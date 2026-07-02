@@ -161,15 +161,48 @@ def make_snippet(body, terms, width=140):
     return ("…" if start else "") + frag + "…"
 
 
-def cmd_read(root, args):
-    ref = args.path
-    if ref.endswith(".md"):
-        ref = ref[:-3]
+def resolve_concept(root, path):
+    ref = path[:-3] if path.endswith(".md") else path
     ap = os.path.join(root, ref + ".md")
     if not os.path.isfile(ap):
-        print("not found: {}".format(args.path), file=sys.stderr)
+        print("not found: {}".format(path), file=sys.stderr)
         sys.exit(1)
-    print(read_file(ap))
+    return ap
+
+
+def cmd_read(root, args):
+    print(read_file(resolve_concept(root, args.path)))
+
+
+def iter_headings(body):
+    """Yield (level, text) for markdown headings, skipping fenced code blocks."""
+    in_fence = False
+    for line in body.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        m = re.match(r"^(#{1,6})\s+(.+?)\s*#*$", line)
+        if m:
+            yield len(m.group(1)), m.group(2).strip()
+
+
+def cmd_toc(root, args):
+    ap = resolve_concept(root, args.path)
+    fm, body = split_frontmatter(read_file(ap))
+    title = fm.get("title") or os.path.basename(ap)[:-3]
+    print("# {}  [{}]".format(title, fm.get("type", "")))
+    found = False
+    for lvl, text in iter_headings(body):
+        if args.level == 0:                       # --level 0 → full tree, indented
+            print("  " * (lvl - 1) + "- " + text)
+            found = True
+        elif lvl == args.level:                   # default: only this level (h2)
+            print("- " + text)
+            found = True
+    if not found:
+        print("(no h{} headings)".format(args.level) if args.level else "(no headings)")
 
 
 def main():
@@ -185,9 +218,14 @@ def main():
     pf.add_argument("--limit", type=int, default=10)
     pr = sub.add_parser("read")
     pr.add_argument("path")
+    pt = sub.add_parser("toc", help="print a concept's headings (default: h2 only)")
+    pt.add_argument("path")
+    pt.add_argument("--level", type=int, default=2,
+                    help="heading level to list (default 2 = h2); 0 = full indented tree")
     args = ap.parse_args()
     root = catalogue_root(args.root)
-    {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find, "read": cmd_read}[args.cmd](root, args)
+    {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find,
+     "read": cmd_read, "toc": cmd_toc}[args.cmd](root, args)
 
 
 if __name__ == "__main__":
