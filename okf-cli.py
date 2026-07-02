@@ -205,6 +205,79 @@ def cmd_toc(root, args):
         print("(no h{} headings)".format(args.level) if args.level else "(no headings)")
 
 
+def bundle_graph(root, bundle):
+    """Return (nodes, edges) for one bundle. Nodes=concepts, edges=in-bundle md links."""
+    bp = os.path.join(root, bundle)
+    concepts = dict(iter_concepts(bp))            # cid -> abspath
+    nodes, edges = [], []
+    link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+    for cid, ap in sorted(concepts.items()):
+        fm, body = split_frontmatter(read_file(ap))
+        nodes.append({"id": cid, "title": fm.get("title") or cid,
+                      "type": fm.get("type", ""), "body": body})
+        cdir = os.path.dirname(cid)
+        for m in link_re.finditer(re.sub(r"```.*?```", "", body, flags=re.S)):
+            tgt = m.group(1).split("#")[0].strip()
+            if not tgt.endswith(".md") or tgt.startswith(("http", "..")):
+                continue
+            if tgt.startswith("/"):
+                dest = tgt[1:-3]
+            else:
+                dest = os.path.normpath(os.path.join(cdir, tgt))[:-3] if False else \
+                       os.path.normpath(os.path.join(cdir, tgt[:-3]))
+            dest = dest.replace(os.sep, "/")
+            if dest in concepts and dest != cid:
+                edges.append({"source": cid, "target": dest})
+    return nodes, edges
+
+
+def cmd_visualize(root, args):
+    import json
+    nodes, edges = bundle_graph(root, args.bundle)
+    out = args.out or os.path.join(root, args.bundle, "viz.html")
+    data = json.dumps({"name": args.bundle, "nodes": nodes, "edges": edges})
+    html = _VIZ_TEMPLATE.replace("__DATA__", data).replace("__NAME__", args.bundle)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(html)
+    print("wrote {} ({} nodes, {} edges)".format(out, len(nodes), len(edges)))
+
+
+_VIZ_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8">
+<title>OKF — __NAME__</title>
+<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<style>
+ body{margin:0;font:14px/1.5 system-ui,sans-serif;display:flex;height:100vh}
+ #g{flex:1;background:#0d1117}
+ #p{width:38%;max-width:560px;overflow:auto;padding:16px 22px;border-left:1px solid #30363d;background:#161b22;color:#c9d1d9}
+ #p h1,#p h2,#p h3{color:#e6edf3} #p a{color:#58a6ff} #p code,#p pre{background:#0d1117;border-radius:6px}
+ #p pre{padding:12px;overflow:auto} #bar{padding:8px 12px;background:#161b22;color:#c9d1d9;border-bottom:1px solid #30363d}
+ #s{width:220px} .meta{color:#8b949e;font-size:12px;margin-bottom:10px}
+</style></head><body>
+<div style="flex:1;display:flex;flex-direction:column">
+ <div id="bar"><b>__NAME__</b> &nbsp; <input id="s" placeholder="filter title/type…"></div>
+ <div id="g"></div>
+</div>
+<div id="p"><div class="meta">Klick auf einen Knoten.</div></div>
+<script>
+const D=__DATA__;
+const COL={ADR:'#f78166',Service:'#3fb950',Component:'#a371f7',Template:'#d29922',Reference:'#58a6ff',Guide:'#39c5cf',Concept:'#8b949e',Pattern:'#db61a2',SOP:'#e3b341',Playbook:'#ff7b72',LessonLearned:'#7ee787',ChangeNote:'#6e7681',Decision:'#bc8cff'};
+const cy=cytoscape({container:document.getElementById('g'),
+ elements:[...D.nodes.map(n=>({data:{id:n.id,label:n.title,type:n.type}})),
+           ...D.edges.map(e=>({data:{source:e.source,target:e.target}}))],
+ style:[{selector:'node',style:{'background-color':n=>COL[n.data('type')]||'#8b949e','width':10,'height':10,'label':'data(label)','font-size':6,'color':'#8b949e','min-zoomed-font-size':7}},
+        {selector:'edge',style:{'width':.6,'line-color':'#30363d','curve-style':'haystack','target-arrow-shape':'none'}},
+        {selector:'.hl',style:{'background-color':'#e6edf3','width':16,'height':16}}],
+ layout:{name:'cose',animate:false,nodeRepulsion:8000,idealEdgeLength:60}});
+const body=Object.fromEntries(D.nodes.map(n=>[n.id,n]));
+cy.on('tap','node',e=>{const n=body[e.target.id()];
+ document.getElementById('p').innerHTML='<div class="meta">'+n.type+' · '+e.target.id()+'</div><h1>'+n.title+'</h1>'+marked.parse(n.body||'');
+ cy.elements().removeClass('hl');e.target.addClass('hl');});
+document.getElementById('s').addEventListener('input',ev=>{const q=ev.target.value.toLowerCase();
+ cy.nodes().forEach(n=>{const h=!q||n.data('label').toLowerCase().includes(q)||(n.data('type')||'').toLowerCase().includes(q);n.style('display',h?'element':'none');});});
+</script></body></html>"""
+
+
 def main():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -222,10 +295,13 @@ def main():
     pt.add_argument("path")
     pt.add_argument("--level", type=int, default=2,
                     help="heading level to list (default 2 = h2); 0 = full indented tree")
+    pv = sub.add_parser("visualize", help="write a self-contained viz.html graph for a bundle")
+    pv.add_argument("bundle")
+    pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
     args = ap.parse_args()
     root = catalogue_root(args.root)
     {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find,
-     "read": cmd_read, "toc": cmd_toc}[args.cmd](root, args)
+     "read": cmd_read, "toc": cmd_toc, "visualize": cmd_visualize}[args.cmd](root, args)
 
 
 if __name__ == "__main__":
