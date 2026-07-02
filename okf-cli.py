@@ -10,6 +10,7 @@ Commands:
     okf-cli.py index [bundle]              catalogue TOC, or one bundle's index
     okf-cli.py find "<query>"              ranked keyword search across all bundles
     okf-cli.py read <bundle>/<concept-id>  print one concept page
+    okf-cli.py reindex <target> [--init] [--check]  (re)generate index.md listings
 
 Run from the catalogue root, or pass --root <path>.
 """
@@ -20,6 +21,8 @@ import sys
 
 RESERVED = {"index.md", "log.md", "readme.md", "index-map.md"}
 FM_DELIM = "---"
+MARK_START = "<!-- okf:index -->"
+MARK_END = "<!-- /okf:index -->"
 
 
 def catalogue_root(explicit):
@@ -71,10 +74,17 @@ def read_file(ap):
         return f.read()
 
 
+def _dequote(s):
+    s = (s or "").strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        return s[1:-1]
+    return s
+
+
 def meta_of(ap):
     fm, _ = split_frontmatter(read_file(ap))
-    title = fm.get("title") or os.path.basename(ap)[:-3]
-    return fm.get("type", ""), title, fm.get("description", "")
+    title = _dequote(fm.get("title", "")) or os.path.basename(ap)[:-3]
+    return fm.get("type", ""), title, _dequote(fm.get("description", ""))
 
 
 def cmd_bundles(root, _args):
@@ -278,6 +288,154 @@ document.getElementById('s').addEventListener('input',ev=>{const q=ev.target.val
 </script></body></html>"""
 
 
+# --- reindex: mechanical, marker-bounded index.md generation (OKF §6) -------
+
+def write_file(ap, text):
+    with open(ap, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _collapse(s):
+    return re.sub(r"\s+", " ", s or "").strip()
+
+
+def list_dir_concepts(dirpath):
+    """(title, slug, description) for non-reserved .md directly in dirpath, by title."""
+    out = []
+    for fn in os.listdir(dirpath):
+        if not fn.endswith(".md") or fn.lower() in RESERVED:
+            continue
+        ap = os.path.join(dirpath, fn)
+        if not os.path.isfile(ap):
+            continue
+        _, title, desc = meta_of(ap)
+        out.append((title, fn[:-3], desc))
+    out.sort(key=lambda x: x[0].casefold())
+    return out
+
+
+def index_h1_and_desc(ap):
+    """First H1 text and the intro paragraph of an index.md (no frontmatter).
+
+    The intro is the first non-empty line after the H1 *only if* it is a real
+    paragraph; if the body leads with a heading/list/comment there is no intro.
+    """
+    _, body = split_frontmatter(read_file(ap))
+    lines = body.splitlines()
+    h1, desc, i = None, "", 0
+    while i < len(lines):
+        m = re.match(r"^#\s+(.+?)\s*#*$", lines[i])
+        i += 1
+        if m:
+            h1 = m.group(1).strip()
+            break
+    while i < len(lines):
+        s = lines[i].strip()
+        if not s:
+            i += 1
+            continue
+        if not re.match(r"^(#|<!--|[*\-+>]|\d+\.)", s):
+            desc = s
+        break
+    return h1, desc
+
+
+def list_subdirs_with_index(dirpath):
+    """(title, subdir_name, description) for immediate subdirs containing index.md."""
+    out = []
+    for name in sorted(os.listdir(dirpath)):
+        p = os.path.join(dirpath, name)
+        if not os.path.isdir(p) or name.startswith(".") or name == "assets":
+            continue
+        idx = os.path.join(p, "index.md")
+        if not os.path.isfile(idx):
+            continue
+        h1, desc = index_h1_and_desc(idx)
+        out.append((h1 or name, name, desc))
+    out.sort(key=lambda x: x[0].casefold())
+    return out
+
+
+def render_block(subdirs, concepts):
+    """OKF bullet list: subdirectories first, then concept files."""
+    lines = []
+    for title, name, desc in subdirs:
+        d = _collapse(desc)
+        lines.append("* [{}]({}/index.md){}".format(title, name, " - " + d if d else ""))
+    for title, slug, desc in concepts:
+        d = _collapse(desc)
+        lines.append("* [{}]({}.md){}".format(title, slug, " - " + d if d else ""))
+    return "\n".join(lines)
+
+
+def replace_managed_block(text, block):
+    """Replace content between the markers. Returns (new_text, found)."""
+    si = text.find(MARK_START)
+    if si == -1:
+        return text, False
+    ei = text.find(MARK_END, si)
+    if ei == -1:
+        return text, False
+    inner = "\n" + block + "\n" if block else "\n"
+    return text[:si + len(MARK_START)] + inner + text[ei:], True
+
+
+def ensure_markers(dirpath):
+    """Ensure dirpath/index.md carries a marker block. Non-destructive."""
+    idx = os.path.join(dirpath, "index.md")
+    title = os.path.basename(os.path.abspath(dirpath))
+    if not os.path.isfile(idx):
+        write_file(idx, "# {}\n\n## Contents\n\n{}\n{}\n".format(title, MARK_START, MARK_END))
+        return
+    text = read_file(idx)
+    if MARK_START in text:
+        return
+    sep = "" if text.endswith("\n") else "\n"
+    write_file(idx, text + sep + "\n## Contents\n\n{}\n{}\n".format(MARK_START, MARK_END))
+
+
+def cmd_reindex(root, args):
+    target = args.target.rstrip("/")
+    tp = os.path.join(root, target)
+    if not os.path.isdir(tp):
+        print("not a directory: {}".format(target), file=sys.stderr)
+        sys.exit(1)
+    if args.init and not args.check:
+        ensure_markers(tp)                        # only the named target dir
+    dirs = []
+    for dp, dn, fn in os.walk(tp):
+        dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
+        if "index.md" in fn:
+            dirs.append(dp)
+    changed, skipped, stale = [], [], []
+    for dp in sorted(dirs):
+        idx = os.path.join(dp, "index.md")
+        text = read_file(idx)
+        rel = os.path.relpath(idx, root)
+        if MARK_START not in text:
+            skipped.append(rel)
+            continue
+        block = render_block(list_subdirs_with_index(dp), list_dir_concepts(dp))
+        new_text, _ = replace_managed_block(text, block)
+        if new_text == text:
+            continue
+        if args.check:
+            stale.append(rel)
+        else:
+            write_file(idx, new_text)
+            changed.append(rel)
+    if args.check:
+        for p in stale:
+            print("STALE        {}".format(p))
+        print("reindex --check: {} stale, {} without markers".format(len(stale), len(skipped)))
+        sys.exit(1 if stale else 0)
+    for p in changed:
+        print("updated       {}".format(p))
+    for p in skipped:
+        print("skipped (no markers)  {}".format(p))
+    print("reindex: {} updated, {} skipped".format(len(changed), len(skipped)))
+
+
 def main():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -298,10 +456,17 @@ def main():
     pv = sub.add_parser("visualize", help="write a self-contained viz.html graph for a bundle")
     pv.add_argument("bundle")
     pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
+    px = sub.add_parser("reindex", help="(re)generate marker-bounded index.md listings")
+    px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
+    px.add_argument("--init", action="store_true",
+                    help="add a marker block to the named target dir if missing")
+    px.add_argument("--check", action="store_true",
+                    help="dry-run: report stale blocks, exit 1 on drift, no writes")
     args = ap.parse_args()
     root = catalogue_root(args.root)
     {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find,
-     "read": cmd_read, "toc": cmd_toc, "visualize": cmd_visualize}[args.cmd](root, args)
+     "read": cmd_read, "toc": cmd_toc, "visualize": cmd_visualize,
+     "reindex": cmd_reindex}[args.cmd](root, args)
 
 
 if __name__ == "__main__":
