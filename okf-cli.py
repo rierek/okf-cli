@@ -11,13 +11,18 @@ Commands:
     okf-cli.py find "<query>"              ranked keyword search across all bundles
     okf-cli.py read <bundle>/<concept-id>  print one concept page
     okf-cli.py reindex <target> [--init] [--check]  (re)generate index.md listings
+    okf-cli.py tags                        full tag audit dump (tag + usage count)
+    okf-cli.py tags <tag1> <tag2> …        fuzzy-search each candidate against the tag universe
 
 Run from the catalogue root, or pass --root <path>.
 """
 import argparse
+import difflib
 import os
 import re
+import subprocess
 import sys
+from collections import Counter
 
 RESERVED = {"index.md", "log.md", "readme.md", "index-map.md"}
 FM_DELIM = "---"
@@ -85,6 +90,112 @@ def meta_of(ap):
     fm, _ = split_frontmatter(read_file(ap))
     title = _dequote(fm.get("title", "")) or os.path.basename(ap)[:-3]
     return fm.get("type", ""), title, _dequote(fm.get("description", ""))
+
+
+def parse_tag_list(raw):
+    """Parse a frontmatter `tags` value like `[a, b, "c d"]` into a list."""
+    raw = (raw or "").strip()
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    if not raw.strip():
+        return []
+    return [_dequote(p) for p in raw.split(",") if p.strip()]
+
+
+def extract_tags(text):
+    """Read the `tags` frontmatter field, inline (`tags: [a, b]`) or as a
+    YAML block list (`tags:\\n  - a\\n  - b`). split_frontmatter() only keeps
+    single-line values, so this walks the raw frontmatter block itself."""
+    if not text.startswith(FM_DELIM):
+        return []
+    end = text.find("\n" + FM_DELIM, len(FM_DELIM))
+    if end == -1:
+        return []
+    lines = text[len(FM_DELIM):end].splitlines()
+    for i, line in enumerate(lines):
+        m = re.match(r"^tags:\s*(.*)$", line)
+        if not m:
+            continue
+        rest = m.group(1).strip()
+        if rest:
+            return parse_tag_list(rest)
+        tags = []
+        for cont in lines[i + 1:]:
+            lm = re.match(r"^\s*-\s*(.+)$", cont)
+            if not lm:
+                break
+            tags.append(_dequote(lm.group(1).strip()))
+        return tags
+    return []
+
+
+def all_tags(root):
+    """Return Counter of tag -> usage count across every concept in the catalogue."""
+    counts = Counter()
+    for b in list_bundles(root):
+        bp = os.path.join(root, b)
+        for _cid, ap in iter_concepts(bp):
+            for t in extract_tags(read_file(ap)):
+                counts[t] += 1
+    return counts
+
+
+def fuzzy_matches(query, candidates, limit=8):
+    """Rank candidates against query, merging two signals so both typo/subsequence
+    matches (fzf --filter) AND abbreviation/reordering matches (difflib ratio,
+    e.g. `km-management` vs `knowledge-management`) surface — fzf alone misses
+    the latter since it requires an in-order character subsequence."""
+    if not candidates:
+        return []
+    fzf_hits = []
+    try:
+        proc = subprocess.run(
+            ["fzf", "--filter", query],
+            input="\n".join(candidates),
+            capture_output=True, text=True, timeout=5,
+        )
+        fzf_hits = [l for l in proc.stdout.splitlines() if l.strip()]
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+    ql = query.lower()
+    scored = []
+    for c in candidates:
+        cl = c.lower()
+        ratio = difflib.SequenceMatcher(None, ql, cl).ratio()
+        if ql in cl or cl in ql:
+            ratio += 0.3
+        scored.append((ratio, c))
+    scored.sort(key=lambda x: -x[0])
+    difflib_hits = [c for r, c in scored if r > 0.5]
+
+    seen, merged = set(), []
+    for c in fzf_hits + difflib_hits:
+        if c not in seen:
+            seen.add(c)
+            merged.append(c)
+    return merged[:limit]
+
+
+def cmd_tags(root, args):
+    counts = all_tags(root)
+    if not args.query:
+        if not counts:
+            print("(no tags found)")
+            return
+        width = max(len(t) for t in counts)
+        for t, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+            print("  {:<{w}}  {}".format(t, n, w=width))
+        return
+    universe = sorted(counts.keys())
+    for q in args.query:
+        print(f"== searched: {q} ==")
+        matches = fuzzy_matches(q, universe, limit=args.limit)
+        if not matches:
+            print("  (no match — new tag)")
+        for m in matches:
+            print("  - {}  ({})".format(m, counts[m]))
+        print()
 
 
 def cmd_bundles(root, _args):
@@ -462,11 +573,15 @@ def main():
                     help="add a marker block to the named target dir if missing")
     px.add_argument("--check", action="store_true",
                     help="dry-run: report stale blocks, exit 1 on drift, no writes")
+    pg = sub.add_parser("tags", help="list all tags with usage counts, or fuzzy-search candidate tags")
+    pg.add_argument("query", nargs="*",
+                    help="candidate tag(s) to fuzzy-search against the tag universe; omit for full audit dump")
+    pg.add_argument("--limit", type=int, default=8, help="max matches per candidate (default 8)")
     args = ap.parse_args()
     root = catalogue_root(args.root)
     {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find,
      "read": cmd_read, "toc": cmd_toc, "visualize": cmd_visualize,
-     "reindex": cmd_reindex}[args.cmd](root, args)
+     "reindex": cmd_reindex, "tags": cmd_tags}[args.cmd](root, args)
 
 
 if __name__ == "__main__":
