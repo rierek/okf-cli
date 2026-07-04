@@ -366,9 +366,10 @@ def bundle_graph(root, bundle):
 def cmd_visualize(root, args):
     import json
     nodes, edges = bundle_graph(root, args.bundle)
-    out = args.out or os.path.join(root, args.bundle, "viz.html")
+    out = args.out or os.path.join(root, args.bundle, "assets", "viz.html")
     data = json.dumps({"name": args.bundle, "nodes": nodes, "edges": edges})
     html = _VIZ_TEMPLATE.replace("__DATA__", data).replace("__NAME__", args.bundle)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)
     print("wrote {} ({} nodes, {} edges)".format(out, len(nodes), len(edges)))
@@ -733,9 +734,13 @@ def load_types(root):
 
 
 def iter_all_md(bundle_path):
-    """Yield abspath for every .md under a bundle, reserved files included."""
+    """Yield abspath for every .md under a bundle, reserved files included.
+
+    Prunes "assets" (binary asset store) and "_"-prefixed dirs (staging, same
+    convention as is_bundle_dir uses one level up for bundles)."""
     for dirpath, dirnames, filenames in os.walk(bundle_path):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "assets"]
+        dirnames[:] = [d for d in dirnames
+                       if not d.startswith(".") and not d.startswith("_") and d != "assets"]
         for fn in filenames:
             if fn.endswith(".md"):
                 yield os.path.join(dirpath, fn)
@@ -810,7 +815,8 @@ def check_asset_placement(bundle_path):
     a list of paths relative to bundle_path."""
     bad = []
     for dirpath, dirnames, filenames in os.walk(bundle_path):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "assets"]
+        dirnames[:] = [d for d in dirnames
+                       if not d.startswith(".") and not d.startswith("_") and d != "assets"]
         for fn in filenames:
             if fn.endswith(".md") or fn.startswith("."):
                 continue

@@ -348,6 +348,15 @@ class CheckCommand(unittest.TestCase):
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertNotIn("asset-placement", self._names(errors))
 
+    def test_underscore_prefixed_dir_is_excluded_from_scan(self):
+        # mirrors is_bundle_dir's convention: "_"-prefixed dirs are staging,
+        # not catalogue content — same exemption applied one level down.
+        self._w("b/_intake/raw.md", "# no frontmatter\n")
+        self._w("b/_intake/notes.tsv", "col1\tcol2\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
     def test_unregistered_type_is_warning(self):
         self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
         self._w("b/x.md", "---\ntype: Bogus\ntitle: X\n---\n# X\n")
@@ -400,6 +409,29 @@ class CheckCommand(unittest.TestCase):
         self._w("b2/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
         errors, warnings = okf.run_checks(self.tmp, None)
         self.assertIn("b1/x.md", [e[1] for e in errors])
+
+
+class VisualizeDefaultOutputPath(unittest.TestCase):
+    """viz.html is a generated artifact, not knowledge content — it must land
+    under <bundle>/assets/ by default so it doesn't trip asset-placement."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_default_out_is_under_bundle_assets(self):
+        import types
+        os.makedirs(os.path.join(self.tmp, "b"))
+        with open(os.path.join(self.tmp, "b", "x.md"), "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: X\n---\n# X\n")
+        args = types.SimpleNamespace(bundle="b", out=None)
+        okf.cmd_visualize(self.tmp, args)
+        expected = os.path.join(self.tmp, "b", "assets", "viz.html")
+        self.assertTrue(os.path.isfile(expected))
 
 
 if __name__ == "__main__":
