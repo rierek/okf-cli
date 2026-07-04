@@ -157,6 +157,83 @@ class EnsureMarkersCreateOnly(unittest.TestCase):
             self.assertEqual(f.read(), body)  # no naive append
 
 
+class UncoveredIndexDirs(unittest.TestCase):
+    """I02 — a marker-less index.md that has concept files is UNCOVERED: no
+    safety net proves the files appear in the index. Empty dirs are fine."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_flags_markerless_dir_with_concepts(self):
+        self._w("b/index.md", "# B\n\n## A\n\n* [x](x.md)\n\n## Z\n\n* [y](y.md)\n")  # curated, no markers
+        self._w("b/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._w("b/y.md", "---\ntype: Concept\n---\n# Y\n")
+        un = okf.uncovered_index_dirs(self.tmp, os.path.join(self.tmp, "b"))
+        self.assertIn("b/index.md", un)
+
+    def test_managed_dir_is_not_uncovered(self):
+        self._w("b/index.md", "# B\n\n" + M0 + "\n" + M1 + "\n")
+        self._w("b/x.md", "---\ntype: Concept\n---\n# X\n")
+        un = okf.uncovered_index_dirs(self.tmp, os.path.join(self.tmp, "b"))
+        self.assertEqual(un, [])
+
+    def test_markerless_but_empty_dir_is_not_uncovered(self):
+        self._w("b/index.md", "# B\n\nno concepts here\n")
+        un = okf.uncovered_index_dirs(self.tmp, os.path.join(self.tmp, "b"))
+        self.assertEqual(un, [])
+
+
+class ForceFlattenAndExempt(unittest.TestCase):
+    """Q01 — --force flattens a pure multi-section listing (sections optional);
+    a content page marked exempt is dropped from the coverage gate."""
+
+    def test_force_flattens_pure_multi_section(self):
+        text = ("# T\n\nintro\n\n## Alpha\n\n* [A](a.md)\n\n## Beta\n\n* [B](b.md)\n")
+        new, status = okf.convert_flat_index(text, force=True)
+        self.assertEqual(status, "converted")
+        self.assertIn(M0, new)
+        self.assertIn("intro", new)          # intro before first ## preserved
+        self.assertNotIn("## Alpha", new)     # sub-section headings dropped
+        self.assertNotIn("* [A](a.md)", new)  # old bullets removed (reindex refills)
+
+    def test_force_refuses_when_prose_present(self):
+        text = ("# T\n\n## Alpha\n\n| tbl | col |\n\n## Beta\n\n* [B](b.md)\n")
+        new, status = okf.convert_flat_index(text, force=True)
+        self.assertNotEqual(status, "converted")   # table = real content, not flattened
+        self.assertEqual(new, text)
+
+    def test_without_force_multi_section_still_skipped(self):
+        text = ("# T\n\n## Alpha\n\n* [A](a.md)\n\n## Beta\n\n* [B](b.md)\n")
+        new, status = okf.convert_flat_index(text, force=False)
+        self.assertEqual(status, "skip-multi-section")
+
+    def test_uncovered_skips_exempt_index(self):
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(tmp, "b"))
+            with open(os.path.join(tmp, "b", "index.md"), "w") as f:
+                f.write("# B\n\n" + okf.EXEMPT + "\n\ncurated content page\n")
+            with open(os.path.join(tmp, "b", "x.md"), "w") as f:
+                f.write("---\ntype: Concept\n---\n# X\n")
+            un = okf.uncovered_index_dirs(tmp, os.path.join(tmp, "b"))
+            self.assertEqual(un, [])
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class RenderGitLog(unittest.TestCase):
     """T04 — render git history as a SPEC §7 date-grouped flat list."""
 

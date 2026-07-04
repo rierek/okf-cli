@@ -31,6 +31,7 @@ MARK_START = "<!-- okf:index -->"
 MARK_END = "<!-- /okf:index -->"
 LOG_START = "<!-- okf:log -->"
 LOG_END = "<!-- /okf:log -->"
+EXEMPT = "<!-- okf:index-exempt -->"
 LOG_NOTICE = (
     "> **History lives in git.** This file is a portability snapshot, not the "
     "source of truth. Regenerate the block below with `python3 okf-cli.py log "
@@ -500,13 +501,14 @@ def replace_managed_block(text, block):
     return text[:si + len(MARK_START)] + inner + text[ei:], True
 
 
-def convert_flat_index(text):
+def convert_flat_index(text, force=False):
     """Migrate a marker-less, hand-curated index.md to a managed marker block.
 
-    Returns (new_text, status). Only a *simple flat* index is converted: exactly
-    one `## ` section whose tail is nothing but a bullet list. Anything with
-    bespoke multi-section curation, trailing prose, or no list is left untouched
-    and flagged, so `reindex --init` never flattens hand-authored structure.
+    Returns (new_text, status). A *single-section* flat listing (one `## `
+    section whose tail is only a bullet list) always converts. A *multi-section*
+    listing converts only with force=True, and only when every section body is
+    still pure headings+bullets — any prose/table (real content) refuses. Trailing
+    prose or a missing list is left untouched and flagged.
 
     status ∈ {converted, already-managed, skip-multi-section,
               skip-trailing-content, skip-no-list}
@@ -515,26 +517,28 @@ def convert_flat_index(text):
         return text, "already-managed"
     lines = text.splitlines()
     h2_idxs = [i for i, ln in enumerate(lines) if re.match(r"^##\s", ln)]
-    if len(h2_idxs) >= 2:
-        return text, "skip-multi-section"
     if len(h2_idxs) == 0:
         return text, "skip-no-list"
+    multi = len(h2_idxs) >= 2
+    if multi and not force:
+        return text, "skip-multi-section"
     h2 = h2_idxs[0]
     saw_bullet = saw_prose = False
     for ln in lines[h2 + 1:]:
         s = ln.strip()
-        if not s:
+        if not s or re.match(r"^##\s", s):   # blank / sub-section heading: allowed
             continue
         if re.match(r"^[*\-+]\s", s):
             saw_bullet = True
         else:
-            saw_prose = True
+            saw_prose = True                 # prose or table = real content
     if not saw_bullet:
         return text, "skip-no-list"
     if saw_prose:
         return text, "skip-trailing-content"
-    head = "\n".join(lines[:h2 + 1]).rstrip()
-    new = head + "\n\n" + MARK_START + "\n" + MARK_END + "\n"
+    head = "\n".join(lines[:h2]).rstrip()
+    section = "## Contents" if multi else lines[h2].rstrip()
+    new = head + "\n\n" + section + "\n\n" + MARK_START + "\n" + MARK_END + "\n"
     return new, "converted"
 
 
@@ -551,12 +555,12 @@ def ensure_markers(dirpath):
         write_file(idx, "# {}\n\n## Contents\n\n{}\n{}\n".format(title, MARK_START, MARK_END))
 
 
-def init_indexes(root, target, dry_run=False):
+def init_indexes(root, target, dry_run=False, force=False):
     """Walk the target subtree and migrate each marker-less flat index.md.
 
     Returns a sorted list of (relpath-from-root, status) from convert_flat_index.
-    Writes converted files only when dry_run is False. Bespoke/curated indexes
-    are reported with their skip-status and left untouched.
+    Writes converted files only when dry_run is False. With force=True, pure
+    multi-section listings are flattened too (prose/tables still refuse).
     """
     results = []
     for dp, dn, fn in os.walk(target):
@@ -565,12 +569,31 @@ def init_indexes(root, target, dry_run=False):
             continue
         idx = os.path.join(dp, "index.md")
         rel = os.path.relpath(idx, root).replace(os.sep, "/")
-        new, status = convert_flat_index(read_file(idx))
+        new, status = convert_flat_index(read_file(idx), force=force)
         if status == "converted" and not dry_run:
             write_file(idx, new)
         results.append((rel, status))
     results.sort()
     return results
+
+
+def uncovered_index_dirs(root, target):
+    """Marker-less index.md dirs that DO hold concept files — no coverage net
+    proves those files appear in the index. Returns sorted rel index.md paths.
+    """
+    out = []
+    for dp, dn, fn in os.walk(target):
+        dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
+        if "index.md" not in fn:
+            continue
+        idx = os.path.join(dp, "index.md")
+        text = read_file(idx)
+        if MARK_START in text or EXEMPT in text:   # managed or deliberately exempt
+            continue
+        if list_dir_concepts(dp):
+            out.append(os.path.relpath(idx, root).replace(os.sep, "/"))
+    out.sort()
+    return out
 
 
 def cmd_reindex(root, args):
@@ -582,7 +605,7 @@ def cmd_reindex(root, args):
     if args.init:
         if not args.check:
             ensure_markers(tp)                    # create-only, named target
-        conv = init_indexes(root, tp, dry_run=args.check)
+        conv = init_indexes(root, tp, dry_run=args.check, force=getattr(args, "force", False))
         verb = "would convert" if args.check else "converted"
         for rel, status in conv:
             if status == "converted":
@@ -617,10 +640,14 @@ def cmd_reindex(root, args):
             write_file(idx, new_text)
             changed.append(rel)
     if args.check:
+        un = uncovered_index_dirs(root, tp)
         for p in stale:
             print("STALE        {}".format(p))
-        print("reindex --check: {} stale, {} without markers".format(len(stale), len(skipped)))
-        sys.exit(1 if stale else 0)
+        for p in un:
+            print("UNCOVERED    {}".format(p))
+        print("reindex --check: {} stale, {} uncovered, {} without markers".format(
+            len(stale), len(un), len(skipped)))
+        sys.exit(1 if (stale or un) else 0)
     for p in changed:
         print("updated       {}".format(p))
     for p in skipped:
@@ -716,7 +743,9 @@ def main():
                     help="recursively migrate marker-less flat index.md in the subtree to "
                          "managed marker blocks (bespoke multi-section indexes are skipped + flagged)")
     px.add_argument("--check", action="store_true",
-                    help="dry-run: with --init preview conversions; else report stale blocks. No writes")
+                    help="dry-run: with --init preview conversions; else report stale + uncovered. No writes")
+    px.add_argument("--force", action="store_true",
+                    help="with --init, also flatten a pure multi-section listing (prose/tables still refuse)")
     pl = sub.add_parser("log", help="render git history for the catalogue or a bundle as a SPEC §7 changelog")
     pl.add_argument("bundle", nargs="?", help="bundle to scope to (default: whole catalogue)")
     pl.add_argument("--since", help="git --since filter, e.g. '3 months ago'")
