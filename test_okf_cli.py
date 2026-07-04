@@ -342,6 +342,12 @@ class CheckCommand(unittest.TestCase):
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertNotIn("asset-placement", self._names(errors))
 
+    def test_asset_inside_nested_assets_dir_is_clean(self):
+        self._w("b/index.md", "# B\n")
+        self._w("b/sub/assets/diagram.png", "not a real png")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("asset-placement", self._names(errors))
+
     def test_unregistered_type_is_warning(self):
         self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
         self._w("b/x.md", "---\ntype: Bogus\ntitle: X\n---\n# X\n")

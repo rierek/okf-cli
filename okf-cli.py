@@ -810,11 +810,7 @@ def check_asset_placement(bundle_path):
     a list of paths relative to bundle_path."""
     bad = []
     for dirpath, dirnames, filenames in os.walk(bundle_path):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        rel_dir = os.path.relpath(dirpath, bundle_path)
-        top = rel_dir.split(os.sep)[0] if rel_dir != "." else None
-        if top == "assets":
-            continue
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "assets"]
         for fn in filenames:
             if fn.endswith(".md") or fn.startswith("."):
                 continue
