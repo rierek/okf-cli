@@ -491,18 +491,77 @@ def replace_managed_block(text, block):
     return text[:si + len(MARK_START)] + inner + text[ei:], True
 
 
+def convert_flat_index(text):
+    """Migrate a marker-less, hand-curated index.md to a managed marker block.
+
+    Returns (new_text, status). Only a *simple flat* index is converted: exactly
+    one `## ` section whose tail is nothing but a bullet list. Anything with
+    bespoke multi-section curation, trailing prose, or no list is left untouched
+    and flagged, so `reindex --init` never flattens hand-authored structure.
+
+    status ∈ {converted, already-managed, skip-multi-section,
+              skip-trailing-content, skip-no-list}
+    """
+    if MARK_START in text:
+        return text, "already-managed"
+    lines = text.splitlines()
+    h2_idxs = [i for i, ln in enumerate(lines) if re.match(r"^##\s", ln)]
+    if len(h2_idxs) >= 2:
+        return text, "skip-multi-section"
+    if len(h2_idxs) == 0:
+        return text, "skip-no-list"
+    h2 = h2_idxs[0]
+    saw_bullet = saw_prose = False
+    for ln in lines[h2 + 1:]:
+        s = ln.strip()
+        if not s:
+            continue
+        if re.match(r"^[*\-+]\s", s):
+            saw_bullet = True
+        else:
+            saw_prose = True
+    if not saw_bullet:
+        return text, "skip-no-list"
+    if saw_prose:
+        return text, "skip-trailing-content"
+    head = "\n".join(lines[:h2 + 1]).rstrip()
+    new = head + "\n\n" + MARK_START + "\n" + MARK_END + "\n"
+    return new, "converted"
+
+
 def ensure_markers(dirpath):
-    """Ensure dirpath/index.md carries a marker block. Non-destructive."""
+    """Create dirpath/index.md with an empty marker block if it is missing.
+
+    Create-only: an existing marker-less index.md is left untouched — its
+    hand-curated content is migrated by convert_flat_index (via init_indexes),
+    never by a naive append.
+    """
     idx = os.path.join(dirpath, "index.md")
     title = os.path.basename(os.path.abspath(dirpath))
     if not os.path.isfile(idx):
         write_file(idx, "# {}\n\n## Contents\n\n{}\n{}\n".format(title, MARK_START, MARK_END))
-        return
-    text = read_file(idx)
-    if MARK_START in text:
-        return
-    sep = "" if text.endswith("\n") else "\n"
-    write_file(idx, text + sep + "\n## Contents\n\n{}\n{}\n".format(MARK_START, MARK_END))
+
+
+def init_indexes(root, target, dry_run=False):
+    """Walk the target subtree and migrate each marker-less flat index.md.
+
+    Returns a sorted list of (relpath-from-root, status) from convert_flat_index.
+    Writes converted files only when dry_run is False. Bespoke/curated indexes
+    are reported with their skip-status and left untouched.
+    """
+    results = []
+    for dp, dn, fn in os.walk(target):
+        dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
+        if "index.md" not in fn:
+            continue
+        idx = os.path.join(dp, "index.md")
+        rel = os.path.relpath(idx, root).replace(os.sep, "/")
+        new, status = convert_flat_index(read_file(idx))
+        if status == "converted" and not dry_run:
+            write_file(idx, new)
+        results.append((rel, status))
+    results.sort()
+    return results
 
 
 def cmd_reindex(root, args):
@@ -511,8 +570,21 @@ def cmd_reindex(root, args):
     if not os.path.isdir(tp):
         print("not a directory: {}".format(target), file=sys.stderr)
         sys.exit(1)
-    if args.init and not args.check:
-        ensure_markers(tp)                        # only the named target dir
+    if args.init:
+        if not args.check:
+            ensure_markers(tp)                    # create-only, named target
+        conv = init_indexes(root, tp, dry_run=args.check)
+        verb = "would convert" if args.check else "converted"
+        for rel, status in conv:
+            if status == "converted":
+                print("{:<14} {}".format(verb, rel))
+            elif status != "already-managed":
+                print("{:<14} {}  ({})".format("skipped", rel, status))
+        n_conv = sum(1 for _, s in conv if s == "converted")
+        n_skip = sum(1 for _, s in conv if s not in ("converted", "already-managed"))
+        print("init: {} {}, {} skipped".format(n_conv, verb, n_skip))
+        if args.check:
+            sys.exit(0)                           # --init --check = conversion preview only
     dirs = []
     for dp, dn, fn in os.walk(tp):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
@@ -570,9 +642,10 @@ def main():
     px = sub.add_parser("reindex", help="(re)generate marker-bounded index.md listings")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
     px.add_argument("--init", action="store_true",
-                    help="add a marker block to the named target dir if missing")
+                    help="recursively migrate marker-less flat index.md in the subtree to "
+                         "managed marker blocks (bespoke multi-section indexes are skipped + flagged)")
     px.add_argument("--check", action="store_true",
-                    help="dry-run: report stale blocks, exit 1 on drift, no writes")
+                    help="dry-run: with --init preview conversions; else report stale blocks. No writes")
     pg = sub.add_parser("tags", help="list all tags with usage counts, or fuzzy-search candidate tags")
     pg.add_argument("query", nargs="*",
                     help="candidate tag(s) to fuzzy-search against the tag universe; omit for full audit dump")
