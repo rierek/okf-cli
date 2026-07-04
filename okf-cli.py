@@ -14,6 +14,7 @@ Commands:
     okf-cli.py log [bundle] [--since] [--write]  render git history as a SPEC §7 changelog
     okf-cli.py tags                        full tag audit dump (tag + usage count)
     okf-cli.py tags <tag1> <tag2> …        fuzzy-search each candidate against the tag universe
+    okf-cli.py check [target] [--strict] [--json]  conformance scan (§9 + local invariants)
 
 Run from the catalogue root, or pass --root <path>.
 """
@@ -717,6 +718,164 @@ def cmd_log(root, args):
         print(md, end="")
 
 
+# --- check: pluggable conformance scan (§9 hard rules + local invariants) ---
+
+FILENAME_FORBIDDEN_CHARS = set('#^[]|\\:?*"<>%')
+GERMAN_FM_KEYS = {"titel", "beschreibung", "typ", "stichworte", "datum", "zusammenfassung"}
+
+
+def load_types(root):
+    """Set of registered `type` values from TYPES.md, or None if the file is missing."""
+    p = os.path.join(root, "TYPES.md")
+    if not os.path.isfile(p):
+        return None
+    return set(re.findall(r"^\|\s*`([^`]+)`", read_file(p), re.M))
+
+
+def iter_all_md(bundle_path):
+    """Yield abspath for every .md under a bundle, reserved files included."""
+    for dirpath, dirnames, filenames in os.walk(bundle_path):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "assets"]
+        for fn in filenames:
+            if fn.endswith(".md"):
+                yield os.path.join(dirpath, fn)
+
+
+def gather_file_context(root, bundle, ap):
+    text = read_file(ap)
+    fm, body = split_frontmatter(text)
+    has_fm = text.startswith(FM_DELIM) and text.find("\n" + FM_DELIM, len(FM_DELIM)) != -1
+    fn = os.path.basename(ap)
+    return {
+        "root": root, "bundle": bundle, "ap": ap,
+        "rel": os.path.relpath(ap, root).replace(os.sep, "/"),
+        "fn": fn, "text": text, "fm": fm, "body": body,
+        "has_fm": has_fm, "is_reserved": fn.lower() in RESERVED,
+    }
+
+
+def check_fm_parseable(ctx):
+    if ctx["is_reserved"]:
+        return []
+    return [] if ctx["has_fm"] else ["no parseable frontmatter"]
+
+
+def check_type_nonempty(ctx):
+    if ctx["is_reserved"] or not ctx["has_fm"]:
+        return []
+    return [] if ctx["fm"].get("type", "").strip() else ["missing/empty `type`"]
+
+
+def check_reserved_no_type(ctx):
+    if not ctx["is_reserved"] or not ctx["has_fm"]:
+        return []
+    return ["reserved file must not carry `type`"] if ctx["fm"].get("type", "").strip() else []
+
+
+def check_filename_chars(ctx):
+    if ctx["is_reserved"]:
+        return []
+    bad = FILENAME_FORBIDDEN_CHARS & set(ctx["fn"][:-3])
+    return ["forbidden char(s) in filename: {}".format("".join(sorted(bad)))] if bad else []
+
+
+def check_type_registered(ctx, types_set):
+    if ctx["is_reserved"] or not ctx["has_fm"] or types_set is None:
+        return []
+    t = ctx["fm"].get("type", "").strip()
+    return ["type `{}` not registered in TYPES.md".format(t)] if t and t not in types_set else []
+
+
+def check_english_keys(ctx):
+    if ctx["is_reserved"] or not ctx["has_fm"]:
+        return []
+    hits = GERMAN_FM_KEYS & set(ctx["fm"].keys())
+    return ["German frontmatter key(s): {}".format(", ".join(sorted(hits)))] if hits else []
+
+
+def check_crosslink_format(ctx):
+    if ctx["is_reserved"]:
+        return []
+    bad = []
+    for m in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", ctx["body"]):
+        tgt = m.group(1).split("#")[0].strip()
+        if not tgt.endswith(".md") or tgt.startswith(("http://", "https://", "/", "..")):
+            continue
+        bad.append(tgt)
+    return ["non bundle-relative link(s): {}".format(", ".join(bad))] if bad else []
+
+
+def check_asset_placement(bundle_path):
+    """Non-md, non-hidden files that live outside <bundle>/assets/. Returns
+    a list of paths relative to bundle_path."""
+    bad = []
+    for dirpath, dirnames, filenames in os.walk(bundle_path):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        rel_dir = os.path.relpath(dirpath, bundle_path)
+        top = rel_dir.split(os.sep)[0] if rel_dir != "." else None
+        if top == "assets":
+            continue
+        for fn in filenames:
+            if fn.endswith(".md") or fn.startswith("."):
+                continue
+            bad.append(os.path.relpath(os.path.join(dirpath, fn), bundle_path).replace(os.sep, "/"))
+    return bad
+
+
+def run_checks(root, target):
+    """Run the full pluggable conformance scan over `target` (bundle or
+    bundle/subdir), or the whole catalogue when target is None.
+
+    Returns (errors, warnings), each a list of (check_name, rel_path, message).
+    """
+    if target:
+        tp = os.path.join(root, target.rstrip("/"))
+        scopes = [(target.split("/")[0], tp)]
+    else:
+        scopes = [(b, os.path.join(root, b)) for b in list_bundles(root)]
+
+    types_set = load_types(root)
+    per_file_checks = [
+        ("frontmatter-parseable", "error", check_fm_parseable),
+        ("type-nonempty", "error", check_type_nonempty),
+        ("reserved-no-type", "error", check_reserved_no_type),
+        ("filename-chars", "error", check_filename_chars),
+        ("type-registered", "warning", lambda c: check_type_registered(c, types_set)),
+        ("english-keys", "warning", check_english_keys),
+        ("crosslink-format", "warning", check_crosslink_format),
+    ]
+
+    errors, warnings = [], []
+    for bundle, bp in scopes:
+        for ap in iter_all_md(bp):
+            ctx = gather_file_context(root, bundle, ap)
+            for name, sev, fn in per_file_checks:
+                for msg in fn(ctx):
+                    (errors if sev == "error" else warnings).append((name, ctx["rel"], msg))
+        for rel in check_asset_placement(bp):
+            errors.append(("asset-placement", "{}/{}".format(bundle, rel), "non-md file outside assets/"))
+    return errors, warnings
+
+
+def cmd_check(root, args):
+    errors, warnings = run_checks(root, getattr(args, "target", None))
+    if args.strict:
+        errors, warnings = errors + warnings, []
+    if args.json:
+        import json
+        print(json.dumps({
+            "errors": [{"check": n, "path": p, "message": m} for n, p, m in errors],
+            "warnings": [{"check": n, "path": p, "message": m} for n, p, m in warnings],
+        }))
+    else:
+        for name, path, msg in errors:
+            print("ERROR    {:<20} {}  ({})".format(name, path, msg))
+        for name, path, msg in warnings:
+            print("WARNING  {:<20} {}  ({})".format(name, path, msg))
+        print("OK — 0 violations" if not errors else "{} VIOLATIONS".format(len(errors)))
+    sys.exit(1 if errors else 0)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -754,11 +913,16 @@ def main():
     pg.add_argument("query", nargs="*",
                     help="candidate tag(s) to fuzzy-search against the tag universe; omit for full audit dump")
     pg.add_argument("--limit", type=int, default=8, help="max matches per candidate (default 8)")
+    pc = sub.add_parser("check", help="conformance scan: §9 hard rules + local invariants")
+    pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
+    pc.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args()
     root = catalogue_root(args.root)
     {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find,
      "read": cmd_read, "toc": cmd_toc, "visualize": cmd_visualize,
-     "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags}[args.cmd](root, args)
+     "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags,
+     "check": cmd_check}[args.cmd](root, args)
 
 
 if __name__ == "__main__":

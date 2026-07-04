@@ -286,5 +286,115 @@ class SpliceLog(unittest.TestCase):
         self.assertLess(new.index("SNAP"), new.index("* precious hand entry"))
 
 
+class CheckCommand(unittest.TestCase):
+    """T06 — okf-cli check: pluggable (name, severity, check_fn) conformance
+    scan. error = §9 hard rules + filename/asset placement (exit 1).
+    warning = type registration / English keys / cross-link format."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _names(self, entries):
+        return [e[0] for e in entries]
+
+    def test_missing_frontmatter_is_error(self):
+        self._w("b/x.md", "# X\n\nno frontmatter at all.\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("frontmatter-parseable", self._names(errors))
+        self.assertNotIn("type-nonempty", self._names(errors))  # not double-flagged
+
+    def test_empty_type_is_error(self):
+        self._w("b/x.md", "---\ntype: \ntitle: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("type-nonempty", self._names(errors))
+        self.assertNotIn("frontmatter-parseable", self._names(errors))
+
+    def test_reserved_file_with_type_is_error(self):
+        self._w("b/index.md", "---\ntype: Concept\n---\n# B\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("reserved-no-type", self._names(errors))
+
+    def test_filename_forbidden_char_is_error(self):
+        self._w("b/weird%name.md", "---\ntype: Concept\n---\n# W\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("filename-chars", self._names(errors))
+
+    def test_asset_outside_assets_dir_is_error(self):
+        self._w("b/index.md", "# B\n")
+        self._w("b/diagram.png", "not a real png")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("asset-placement", self._names(errors))
+
+    def test_asset_inside_assets_dir_is_clean(self):
+        self._w("b/index.md", "# B\n")
+        self._w("b/assets/diagram.png", "not a real png")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("asset-placement", self._names(errors))
+
+    def test_unregistered_type_is_warning(self):
+        self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
+        self._w("b/x.md", "---\ntype: Bogus\ntitle: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("type-registered", self._names(warnings))
+        self.assertNotIn("type-registered", self._names(errors))
+
+    def test_registered_type_has_no_warning(self):
+        self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("type-registered", self._names(warnings))
+
+    def test_no_types_md_skips_type_registered_check(self):
+        self._w("b/x.md", "---\ntype: AnythingGoes\ntitle: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("type-registered", self._names(warnings))
+
+    def test_german_frontmatter_key_is_warning(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitel: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("english-keys", self._names(warnings))
+
+    def test_relative_crosslink_is_warning(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](y.md)\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("crosslink-format", self._names(warnings))
+
+    def test_bundle_relative_crosslink_is_clean(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](/y.md)\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("crosslink-format", self._names(warnings))
+
+    def test_cross_bundle_dotdot_link_is_clean(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](../other/y.md)\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("crosslink-format", self._names(warnings))
+
+    def test_clean_bundle_has_zero_violations(self):
+        self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
+        self._w("b/index.md", "# B\n\n## Contents\n\n"
+                              + okf.MARK_START + "\n* [X](x.md)\n" + okf.MARK_END + "\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags: [a]\n---\n# X\n\n[Y](/other.md)\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
+    def test_whole_catalogue_scan_when_no_target(self):
+        self._w("b1/x.md", "# X\n\nno frontmatter.\n")
+        self._w("b2/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        errors, warnings = okf.run_checks(self.tmp, None)
+        self.assertIn("b1/x.md", [e[1] for e in errors])
+
+
 if __name__ == "__main__":
     unittest.main()
