@@ -11,6 +11,7 @@ Commands:
     okf-cli.py find "<query>"              ranked keyword search across all bundles
     okf-cli.py read <bundle>/<concept-id>  print one concept page
     okf-cli.py reindex <target> [--init] [--check]  (re)generate index.md listings
+    okf-cli.py log [bundle] [--since] [--write]  render git history as a SPEC §7 changelog
     okf-cli.py tags                        full tag audit dump (tag + usage count)
     okf-cli.py tags <tag1> <tag2> …        fuzzy-search each candidate against the tag universe
 
@@ -28,6 +29,14 @@ RESERVED = {"index.md", "log.md", "readme.md", "index-map.md"}
 FM_DELIM = "---"
 MARK_START = "<!-- okf:index -->"
 MARK_END = "<!-- /okf:index -->"
+LOG_START = "<!-- okf:log -->"
+LOG_END = "<!-- /okf:log -->"
+LOG_NOTICE = (
+    "> **History lives in git.** This file is a portability snapshot, not the "
+    "source of truth. Regenerate the block below with `python3 okf-cli.py log "
+    "--write` (per bundle: `okf-cli.py log <bundle>`). Rationale for each change "
+    "lives in its commit body; anything outside the markers is a frozen archive."
+)
 
 
 def catalogue_root(explicit):
@@ -619,6 +628,68 @@ def cmd_reindex(root, args):
     print("reindex: {} updated, {} skipped".format(len(changed), len(skipped)))
 
 
+def render_git_log(title, rows):
+    """rows: [(date, subject), …] newest-first → SPEC §7 date-grouped flat list."""
+    out = ["# {} Update Log".format(title)]
+    last = None
+    for date, subject in rows:
+        if date != last:
+            out.append("")
+            out.append("## {}".format(date))
+            last = date
+        out.append("* {}".format(subject))
+    return "\n".join(out).rstrip() + "\n"
+
+
+def splice_log(existing, snapshot):
+    """Insert/refresh the git snapshot inside <!-- okf:log --> markers.
+
+    If markers exist, only the block between them is replaced (the hand-authored
+    archive outside stays put). Otherwise a notice header + marker block is
+    created and any prior content is preserved below as a frozen archive.
+    """
+    block = LOG_START + "\n" + snapshot.rstrip() + "\n" + LOG_END
+    if existing and LOG_START in existing:
+        si = existing.find(LOG_START)
+        ei = existing.find(LOG_END, si) + len(LOG_END)
+        return existing[:si] + block + existing[ei:]
+    header = "# Catalogue Update Log\n\n" + LOG_NOTICE + "\n\n"
+    archive = ""
+    if existing and existing.strip():
+        arch = re.sub(r"^#\s+.*\n+", "", existing.strip())  # drop duplicate H1
+        archive = "\n\n## Archiv (hand-authored, eingefroren)\n\n" + arch + "\n"
+    return header + block + archive + "\n"
+
+
+def cmd_log(root, args):
+    bundle = getattr(args, "bundle", None)
+    scope = os.path.join(root, bundle) if bundle else root
+    title = bundle if bundle else "Catalogue"
+    cmd = ["git", "-C", root, "log", "--date=short", "--format=%ad\t%s"]
+    if args.since:
+        cmd.append("--since={}".format(args.since))
+    cmd += ["--", os.path.relpath(scope, root) if bundle else "."]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print("git log failed: {}".format(e), file=sys.stderr)
+        sys.exit(1)
+    rows = []
+    for line in res.stdout.splitlines():
+        if "\t" in line:
+            d, s = line.split("\t", 1)
+            rows.append((d, s))
+    md = render_git_log(title, rows)
+    if args.write:
+        target = os.path.join(scope, "log.md")
+        existing = read_file(target) if os.path.isfile(target) else ""
+        snapshot = re.sub(r"^#\s+.*\n+", "", md)  # snapshot body without its own H1
+        write_file(target, splice_log(existing, snapshot))
+        print("wrote {}".format(os.path.relpath(target, root)))
+    else:
+        print(md, end="")
+
+
 def main():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -646,6 +717,10 @@ def main():
                          "managed marker blocks (bespoke multi-section indexes are skipped + flagged)")
     px.add_argument("--check", action="store_true",
                     help="dry-run: with --init preview conversions; else report stale blocks. No writes")
+    pl = sub.add_parser("log", help="render git history for the catalogue or a bundle as a SPEC §7 changelog")
+    pl.add_argument("bundle", nargs="?", help="bundle to scope to (default: whole catalogue)")
+    pl.add_argument("--since", help="git --since filter, e.g. '3 months ago'")
+    pl.add_argument("--write", action="store_true", help="materialize into <scope>/log.md instead of stdout")
     pg = sub.add_parser("tags", help="list all tags with usage counts, or fuzzy-search candidate tags")
     pg.add_argument("query", nargs="*",
                     help="candidate tag(s) to fuzzy-search against the tag universe; omit for full audit dump")
@@ -654,7 +729,7 @@ def main():
     root = catalogue_root(args.root)
     {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find,
      "read": cmd_read, "toc": cmd_toc, "visualize": cmd_visualize,
-     "reindex": cmd_reindex, "tags": cmd_tags}[args.cmd](root, args)
+     "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags}[args.cmd](root, args)
 
 
 if __name__ == "__main__":

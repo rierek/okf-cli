@@ -157,5 +157,57 @@ class EnsureMarkersCreateOnly(unittest.TestCase):
             self.assertEqual(f.read(), body)  # no naive append
 
 
+class RenderGitLog(unittest.TestCase):
+    """T04 — render git history as a SPEC §7 date-grouped flat list."""
+
+    def test_groups_by_date_newest_first(self):
+        rows = [
+            ("2026-07-04", "feat(x): a"),
+            ("2026-07-04", "chore(y): b"),
+            ("2026-07-03", "fix(z): c"),
+        ]
+        md = okf.render_git_log("dev-arch-wiki", rows)
+        self.assertIn("# dev-arch-wiki Update Log", md)
+        # one heading per date, newest first
+        self.assertEqual(md.count("## 2026-07-04"), 1)
+        self.assertLess(md.index("## 2026-07-04"), md.index("## 2026-07-03"))
+        # both same-day commits land under the one date heading, as bullets
+        self.assertIn("* feat(x): a", md)
+        self.assertIn("* chore(y): b", md)
+        self.assertIn("* fix(z): c", md)
+        # bullet b sits after its date heading and before the next date heading
+        self.assertLess(md.index("* chore(y): b"), md.index("## 2026-07-03"))
+
+    def test_empty_history_still_has_header(self):
+        md = okf.render_git_log("dev-arch-wiki", [])
+        self.assertIn("# dev-arch-wiki Update Log", md)
+
+
+class SpliceLog(unittest.TestCase):
+    """T05 — --write is marker-bounded: refresh the snapshot, never clobber the
+    hand-authored archive that lives outside the markers."""
+
+    def test_replaces_only_between_markers(self):
+        existing = (
+            "# Catalogue Update Log\n\n> notice\n\n"
+            + okf.LOG_START + "\nOLD SNAPSHOT\n" + okf.LOG_END
+            + "\n\n## Archiv\n* precious hand entry\n"
+        )
+        new = okf.splice_log(existing, "NEW SNAPSHOT")
+        self.assertIn("NEW SNAPSHOT", new)
+        self.assertNotIn("OLD SNAPSHOT", new)
+        self.assertIn("* precious hand entry", new)   # archive outside markers preserved
+        self.assertIn("> notice", new)
+
+    def test_wraps_markerless_file_and_preserves_content_as_archive(self):
+        existing = "# Catalogue Update Log\n\n## 2026-07-04\n* precious hand entry\n"
+        new = okf.splice_log(existing, "SNAP")
+        self.assertIn(okf.LOG_START, new)
+        self.assertIn("SNAP", new)
+        self.assertIn("* precious hand entry", new)    # old content kept, not lost
+        # snapshot block comes before the preserved archive
+        self.assertLess(new.index("SNAP"), new.index("* precious hand entry"))
+
+
 if __name__ == "__main__":
     unittest.main()
