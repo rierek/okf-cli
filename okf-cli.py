@@ -15,6 +15,7 @@ Commands:
     okf-cli.py tags                        full tag audit dump (tag + usage count)
     okf-cli.py tags <tag1> <tag2> …        fuzzy-search each candidate against the tag universe
     okf-cli.py check [target] [--strict] [--json]  conformance scan (§9 + local invariants)
+    okf-cli.py fix-crosslinks [target] [--check]   rewrite relative links to bundle-relative form
 
 Run from the catalogue root, or pass --root <path>.
 """
@@ -824,18 +825,104 @@ def check_asset_placement(bundle_path):
     return bad
 
 
+CROSSLINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+
+
+def resolve_crosslink_target(root, bundle, cdir, tgt):
+    """Reuses bundle_graph's cdir-relative resolution formula. Returns the
+    bundle-relative absolute form (`/dest.md`) only if the target file really
+    exists — the safety anchor that leaves doc examples pointing at
+    non-existent paths untouched instead of guessing."""
+    dest = os.path.normpath(os.path.join(cdir, tgt[:-3])).replace(os.sep, "/")
+    if not os.path.isfile(os.path.join(root, bundle, dest + ".md")):
+        return None
+    return "/" + dest + ".md"
+
+
+def rewrite_crosslinks_in_body(root, bundle, cdir, body):
+    """Rewrite same-bundle relative links to bundle-relative absolute form.
+    Same detection filter as check_crosslink_format (skip http(s)://, leading
+    `/`, leading `..`). Returns (new_body, changed_count, unresolved_targets)."""
+    changed = 0
+    unresolved = []
+
+    def repl(m):
+        nonlocal changed
+        label, target = m.group(1), m.group(2)
+        raw_tgt, _, anchor = target.partition("#")
+        raw_tgt = raw_tgt.strip()
+        if not raw_tgt.endswith(".md") or raw_tgt.startswith(("http://", "https://", "/", "..")):
+            return m.group(0)
+        resolved = resolve_crosslink_target(root, bundle, cdir, raw_tgt)
+        if resolved is None:
+            unresolved.append(raw_tgt)
+            return m.group(0)
+        changed += 1
+        new_target = resolved + ("#" + anchor if anchor else "")
+        return "[{}]({})".format(label, new_target)
+
+    new_body = CROSSLINK_RE.sub(repl, body)
+    return new_body, changed, unresolved
+
+
+def fix_crosslinks(root, target, dry_run=False):
+    """Rewrite crosslinks in every non-reserved .md under `target` (bundle or
+    bundle/subdir, or the whole catalogue when None) to bundle-relative
+    absolute form. Returns (touched, unresolved):
+    touched = [(rel, changed_count), ...], unresolved = [(rel, target), ...]."""
+    touched, unresolved = [], []
+    for bundle, bp in resolve_scopes(root, target):
+        for ap in iter_all_md(bp):
+            if os.path.basename(ap).lower() in RESERVED:
+                continue
+            text = read_file(ap)
+            _, body = split_frontmatter(text)
+            head = text[:len(text) - len(body)]
+            cdir = os.path.dirname(os.path.relpath(ap, bp))
+            new_body, changed, unres = rewrite_crosslinks_in_body(root, bundle, cdir, body)
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            for u in unres:
+                unresolved.append((rel, u))
+            if changed:
+                touched.append((rel, changed))
+                if not dry_run:
+                    write_file(ap, head + new_body)
+    return touched, unresolved
+
+
+def cmd_fix_crosslinks(root, args):
+    target = args.target
+    if target:
+        tp = os.path.join(root, target.rstrip("/"))
+        if not os.path.isdir(tp):
+            print("not a directory: {}".format(target), file=sys.stderr)
+            sys.exit(1)
+    touched, unresolved = fix_crosslinks(root, target, dry_run=args.check)
+    verb = "would rewrite" if args.check else "rewrote"
+    for rel, n in touched:
+        print("{:<14} {}  ({} link(s))".format(verb, rel, n))
+    for rel, tgt in unresolved:
+        print("unresolved     {}  -> {}".format(rel, tgt))
+    print("fix-crosslinks: {} file(s) {}, {} unresolved link(s)".format(
+        len(touched), verb, len(unresolved)))
+
+
+def resolve_scopes(root, target):
+    """[(bundle, bundle_path), ...] for `target` (<bundle> or <bundle>/<subdir>),
+    or every bundle in the catalogue when target is None."""
+    if target:
+        tp = os.path.join(root, target.rstrip("/"))
+        return [(target.split("/")[0], tp)]
+    return [(b, os.path.join(root, b)) for b in list_bundles(root)]
+
+
 def run_checks(root, target):
     """Run the full pluggable conformance scan over `target` (bundle or
     bundle/subdir), or the whole catalogue when target is None.
 
     Returns (errors, warnings), each a list of (check_name, rel_path, message).
     """
-    if target:
-        tp = os.path.join(root, target.rstrip("/"))
-        scopes = [(target.split("/")[0], tp)]
-    else:
-        scopes = [(b, os.path.join(root, b)) for b in list_bundles(root)]
-
+    scopes = resolve_scopes(root, target)
     types_set = load_types(root)
     per_file_checks = [
         ("frontmatter-parseable", "error", check_fm_parseable),
@@ -919,12 +1006,16 @@ def main():
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
+    pfx = sub.add_parser("fix-crosslinks",
+                         help="rewrite same-bundle relative links to bundle-relative absolute form")
+    pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
     args = ap.parse_args()
     root = catalogue_root(args.root)
     {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find,
      "read": cmd_read, "toc": cmd_toc, "visualize": cmd_visualize,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags,
-     "check": cmd_check}[args.cmd](root, args)
+     "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks}[args.cmd](root, args)
 
 
 if __name__ == "__main__":

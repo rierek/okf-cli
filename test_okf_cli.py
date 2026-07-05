@@ -434,5 +434,177 @@ class VisualizeDefaultOutputPath(unittest.TestCase):
         self.assertTrue(os.path.isfile(expected))
 
 
+class ResolveCrosslinkTarget(unittest.TestCase):
+    """T07 — resolve_crosslink_target reuses bundle_graph's cdir-relative
+    normalization formula, gated by a real isfile() check (the safety anchor
+    that keeps doc examples pointing at non-existent paths untouched)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_same_dir_target_resolves(self):
+        self._w("b/y.md", "")
+        got = okf.resolve_crosslink_target(self.tmp, "b", "", "y.md")
+        self.assertEqual(got, "/y.md")
+
+    def test_subdir_target_resolves_from_bundle_root(self):
+        self._w("b/sub/y.md", "")
+        got = okf.resolve_crosslink_target(self.tmp, "b", "", "sub/y.md")
+        self.assertEqual(got, "/sub/y.md")
+
+    def test_target_resolves_relative_to_source_cdir(self):
+        self._w("b/sub/y.md", "")
+        got = okf.resolve_crosslink_target(self.tmp, "b", "sub", "y.md")
+        self.assertEqual(got, "/sub/y.md")
+
+    def test_dotslash_target_normalizes(self):
+        self._w("b/y.md", "")
+        got = okf.resolve_crosslink_target(self.tmp, "b", "", "./y.md")
+        self.assertEqual(got, "/y.md")
+
+    def test_nonexistent_target_returns_none(self):
+        got = okf.resolve_crosslink_target(self.tmp, "b", "", "ghost.md")
+        self.assertIsNone(got)
+
+    def test_index_md_target_resolves(self):
+        self._w("b/sub/index.md", "")
+        got = okf.resolve_crosslink_target(self.tmp, "b", "", "sub/index.md")
+        self.assertEqual(got, "/sub/index.md")
+
+
+class RewriteCrosslinksInBody(unittest.TestCase):
+    """T08 — rewrite_crosslinks_in_body: same link-detection filter as
+    check_crosslink_format, but rewrites resolvable targets in place."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_rewrites_resolvable_same_dir_link(self):
+        self._w("b/y.md", "")
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(
+            self.tmp, "b", "", "See [Y](y.md) for details.")
+        self.assertEqual(new, "See [Y](/y.md) for details.")
+        self.assertEqual(changed, 1)
+        self.assertEqual(unresolved, [])
+
+    def test_preserves_anchor_fragment(self):
+        self._w("b/y.md", "")
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(
+            self.tmp, "b", "", "[Y](y.md#section)")
+        self.assertEqual(new, "[Y](/y.md#section)")
+        self.assertEqual(changed, 1)
+
+    def test_unresolvable_target_left_untouched(self):
+        body = "[Ghost](ghost.md)"
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        self.assertEqual(new, body)
+        self.assertEqual(changed, 0)
+        self.assertEqual(unresolved, ["ghost.md"])
+
+    def test_already_bundle_relative_link_untouched(self):
+        self._w("b/y.md", "")
+        body = "[Y](/y.md)"
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        self.assertEqual(new, body)
+        self.assertEqual(changed, 0)
+
+    def test_cross_bundle_dotdot_link_untouched(self):
+        body = "[Y](../other-bundle/y.md)"
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        self.assertEqual(new, body)
+        self.assertEqual(changed, 0)
+
+    def test_multiple_occurrences_all_rewritten(self):
+        self._w("b/y.md", "")
+        body = "[Y](y.md) and again [Y2](y.md)"
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        self.assertEqual(new, "[Y](/y.md) and again [Y2](/y.md)")
+        self.assertEqual(changed, 2)
+
+    def test_subdir_relative_link_from_root_rewritten(self):
+        self._w("b/sub/y.md", "")
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(
+            self.tmp, "b", "", "[Y](sub/y.md)")
+        self.assertEqual(new, "[Y](/sub/y.md)")
+        self.assertEqual(changed, 1)
+
+
+class FixCrosslinksCommand(unittest.TestCase):
+    """T09 — fix_crosslinks: file-level orchestration, frontmatter untouched,
+    reserved files skipped (parity with check_crosslink_format's own scope),
+    dry-run writes nothing."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_writes_rewritten_files_by_default(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b")
+        self.assertEqual(len(touched), 1)
+        self.assertEqual(unresolved, [])
+        content = self._r("b/x.md")
+        self.assertIn("[Y](/y.md)", content)
+        self.assertTrue(content.startswith("---\ntype: Concept\ntitle: X\n---\n"))
+
+    def test_dry_run_does_not_write(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        before = self._r("b/x.md")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", dry_run=True)
+        self.assertEqual(len(touched), 1)
+        self.assertEqual(self._r("b/x.md"), before)
+
+    def test_reserved_file_is_not_rewritten(self):
+        self._w("b/index.md", "# B\n\n[X](x.md)\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b")
+        self.assertNotIn("b/index.md", [t[0] for t in touched])
+        self.assertIn("(x.md)", self._r("b/index.md"))
+
+    def test_unresolved_links_are_reported(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Ghost](ghost.md)\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b")
+        self.assertEqual(touched, [])
+        self.assertIn(("b/x.md", "ghost.md"), unresolved)
+
+
 if __name__ == "__main__":
     unittest.main()
