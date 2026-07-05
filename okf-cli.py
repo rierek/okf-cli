@@ -474,11 +474,13 @@ def cmd_info(root, _args):
     """Print the catalogue's schema docs (TYPES.md + PROPERTIES.md) so an
     agent can load the type vocabulary and property spec in one call."""
     for fn in ("TYPES.md", "PROPERTIES.md"):
+        print("------")
         p = os.path.join(root, fn)
         if os.path.isfile(p):
             print(read_file(p))
         else:
             print("(missing: {})".format(fn))
+    print("------")
 
 
 def iter_headings(body):
