@@ -8,6 +8,9 @@ A *catalogue* is a directory whose immediate subdirectories (not starting with
 Commands:
     okf-cli.py index [bundle] [--full]     catalogue TOC (bundle/description/concepts/directories),
                                             or one bundle's index; --full adds types+tags per bundle
+    okf-cli.py list [--type <T>] [--tag <T>] [--scope <target>]
+                                            list concepts filtered by frontmatter type and/or tag (exact match,
+                                            AND-combined), structured per-hit block (title/type/path/description)
     okf-cli.py find "<query>"              ranked keyword search across all bundles; structured per-hit block
                                             (score/title/type/path/description/body-snippet). score shown as
                                             achieved/max ("4/6") — 3 title-hit + 2 tag-hit + 1 body-hit per term,
@@ -402,6 +405,35 @@ def cmd_index(root, args):
 
 def tokenize(s):
     return [t for t in re.split(r"[^a-z0-9]+", s.lower()) if t]
+
+
+def cmd_list(root, args):
+    if not args.type and not args.tag:
+        print("(error: pass --type and/or --tag)", file=sys.stderr)
+        sys.exit(1)
+    hits = []
+    for _bundle, bp in resolve_scopes(root, args.scope):
+        for _cid, ap in iter_concepts(bp):
+            t, title, desc = meta_of(ap)
+            if args.type and t != args.type:
+                continue
+            if args.tag and args.tag not in extract_tags(read_file(ap)):
+                continue
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            path = rel[:-3] if rel.endswith(".md") else rel
+            hits.append((title, t, path, desc))
+    hits.sort(key=lambda x: x[0].casefold())
+    if not hits:
+        print("(no matches)")
+        return
+    for title, t, path, desc in hits:
+        print("------")
+        print("title: {}".format(title))
+        print("type: {}".format(t))
+        print("path: {}".format(path))
+        print("description: {}".format(desc))
+    print("------")
+    print("list: {} concept(s)".format(len(hits)))
 
 
 def cmd_find(root, args):
@@ -1182,6 +1214,11 @@ def main():
     pi.add_argument("--full", action="store_true",
                     help="add per-bundle types+tags used (catalogue TOC), or print the "
                          "structured bundle summary instead of the raw index.md (with a bundle arg)")
+    pls = sub.add_parser("list", help="list concepts filtered by frontmatter type and/or tag")
+    pls.add_argument("--type", help="filter by frontmatter `type` (exact match)")
+    pls.add_argument("--tag", help="filter by tag (exact match)")
+    pls.add_argument("--scope", metavar="TARGET",
+                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
     pf = sub.add_parser("find")
     pf.add_argument("query")
     pf.add_argument("--limit", type=int, default=10)
@@ -1236,7 +1273,7 @@ def main():
     pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
     args = ap.parse_args()
     root = catalogue_root(args.root)
-    {"index": cmd_index, "find": cmd_find,
+    {"index": cmd_index, "find": cmd_find, "list": cmd_list,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
      "normalize-tags": cmd_normalize_tags,
