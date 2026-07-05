@@ -8,9 +8,10 @@ A *catalogue* is a directory whose immediate subdirectories (not starting with
 Commands:
     okf-cli.py index [bundle] [--full]     catalogue TOC (bundle/description/concepts/directories),
                                             or one bundle's index; --full adds types+tags per bundle
-    okf-cli.py find "<query>"              ranked keyword search across all bundles (shows type + description).
-                                            score per term: 3 title-hit + 2 tag-hit + 1 body-hit (capped at
-                                            1 per field per term) → max score = 6 * number of terms
+    okf-cli.py find "<query>"              ranked keyword search across all bundles; structured per-hit block
+                                            (score/title/type/path/description/body-snippet). score shown as
+                                            achieved/max ("4/6") — 3 title-hit + 2 tag-hit + 1 body-hit per term,
+                                            capped at 1 per field per term, max = 6 * number of terms
     okf-cli.py read <bundle>/<concept-id>  print one concept page
     okf-cli.py info                        print catalogue schema docs (TYPES.md + PROPERTIES.md)
     okf-cli.py reindex <target> [--init] [--check]  (re)generate index.md listings
@@ -19,6 +20,9 @@ Commands:
     okf-cli.py tags <tag1> <tag2> …        fuzzy-search each candidate against the tag universe
     okf-cli.py merge-tags <tag1> [<tag2> …] --into <tag> [--scope <target>] [--apply]
                                             merge/rename tags across concept frontmatter (dry-run default)
+    okf-cli.py normalize-tags [--scope <target>] [--apply]
+                                            convert inline `tags: [...]` to YAML block-list (local convention,
+                                            dry-run default)
     okf-cli.py check [target] [--strict] [--json]  conformance scan (§9 + local invariants)
     okf-cli.py fix-crosslinks [target] [--check]   rewrite relative links to bundle-relative form
 
@@ -158,6 +162,7 @@ def all_tags(root):
 
 
 TAGS_INLINE_RE = re.compile(r"^tags:[ \t]*\[.*\]\s*$", re.M)
+TAGS_INLINE_CONTENT_RE = re.compile(r"^tags:[ \t]*\[(.*)\]\s*$", re.M)
 TAGS_BLOCK_RE = re.compile(r"^tags:[ \t]*\n((?:[ \t]*-[ \t]*.+\n)*)", re.M)
 
 
@@ -218,6 +223,46 @@ def cmd_merge_tags(root, args):
         print("unparseable    {}  (tags field not in inline/block form — skipped)".format(rel))
     print("merge-tags: {} file(s) {}, {} unparseable — {} -> {}".format(
         len(touched), verb, len(unparseable), ", ".join(sorted(sources)), args.into))
+
+
+def normalize_tags_in_file(text):
+    """Convert a non-empty inline `tags: [a, b]` field to YAML block-list form.
+    Local convention (this catalogue), not an OKF spec requirement — both forms
+    stay valid OKF, this just harmonizes the one file that drifts. Returns the
+    new text, or None if there's no frontmatter, no tags field, it's already
+    block-list, or the inline list is empty (`[]`)."""
+    if not text.startswith(FM_DELIM):
+        return None
+    end = text.find("\n" + FM_DELIM, len(FM_DELIM))
+    if end == -1:
+        return None
+    fm, rest = text[:end], text[end:]
+    m = TAGS_INLINE_CONTENT_RE.search(fm)
+    if not m:
+        return None
+    tags = parse_tag_list(m.group(1))
+    if not tags:
+        return None
+    new_field = "tags:\n" + "\n".join("  - {}".format(t) for t in tags)
+    return fm[:m.start()] + new_field + fm[m.end():] + rest
+
+
+def cmd_normalize_tags(root, args):
+    touched = []
+    for _bundle, bp in resolve_scopes(root, args.scope):
+        for _cid, ap in iter_concepts(bp):
+            text = read_file(ap)
+            new_text = normalize_tags_in_file(text)
+            if new_text is None:
+                continue
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            touched.append(rel)
+            if args.apply:
+                write_file(ap, new_text)
+    verb = "rewrote" if args.apply else "would rewrite"
+    for rel in touched:
+        print("{:<14} {}".format(verb, rel))
+    print("normalize-tags: {} file(s) {}".format(len(touched), verb))
 
 
 def fuzzy_matches(query, candidates, limit=8):
@@ -386,11 +431,16 @@ def cmd_find(root, args):
     if not hits:
         print("(no matches for: {})".format(args.query))
         return
+    max_score = 6 * len(terms)
     for score, path, title, typ, desc, snip in hits[: args.limit]:
-        print("{:>4}  {}  [{}]\n      {}".format(score, title, typ, path))
-        if desc:
-            print("      {}".format(desc))
-        print("      {}\n".format(snip))
+        print("------")
+        print("score: {}/{}".format(score, max_score))
+        print("title: {}".format(title))
+        print("type: {}".format(typ))
+        print("path: {}".format(path))
+        print("description: {}".format(desc))
+        print("body-snippet: {}".format(snip))
+    print("------")
 
 
 def make_snippet(body, terms, width=140):
@@ -923,6 +973,17 @@ def check_english_keys(ctx):
     return ["German frontmatter key(s): {}".format(", ".join(sorted(hits)))] if hits else []
 
 
+def check_tags_block_form(ctx):
+    """Local convention (this catalogue, not OKF spec): `tags` must be a YAML
+    block-list, not inline `[a, b]`. Empty `[]` is fine (nothing to convert)."""
+    if ctx["is_reserved"] or not ctx["has_fm"]:
+        return []
+    raw = ctx["fm"].get("tags", "").strip()
+    if raw.startswith("[") and raw.endswith("]") and raw[1:-1].strip():
+        return ["tags field uses inline form — local convention requires YAML block-list"]
+    return []
+
+
 def check_crosslink_format(ctx):
     if ctx["is_reserved"]:
         return []
@@ -1073,6 +1134,7 @@ def run_checks(root, target):
         ("type-registered", "warning", lambda c: check_type_registered(c, types_set)),
         ("english-keys", "warning", check_english_keys),
         ("crosslink-format", "warning", check_crosslink_format),
+        ("tags-block-form", "warning", check_tags_block_form),
     ]
 
     errors, warnings = [], []
@@ -1157,6 +1219,11 @@ def main():
     pmt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
     pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    pnt = sub.add_parser("normalize-tags",
+                         help="convert inline `tags: [...]` fields to YAML block-list form (local convention)")
+    pnt.add_argument("--scope", metavar="TARGET",
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+    pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pc = sub.add_parser("check", help="conformance scan: §9 hard rules + local invariants")
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
@@ -1170,6 +1237,7 @@ def main():
     {"index": cmd_index, "find": cmd_find,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
+     "normalize-tags": cmd_normalize_tags,
      "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks}[args.cmd](root, args)
 
 
