@@ -6,14 +6,19 @@ A *catalogue* is a directory whose immediate subdirectories (not starting with
 '.' or '_') are OKF *bundles*. Standard library only — no install required.
 
 Commands:
-    okf-cli.py bundles                     list bundles + concept counts
-    okf-cli.py index [bundle]              catalogue TOC, or one bundle's index
-    okf-cli.py find "<query>"              ranked keyword search across all bundles
+    okf-cli.py index [bundle] [--full]     catalogue TOC (bundle/description/concepts/directories),
+                                            or one bundle's index; --full adds types+tags per bundle
+    okf-cli.py find "<query>"              ranked keyword search across all bundles (shows type + description).
+                                            score per term: 3 title-hit + 2 tag-hit + 1 body-hit (capped at
+                                            1 per field per term) → max score = 6 * number of terms
     okf-cli.py read <bundle>/<concept-id>  print one concept page
+    okf-cli.py info                        print catalogue schema docs (TYPES.md + PROPERTIES.md)
     okf-cli.py reindex <target> [--init] [--check]  (re)generate index.md listings
     okf-cli.py log [bundle] [--since] [--write]  render git history as a SPEC §7 changelog
-    okf-cli.py tags                        full tag audit dump (tag + usage count)
+    okf-cli.py tags [--singletons]          full tag audit dump (tag + usage count), or singleton-only
     okf-cli.py tags <tag1> <tag2> …        fuzzy-search each candidate against the tag universe
+    okf-cli.py merge-tags <tag1> [<tag2> …] --into <tag> [--scope <target>] [--apply]
+                                            merge/rename tags across concept frontmatter (dry-run default)
     okf-cli.py check [target] [--strict] [--json]  conformance scan (§9 + local invariants)
     okf-cli.py fix-crosslinks [target] [--check]   rewrite relative links to bundle-relative form
 
@@ -152,6 +157,69 @@ def all_tags(root):
     return counts
 
 
+TAGS_INLINE_RE = re.compile(r"^tags:[ \t]*\[.*\]\s*$", re.M)
+TAGS_BLOCK_RE = re.compile(r"^tags:[ \t]*\n((?:[ \t]*-[ \t]*.+\n)*)", re.M)
+
+
+def rewrite_tags_in_frontmatter(text, new_tags):
+    """Rewrite the `tags:` field inside a concept's frontmatter, preserving
+    whichever style the file used — inline (`tags: [a, b]`) or YAML block-list
+    (`tags:\\n  - a\\n  - b`). Returns the new file text, or None if there is
+    no frontmatter / no parseable `tags` field (caller should skip + flag)."""
+    if not text.startswith(FM_DELIM):
+        return None
+    end = text.find("\n" + FM_DELIM, len(FM_DELIM))
+    if end == -1:
+        return None
+    fm, rest = text[:end], text[end:]
+
+    m = TAGS_INLINE_RE.search(fm)
+    if m:
+        new_field = "tags: [{}]".format(", ".join(new_tags))
+        return fm[:m.start()] + new_field + fm[m.end():] + rest
+
+    m = TAGS_BLOCK_RE.search(fm)
+    if m:
+        new_field = "tags:\n" + "".join("  - {}\n".format(t) for t in new_tags)
+        return fm[:m.start()] + new_field + fm[m.end():] + rest
+
+    return None
+
+
+def cmd_merge_tags(root, args):
+    sources = set(args.tags)
+    touched, unparseable = [], []
+    for _bundle, bp in resolve_scopes(root, args.scope):
+        for _cid, ap in iter_concepts(bp):
+            text = read_file(ap)
+            tags = extract_tags(text)
+            if not any(t in sources for t in tags):
+                continue
+            new_tags, seen = [], set()
+            for t in tags:
+                nt = args.into if t in sources else t
+                if nt not in seen:
+                    seen.add(nt)
+                    new_tags.append(nt)
+            if new_tags == tags:
+                continue
+            new_text = rewrite_tags_in_frontmatter(text, new_tags)
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            if new_text is None:
+                unparseable.append(rel)
+                continue
+            touched.append(rel)
+            if args.apply:
+                write_file(ap, new_text)
+    verb = "rewrote" if args.apply else "would rewrite"
+    for rel in touched:
+        print("{:<14} {}".format(verb, rel))
+    for rel in unparseable:
+        print("unparseable    {}  (tags field not in inline/block form — skipped)".format(rel))
+    print("merge-tags: {} file(s) {}, {} unparseable — {} -> {}".format(
+        len(touched), verb, len(unparseable), ", ".join(sorted(sources)), args.into))
+
+
 def fuzzy_matches(query, candidates, limit=8):
     """Rank candidates against query, merging two signals so both typo/subsequence
     matches (fzf --filter) AND abbreviation/reordering matches (difflib ratio,
@@ -195,8 +263,14 @@ def cmd_tags(root, args):
         if not counts:
             print("(no tags found)")
             return
-        width = max(len(t) for t in counts)
-        for t, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        items = counts.items()
+        if args.singletons:
+            items = [(t, n) for t, n in items if n == 1]
+            if not items:
+                print("(no singleton tags)")
+                return
+        width = max(len(t) for t, _n in items)
+        for t, n in sorted(items, key=lambda kv: (-kv[1], kv[0])):
             print("  {:<{w}}  {}".format(t, n, w=width))
         return
     universe = sorted(counts.keys())
@@ -210,20 +284,60 @@ def cmd_tags(root, args):
         print()
 
 
-def cmd_bundles(root, _args):
-    bundles = list_bundles(root)
-    if not bundles:
-        print("(no bundles found)")
-        return
-    width = max(len(b) for b in bundles)
-    for b in bundles:
-        n = sum(1 for _ in iter_concepts(os.path.join(root, b)))
-        print("  {:<{w}}  {} concepts".format(b, n, w=width))
+def bundle_description(bp):
+    """H1 + intro paragraph from a bundle's entry file (INDEX-MAP.md/index.md)."""
+    for fn in ("INDEX-MAP.md", "index.md"):
+        fp = os.path.join(bp, fn)
+        if os.path.isfile(fp):
+            _, desc = index_h1_and_desc(fp)
+            return desc
+    return ""
+
+
+def bundle_top_dirs(bp):
+    """Immediate subdirectories of a bundle, excluding hidden dirs and assets/."""
+    return sorted(
+        d for d in os.listdir(bp)
+        if os.path.isdir(os.path.join(bp, d)) and not d.startswith(".") and d != "assets"
+    )
+
+
+def bundle_types_and_tags(bp):
+    """Return (sorted types, sorted tags) used across a bundle's concepts."""
+    types, tags = set(), set()
+    for _cid, ap in iter_concepts(bp):
+        t, _title, _desc = meta_of(ap)
+        if t:
+            types.add(t)
+        tags.update(extract_tags(read_file(ap)))
+    return sorted(types), sorted(tags)
+
+
+def render_bundle_block(root, b, full=False):
+    bp = os.path.join(root, b)
+    n = sum(1 for _ in iter_concepts(bp))
+    lines = [
+        "bundle: {}".format(b),
+        "description: {}".format(_collapse(bundle_description(bp))),
+        "concepts: {}".format(n),
+    ]
+    dirs = bundle_top_dirs(bp)
+    if dirs:
+        lines.append("directories:")
+        lines.extend("- {}".format(d) for d in dirs)
+    if full:
+        types, tags = bundle_types_and_tags(bp)
+        lines.append("types: {}".format(", ".join(types)))
+        lines.append("tags: {}".format(", ".join(tags)))
+    return "\n".join(lines)
 
 
 def cmd_index(root, args):
     if args.bundle:
         bp = os.path.join(root, args.bundle)
+        if args.full:
+            print(render_bundle_block(root, args.bundle, full=True))
+            return
         for fn in ("INDEX-MAP.md", "index.md"):
             p = os.path.join(bp, fn)
             if os.path.isfile(p):
@@ -235,17 +349,10 @@ def cmd_index(root, args):
             t, title, desc = meta_of(ap)
             print("* [{}]({}.md) [{}]{}".format(title, cid, t, " - " + desc if desc else ""))
         return
-    # catalogue TOC
-    print("# Knowledge Catalogue\n")
+    # catalogue TOC — structured per-bundle blocks
     for b in list_bundles(root):
-        bp = os.path.join(root, b)
-        n = sum(1 for _ in iter_concepts(bp))
-        entry = "* **{}** ({} concepts)".format(b, n)
-        for fn in ("INDEX-MAP.md", "index.md"):
-            if os.path.isfile(os.path.join(bp, fn)):
-                entry += " → {}".format(fn)
-                break
-        print(entry)
+        print(render_bundle_block(root, b, full=args.full))
+        print("-----")
 
 
 def tokenize(s):
@@ -268,16 +375,22 @@ def cmd_find(root, args):
             hay_body = body.lower()
             score = 0
             for t in terms:
-                score += 3 * hay_title.count(t) + 2 * hay_tags.count(t) + hay_body.count(t)
+                score += (3 * min(hay_title.count(t), 1)
+                          + 2 * min(hay_tags.count(t), 1)
+                          + min(hay_body.count(t), 1))
             if score:
                 snip = make_snippet(body, terms)
-                hits.append((score, "{}/{}".format(b, cid), title, fm.get("type", ""), snip))
+                desc = _dequote(fm.get("description", ""))
+                hits.append((score, "{}/{}".format(b, cid), title, fm.get("type", ""), desc, snip))
     hits.sort(key=lambda x: -x[0])
     if not hits:
         print("(no matches for: {})".format(args.query))
         return
-    for score, path, title, typ, snip in hits[: args.limit]:
-        print("{:>4}  {}  [{}]\n      {}\n      {}\n".format(score, title, typ, path, snip))
+    for score, path, title, typ, desc, snip in hits[: args.limit]:
+        print("{:>4}  {}  [{}]\n      {}".format(score, title, typ, path))
+        if desc:
+            print("      {}".format(desc))
+        print("      {}\n".format(snip))
 
 
 def make_snippet(body, terms, width=140):
@@ -305,6 +418,17 @@ def resolve_concept(root, path):
 
 def cmd_read(root, args):
     print(read_file(resolve_concept(root, args.path)))
+
+
+def cmd_info(root, _args):
+    """Print the catalogue's schema docs (TYPES.md + PROPERTIES.md) so an
+    agent can load the type vocabulary and property spec in one call."""
+    for fn in ("TYPES.md", "PROPERTIES.md"):
+        p = os.path.join(root, fn)
+        if os.path.isfile(p):
+            print(read_file(p))
+        else:
+            print("(missing: {})".format(fn))
 
 
 def iter_headings(body):
@@ -825,6 +949,23 @@ def check_asset_placement(bundle_path):
     return bad
 
 
+def check_entry_file_description(bundle_path):
+    """A bundle's entry file (INDEX-MAP.md preferred, else index.md) must carry
+    an H1 + a real intro paragraph — `index --full` surfaces this as the
+    bundle's `description`. Returns a list of violation messages (0..2)."""
+    for fn in ("INDEX-MAP.md", "index.md"):
+        fp = os.path.join(bundle_path, fn)
+        if os.path.isfile(fp):
+            h1, desc = index_h1_and_desc(fp)
+            msgs = []
+            if not h1:
+                msgs.append("{} missing H1".format(fn))
+            if not desc.strip():
+                msgs.append("{} missing intro paragraph (used as bundle description)".format(fn))
+            return msgs
+    return ["no entry file (INDEX-MAP.md/index.md) found"]
+
+
 CROSSLINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
@@ -943,6 +1084,8 @@ def run_checks(root, target):
                     (errors if sev == "error" else warnings).append((name, ctx["rel"], msg))
         for rel in check_asset_placement(bp):
             errors.append(("asset-placement", "{}/{}".format(bundle, rel), "non-md file outside assets/"))
+        for msg in check_entry_file_description(bp):
+            warnings.append(("entry-file-description", bundle, msg))
     return errors, warnings
 
 
@@ -970,14 +1113,17 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="catalogue root (default: script directory)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("bundles")
     pi = sub.add_parser("index")
     pi.add_argument("bundle", nargs="?")
+    pi.add_argument("--full", action="store_true",
+                    help="add per-bundle types+tags used (catalogue TOC), or print the "
+                         "structured bundle summary instead of the raw index.md (with a bundle arg)")
     pf = sub.add_parser("find")
     pf.add_argument("query")
     pf.add_argument("--limit", type=int, default=10)
     pr = sub.add_parser("read")
     pr.add_argument("path")
+    sub.add_parser("info", help="print catalogue schema docs (TYPES.md + PROPERTIES.md)")
     pt = sub.add_parser("toc", help="print a concept's headings (default: h2 only)")
     pt.add_argument("path")
     pt.add_argument("--level", type=int, default=2,
@@ -1002,6 +1148,15 @@ def main():
     pg.add_argument("query", nargs="*",
                     help="candidate tag(s) to fuzzy-search against the tag universe; omit for full audit dump")
     pg.add_argument("--limit", type=int, default=8, help="max matches per candidate (default 8)")
+    pg.add_argument("--singletons", action="store_true",
+                    help="full-dump mode only: show tags used exactly once")
+    pmt = sub.add_parser("merge-tags",
+                         help="merge/rename one or more tags into a target tag across concept frontmatter")
+    pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows")
+    pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name")
+    pmt.add_argument("--scope", metavar="TARGET",
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+    pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pc = sub.add_parser("check", help="conformance scan: §9 hard rules + local invariants")
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
@@ -1012,9 +1167,9 @@ def main():
     pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
     args = ap.parse_args()
     root = catalogue_root(args.root)
-    {"bundles": cmd_bundles, "index": cmd_index, "find": cmd_find,
-     "read": cmd_read, "toc": cmd_toc, "visualize": cmd_visualize,
-     "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags,
+    {"index": cmd_index, "find": cmd_find,
+     "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
+     "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
      "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks}[args.cmd](root, args)
 
 
