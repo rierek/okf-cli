@@ -28,6 +28,8 @@ Commands:
                                             dry-run default)
     okf-cli.py check [target] [--strict] [--json]  conformance scan (§9 + local invariants)
     okf-cli.py fix-crosslinks [target] [--check]   rewrite relative links to bundle-relative form
+    okf-cli.py fix-xml-tags [target] [--check]     wrap `<tag>`/`<tag>.<tag2>` placeholders in inline
+                                            code so Obsidian doesn't misparse them as XML/HTML
 
 Run from the catalogue root, or pass --root <path>.
 """
@@ -1030,6 +1032,103 @@ def check_crosslink_format(ctx):
     return ["non bundle-relative link(s): {}".format(", ".join(bad))] if bad else []
 
 
+_TAG = r"</?[A-Za-z][\w:-]*>"
+XML_TAG_CHAIN_RE = re.compile(r"{t}(?:\.(?:{t}|[A-Za-z0-9_-]+))*".format(t=_TAG))
+SAFE_HTML_TAGS = {"br", "hr", "sub", "sup", "kbd", "mark", "code", "wbr"}
+AUTOLINK_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+
+
+def _mask_code_spans(body):
+    """Stash fenced code blocks + inline code so a pattern scan skips them.
+    Frontmatter is already split off by the caller (ctx["body"]/split_frontmatter),
+    so only fences/inline-code need masking here. Mirrors the Vault-side
+    wrap-hex-tags.js mask/unmask convention for the same class of problem."""
+    tokens = []
+
+    def stash(m):
+        tokens.append(m.group(0))
+        return "\x00{}\x00".format(len(tokens) - 1)
+
+    body = re.sub(r"(```|~~~)[\s\S]*?\1", stash, body)
+    body = re.sub(r"`[^`\n]+`", stash, body)
+    return body, tokens
+
+
+def _unmask(text, tokens):
+    return re.sub(r"\x00(\d+)\x00", lambda m: tokens[int(m.group(1))], text)
+
+
+def _is_ignorable_chain(chain):
+    """Skip real HTML (`<br>`, `</br>`, ...) and markdown autolinks
+    (`<https://...>`) — only placeholder-shaped chains are violations."""
+    if "." not in chain and chain.strip("<>/").lower() in SAFE_HTML_TAGS:
+        return True
+    inner = chain.split(".", 1)[0][1:-1].lstrip("/")
+    return bool(AUTOLINK_RE.match(inner))
+
+
+def find_xml_like_tags(body):
+    """Angle-bracket placeholder chains like `<info>.<other>` or `<tag>.<tag2>.go`
+    outside code spans — Obsidian misreads these as unclosed XML/HTML tags."""
+    masked, _ = _mask_code_spans(body)
+    return [m for m in XML_TAG_CHAIN_RE.findall(masked) if not _is_ignorable_chain(m)]
+
+
+def check_xml_like_tags(ctx):
+    if ctx["is_reserved"]:
+        return []
+    hits = find_xml_like_tags(ctx["body"])
+    return ["angle-bracket placeholder(s) not in code-fence: {}".format(", ".join(sorted(set(hits))))] if hits else []
+
+
+def fix_xml_like_tags(root, target, dry_run=False):
+    """Wrap angle-bracket placeholder chains in inline code across every
+    non-reserved .md under `target` (bundle or bundle/subdir, or the whole
+    catalogue when None). Returns [(rel, count), ...]."""
+    touched = []
+    for bundle, bp in resolve_scopes(root, target):
+        for ap in iter_all_md(bp):
+            if os.path.basename(ap).lower() in RESERVED:
+                continue
+            text = read_file(ap)
+            _, body = split_frontmatter(text)
+            head = text[:len(text) - len(body)]
+            masked, tokens = _mask_code_spans(body)
+            count = 0
+
+            def repl(m):
+                nonlocal count
+                chain = m.group(0)
+                if _is_ignorable_chain(chain):
+                    return chain
+                count += 1
+                return "`" + chain + "`"
+
+            new_masked = XML_TAG_CHAIN_RE.sub(repl, masked)
+            new_body = _unmask(new_masked, tokens)
+            if count:
+                rel = os.path.relpath(ap, root).replace(os.sep, "/")
+                touched.append((rel, count))
+                if not dry_run:
+                    write_file(ap, head + new_body)
+    return touched
+
+
+def cmd_fix_xml_tags(root, args):
+    target = args.target
+    if target:
+        tp = os.path.join(root, target.rstrip("/"))
+        if not os.path.isdir(tp):
+            print("not a directory: {}".format(target), file=sys.stderr)
+            sys.exit(1)
+    touched = fix_xml_like_tags(root, target, dry_run=args.check)
+    verb = "would wrap" if args.check else "wrapped"
+    for rel, n in touched:
+        print("{:<12} {}  ({} chain(s))".format(verb, rel, n))
+    print("fix-xml-tags: {} file(s) {}, {} chain(s) total".format(
+        len(touched), verb, sum(n for _, n in touched)))
+
+
 def check_asset_placement(bundle_path):
     """Non-md, non-hidden files that live outside <bundle>/assets/. Returns
     a list of paths relative to bundle_path."""
@@ -1169,6 +1268,7 @@ def run_checks(root, target):
         ("english-keys", "warning", check_english_keys),
         ("crosslink-format", "warning", check_crosslink_format),
         ("tags-block-form", "warning", check_tags_block_form),
+        ("xml-like-tags", "warning", check_xml_like_tags),
     ]
 
     errors, warnings = [], []
@@ -1271,13 +1371,18 @@ def main():
                          help="rewrite same-bundle relative links to bundle-relative absolute form")
     pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
+    pfxt = sub.add_parser("fix-xml-tags",
+                          help="wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
+    pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
     args = ap.parse_args()
     root = catalogue_root(args.root)
     {"index": cmd_index, "find": cmd_find, "list": cmd_list,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
      "normalize-tags": cmd_normalize_tags,
-     "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks}[args.cmd](root, args)
+     "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks,
+     "fix-xml-tags": cmd_fix_xml_tags}[args.cmd](root, args)
 
 
 if __name__ == "__main__":
