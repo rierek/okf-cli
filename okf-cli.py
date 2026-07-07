@@ -944,6 +944,21 @@ def load_types(root):
     return set(re.findall(r"^\|\s*`([^`]+)`", read_file(p), re.M))
 
 
+def load_okf_config(root):
+    """Parse <root>/.okf.toml if present. Returns a dict ({} if absent).
+    Leading-~ path values are expanduser-expanded. Requires Python 3.11+ (tomllib)."""
+    p = os.path.join(root, ".okf.toml")
+    if not os.path.isfile(p):
+        return {}
+    import tomllib
+    with open(p, "rb") as f:
+        data = tomllib.load(f)
+    for k in ("kc_root", "types_source"):
+        if isinstance(data.get(k), str):
+            data[k] = os.path.expanduser(data[k])
+    return data
+
+
 def iter_all_md(bundle_path):
     """Yield abspath for every .md under a bundle, reserved files included.
 

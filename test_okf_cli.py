@@ -607,5 +607,34 @@ class FixCrosslinksCommand(unittest.TestCase):
         self.assertIn(("b/x.md", "ghost.md"), unresolved)
 
 
+class OkfConfig(unittest.TestCase):
+    """.okf.toml is the machine-truth config; absent or empty -> {}.
+    ~ in path values is expanded."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        with open(os.path.join(self.tmp, rel), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_absent_config_is_empty_dict(self):
+        self.assertEqual(okf.load_okf_config(self.tmp), {})
+
+    def test_parses_keys(self):
+        self._w(".okf.toml", 'kc_root = "~/Obsidian/Knowledge-Catalogue"\n'
+                             'types_source = "~/Obsidian/Knowledge-Catalogue/TYPES.md"\n'
+                             'bundle = "demo-okf"\n')
+        cfg = okf.load_okf_config(self.tmp)
+        self.assertEqual(cfg["bundle"], "demo-okf")
+        self.assertFalse(cfg["types_source"].startswith("~"))  # expanduser ran
+        self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
+
+
 if __name__ == "__main__":
     unittest.main()
