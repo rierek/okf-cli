@@ -804,5 +804,43 @@ class RewritePath(unittest.TestCase):
         self.assertIn("docs/x.md\n", self._r("a.txt"))       # the real one rewritten
 
 
+class CmdRefs(unittest.TestCase):
+    """cmd_refs (B03): path resolves against --scan-root when given (the tree it
+    lives in); a missing target exits non-zero instead of silently returning []."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_scan_root_relative_path_resolves(self):
+        import io, json, contextlib, types
+        self._w("docs/arch.md", "# A\n")
+        self._w("README.md", "[a](docs/arch.md)\n")
+        # skill-style call: --root <repo>/docs, --scan-root <repo>, repo-relative path
+        args = types.SimpleNamespace(path="docs/arch.md", scan_root=self.tmp, json=True)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_refs(os.path.join(self.tmp, "docs"), args)
+        out = json.loads(buf.getvalue())
+        self.assertEqual([h["source"] for h in out["inbound"]], ["README.md"])
+
+    def test_missing_target_exits_nonzero(self):
+        import types
+        args = types.SimpleNamespace(path="ghost.md", scan_root=self.tmp, json=True)
+        with self.assertRaises(SystemExit) as cm:
+            okf.cmd_refs(os.path.join(self.tmp, "docs"), args)
+        self.assertNotEqual(cm.exception.code, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

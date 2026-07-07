@@ -631,8 +631,17 @@ def build_ref_matrix(scan_root, target_abspath):
 
 def cmd_refs(root, args):
     import json
-    target = args.path if os.path.isabs(args.path) else os.path.join(root, args.path)
     scan_root = os.path.abspath(args.scan_root) if getattr(args, "scan_root", None) else root
+    if os.path.isabs(args.path):
+        target = args.path
+    else:
+        # resolve against scan_root (the tree the path lives in) when given,
+        # else root; prefer whichever actually exists.
+        cand_scan = os.path.join(scan_root, args.path)
+        target = cand_scan if os.path.exists(cand_scan) else os.path.join(root, args.path)
+    if not os.path.exists(target):
+        sys.stderr.write("refs: target not found: {}\n".format(args.path))
+        sys.exit(2)
     hits = build_ref_matrix(scan_root, target)
     if getattr(args, "json", False):
         print(json.dumps({
