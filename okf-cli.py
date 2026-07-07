@@ -586,6 +586,53 @@ def cmd_visualize(root, args):
     print("wrote {} ({} nodes, {} edges)".format(out, len(nodes), len(edges)))
 
 
+def build_ref_matrix(scan_root, target_abspath):
+    """List every markdown link under scan_root that resolves to target_abspath.
+    Returns [(source_rel, raw_link), ...]. Reuses the bundle_graph link regex,
+    strips fenced code, ignores http(s)/mailto and anchors. Both relative and
+    bundle-relative (leading /) links are resolved path-wise."""
+    target_abspath = os.path.abspath(target_abspath)
+    link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+    hits = []
+    for dirpath, dirnames, filenames in os.walk(scan_root):
+        dirnames[:] = [d for d in dirnames
+                       if d not in ("node_modules",) and not d.startswith(".")]
+        for fn in filenames:
+            if not fn.endswith(".md"):
+                continue
+            ap = os.path.join(dirpath, fn)
+            body = re.sub(r"```.*?```", "", read_file(ap), flags=re.S)
+            for m in link_re.finditer(body):
+                raw = m.group(1)
+                tgt = raw.split("#", 1)[0].split("?", 1)[0].strip()
+                if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
+                    continue
+                if tgt.startswith("/"):
+                    resolved = os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
+                else:
+                    resolved = os.path.abspath(os.path.join(dirpath, tgt))
+                if resolved == target_abspath:
+                    hits.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), raw))
+    return hits
+
+
+def cmd_refs(root, args):
+    import json
+    target = args.path if os.path.isabs(args.path) else os.path.join(root, args.path)
+    scan_root = os.path.abspath(args.scan_root) if getattr(args, "scan_root", None) else root
+    hits = build_ref_matrix(scan_root, target)
+    if getattr(args, "json", False):
+        print(json.dumps({
+            "target": os.path.relpath(os.path.abspath(target), scan_root).replace(os.sep, "/"),
+            "inbound": [{"source": s, "link": l} for s, l in hits],
+        }))
+    else:
+        if not hits:
+            print("no inbound references")
+        for s, l in hits:
+            print("{}  ->  {}".format(s, l))
+
+
 _VIZ_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8">
 <title>OKF — __NAME__</title>
 <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
@@ -1355,6 +1402,10 @@ def main():
     pv = sub.add_parser("visualize", help="write a self-contained viz.html graph for a bundle")
     pv.add_argument("bundle")
     pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
+    prf = sub.add_parser("refs", help="list inbound markdown references to a file")
+    prf.add_argument("path", help="target file (abs, or relative to --root)")
+    prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide")
+    prf.add_argument("--json", action="store_true")
     px = sub.add_parser("reindex", help="(re)generate marker-bounded index.md listings")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
     px.add_argument("--init", action="store_true",
@@ -1403,6 +1454,7 @@ def main():
     root = catalogue_root(args.root)
     {"index": cmd_index, "find": cmd_find, "list": cmd_list,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
+     "refs": cmd_refs,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
      "normalize-tags": cmd_normalize_tags,
      "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks,
