@@ -351,6 +351,7 @@ class CheckCommand(unittest.TestCase):
     def test_underscore_prefixed_dir_is_excluded_from_scan(self):
         # mirrors is_bundle_dir's convention: "_"-prefixed dirs are staging,
         # not catalogue content — same exemption applied one level down.
+        self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n")
         self._w("b/_intake/raw.md", "# no frontmatter\n")
         self._w("b/_intake/notes.tsv", "col1\tcol2\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
@@ -397,9 +398,9 @@ class CheckCommand(unittest.TestCase):
 
     def test_clean_bundle_has_zero_violations(self):
         self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
-        self._w("b/index.md", "# B\n\n## Contents\n\n"
+        self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n\n## Contents\n\n"
                               + okf.MARK_START + "\n* [X](x.md)\n" + okf.MARK_END + "\n")
-        self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags: [a]\n---\n# X\n\n[Y](/other.md)\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n---\n# X\n\n[Y](/other.md)\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
