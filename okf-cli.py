@@ -936,9 +936,11 @@ FILENAME_FORBIDDEN_CHARS = set('#^[]|\\:?*"<>%')
 GERMAN_FM_KEYS = {"titel", "beschreibung", "typ", "stichworte", "datum", "zusammenfassung"}
 
 
-def load_types(root):
-    """Set of registered `type` values from TYPES.md, or None if the file is missing."""
-    p = os.path.join(root, "TYPES.md")
+def load_types(root, types_source=None):
+    """Set of registered `type` values, or None if the source is missing.
+    types_source overrides the default <root>/TYPES.md so a repo bundle can
+    point at the central catalogue's TYPES.md (config-aware, no local copy)."""
+    p = types_source or os.path.join(root, "TYPES.md")
     if not os.path.isfile(p):
         return None
     return set(re.findall(r"^\|\s*`([^`]+)`", read_file(p), re.M))
@@ -1266,14 +1268,19 @@ def resolve_scopes(root, target):
     return [(b, os.path.join(root, b)) for b in list_bundles(root)]
 
 
-def run_checks(root, target):
+def run_checks(root, target, types_source=None):
     """Run the full pluggable conformance scan over `target` (bundle or
     bundle/subdir), or the whole catalogue when target is None.
+
+    types_source overrides <root>/TYPES.md; absent, falls back to the
+    .okf.toml `types_source` config key, then to <root>/TYPES.md.
 
     Returns (errors, warnings), each a list of (check_name, rel_path, message).
     """
     scopes = resolve_scopes(root, target)
-    types_set = load_types(root)
+    if types_source is None:
+        types_source = load_okf_config(root).get("types_source")
+    types_set = load_types(root, types_source)
     per_file_checks = [
         ("frontmatter-parseable", "error", check_fm_parseable),
         ("type-nonempty", "error", check_type_nonempty),
@@ -1301,7 +1308,8 @@ def run_checks(root, target):
 
 
 def cmd_check(root, args):
-    errors, warnings = run_checks(root, getattr(args, "target", None))
+    errors, warnings = run_checks(root, getattr(args, "target", None),
+                                  types_source=getattr(args, "types", None))
     if args.strict:
         errors, warnings = errors + warnings, []
     if args.json:
@@ -1382,6 +1390,7 @@ def main():
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
+    pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)")
     pfx = sub.add_parser("fix-crosslinks",
                          help="rewrite same-bundle relative links to bundle-relative absolute form")
     pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")

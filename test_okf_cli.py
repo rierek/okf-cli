@@ -636,5 +636,51 @@ class OkfConfig(unittest.TestCase):
         self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
 
 
+class ConfigAwareTypes(unittest.TestCase):
+    """type-registered check resolves TYPES.md via .okf.toml types_source,
+    so a repo bundle points at the central catalogue's TYPES.md (no local copy)."""
+
+    def setUp(self):
+        import tempfile
+        self.central = tempfile.mkdtemp()
+        self.repo = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.central, ignore_errors=True)
+        shutil.rmtree(self.repo, ignore_errors=True)
+
+    def _w(self, base, rel, text):
+        ap = os.path.join(base, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_central_types_source_flags_unregistered(self):
+        # central TYPES.md registers only `Concept`; repo has NO local TYPES.md
+        self._w(self.central, "TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
+        self._w(self.repo, ".okf.toml",
+                'types_source = "{}"\n'.format(os.path.join(self.central, "TYPES.md")))
+        self._w(self.repo, "b/x.md", "---\ntype: Bogus\ntitle: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.repo, "b")
+        self.assertIn("type-registered", [w[0] for w in warnings])
+
+    def test_central_types_source_accepts_registered(self):
+        self._w(self.central, "TYPES.md",
+                "| type | Meaning |\n|---|---|\n| `Glossary` | x |\n")
+        self._w(self.repo, ".okf.toml",
+                'types_source = "{}"\n'.format(os.path.join(self.central, "TYPES.md")))
+        self._w(self.repo, "b/g.md", "---\ntype: Glossary\ntitle: G\n---\n# G\n")
+        errors, warnings = okf.run_checks(self.repo, "b")
+        self.assertNotIn("type-registered", [w[0] for w in warnings])
+
+    def test_explicit_types_source_arg_overrides_config(self):
+        self._w(self.central, "TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
+        self._w(self.repo, "b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(
+            self.repo, "b", types_source=os.path.join(self.central, "TYPES.md"))
+        self.assertNotIn("type-registered", [w[0] for w in warnings])
+
+
 if __name__ == "__main__":
     unittest.main()
