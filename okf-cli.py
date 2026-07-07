@@ -590,6 +590,11 @@ def cmd_visualize(root, args):
     print("wrote {} ({} nodes, {} edges)".format(out, len(nodes), len(edges)))
 
 
+def _prune_walk_dirs(dirnames):
+    """In-place os.walk prune: skip node_modules and dot-dirs."""
+    dirnames[:] = [d for d in dirnames if d != "node_modules" and not d.startswith(".")]
+
+
 def build_ref_matrix(scan_root, target_abspath):
     """List every markdown link under scan_root that resolves to target_abspath.
     Returns [(source_rel, raw_link), ...]. Reuses the bundle_graph link regex,
@@ -599,8 +604,7 @@ def build_ref_matrix(scan_root, target_abspath):
     link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     hits = []
     for dirpath, dirnames, filenames in os.walk(scan_root):
-        dirnames[:] = [d for d in dirnames
-                       if d not in ("node_modules",) and not d.startswith(".")]
+        _prune_walk_dirs(dirnames)
         for fn in filenames:
             if not fn.endswith(".md"):
                 continue
@@ -612,7 +616,12 @@ def build_ref_matrix(scan_root, target_abspath):
                 if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
                     continue
                 if tgt.startswith("/"):
-                    resolved = os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
+                    # OKF: leading / = the source file's BUNDLE root (its top-level
+                    # dir under scan_root), NOT scan_root itself.
+                    rel = os.path.relpath(dirpath, scan_root).replace(os.sep, "/")
+                    bundle = rel.split("/", 1)[0] if rel not in (".", "") else ""
+                    base = os.path.join(scan_root, bundle) if bundle else scan_root
+                    resolved = os.path.abspath(os.path.join(base, tgt.lstrip("/")))
                 else:
                     resolved = os.path.abspath(os.path.join(dirpath, tgt))
                 if resolved == target_abspath:
@@ -647,20 +656,20 @@ def rewrite_path(scan_root, old, new, dry_run=False):
     node_modules, dotdirs. Returns [(rel_path, count), ...]."""
     touched = []
     for dirpath, dirnames, filenames in os.walk(scan_root):
-        dirnames[:] = [d for d in dirnames
-                       if d not in ("node_modules",) and not d.startswith(".")]
+        _prune_walk_dirs(dirnames)
         for fn in filenames:
             if not fn.endswith(REWRITE_EXTS):
                 continue
             ap = os.path.join(dirpath, fn)
             text = read_file(ap)
-            if old not in text:
+            pat = re.compile(r"(?<![\w./-])" + re.escape(old) + r"(?![\w./-])")
+            n = len(pat.findall(text))
+            if not n:
                 continue
-            count = text.count(old)
             if not dry_run:
                 with open(ap, "w", encoding="utf-8") as f:
-                    f.write(text.replace(old, new))
-            touched.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), count))
+                    f.write(pat.sub(lambda _m: new, text))
+            touched.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), n))
     return touched
 
 

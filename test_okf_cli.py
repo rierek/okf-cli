@@ -713,9 +713,17 @@ class RefMatrix(unittest.TestCase):
 
     def test_bundle_relative_leading_slash_resolves(self):
         self._w("docs/arch.md", "# Arch\n")
-        self._w("docs/x.md", "see [a](/docs/arch.md)\n")
+        self._w("docs/x.md", "see [a](/arch.md)\n")   # /arch.md = bundle(docs) root
         hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "docs/arch.md"))
         self.assertEqual(self._sources(hits), ["docs/x.md"])
+
+    def test_leading_slash_is_bundle_root_not_scan_root(self):
+        # OKF: /x.md in b1/foo.md means b1/x.md, NOT <scan_root>/x.md
+        self._w("b1/x.md", "# X\n")
+        self._w("b1/foo.md", "[x](/x.md)\n")
+        self._w("b2/bar.md", "[x](/x.md)\n")   # means b2/x.md — unrelated to target
+        hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "b1/x.md"))
+        self.assertEqual(self._sources(hits), ["b1/foo.md"])
 
     def test_http_and_anchor_and_fenced_ignored(self):
         self._w("docs/arch.md", "# Arch\n")
@@ -786,6 +794,14 @@ class RewritePath(unittest.TestCase):
         self._w("a.txt", "docs/notes.md and docs/notes.md again\n")
         touched = okf.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
         self.assertEqual(touched, [("a.txt", 2)])
+
+    def test_does_not_touch_substring_collision(self):
+        self._w("a.txt", "my-docs/notes.md and docs/notes.md-old and docs/notes.md\n")
+        touched = okf.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        self.assertEqual(touched, [("a.txt", 1)])            # only the standalone path
+        self.assertIn("my-docs/notes.md", self._r("a.txt"))  # prefix-collision untouched
+        self.assertIn("docs/notes.md-old", self._r("a.txt")) # suffix-collision untouched
+        self.assertIn("docs/x.md\n", self._r("a.txt"))       # the real one rewritten
 
 
 if __name__ == "__main__":
