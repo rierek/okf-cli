@@ -633,6 +633,43 @@ def cmd_refs(root, args):
             print("{}  ->  {}".format(s, l))
 
 
+REWRITE_EXTS = (".md", ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".rb",
+                ".yml", ".yaml", ".toml", ".json", ".txt", ".rst", ".cfg", ".ini", ".sh")
+
+
+def rewrite_path(scan_root, old, new, dry_run=False):
+    """Literal old->new path-string replace across text files under scan_root
+    (covers non-markdown references markdown tooling can't see). Prunes .git,
+    node_modules, dotdirs. Returns [(rel_path, count), ...]."""
+    touched = []
+    for dirpath, dirnames, filenames in os.walk(scan_root):
+        dirnames[:] = [d for d in dirnames
+                       if d not in ("node_modules",) and not d.startswith(".")]
+        for fn in filenames:
+            if not fn.endswith(REWRITE_EXTS):
+                continue
+            ap = os.path.join(dirpath, fn)
+            text = read_file(ap)
+            if old not in text:
+                continue
+            count = text.count(old)
+            if not dry_run:
+                with open(ap, "w", encoding="utf-8") as f:
+                    f.write(text.replace(old, new))
+            touched.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), count))
+    return touched
+
+
+def cmd_rewrite_path(root, args):
+    scan_root = os.path.abspath(args.scan_root) if getattr(args, "scan_root", None) else root
+    dry = getattr(args, "check", False)
+    touched = rewrite_path(scan_root, args.old, args.new, dry_run=dry)
+    verb = "would rewrite" if dry else "rewrote"
+    for rel, n in touched:
+        print("{} {} ({}x)".format(verb, rel, n))
+    print("{} file(s) {}".format(len(touched), "affected (dry-run)" if dry else "written"))
+
+
 _VIZ_TEMPLATE = """<!doctype html><html><head><meta charset="utf-8">
 <title>OKF — __NAME__</title>
 <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
@@ -1406,6 +1443,11 @@ def main():
     prf.add_argument("path", help="target file (abs, or relative to --root)")
     prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide")
     prf.add_argument("--json", action="store_true")
+    prw = sub.add_parser("rewrite-path", help="literal path-string rewrite across text files")
+    prw.add_argument("old")
+    prw.add_argument("new")
+    prw.add_argument("--scan-root", help="dir to scan (default: --root)")
+    prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
     px = sub.add_parser("reindex", help="(re)generate marker-bounded index.md listings")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
     px.add_argument("--init", action="store_true",
@@ -1455,6 +1497,7 @@ def main():
     {"index": cmd_index, "find": cmd_find, "list": cmd_list,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "refs": cmd_refs,
+     "rewrite-path": cmd_rewrite_path,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
      "normalize-tags": cmd_normalize_tags,
      "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks,

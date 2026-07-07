@@ -739,5 +739,54 @@ class RefMatrix(unittest.TestCase):
         self.assertEqual(hits, [])
 
 
+class RewritePath(unittest.TestCase):
+    """rewrite_path: literal old->new path replace across text files, dry-run
+    writes nothing, binary/vendored dirs pruned."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_rewrites_across_md_and_code(self):
+        self._w("README.md", "docs live at docs/notes.md today\n")
+        self._w("app.py", "# see docs/notes.md for details\n")
+        touched = okf.rewrite_path(self.tmp, "docs/notes.md", "docs/demo-okf/notes.md")
+        self.assertEqual(sorted(t[0] for t in touched), ["README.md", "app.py"])
+        self.assertIn("docs/demo-okf/notes.md", self._r("README.md"))
+        self.assertIn("docs/demo-okf/notes.md", self._r("app.py"))
+
+    def test_dry_run_writes_nothing_but_reports(self):
+        self._w("README.md", "docs/notes.md\n")
+        before = self._r("README.md")
+        touched = okf.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md", dry_run=True)
+        self.assertEqual(touched, [("README.md", 1)])
+        self.assertEqual(self._r("README.md"), before)
+
+    def test_prunes_git_and_node_modules(self):
+        self._w(".git/config", "docs/notes.md\n")
+        self._w("node_modules/x.js", "docs/notes.md\n")
+        touched = okf.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        self.assertEqual(touched, [])
+
+    def test_counts_multiple_occurrences(self):
+        self._w("a.txt", "docs/notes.md and docs/notes.md again\n")
+        touched = okf.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        self.assertEqual(touched, [("a.txt", 2)])
+
+
 if __name__ == "__main__":
     unittest.main()
