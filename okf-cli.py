@@ -26,10 +26,14 @@ Commands:
     okf-cli.py normalize-tags [--scope <target>] [--apply]
                                             convert inline `tags: [...]` to YAML block-list (local convention,
                                             dry-run default)
-    okf-cli.py check [target] [--strict] [--json]  conformance scan (§9 + local invariants)
+    okf-cli.py check [target] [--strict] [--json] [--types <path>]  conformance scan (§9 + local
+                                            invariants); honors .okf.toml types_source / --types for TYPES.md
     okf-cli.py fix-crosslinks [target] [--check]   rewrite relative links to bundle-relative form
     okf-cli.py fix-xml-tags [target] [--check]     wrap `<tag>`/`<tag>.<tag2>` placeholders in inline
                                             code so Obsidian doesn't misparse them as XML/HTML
+    okf-cli.py refs <path> [--scan-root <dir>] [--json]  inbound markdown references to a file
+    okf-cli.py rewrite-path <old> <new> [--scan-root <dir>] [--check]  literal path-string rewrite
+                                            across text files (non-md too); dry-run with --check
 
 Run from the catalogue root, or pass --root <path>.
 """
