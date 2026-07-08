@@ -595,6 +595,18 @@ def _prune_walk_dirs(dirnames):
     dirnames[:] = [d for d in dirnames if d != "node_modules" and not d.startswith(".")]
 
 
+def _find_reserved_name(filenames, name="index.md"):
+    """Case-insensitive lookup of a reserved filename in an os.walk filenames
+    list. Returns the actual on-disk filename (preserving its real case), or
+    None. OKF's reserved-name recognition (RESERVED, above) is case-insensitive
+    via .lower() — the index-discovery walks below now match that."""
+    low = name.lower()
+    for f in filenames:
+        if f.lower() == low:
+            return f
+    return None
+
+
 def build_ref_matrix(scan_root, target_abspath):
     """List every markdown link under scan_root that resolves to target_abspath.
     Returns [(source_rel, raw_link), ...]. Reuses the bundle_graph link regex,
@@ -787,9 +799,10 @@ def list_subdirs_with_index(dirpath):
         p = os.path.join(dirpath, name)
         if not os.path.isdir(p) or name.startswith(".") or name == "assets":
             continue
-        idx = os.path.join(p, "index.md")
-        if not os.path.isfile(idx):
+        idx_name = _find_reserved_name(os.listdir(p))
+        if not idx_name:
             continue
+        idx = os.path.join(p, idx_name)
         h1, desc = index_h1_and_desc(idx)
         out.append((h1 or name, name, desc))
     out.sort(key=lambda x: x[0].casefold())
@@ -884,9 +897,10 @@ def init_indexes(root, target, dry_run=False, force=False):
     results = []
     for dp, dn, fn in os.walk(target):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
-        if "index.md" not in fn:
+        idx_name = _find_reserved_name(fn)
+        if not idx_name:
             continue
-        idx = os.path.join(dp, "index.md")
+        idx = os.path.join(dp, idx_name)
         rel = os.path.relpath(idx, root).replace(os.sep, "/")
         new, status = convert_flat_index(read_file(idx), force=force)
         if status == "converted" and not dry_run:
@@ -903,9 +917,10 @@ def uncovered_index_dirs(root, target):
     out = []
     for dp, dn, fn in os.walk(target):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
-        if "index.md" not in fn:
+        idx_name = _find_reserved_name(fn)
+        if not idx_name:
             continue
-        idx = os.path.join(dp, "index.md")
+        idx = os.path.join(dp, idx_name)
         text = read_file(idx)
         if MARK_START in text or EXEMPT in text:   # managed or deliberately exempt
             continue
@@ -939,11 +954,12 @@ def cmd_reindex(root, args):
     dirs = []
     for dp, dn, fn in os.walk(tp):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
-        if "index.md" in fn:
-            dirs.append(dp)
+        idx_name = _find_reserved_name(fn)
+        if idx_name:
+            dirs.append((dp, idx_name))
     changed, skipped, stale = [], [], []
-    for dp in sorted(dirs):
-        idx = os.path.join(dp, "index.md")
+    for dp, idx_name in sorted(dirs):
+        idx = os.path.join(dp, idx_name)
         text = read_file(idx)
         rel = os.path.relpath(idx, root)
         if MARK_START not in text:

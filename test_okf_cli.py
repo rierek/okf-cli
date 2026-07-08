@@ -127,6 +127,15 @@ class InitIndexesRecursion(unittest.TestCase):
         self.assertEqual(self._r("b/sub1/index.md"), before)
         self.assertNotIn(M0, self._r("b/sub1/index.md"))
 
+    def test_recognizes_uppercase_index_filename(self):
+        # Real-world repos sometimes use INDEX.md — discovery must be
+        # case-insensitive (matches the already-case-insensitive RESERVED
+        # check) instead of silently skipping the dir (B-2026-07-08).
+        self._w("b/sub3/INDEX.md", "# Sub3\n\n## Concepts\n\n* [W](w.md) - d\n")
+        results = dict(okf.init_indexes(self.tmp, os.path.join(self.tmp, "b"), dry_run=False))
+        self.assertEqual(results["b/sub3/INDEX.md"], "converted")
+        self.assertIn(M0, self._r("b/sub3/INDEX.md"))
+
 
 class EnsureMarkersCreateOnly(unittest.TestCase):
     """ensure_markers must not naively append to a marker-less file that has
@@ -192,6 +201,13 @@ class UncoveredIndexDirs(unittest.TestCase):
         self._w("b/index.md", "# B\n\nno concepts here\n")
         un = okf.uncovered_index_dirs(self.tmp, os.path.join(self.tmp, "b"))
         self.assertEqual(un, [])
+
+    def test_flags_uppercase_index_filename(self):
+        # B-2026-07-08: uppercase INDEX.md must not be silently invisible.
+        self._w("b/INDEX.md", "# B\n\n## A\n\n* [x](x.md)\n")
+        self._w("b/x.md", "---\ntype: Concept\n---\n# X\n")
+        un = okf.uncovered_index_dirs(self.tmp, os.path.join(self.tmp, "b"))
+        self.assertIn("b/INDEX.md", un)
 
 
 class ForceFlattenAndExempt(unittest.TestCase):
