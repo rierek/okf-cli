@@ -13,9 +13,12 @@ _COMMANDS = {
     "check": (["target"], True),
     "reindex": (["target"], False),
     "refs":  (["path"], True),
+    "rename": (["old", "new"], False),
 }
-# optional flag params: tool-key -> okf-cli flag
+# optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit"}
+# optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
+_BOOL_FLAGS = {"apply": "--apply", "force": "--force"}
 
 
 def build_argv(root, command, params):
@@ -30,6 +33,9 @@ def build_argv(root, command, params):
     for key, flag in _FLAGS.items():
         if params.get(key) not in (None, ""):
             argv += [flag, str(params[key])]
+    for key, flag in _BOOL_FLAGS.items():
+        if params.get(key):
+            argv.append(flag)
     if supports_json:
         argv.append("--json")
     return argv
@@ -96,6 +102,15 @@ def _register(server):
     def okf_refs(root: str, path: str, scan_root: str = "") -> dict:
         """Inbound markdown references to a file (reference-integrity step a)."""
         return run_okf(root, "refs", {"path": path, "scan_root": scan_root})
+
+    @server.tool()
+    def okf_rename(root: str, old: str, new: str, apply: bool = False,
+                   force: bool = False) -> str:
+        """Move a concept and keep every reference intact: rewrites inbound links
+        repo-wide plus the file's own outbound links on a bundle change, then
+        reindexes affected bundles. Defaults to a dry-run preview; pass apply=True
+        to perform the move (git mv, staged). Reference-integrity step b."""
+        return run_okf(root, "rename", {"old": old, "new": new, "apply": apply, "force": force})
 
     return server
 
