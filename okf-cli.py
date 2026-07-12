@@ -34,6 +34,9 @@ Commands:
     okf-cli.py refs <path> [--scan-root <dir>] [--json]  inbound markdown references to a file
     okf-cli.py rewrite-path <old> <new> [--scan-root <dir>] [--check]  literal path-string rewrite
                                             across text files (non-md too); dry-run with --check
+    okf-cli.py rename <old> <new> [--apply] [--force]  move a concept and rewrite every inbound link
+                                            (repo-wide) + the file's own outbound links on a bundle
+                                            change, then reindex affected bundles; dry-run default
 
 Run from the catalogue root, or pass --root <path>.
 """
@@ -1449,6 +1452,199 @@ def cmd_check(root, args):
     sys.exit(1 if errors else 0)
 
 
+def bundle_of(root, abspath):
+    """Top-level bundle dir a path lives in (its first component under root)."""
+    rel = os.path.relpath(os.path.abspath(abspath), root).replace(os.sep, "/")
+    return rel.split("/", 1)[0]
+
+
+def link_expr(root, src_abs, dst_abs):
+    """Canonical OKF link string FROM src file TO dst target. Same bundle ->
+    bundle-relative absolute (`/subdir/concept.md`, resolved against the shared
+    bundle root). Different bundle -> path-relative (`../bundle/.../concept.md`),
+    the only form that can cross bundles since a leading `/` rebinds to the
+    source's own bundle root."""
+    src_abs, dst_abs = os.path.abspath(src_abs), os.path.abspath(dst_abs)
+    if bundle_of(root, src_abs) == bundle_of(root, dst_abs):
+        bundle_root = os.path.join(root, bundle_of(root, src_abs))
+        return "/" + os.path.relpath(dst_abs, bundle_root).replace(os.sep, "/")
+    return os.path.relpath(dst_abs, os.path.dirname(src_abs)).replace(os.sep, "/")
+
+
+def _split_link_suffix(raw):
+    """Split a link target into (path, suffix) where suffix is a #anchor/?query
+    tail (kept verbatim so a rewrite preserves deep links)."""
+    cut = len(raw)
+    for ch in "#?":
+        i = raw.find(ch)
+        if i != -1:
+            cut = min(cut, i)
+    return raw[:cut], raw[cut:]
+
+
+def resolve_link_target(root, src_abs, raw):
+    """Absolute path a markdown link target resolves to, relative to src_abs's
+    location. Handles bundle-relative (`/...`) and path-relative forms. Returns
+    None for external / anchor-only / non-.md links."""
+    path, _ = _split_link_suffix(raw.strip())
+    if not path.endswith(".md") or re.match(r"^[a-z][a-z0-9+.-]*://", path) or path.startswith("mailto:"):
+        return None
+    if path.startswith("/"):
+        bundle_root = os.path.join(root, bundle_of(root, src_abs))
+        return os.path.abspath(os.path.join(bundle_root, path.lstrip("/")))
+    return os.path.abspath(os.path.join(os.path.dirname(src_abs), path))
+
+
+def _dedupe(pairs):
+    seen, out = set(), []
+    for p in pairs:
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def plan_rename(root, old_abs, new_abs):
+    """Compute the reference rewrites a move old->new requires, WITHOUT touching
+    disk (so it also drives the dry-run preview). Returns:
+      inbound  = [(source_rel, old_raw, new_raw), ...]  links pointing AT the file
+      outbound = [(old_raw, new_raw), ...]              the moved file's own links
+                 (only when the bundle changes; within a bundle they stay valid)
+      bundles  = sorted affected bundle names (reindex targets)."""
+    old_abs, new_abs = os.path.abspath(old_abs), os.path.abspath(new_abs)
+    inbound = []
+    for source_rel, raw in build_ref_matrix(root, old_abs):
+        src_abs = os.path.join(root, source_rel)
+        if os.path.abspath(src_abs) == old_abs:
+            continue  # self-reference: handled by the outbound pass
+        _, suffix = _split_link_suffix(raw)
+        new_raw = link_expr(root, src_abs, new_abs) + suffix
+        if new_raw != raw:
+            inbound.append((source_rel, raw, new_raw))
+    outbound = []
+    if bundle_of(root, old_abs) != bundle_of(root, new_abs):
+        src = old_abs if os.path.exists(old_abs) else new_abs
+        body = re.sub(r"```.*?```", "", read_file(src), flags=re.S)
+        for m in CROSSLINK_RE.finditer(body):
+            raw = m.group(2)
+            tgt = resolve_link_target(root, old_abs, raw)
+            if tgt is None or not os.path.isfile(tgt):
+                continue
+            _, suffix = _split_link_suffix(raw)
+            new_raw = link_expr(root, new_abs, tgt) + suffix
+            if new_raw != raw:
+                outbound.append((raw, new_raw))
+        outbound = _dedupe(outbound)
+    bundles = sorted({bundle_of(root, old_abs), bundle_of(root, new_abs)})
+    return {"inbound": inbound, "outbound": outbound, "bundles": bundles}
+
+
+def _apply_link_rewrites(abspath, rewrites):
+    """Replace each `](old_raw)` occurrence with `](new_raw)` in one file. The
+    `](...)` wrapper anchors the match to real link targets, never label text."""
+    text = read_file(abspath)
+    for old_raw, new_raw in rewrites:
+        text = text.replace("]({})".format(old_raw), "]({})".format(new_raw))
+    write_file(abspath, text)
+
+
+def reindex_tree(root, tp):
+    """Refresh every managed index block under tp (no --init/--check semantics).
+    Returns the rel-paths of index files actually rewritten."""
+    changed = []
+    for dp, dn, fn in os.walk(tp):
+        dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
+        idx_name = _find_reserved_name(fn)
+        if not idx_name:
+            continue
+        idx = os.path.join(dp, idx_name)
+        text = read_file(idx)
+        if MARK_START not in text:
+            continue
+        block = render_block(list_subdirs_with_index(dp), list_dir_concepts(dp))
+        new_text, _ = replace_managed_block(text, block)
+        if new_text != text:
+            write_file(idx, new_text)
+            changed.append(os.path.relpath(idx, root).replace(os.sep, "/"))
+    return changed
+
+
+def _git_mv(root, old_abs, new_abs):
+    """History-preserving, staged move. Falls back to a plain fs rename when the
+    file is untracked or git is unavailable. Returns True if git handled it."""
+    try:
+        proc = subprocess.run(["git", "-C", root, "mv", "-f", old_abs, new_abs],
+                              capture_output=True, text=True)
+        if proc.returncode == 0:
+            return True
+    except OSError:
+        pass
+    os.rename(old_abs, new_abs)
+    return False
+
+
+def cmd_rename(root, args):
+    old_abs = os.path.abspath(args.old if os.path.isabs(args.old) else os.path.join(root, args.old))
+    new_abs = os.path.abspath(args.new if os.path.isabs(args.new) else os.path.join(root, args.new))
+
+    def die(msg):
+        sys.stderr.write("rename: {}\n".format(msg))
+        sys.exit(2)
+
+    if not old_abs.endswith(".md") or not new_abs.endswith(".md"):
+        die("both paths must be .md concept files")
+    if not os.path.isfile(old_abs):
+        die("source not found: {}".format(args.old))
+    if os.path.basename(old_abs).lower() in RESERVED:
+        die("refusing to move a reserved file ({})".format(os.path.basename(old_abs)))
+    if old_abs == new_abs:
+        die("source and destination are identical")
+    if os.path.commonpath([old_abs, root]) != root or os.path.commonpath([new_abs, root]) != root:
+        die("both paths must live under the catalogue root")
+    for p in (old_abs, new_abs):
+        if os.path.relpath(p, root).count(os.sep) < 1:
+            die("path must be inside a bundle (<bundle>/<concept>.md)")
+    badchars = FILENAME_FORBIDDEN_CHARS & set(os.path.basename(new_abs)[:-3])
+    if badchars:
+        die("forbidden char(s) in new filename: {}".format("".join(sorted(badchars))))
+    if os.path.exists(new_abs) and args.apply and not args.force:
+        die("destination exists (use --force to overwrite): {}".format(args.new))
+
+    plan = plan_rename(root, old_abs, new_abs)
+    old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
+    new_rel = os.path.relpath(new_abs, root).replace(os.sep, "/")
+
+    if not args.apply:
+        print("would move   {}  ->  {}".format(old_rel, new_rel))
+        for src, oraw, nraw in plan["inbound"]:
+            print("  inbound    {}   {}  ->  {}".format(src, oraw, nraw))
+        for oraw, nraw in plan["outbound"]:
+            print("  outbound   {}  ->  {}".format(oraw, nraw))
+        print("  reindex    {}".format(", ".join(plan["bundles"])))
+        print("rename (dry-run): {} inbound, {} outbound link(s), {} bundle(s). "
+              "Re-run with --apply.".format(
+                  len(plan["inbound"]), len(plan["outbound"]), len(plan["bundles"])))
+        return
+
+    os.makedirs(os.path.dirname(new_abs), exist_ok=True)
+    moved = _git_mv(root, old_abs, new_abs)
+    if plan["outbound"]:
+        _apply_link_rewrites(new_abs, plan["outbound"])
+    by_src = {}
+    for src, oraw, nraw in plan["inbound"]:
+        by_src.setdefault(src, []).append((oraw, nraw))
+    for src, rw in by_src.items():
+        _apply_link_rewrites(os.path.join(root, src), _dedupe(rw))
+    reidx = []
+    for b in plan["bundles"]:
+        reidx += reindex_tree(root, os.path.join(root, b))
+    print("moved ({})  {}  ->  {}".format("git mv" if moved else "fs", old_rel, new_rel))
+    print("rewrote {} inbound link(s) in {} file(s), {} outbound link(s)".format(
+        len(plan["inbound"]), len(by_src), len(plan["outbound"])))
+    print("reindexed {} index file(s) across: {}".format(len(reidx), ", ".join(plan["bundles"])))
+    print("staged for commit — run `okf-cli.py check` before committing.")
+
+
 def main():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1486,6 +1682,12 @@ def main():
     prw.add_argument("new")
     prw.add_argument("--scan-root", help="dir to scan (default: --root)")
     prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
+    prn = sub.add_parser("rename",
+                         help="move a concept + rewrite every inbound/outbound link + reindex (dry-run default)")
+    prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)")
+    prn.add_argument("new", help="destination path (same or different bundle)")
+    prn.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
+    prn.add_argument("--force", action="store_true", help="overwrite an existing destination")
     px = sub.add_parser("reindex", help="(re)generate marker-bounded index.md listings")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
     px.add_argument("--init", action="store_true",
@@ -1535,7 +1737,7 @@ def main():
     {"index": cmd_index, "find": cmd_find, "list": cmd_list,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "refs": cmd_refs,
-     "rewrite-path": cmd_rewrite_path,
+     "rewrite-path": cmd_rewrite_path, "rename": cmd_rename,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
      "normalize-tags": cmd_normalize_tags,
      "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks,

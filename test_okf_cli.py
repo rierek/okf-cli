@@ -858,5 +858,81 @@ class CmdRefs(unittest.TestCase):
         self.assertNotEqual(cm.exception.code, 0)
 
 
+class RenameConcept(unittest.TestCase):
+    """rename: link_expr / plan_rename reference-integrity core (no git needed)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self._w("aaa/index.md", "# AAA\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
+        self._w("aaa/sub/index.md", "# Sub\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
+        self._w("bbb/index.md", "# BBB\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
+        self._w("aaa/a.md", "---\ntype: Concept\n---\n"
+                            "Links [B](/b.md) and [C](/sub/c.md#h).")
+        self._w("aaa/b.md", "---\ntype: Concept\n---\nBack to [A](/a.md).")
+        self._w("aaa/sub/c.md", "---\ntype: Concept\n---\nSee [A](/a.md).")
+        self._w("bbb/x.md", "---\ntype: Concept\n---\nCross to [A](../aaa/a.md).")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _ap(self, rel):
+        return os.path.join(self.tmp, rel)
+
+    def test_link_expr_same_bundle_is_bundle_relative(self):
+        self.assertEqual(
+            okf.link_expr(self.tmp, self._ap("aaa/b.md"), self._ap("aaa/a.md")),
+            "/a.md")
+
+    def test_link_expr_cross_bundle_is_path_relative(self):
+        self.assertEqual(
+            okf.link_expr(self.tmp, self._ap("aaa/b.md"), self._ap("bbb/a.md")),
+            "../bbb/a.md")
+
+    def test_link_expr_cross_bundle_from_subdir_climbs_correctly(self):
+        self.assertEqual(
+            okf.link_expr(self.tmp, self._ap("aaa/sub/c.md"), self._ap("bbb/a.md")),
+            "../../bbb/a.md")
+
+    def test_split_link_suffix_keeps_anchor(self):
+        self.assertEqual(okf._split_link_suffix("/sub/c.md#h"), ("/sub/c.md", "#h"))
+
+    def test_plan_same_bundle_rewrites_inbound_only(self):
+        plan = okf.plan_rename(self.tmp, self._ap("aaa/a.md"), self._ap("aaa/a2.md"))
+        srcs = {s: (o, n) for s, o, n in plan["inbound"]}
+        self.assertEqual(srcs["aaa/b.md"], ("/a.md", "/a2.md"))
+        self.assertEqual(srcs["aaa/sub/c.md"], ("/a.md", "/a2.md"))
+        self.assertEqual(srcs["bbb/x.md"], ("../aaa/a.md", "../aaa/a2.md"))
+        self.assertEqual(plan["outbound"], [])          # bundle unchanged
+        self.assertEqual(plan["bundles"], ["aaa"])
+
+    def test_plan_cross_bundle_rewrites_inbound_and_outbound(self):
+        plan = okf.plan_rename(self.tmp, self._ap("aaa/a.md"), self._ap("bbb/a.md"))
+        srcs = {s: (o, n) for s, o, n in plan["inbound"]}
+        self.assertEqual(srcs["aaa/b.md"], ("/a.md", "../bbb/a.md"))
+        self.assertEqual(srcs["aaa/sub/c.md"], ("/a.md", "../../bbb/a.md"))
+        self.assertEqual(srcs["bbb/x.md"], ("../aaa/a.md", "/a.md"))
+        # moved file's own links reforged, anchor preserved
+        self.assertIn(("/b.md", "../aaa/b.md"), plan["outbound"])
+        self.assertIn(("/sub/c.md#h", "../aaa/sub/c.md#h"), plan["outbound"])
+        self.assertEqual(plan["bundles"], ["aaa", "bbb"])
+
+    def test_apply_link_rewrites_targets_link_not_label(self):
+        p = self._ap("aaa/b.md")
+        self._w("aaa/b.md", "[/a.md](/a.md) and text /a.md bare")
+        okf._apply_link_rewrites(p, [("/a.md", "/a2.md")])
+        with open(p) as f:
+            out = f.read()
+        # only the ](...) target rewritten; label text + bare mention untouched
+        self.assertEqual(out, "[/a.md](/a2.md) and text /a.md bare")
+
+
 if __name__ == "__main__":
     unittest.main()
