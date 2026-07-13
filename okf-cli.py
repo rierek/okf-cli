@@ -25,6 +25,8 @@ Commands:
     okf-cli.py tags --validate <tag> …      exit 1 if any tag is unregistered (agent pre-write gate)
     okf-cli.py merge-tags <tag1> [<tag2> …] --into <tag> [--scope <target>] [--apply]
                                             merge/rename tags across concept frontmatter (dry-run default)
+    okf-cli.py remove-tags <tag1> [<tag2> …] [--scope <target>] [--apply]
+                                            remove tags from concept frontmatter, no merge target (dry-run default)
     okf-cli.py normalize-tags [--scope <target>] [--apply]
                                             convert inline `tags: [...]` to YAML block-list (local convention,
                                             dry-run default)
@@ -177,7 +179,7 @@ def all_tags(root):
 
 TAGS_INLINE_RE = re.compile(r"^tags:[ \t]*\[.*\]\s*$", re.M)
 TAGS_INLINE_CONTENT_RE = re.compile(r"^tags:[ \t]*\[(.*)\]\s*$", re.M)
-TAGS_BLOCK_RE = re.compile(r"^tags:[ \t]*\n((?:[ \t]*-[ \t]*.+\n)*)", re.M)
+TAGS_BLOCK_RE = re.compile(r"^tags:[ \t]*\n((?:[ \t]*-[ \t]*.+\n?)*)", re.M)
 
 
 def rewrite_tags_in_frontmatter(text, new_tags):
@@ -201,6 +203,29 @@ def rewrite_tags_in_frontmatter(text, new_tags):
     if m:
         new_field = "tags:\n" + "".join("  - {}\n".format(t) for t in new_tags)
         return fm[:m.start()] + new_field + fm[m.end():] + rest
+
+    return None
+
+
+def remove_tags_field(text):
+    """Strip the entire `tags:` field (inline or block) from frontmatter — used
+    when a removal empties the tag list, so no dangling `tags:` key is left.
+    Returns the new text, or None if there's no frontmatter / no tags field."""
+    if not text.startswith(FM_DELIM):
+        return None
+    end = text.find("\n" + FM_DELIM, len(FM_DELIM))
+    if end == -1:
+        return None
+    fm, rest = text[:end], text[end:]
+
+    m = TAGS_INLINE_RE.search(fm)
+    if m:
+        e = m.end() + 1 if m.end() < len(fm) and fm[m.end()] == "\n" else m.end()
+        return fm[:m.start()] + fm[e:] + rest
+
+    m = TAGS_BLOCK_RE.search(fm)
+    if m:
+        return fm[:m.start()] + fm[m.end():] + rest
 
     return None
 
@@ -237,6 +262,41 @@ def cmd_merge_tags(root, args):
         print("unparseable    {}  (tags field not in inline/block form — skipped)".format(rel))
     print("merge-tags: {} file(s) {}, {} unparseable — {} -> {}".format(
         len(touched), verb, len(unparseable), ", ".join(sorted(sources)), args.into))
+
+
+def cmd_remove_tags(root, args):
+    """Remove one or more tags from concept frontmatter (no merge target).
+    Symmetric to merge-tags: dry-run default, --scope-limited, --apply writes.
+    Emptying the tag list strips the whole `tags:` field (no dangling key)."""
+    targets = set(args.tags)
+    touched, emptied, unparseable = [], [], []
+    for _bundle, bp in resolve_scopes(root, args.scope):
+        for _cid, ap in iter_concepts(bp):
+            text = read_file(ap)
+            tags = extract_tags(text)
+            if not any(t in targets for t in tags):
+                continue
+            new_tags = [t for t in tags if t not in targets]
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            if new_tags:
+                new_text = rewrite_tags_in_frontmatter(text, new_tags)
+            else:
+                new_text = remove_tags_field(text)
+                if new_text is not None:
+                    emptied.append(rel)
+            if new_text is None:
+                unparseable.append(rel)
+                continue
+            touched.append(rel)
+            if args.apply:
+                write_file(ap, new_text)
+    verb = "rewrote" if args.apply else "would rewrite"
+    for rel in touched:
+        print("{:<14} {}".format(verb, rel))
+    for rel in unparseable:
+        print("unparseable    {}  (tags field not in inline/block form — skipped)".format(rel))
+    print("remove-tags: {} file(s) {}, {} emptied, {} unparseable — removed {}".format(
+        len(touched), verb, len(emptied), len(unparseable), ", ".join(sorted(targets))))
 
 
 def normalize_tags_in_file(text):
@@ -1804,6 +1864,12 @@ def main():
     pmt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
     pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    prt = sub.add_parser("remove-tags",
+                         help="remove one or more tags from concept frontmatter (no merge target)")
+    prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft")
+    prt.add_argument("--scope", metavar="TARGET",
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+    prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pnt = sub.add_parser("normalize-tags",
                          help="convert inline `tags: [...]` fields to YAML block-list form (local convention)")
     pnt.add_argument("--scope", metavar="TARGET",
@@ -1829,6 +1895,7 @@ def main():
      "refs": cmd_refs,
      "rewrite-path": cmd_rewrite_path, "rename": cmd_rename,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
+     "remove-tags": cmd_remove_tags,
      "normalize-tags": cmd_normalize_tags,
      "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks,
      "fix-xml-tags": cmd_fix_xml_tags}[args.cmd](root, args)

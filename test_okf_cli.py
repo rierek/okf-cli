@@ -997,5 +997,77 @@ class TagRegistryGate(unittest.TestCase):
         self.assertIn("| `a` | keep me |", body)
 
 
+class RemoveTags(unittest.TestCase):
+    """remove-tags: strip tags from frontmatter (no merge target), dry-run default,
+    empties strip the whole tags field."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+        return ap
+
+    def _run(self, tags, scope=None, apply=True):
+        import types
+        import contextlib
+        import io
+        args = types.SimpleNamespace(tags=tags, scope=scope, apply=apply)
+        with contextlib.redirect_stdout(io.StringIO()):
+            okf.cmd_remove_tags(self.tmp, args)
+
+    def test_field_removal_block_form(self):
+        text = "---\ntype: Concept\ntitle: X\ntags:\n  - a\n  - b\n---\n# X\n"
+        out = okf.remove_tags_field(text)
+        self.assertNotIn("tags:", out)
+        self.assertIn("title: X", out)
+        self.assertIn("# X", out)
+
+    def test_field_removal_inline_form(self):
+        text = "---\ntype: Concept\ntags: [a, b]\ntitle: X\n---\n# X\n"
+        out = okf.remove_tags_field(text)
+        self.assertNotIn("tags:", out)
+        self.assertNotIn("[a, b]", out)
+        self.assertIn("title: X", out)
+
+    def test_field_removal_no_tags_returns_none(self):
+        self.assertIsNone(okf.remove_tags_field("---\ntype: Concept\ntitle: X\n---\n# X\n"))
+
+    def test_removes_one_keeps_others(self):
+        ap = self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - keep\n  - drop\n---\n# X\n")
+        self._run(["drop"])
+        new = open(ap, encoding="utf-8").read()
+        self.assertIn("  - keep", new)
+        self.assertNotIn("drop", new)
+
+    def test_emptying_strips_tags_field(self):
+        ap = self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - only\n---\n# X\n")
+        self._run(["only"])
+        new = open(ap, encoding="utf-8").read()
+        self.assertNotIn("tags:", new)
+        self.assertIn("title: X", new)
+
+    def test_dry_run_writes_nothing(self):
+        original = "---\ntype: Concept\ntitle: X\ntags:\n  - drop\n---\n# X\n"
+        ap = self._w("b/x.md", original)
+        self._run(["drop"], apply=False)
+        self.assertEqual(open(ap, encoding="utf-8").read(), original)
+
+    def test_scope_limits_rewrite(self):
+        a = self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - drop\n---\n# X\n")
+        b = self._w("c/y.md", "---\ntype: Concept\ntitle: Y\ntags:\n  - drop\n---\n# Y\n")
+        self._run(["drop"], scope="b")
+        self.assertNotIn("drop", open(a, encoding="utf-8").read())
+        self.assertIn("drop", open(b, encoding="utf-8").read())  # out of scope, untouched
+
+
 if __name__ == "__main__":
     unittest.main()
