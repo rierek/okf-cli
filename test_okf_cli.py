@@ -934,5 +934,68 @@ class RenameConcept(unittest.TestCase):
         self.assertEqual(out, "[/a.md](/a2.md) and text /a.md bare")
 
 
+class TagRegistryGate(unittest.TestCase):
+    """Closed-tag-vocabulary: tag-registered check + register_tags/load_tags.
+    TAGS.md is the allow-list; unknown tags warn (escalate to error via --strict).
+    Absent TAGS.md → no-op."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _names(self, entries):
+        return [e[0] for e in entries]
+
+    def test_no_tags_md_is_noop(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - anything\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("tag-registered", self._names(warnings))
+        self.assertIsNone(okf.load_tags(self.tmp))
+
+    def test_unknown_tag_warns(self):
+        self._w("TAGS.md", okf.TAGS_HEADER + "| `known` |  |\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - known\n  - novel\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("tag-registered", self._names(warnings))
+        msgs = [m for n, _p, m in warnings if n == "tag-registered"]
+        self.assertTrue(any("novel" in m for m in msgs))
+        self.assertFalse(any("known" in m for m in msgs))
+
+    def test_all_known_tags_clean(self):
+        self._w("TAGS.md", okf.TAGS_HEADER + "| `a` |  |\n| `b` |  |\n")
+        self._w("c/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n  - b\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "c")
+        self.assertNotIn("tag-registered", self._names(warnings))
+
+    def test_register_creates_and_appends(self):
+        added, already = okf.register_tags(self.tmp, ["zebra", "alpha"])
+        self.assertEqual(set(added), {"zebra", "alpha"})
+        self.assertEqual(already, [])
+        self.assertEqual(okf.load_tags(self.tmp), {"zebra", "alpha"})
+        # idempotent + casefold-sorted output (alpha before zebra)
+        added2, already2 = okf.register_tags(self.tmp, ["alpha", "mid"])
+        self.assertEqual(added2, ["mid"])
+        self.assertEqual(already2, ["alpha"])
+        body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
+        self.assertLess(body.index("`alpha`"), body.index("`mid`"))
+        self.assertLess(body.index("`mid`"), body.index("`zebra`"))
+
+    def test_register_preserves_descriptions(self):
+        self._w("TAGS.md", okf.TAGS_HEADER + "| `a` | keep me |\n")
+        okf.register_tags(self.tmp, ["b"])
+        body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
+        self.assertIn("| `a` | keep me |", body)
+
+
 if __name__ == "__main__":
     unittest.main()

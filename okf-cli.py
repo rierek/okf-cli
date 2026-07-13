@@ -21,6 +21,8 @@ Commands:
     okf-cli.py log [bundle] [--since] [--write]  render git history as a SPEC §7 changelog
     okf-cli.py tags [--singletons]          full tag audit dump (tag + usage count), or singleton-only
     okf-cli.py tags <tag1> <tag2> …        fuzzy-search each candidate against the tag universe
+    okf-cli.py tags --register <tag> …      add tag(s) to the TAGS.md closed-vocabulary registry
+    okf-cli.py tags --validate <tag> …      exit 1 if any tag is unregistered (agent pre-write gate)
     okf-cli.py merge-tags <tag1> [<tag2> …] --into <tag> [--scope <target>] [--apply]
                                             merge/rename tags across concept frontmatter (dry-run default)
     okf-cli.py normalize-tags [--scope <target>] [--apply]
@@ -315,6 +317,25 @@ def fuzzy_matches(query, candidates, limit=8):
 
 
 def cmd_tags(root, args):
+    if getattr(args, "register", None):
+        added, already = register_tags(root, args.register)
+        if added:
+            print("registered {} new tag(s) in TAGS.md: {}".format(len(added), ", ".join(added)))
+        if already:
+            print("already registered: {}".format(", ".join(already)))
+        return
+    if getattr(args, "validate", None):
+        tags_set = load_tags(root)
+        if tags_set is None:
+            print("(no TAGS.md — closed vocabulary not enabled)")
+            return
+        unknown = [t for t in args.validate if t not in tags_set]
+        for t in unknown:
+            print("UNKNOWN  {}".format(t))
+        print("OK — all {} known".format(len(args.validate)) if not unknown
+              else "{} UNKNOWN — register with: okf-cli.py tags --register {}".format(
+                  len(unknown), " ".join(unknown)))
+        sys.exit(1 if unknown else 0)
     counts = all_tags(root)
     if not args.query:
         if not counts:
@@ -1071,6 +1092,57 @@ def load_types(root, types_source=None):
     return set(re.findall(r"^\|\s*`([^`]+)`", read_file(p), re.M))
 
 
+def load_tags(root, tags_source=None):
+    """Set of registered tag values from <root>/TAGS.md, or None if the file is
+    missing (in which case the closed-vocabulary check is a no-op). TAGS.md is a
+    pipe-table with a leading `` `tag` `` cell per row — same format as TYPES.md,
+    so the extraction regex is shared. The registry is the allowed tag vocabulary;
+    new tags enter it only via `okf-cli.py tags --register` (human-gated)."""
+    p = tags_source or os.path.join(root, "TAGS.md")
+    if not os.path.isfile(p):
+        return None
+    return set(re.findall(r"^\|\s*`([^`]+)`", read_file(p), re.M))
+
+
+TAGS_HEADER = (
+    "# TAGS.md — Registered Tag Vocabulary\n\n"
+    "Closed vocabulary for concept `tags:`. The `tag-registered` conformance check\n"
+    "(warning; `check --strict` escalates to error) flags any tag not listed here.\n"
+    "Add a new tag only via `okf-cli.py tags --register <tag>` — reuse an existing\n"
+    "tag over minting a near-duplicate. A tag earns its place by aggregating content.\n\n"
+    "| Tag | Description |\n|-----|-------------|\n"
+)
+
+
+def _read_tag_rows(root):
+    """Parse TAGS.md into an ordered {tag: description} dict ({} if absent)."""
+    p = os.path.join(root, "TAGS.md")
+    rows = {}
+    if os.path.isfile(p):
+        for tag, desc in re.findall(r"^\|\s*`([^`]+)`\s*\|(.*?)\|", read_file(p), re.M):
+            rows[tag] = desc.strip()
+    return rows
+
+
+def write_tags_registry(root, rows):
+    """Render {tag: description} to TAGS.md, tags casefold-sorted."""
+    body = "".join("| `{}` | {} |\n".format(t, rows[t]) for t in sorted(rows, key=str.casefold))
+    with open(os.path.join(root, "TAGS.md"), "w", encoding="utf-8") as f:
+        f.write(TAGS_HEADER + body)
+
+
+def register_tags(root, new_tags):
+    """Add tags to TAGS.md (creating it if absent). Returns (added, already)."""
+    rows = _read_tag_rows(root)
+    added = [t for t in dict.fromkeys(new_tags) if t not in rows]
+    already = [t for t in dict.fromkeys(new_tags) if t in rows]
+    for t in added:
+        rows[t] = ""
+    if added:
+        write_tags_registry(root, rows)
+    return added, already
+
+
 def load_okf_config(root):
     """Parse <root>/.okf.toml if present. Returns a dict ({} if absent).
     Leading-~ path values are expanduser-expanded. Requires Python 3.11+ (tomllib)."""
@@ -1142,6 +1214,18 @@ def check_type_registered(ctx, types_set):
         return []
     t = ctx["fm"].get("type", "").strip()
     return ["type `{}` not registered in TYPES.md".format(t)] if t and t not in types_set else []
+
+
+def check_tag_registered(ctx, tags_set):
+    """Closed-vocabulary gate: every frontmatter tag must be in TAGS.md.
+    No-op when TAGS.md is absent (tags_set is None). Severity is warning, so it
+    surfaces new tags without blocking; `check --strict` escalates to error.
+    Keeps agents from exploding the tag vocabulary with creative one-offs — a tag
+    only aggregates content if it is reused, not minted fresh each write."""
+    if ctx["is_reserved"] or not ctx["has_fm"] or tags_set is None:
+        return []
+    return ["tag `{}` not registered in TAGS.md".format(t)
+            for t in extract_tags(ctx["text"]) if t not in tags_set]
 
 
 def check_english_keys(ctx):
@@ -1406,12 +1490,14 @@ def run_checks(root, target, types_source=None):
     if types_source is None:
         types_source = load_okf_config(root).get("types_source")
     types_set = load_types(root, types_source)
+    tags_set = load_tags(root)
     per_file_checks = [
         ("frontmatter-parseable", "error", check_fm_parseable),
         ("type-nonempty", "error", check_type_nonempty),
         ("reserved-no-type", "error", check_reserved_no_type),
         ("filename-chars", "error", check_filename_chars),
         ("type-registered", "warning", lambda c: check_type_registered(c, types_set)),
+        ("tag-registered", "warning", lambda c: check_tag_registered(c, tags_set)),
         ("english-keys", "warning", check_english_keys),
         ("crosslink-format", "warning", check_crosslink_format),
         ("tags-block-form", "warning", check_tags_block_form),
@@ -1707,6 +1793,10 @@ def main():
     pg.add_argument("--limit", type=int, default=8, help="max matches per candidate (default 8)")
     pg.add_argument("--singletons", action="store_true",
                     help="full-dump mode only: show tags used exactly once")
+    pg.add_argument("--register", nargs="+", metavar="TAG",
+                    help="add tag(s) to the TAGS.md registry (closed-vocabulary allow-list)")
+    pg.add_argument("--validate", nargs="+", metavar="TAG",
+                    help="check tag(s) against TAGS.md; exit 1 if any are unregistered")
     pmt = sub.add_parser("merge-tags",
                          help="merge/rename one or more tags into a target tag across concept frontmatter")
     pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows")
