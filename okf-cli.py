@@ -32,7 +32,7 @@ Commands:
                                             dry-run default)
     okf-cli.py check [target] [--strict] [--json] [--types <path>]  conformance scan (§9 + local
                                             invariants); honors .okf.toml types_source / --types for TYPES.md
-    okf-cli.py fix-crosslinks [target] [--check]   rewrite relative links to bundle-relative form
+    okf-cli.py fix-crosslinks [target] [--check]   rewrite links to catalogue-root-absolute form
     okf-cli.py fix-xml-tags [target] [--check]     wrap `<tag>`/`<tag>.<tag2>` placeholders in inline
                                             code so Obsidian doesn't misparse them as XML/HTML
     okf-cli.py refs <path> [--scan-root <dir>] [--json]  inbound markdown references to a file
@@ -652,10 +652,17 @@ def bundle_graph(root, bundle):
             if not tgt.endswith(".md") or tgt.startswith(("http", "..")):
                 continue
             if tgt.startswith("/"):
+                # catalogue-root-absolute (/bundle/subdir/concept.md): strip the
+                # leading /bundle/ to get the bundle-relative cid. A link into a
+                # different bundle won't match this bundle's concepts and is
+                # dropped — bundle_graph only builds in-bundle edges.
                 dest = tgt[1:-3]
+                if dest == bundle:
+                    dest = ""
+                elif dest.startswith(bundle + "/"):
+                    dest = dest[len(bundle) + 1:]
             else:
-                dest = os.path.normpath(os.path.join(cdir, tgt))[:-3] if False else \
-                       os.path.normpath(os.path.join(cdir, tgt[:-3]))
+                dest = os.path.normpath(os.path.join(cdir, tgt[:-3]))
             dest = dest.replace(os.sep, "/")
             if dest in concepts and dest != cid:
                 edges.append({"source": cid, "target": dest})
@@ -695,7 +702,7 @@ def build_ref_matrix(scan_root, target_abspath):
     """List every markdown link under scan_root that resolves to target_abspath.
     Returns [(source_rel, raw_link), ...]. Reuses the bundle_graph link regex,
     strips fenced code, ignores http(s)/mailto and anchors. Both relative and
-    bundle-relative (leading /) links are resolved path-wise."""
+    catalogue-root-absolute (leading /) links are resolved path-wise."""
     target_abspath = os.path.abspath(target_abspath)
     link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     hits = []
@@ -712,12 +719,9 @@ def build_ref_matrix(scan_root, target_abspath):
                 if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
                     continue
                 if tgt.startswith("/"):
-                    # OKF: leading / = the source file's BUNDLE root (its top-level
-                    # dir under scan_root), NOT scan_root itself.
-                    rel = os.path.relpath(dirpath, scan_root).replace(os.sep, "/")
-                    bundle = rel.split("/", 1)[0] if rel not in (".", "") else ""
-                    base = os.path.join(scan_root, bundle) if bundle else scan_root
-                    resolved = os.path.abspath(os.path.join(base, tgt.lstrip("/")))
+                    # OKF (catalogue-root convention): leading / = scan_root
+                    # (= catalogue root = Obsidian vault root), NOT the bundle.
+                    resolved = os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
                 else:
                     resolved = os.path.abspath(os.path.join(dirpath, tgt))
                 if resolved == target_abspath:
@@ -893,15 +897,24 @@ def list_subdirs_with_index(dirpath):
     return out
 
 
-def render_block(subdirs, concepts):
-    """OKF bullet list: subdirectories first, then concept files."""
+def render_block(subdirs, concepts, dir_rel=""):
+    """OKF bullet list: subdirectories first, then concept files.
+
+    Links are catalogue-root-absolute (`/bundle/subdir/concept.md`) so Obsidian
+    resolves them from the vault root, not from the index's own folder. A bare
+    relative target (`concept.md`) resolves inconsistently in Obsidian and shows
+    phantom orphan nodes in the graph for files that do exist. `dir_rel` is the
+    index directory's path relative to the catalogue root ("" / "." = root).
+    """
+    dir_rel = "" if dir_rel in ("", ".") else dir_rel.strip("/")
+    prefix = "/" + dir_rel + "/" if dir_rel else "/"
     lines = []
     for title, name, desc in subdirs:
         d = _collapse(desc)
-        lines.append("* [{}]({}/index.md){}".format(title, name, " - " + d if d else ""))
+        lines.append("* [{}]({}{}/index.md){}".format(title, prefix, name, " - " + d if d else ""))
     for title, slug, desc in concepts:
         d = _collapse(desc)
-        lines.append("* [{}]({}.md){}".format(title, slug, " - " + d if d else ""))
+        lines.append("* [{}]({}{}.md){}".format(title, prefix, slug, " - " + d if d else ""))
     return "\n".join(lines)
 
 
@@ -1049,7 +1062,8 @@ def cmd_reindex(root, args):
         if MARK_START not in text:
             skipped.append(rel)
             continue
-        block = render_block(list_subdirs_with_index(dp), list_dir_concepts(dp))
+        dir_rel = os.path.relpath(dp, root).replace(os.sep, "/")
+        block = render_block(list_subdirs_with_index(dp), list_dir_concepts(dp), dir_rel)
         new_text, _ = replace_managed_block(text, block)
         if new_text == text:
             continue
@@ -1307,15 +1321,33 @@ def check_tags_block_form(ctx):
 
 
 def check_crosslink_format(ctx):
+    """Cross-links must be catalogue-root-absolute (`/bundle/subdir/concept.md`,
+    leading `/` = catalogue root = Obsidian vault root). Flags (a) relative links
+    that resolve inconsistently and orphan in Obsidian, and (b) leading-`/` links
+    that do not resolve to a real file from the catalogue root (legacy bundle-
+    relative `/subdir/x.md` or typos — the phantom-orphan class)."""
     if ctx["is_reserved"]:
         return []
-    bad = []
-    for m in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", ctx["body"]):
-        tgt = m.group(1).split("#")[0].strip()
-        if not tgt.endswith(".md") or tgt.startswith(("http://", "https://", "/", "..")):
+    # Symlinked external bundles keep the portable bundle-relative OKF form and are
+    # audited in their own repo — the catalogue-root convention does not apply here.
+    if os.path.islink(os.path.join(ctx["root"], ctx["bundle"])):
+        return []
+    relative, dangling = [], []
+    scan_body, _ = _mask_code_spans(ctx["body"])   # fenced/inline example links are not real links
+    for m in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", scan_body):
+        tgt = m.group(1).split("#")[0].split("?")[0].strip()
+        if not tgt.endswith(".md") or tgt.startswith(("http://", "https://", "mailto:")):
             continue
-        bad.append(tgt)
-    return ["non bundle-relative link(s): {}".format(", ".join(bad))] if bad else []
+        if not tgt.startswith("/"):
+            relative.append(tgt)
+        elif not os.path.isfile(os.path.join(ctx["root"], tgt.lstrip("/"))):
+            dangling.append(tgt)
+    msgs = []
+    if relative:
+        msgs.append("non catalogue-absolute link(s) (use /bundle/…): {}".format(", ".join(relative)))
+    if dangling:
+        msgs.append("catalogue-absolute link(s) not resolving from root: {}".format(", ".join(dangling)))
+    return msgs
 
 
 _TAG = r"</?[A-Za-z][\w:-]*>"
@@ -1450,20 +1482,42 @@ CROSSLINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
 def resolve_crosslink_target(root, bundle, cdir, tgt):
-    """Reuses bundle_graph's cdir-relative resolution formula. Returns the
-    bundle-relative absolute form (`/dest.md`) only if the target file really
-    exists — the safety anchor that leaves doc examples pointing at
-    non-existent paths untouched instead of guessing."""
-    dest = os.path.normpath(os.path.join(cdir, tgt[:-3])).replace(os.sep, "/")
-    if not os.path.isfile(os.path.join(root, bundle, dest + ".md")):
+    """Absolute filesystem path a link target `tgt` (found in bundle/cdir) points
+    at, then re-expressed as the canonical catalogue-root-absolute form
+    (`/bundle/subdir/concept.md`, leading `/` = catalogue root = Obsidian vault
+    root). Interpretations are tried in order so the same rewriter both migrates
+    legacy links and stays idempotent:
+      1. leading `/` as LEGACY bundle-root (`/subdir/x.md` -> bundle/subdir/x.md)
+      2. leading `/` as already-catalogue-root (`/bundle/subdir/x.md`)
+      3. relative to cdir within the bundle (`x.md`, `sub/x.md`, `../other/x.md`)
+    Returns the canonical `/…` string only if the target file really exists (the
+    safety anchor that leaves doc examples on non-existent paths untouched)."""
+    if tgt.startswith("/"):
+        p = tgt.lstrip("/")
+        dest = os.path.join(root, bundle, p)            # legacy bundle-root
+        if not os.path.isfile(dest):
+            dest = os.path.join(root, p)                 # already catalogue-root
+    else:
+        dest = os.path.normpath(os.path.join(root, bundle, cdir, tgt))
+        if not os.path.isfile(dest):
+            # mis-depthed cross-bundle relative link (`../other-bundle/x.md` whose
+            # `..` count never reaches the catalogue root): repoint from root iff
+            # the `../`-stripped tail is a real file — no guessing beyond existence.
+            tail = re.sub(r"^(?:\.\.?/)+", "", tgt)
+            cand = os.path.join(root, tail)
+            if os.path.isfile(cand):
+                dest = cand
+    if not os.path.isfile(dest):
         return None
-    return "/" + dest + ".md"
+    return "/" + os.path.relpath(dest, root).replace(os.sep, "/")
 
 
 def rewrite_crosslinks_in_body(root, bundle, cdir, body):
-    """Rewrite same-bundle relative links to bundle-relative absolute form.
-    Same detection filter as check_crosslink_format (skip http(s)://, leading
-    `/`, leading `..`). Returns (new_body, changed_count, unresolved_targets)."""
+    """Rewrite every resolvable markdown link to canonical catalogue-root-absolute
+    form (`/bundle/subdir/concept.md`). Migrates legacy bundle-relative (`/sub/x`)
+    and path-relative (`x`, `../other/x`) links alike; already-canonical links are
+    left byte-identical (idempotent). Skips http(s)/mailto/anchor-only. Returns
+    (new_body, changed_count, unresolved_targets)."""
     changed = 0
     unresolved = []
 
@@ -1472,14 +1526,16 @@ def rewrite_crosslinks_in_body(root, bundle, cdir, body):
         label, target = m.group(1), m.group(2)
         raw_tgt, _, anchor = target.partition("#")
         raw_tgt = raw_tgt.strip()
-        if not raw_tgt.endswith(".md") or raw_tgt.startswith(("http://", "https://", "/", "..")):
+        if not raw_tgt.endswith(".md") or raw_tgt.startswith(("http://", "https://", "mailto:")):
             return m.group(0)
         resolved = resolve_crosslink_target(root, bundle, cdir, raw_tgt)
         if resolved is None:
             unresolved.append(raw_tgt)
             return m.group(0)
-        changed += 1
         new_target = resolved + ("#" + anchor if anchor else "")
+        if new_target == target:
+            return m.group(0)                            # already canonical
+        changed += 1
         return "[{}]({})".format(label, new_target)
 
     new_body = CROSSLINK_RE.sub(repl, body)
@@ -1488,8 +1544,8 @@ def rewrite_crosslinks_in_body(root, bundle, cdir, body):
 
 def fix_crosslinks(root, target, dry_run=False):
     """Rewrite crosslinks in every non-reserved .md under `target` (bundle or
-    bundle/subdir, or the whole catalogue when None) to bundle-relative
-    absolute form. Returns (touched, unresolved):
+    bundle/subdir, or the whole catalogue when None) to catalogue-root-absolute
+    form. Returns (touched, unresolved):
     touched = [(rel, changed_count), ...], unresolved = [(rel, target), ...]."""
     touched, unresolved = [], []
     for bundle, bp in resolve_scopes(root, target):
@@ -1605,16 +1661,13 @@ def bundle_of(root, abspath):
 
 
 def link_expr(root, src_abs, dst_abs):
-    """Canonical OKF link string FROM src file TO dst target. Same bundle ->
-    bundle-relative absolute (`/subdir/concept.md`, resolved against the shared
-    bundle root). Different bundle -> path-relative (`../bundle/.../concept.md`),
-    the only form that can cross bundles since a leading `/` rebinds to the
-    source's own bundle root."""
-    src_abs, dst_abs = os.path.abspath(src_abs), os.path.abspath(dst_abs)
-    if bundle_of(root, src_abs) == bundle_of(root, dst_abs):
-        bundle_root = os.path.join(root, bundle_of(root, src_abs))
-        return "/" + os.path.relpath(dst_abs, bundle_root).replace(os.sep, "/")
-    return os.path.relpath(dst_abs, os.path.dirname(src_abs)).replace(os.sep, "/")
+    """Canonical OKF link string FROM src file TO dst target: catalogue-root-
+    absolute (`/bundle/subdir/concept.md`). Leading `/` = catalogue root =
+    Obsidian vault root, so the same form addresses same- and cross-bundle
+    targets and resolves identically for okf-cli and Obsidian. src_abs is kept
+    in the signature for call-site symmetry with resolve_link_target."""
+    dst_abs = os.path.abspath(dst_abs)
+    return "/" + os.path.relpath(dst_abs, root).replace(os.sep, "/")
 
 
 def _split_link_suffix(raw):
@@ -1630,14 +1683,14 @@ def _split_link_suffix(raw):
 
 def resolve_link_target(root, src_abs, raw):
     """Absolute path a markdown link target resolves to, relative to src_abs's
-    location. Handles bundle-relative (`/...`) and path-relative forms. Returns
+    location. Handles catalogue-root-absolute (`/...`) and path-relative forms. Returns
     None for external / anchor-only / non-.md links."""
     path, _ = _split_link_suffix(raw.strip())
     if not path.endswith(".md") or re.match(r"^[a-z][a-z0-9+.-]*://", path) or path.startswith("mailto:"):
         return None
     if path.startswith("/"):
-        bundle_root = os.path.join(root, bundle_of(root, src_abs))
-        return os.path.abspath(os.path.join(bundle_root, path.lstrip("/")))
+        # leading / = catalogue root (= Obsidian vault root), not the bundle root
+        return os.path.abspath(os.path.join(root, path.lstrip("/")))
     return os.path.abspath(os.path.join(os.path.dirname(src_abs), path))
 
 
@@ -1707,7 +1760,8 @@ def reindex_tree(root, tp):
         text = read_file(idx)
         if MARK_START not in text:
             continue
-        block = render_block(list_subdirs_with_index(dp), list_dir_concepts(dp))
+        dir_rel = os.path.relpath(dp, root).replace(os.sep, "/")
+        block = render_block(list_subdirs_with_index(dp), list_dir_concepts(dp), dir_rel)
         new_text, _ = replace_managed_block(text, block)
         if new_text != text:
             write_file(idx, new_text)
@@ -1881,7 +1935,7 @@ def main():
     pc.add_argument("--json", action="store_true", help="machine-readable output")
     pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)")
     pfx = sub.add_parser("fix-crosslinks",
-                         help="rewrite same-bundle relative links to bundle-relative absolute form")
+                         help="rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
     pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
     pfxt = sub.add_parser("fix-xml-tags",
