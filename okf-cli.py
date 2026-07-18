@@ -6,6 +6,8 @@ A *catalogue* is a directory whose immediate subdirectories (not starting with
 '.' or '_') are OKF *bundles*. Standard library only — no install required.
 
 Commands:
+    okf-cli.py prime [--full]              one-shot agent onboarding: CLAUDE.md guide + catalogue TOC
+                                            (start here in a new session)
     okf-cli.py index [bundle] [--full]     catalogue TOC (bundle/description/concepts/directories),
                                             or one bundle's index; --full adds types+tags per bundle
     okf-cli.py list [--type <T>] [--tag <T>] [--scope <target>]
@@ -617,6 +619,20 @@ def iter_headings(body):
         m = re.match(r"^(#{1,6})\s+(.+?)\s*#*$", line)
         if m:
             yield len(m.group(1)), m.group(2).strip()
+
+
+def cmd_prime(root, args):
+    """One-shot agent onboarding: CLAUDE.md guide + catalogue TOC in a single call."""
+    p = os.path.join(root, "CLAUDE.md")
+    print("------")
+    if os.path.isfile(p):
+        print(read_file(p))
+    else:
+        print("(missing: CLAUDE.md)")
+    print("------")
+    for b in list_bundles(root):
+        print(render_bundle_block(root, b, full=args.full))
+        print("-----")
 
 
 def cmd_toc(root, args):
@@ -1865,6 +1881,8 @@ def main():
     pf.add_argument("--limit", type=int, default=10)
     pr = sub.add_parser("read")
     pr.add_argument("path")
+    pp = sub.add_parser("prime", help="one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")
+    pp.add_argument("--full", action="store_true", help="add per-bundle types+tags to the TOC")
     sub.add_parser("info", help="print catalogue schema docs (TYPES.md + PROPERTIES.md)")
     pt = sub.add_parser("toc", help="print a concept's headings (default: h2 only)")
     pt.add_argument("path")
@@ -1944,7 +1962,7 @@ def main():
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
     args = ap.parse_args()
     root = catalogue_root(args.root)
-    {"index": cmd_index, "find": cmd_find, "list": cmd_list,
+    {"prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "refs": cmd_refs,
      "rewrite-path": cmd_rewrite_path, "rename": cmd_rename,
