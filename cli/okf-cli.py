@@ -1962,6 +1962,9 @@ def main():
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
     args = ap.parse_args()
     root = catalogue_root(args.root)
+    if not os.path.isdir(root):
+        sys.exit("ERROR: root not found: {} (pass --root <path>; without it, defaults to "
+                  "the script's own directory)".format(root))
     {"prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "refs": cmd_refs,
