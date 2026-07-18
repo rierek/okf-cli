@@ -3,4 +3,4 @@
 kc_root      = "/Users/erik/Obsidian/Knowledge-Catalogue"
 types_source = "/Users/erik/Obsidian/Knowledge-Catalogue/TYPES.md"
 bundle       = "okf-tools-okf"
-symlink      = false   # false | absolute KC symlink path once mounted
+symlink      = "/Users/erik/Obsidian/Knowledge-Catalogue/okf-tools-okf"   # false | absolute KC symlink path once mounted
