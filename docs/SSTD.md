@@ -4,15 +4,20 @@
 
 ## State (2026-07-18)
 
-- **Focus:** Extraktion aus Knowledge-Catalogue abgeschlossen und verifiziert. Repo
-  (`okf-tools`, Unterordner `cli/`, `mcp/`, `plugin/`) lauffähig, Git-Historie beider
+- **Focus:** Bean `okf-cli-dwcq` (task/high, `prime`-Output verschlanken) umgesetzt und
+  geschlossen. `cmd_prime` (cli/okf-cli.py) nutzt jetzt `render_bundle_line` für die
+  Default-Bundle-Liste (Name+Concept-Count); `--full` unverändert (volle Blöcke mit
+  description/directories/types/tags). Gemessen gegen `~/Obsidian/Knowledge-Catalogue`
+  (21 Bundles): default 268→93 Zeilen (13.5KB→7.9KB, ~41% weniger); `--full` unverändert
+  310 Zeilen/25KB. `cmd_index` unangetastet — bleibt Stelle für volles Bundle-Browsing.
+  Vorherige Session: Extraktion aus Knowledge-Catalogue abgeschlossen und verifiziert.
+  Repo (`okf-tools`, Unterordner `cli/`, `mcp/`, `plugin/`) lauffähig, Git-Historie beider
   Quellen (okf-cli, okf-mcp) erhalten. Cross-Referenzen (Skills/CLAUDE.md/MCP-Config/
   AOS) auf neuen Pfad umgestellt. Verify-Findings behoben (roher Traceback bei
   ungültigem `--root` gefixt, KC-Katalog auf `OK — 0 violations`).
 - **In progress:** —
 - **Blocked:** —
-- **Next step:** Bean `okf-cli-dwcq` (task/high) — `okf-cli prime`-Output verschlanken,
-  Progressive Disclosure für Bundle-Infos einhalten (aktuell zu aufgebläht).
+- **Next step:** offen — `beans list --ready` prüfen für nächstes Bean.
 
 ## Open decisions
 
