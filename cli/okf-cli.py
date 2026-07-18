@@ -637,9 +637,17 @@ def cmd_prime(root, args):
     else:
         print("(missing: CLAUDE.md)")
     print("------")
-    for b in list_bundles(root):
-        print(render_bundle_block(root, b, full=args.full))
-        print("-----")
+    bundles = list_bundles(root)
+    if args.full:
+        for b in bundles:
+            print(render_bundle_block(root, b, full=True))
+            print("-----")
+    else:
+        print("bundles:")
+        for b in bundles:
+            print("- " + render_bundle_line(root, b))
+        print("(for description/directories/types/tags per bundle: "
+              "okf-cli index <bundle> [--full], or `okf-cli index` for all)")
 
 
 def cmd_toc(root, args):
@@ -1889,7 +1897,9 @@ def main():
     pr = sub.add_parser("read")
     pr.add_argument("path")
     pp = sub.add_parser("prime", help="one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")
-    pp.add_argument("--full", action="store_true", help="add per-bundle types+tags to the TOC")
+    pp.add_argument("--full", action="store_true",
+                     help="print full per-bundle blocks (description+directories+types+tags) "
+                          "instead of the default compact name+count listing")
     sub.add_parser("info", help="print catalogue schema docs (TYPES.md + PROPERTIES.md)")
     pt = sub.add_parser("toc", help="print a concept's headings (default: h2 only)")
     pt.add_argument("path")

@@ -1098,5 +1098,43 @@ class RenderBundleLine(unittest.TestCase):
         self.assertEqual(line, "empty (0 concepts)")
 
 
+class CmdPrimeBundleListing(unittest.TestCase):
+    """T-okf-cli-dwcq — prime defaults to compact per-bundle lines; --full keeps
+    today's full per-bundle blocks (description/directories/types/tags)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        with open(os.path.join(self.tmp, "CLAUDE.md"), "w", encoding="utf-8") as f:
+            f.write("# Guide\n")
+        ap = os.path.join(self.tmp, "b", "one.md")
+        os.makedirs(os.path.dirname(ap))
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: One\n---\n# One\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _prime(self, full=False):
+        import io, contextlib, types
+        args = types.SimpleNamespace(full=full)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_prime(self.tmp, args)
+        return buf.getvalue()
+
+    def test_default_uses_compact_line_not_description(self):
+        out = self._prime(full=False)
+        self.assertIn("b (1 concepts)", out)
+        self.assertNotIn("description:", out)
+        self.assertNotIn("directories:", out)
+
+    def test_full_keeps_description_and_directories(self):
+        out = self._prime(full=True)
+        self.assertIn("description:", out)
+        self.assertIn("concepts: 1", out)
+
+
 if __name__ == "__main__":
     unittest.main()
