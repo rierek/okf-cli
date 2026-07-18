@@ -453,6 +453,13 @@ def bundle_types_and_tags(bp):
     return sorted(types), sorted(tags)
 
 
+def render_bundle_line(root, b):
+    """Compact one-liner for prime's default bundle listing: name + concept count."""
+    bp = os.path.join(root, b)
+    n = sum(1 for _ in iter_concepts(bp))
+    return "{} ({} concepts)".format(b, n)
+
+
 def render_bundle_block(root, b, full=False):
     bp = os.path.join(root, b)
     n = sum(1 for _ in iter_concepts(bp))

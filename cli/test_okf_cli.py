@@ -1069,5 +1069,34 @@ class RemoveTags(unittest.TestCase):
         self.assertIn("drop", open(b, encoding="utf-8").read())  # out of scope, untouched
 
 
+class RenderBundleLine(unittest.TestCase):
+    """T-okf-cli-dwcq — compact one-liner for prime's default bundle listing."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _concept(self, bundle, name):
+        ap = os.path.join(self.tmp, bundle, name)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: {}\n---\n# {}\n".format(name, name))
+
+    def test_line_has_bundle_name_and_concept_count(self):
+        self._concept("b", "one.md")
+        self._concept("b", "two.md")
+        line = okf.render_bundle_line(self.tmp, "b")
+        self.assertEqual(line, "b (2 concepts)")
+
+    def test_zero_concepts_still_renders(self):
+        os.makedirs(os.path.join(self.tmp, "empty"))
+        line = okf.render_bundle_line(self.tmp, "empty")
+        self.assertEqual(line, "empty (0 concepts)")
+
+
 if __name__ == "__main__":
     unittest.main()
