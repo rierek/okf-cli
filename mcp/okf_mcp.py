@@ -45,7 +45,7 @@ import json
 import subprocess
 
 OKF_CLI = os.environ.get("OKF_CLI",
-    os.path.join(os.path.expanduser("~"), "Obsidian", "Knowledge-Catalogue", "okf-cli.py"))
+    os.path.join(os.path.expanduser("~"), "Obsidian", "tools", "okf-tools", "cli", "okf-cli.py"))
 
 
 def run_okf(root, command, params):
