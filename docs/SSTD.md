@@ -1,35 +1,22 @@
-# okf-tools — Session State Transfer
+# okf-tools — Session State Transfer (Pointer-File)
 
-> Current status of ongoing work (SSTD, `/sstd` format). Plain file. Update at session end.
+> SSTD hält kein Wissen — nur Sink-Registry + Entry-Point (D01). Decisions/durables Wissen → OKF-Bundle, Work-State → beans, Code-Historie → git.
 
-## State (2026-07-18)
+## Sink-Registry
 
-- **Focus:** Bean `okf-cli-dwcq` (task/high, `prime`-Output verschlanken) umgesetzt und
-  geschlossen. `cmd_prime` (cli/okf-cli.py) nutzt jetzt `render_bundle_line` für die
-  Default-Bundle-Liste (Name+Concept-Count); `--full` unverändert (volle Blöcke mit
-  description/directories/types/tags). Gemessen gegen `~/Obsidian/Knowledge-Catalogue`
-  (21 Bundles): default 268→93 Zeilen (13.5KB→7.9KB, ~41% weniger); `--full` unverändert
-  310 Zeilen/25KB. `cmd_index` unangetastet — bleibt Stelle für volles Bundle-Browsing.
-  Vorherige Session: Extraktion aus Knowledge-Catalogue abgeschlossen und verifiziert.
-  Repo (`okf-tools`, Unterordner `cli/`, `mcp/`, `plugin/`) lauffähig, Git-Historie beider
-  Quellen (okf-cli, okf-mcp) erhalten. Cross-Referenzen (Skills/CLAUDE.md/MCP-Config/
-  AOS) auf neuen Pfad umgestellt. Verify-Findings behoben (roher Traceback bei
-  ungültigem `--root` gefixt, KC-Katalog auf `OK — 0 violations`).
-- **In progress:** —
-- **Blocked:** —
-- **Next step:** offen — `beans list --ready` prüfen für nächstes Bean.
+| Sink | Hält | Lesen | Fundstelle |
+|---|---|---|---|
+| **OKF-Bundle** | Konzepte, Decisions, Patterns | `okf-cli find\|read\|toc\|index` | `docs/okf-tools-okf` |
+| **beans** | Work-State, nächster Schritt | `beans list --ready` / `beans roadmap` | `.beans/` |
+| **git** | Code-/Change-Verlauf | `git log` / `git diff` | dieses Repo |
+| **SSTD.md** | Continuity/Entry-Point (dieses File) | Read | `docs/SSTD.md` |
 
-## Open decisions
+## Entry-Point (Stand 2026-07-18)
 
-- Worktree-Weiche: main-direkt erlaubt (Solo, ein Repo für alle drei Komponenten).
-- `plugin/` ist Platzhalter — Zweck/Scope noch offen, keine Klasse-B-Substanz dafür bisher.
-- Test-Suite (`cli/test_okf_cli.py`) hat 19 Failures/2 Errors — verifiziert pre-existing
-  (identisch vor der Extraktion), nicht Teil dieser Session, nicht angefasst.
+- `beans list --ready` aktuell leer — kein offenes Bean. Letztes bearbeitetes: `okf-cli-dwcq` (completed, Summary im Bean-Body).
+- Repo-Konvention (nicht verhandelbar pro Session, s. `/tools/CLAUDE.md`): **Worktree-Weiche = main-direkt erlaubt** (Solo-Repo, ein Repo für `cli/`+`mcp/`+`plugin/`).
 
-## Verify-Historie
+## Attention (noch nicht in kanonischer Senke)
 
-- 2026-07-18: `/verify` gegen die Extraktion → PASS. CLI + MCP-Wrapper-Subprozesskette
-  real getrieben, P0-Risiko (fehlendes `--root`) bestätigt und in allen Aufrufstellen
-  gefixt. Findings (roher Traceback, 7 Pre-existing-Check-Warnings in fremden Bundles)
-  auf Nutzeranweisung behoben, siehe Commits `f26791c` (okf-tools) und `dbcef17`/
-  `2e20b8d`/`f3c7b21` (KC — inkl. `TaskNotes/`-Entfernung als separater Nutzerauftrag).
+- `plugin/`-Zweck/Scope offen (Platzhalter, keine Klasse-B-Substanz) — Entscheidung noch zu treffen, dann per `/okf-p` als Decision ins Bundle.
+- `cli/test_okf_cli.py`: 19 Failures/2 Errors sind verifiziert pre-existing (vor der Extraktion aus der Knowledge-Catalogue identisch) — kein neuer Bug, aber noch nicht als `known-issue`/`dead_end`-Konzept im OKF-Bundle festgehalten.
