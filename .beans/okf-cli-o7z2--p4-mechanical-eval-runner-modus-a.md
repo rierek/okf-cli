@@ -1,13 +1,11 @@
 ---
 # okf-cli-o7z2
 title: P4 — Mechanical eval runner (Modus A)
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T18:58:54Z
+updated_at: 2026-07-25T19:05:40Z
 parent: okf-cli-2lpu
 blocked_by:
     - okf-cli-ez6f
