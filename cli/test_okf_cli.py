@@ -1427,6 +1427,20 @@ class FindScoreBreakdown(unittest.TestCase):
     def test_default_output_unchanged_without_breakdown(self):
         out_flag_false = self._run(breakdown=False)
         self.assertNotIn("contrib:", out_flag_false)
+        # F04 (post-review) — SC-002 says "byte-identical to today"; pin the
+        # FULL exact output, not just the absence of a "contrib:" substring
+        # (a weaker check could miss e.g. a stray blank line or reordering).
+        self.assertEqual(
+            out_flag_false,
+            "------\n"
+            "score: 5/6\n"
+            "title: Zqxbrk One\n"
+            "type: Runbook\n"
+            "path: b/one\n"
+            "description: d\n"
+            "body-snippet: # Untitled Heading body prose only.…\n"
+            "------\n",
+        )
 
 
 class SemanticBackstop(unittest.TestCase):

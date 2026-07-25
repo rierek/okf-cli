@@ -17,7 +17,7 @@ cache that `okf-cli.py find`'s semantic backstop (P8) reads at query time.
   ONLY behind the explicit `--produce` flag. Without it, the script only
   plans and prints the delta — nothing is written, nothing is called.
 
-## Embedded scope: tags only
+## Embedded scope, part 1: tags
 
 The cache's schema is `emb(key, tag, model, dim, vec BLOB)` (confirmed
 against the live cache, 627 `bge-m3` + 650 `voyage-3-large` rows). The `tag`
@@ -34,17 +34,60 @@ concept co-occurrence, not label meaning. Slug-only embedding fixed it
 (`sicherheit → security` 0.90, `custom-plugins → plugins` 0.87 — genuine
 label synonymy).
 
+## Embedded scope, part 2: concept title+body (since P8/8c)
+
+`--target concepts` (default `--target tags`, so this is opt-in and does not
+change any existing behavior) additionally embeds a SECOND, independent
+unit into a SEPARATE table, `concept_emb(key, path, model, dim, vec BLOB)` —
+never touching `emb`'s tags-only rows/schema above. Each row embeds one
+concept's `title + "\n\n" + body` (see `concept_text()`); `path` is the
+concept identity (`bundle/concept-id`, no `.md`) that `okf-cli.py find`'s
+semantic backstop maps a query's nearest vector back to.
+
+**Why this exists, and why tags-only wasn't enough (bean okf-cli-3geg,
+corrected finding).** Task 8c's acceptance names fixture S3 explicitly: a
+concept with `tags=[]` where the query token lives only in the body. A
+tag-keyed backstop has no vector to match a body-only paraphrase query
+against for such concepts — this is not a coverage gap that improves with
+more tags, it's a structural boundary of a tag-keyed cache (see "Finding
+for Task 8" below for the full reasoning). `--target concepts` closes this
+by embedding the concept itself, independent of its tags.
+
+`--target {tags,concepts,both}` (default `tags`) selects which table(s) a
+run touches; `--concept-path-prefix` scopes concept candidates to one
+bundle/prefix (e.g. `agent-memory/_okfeval-`) and `--concept-limit` caps
+the count — both exist to keep a manual `--produce` run small and
+deterministic (this is how P8's own smoke test was run against the real
+catalogue: 3-4 fixture concepts, never the full ~2435), not required for a
+full production run.
+
+`okf-cli.py find`'s semantic backstop currently only reads `concept_emb`
+for model `bge-m3` (local Ollama, no API key, no per-query cost) — never
+`voyage-3-large` at query time, even though the producer can embed concepts
+with either model; a query-time Voyage call would need `VOYAGE_API_KEY` and
+a paid network round-trip, which conflicts with "best-effort, no hard
+dependency, no cost" graceful degradation.
+
 ## Usage
 
 ```bash
-# dry-run (default): plan the delta, no network, no writes
+# dry-run (default): plan the tags-only delta, no network, no writes
 python3 cli/embeddings/build_tagvec.py --root ~/Obsidian/Knowledge-Catalogue
 
-# produce: (re)embed the missing delta and write rows
+# produce tags: (re)embed the missing tag delta and write rows
 python3 cli/embeddings/build_tagvec.py \
     --root ~/Obsidian/Knowledge-Catalogue \
     --output ~/Obsidian/Knowledge-Catalogue/.tagvec/tag_vectors.sqlite \
     --model bge-m3 --model voyage-3-large \
+    --produce
+
+# produce concept title+body embeddings too (P8/8c) — bge-m3 only, scoped
+# to keep a manual run small:
+python3 cli/embeddings/build_tagvec.py \
+    --root ~/Obsidian/Knowledge-Catalogue \
+    --output ~/Obsidian/Knowledge-Catalogue/.tagvec/tag_vectors.sqlite \
+    --model bge-m3 --target concepts \
+    --concept-path-prefix agent-memory/ \
     --produce
 ```
 
@@ -53,8 +96,13 @@ Flags:
   `okf-cli.py`'s `catalogue_root`).
 - `--output` — sqlite path (default: `<root>/.tagvec/tag_vectors.sqlite`).
 - `--model` — repeatable, one of `bge-m3` / `voyage-3-large` (default: both).
+- `--target` — `tags` (default), `concepts`, or `both`. See "Embedded scope,
+  part 2" above.
+- `--concept-path-prefix` / `--concept-limit` — only relevant with
+  `--target concepts`/`both`; scope/cap which concepts are (re-)embedded.
 - `--produce` — the only gate for network calls + writes. Omit it to get a
-  pure dry-run: which `(tag, model)` pairs are missing from the cache.
+  pure dry-run: which `(tag/concept, model)` pairs are missing from the
+  cache.
 
 Delta-reuse: a tag is only (re-)embedded if `sha1(model + "\x00slug\x00" +
 slug_text)` is not already a key in the output db — matches the live cache's

@@ -6,17 +6,31 @@ Brought in-repo from the ad-hoc offline SOP
 RET11) so the cache's `emb(key, tag, model, dim, vec)` schema (RET10) is
 reproducible from a catalogue root rather than living only as prose.
 
+Two independent embedding scopes, controlled by --target (default "tags",
+unchanged/regression-safe):
+- tags (`emb` table): one row per tag slug — the original SOP scope.
+- concepts (`concept_emb` table, P8/8c, bean okf-cli-8uaf): one row per
+  concept's title+body — added because tag embeddings alone cannot rescue
+  a body-only-token, zero-tag concept (fixture S3); see
+  cli/embeddings/README.md "Embedded scope" for the full finding. This is
+  a SEPARATE table — producing concepts never touches `emb`'s rows/schema.
+--target concepts also accepts --concept-path-prefix (scope candidates to
+one bundle/prefix) and --concept-limit (cap count) — both exist to keep a
+manual --produce run small and deterministic, not required for normal use.
+
 This is an OFFLINE, NON-runtime-dependency script:
-- `okf-cli.py find` reads the cache at query time; it never produces it.
+- `okf-cli.py find` reads the cache(s) at query time; it never produces them.
 - Import and argument parsing here NEVER touch the network.
 - Network calls (Ollama for bge-m3, Voyage AI for voyage-3-large) run ONLY
   behind the explicit --produce flag. Without --produce this is a pure
-  dry-run: it reports which (tag, model) pairs are missing from the cache
-  and writes nothing.
+  dry-run: it reports which (tag/concept, model) pairs are missing from the
+  cache and writes nothing.
 
 Usage:
     python3 cli/embeddings/build_tagvec.py [--root ROOT] [--output PATH]
-        [--model bge-m3] [--model voyage-3-large] [--produce]
+        [--model bge-m3] [--model voyage-3-large]
+        [--target {tags,concepts,both}]
+        [--concept-path-prefix PREFIX] [--concept-limit N] [--produce]
 
 Run: python3 -m unittest cli.test_embeddings_tagvec -v
 """
