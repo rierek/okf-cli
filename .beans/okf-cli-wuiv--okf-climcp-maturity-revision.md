@@ -5,7 +5,7 @@ status: in-progress
 type: milestone
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T18:23:36Z
+updated_at: 2026-07-25T20:04:39Z
 ---
 
 Raise okf-cli + okf-mcp maturity at its three weak edges — retrieval semantics, MCP->subprocess correctness, root-safety — with every retrieval change measured as a delta against a keyword baseline frozen BEFORE any optimization.
@@ -42,3 +42,9 @@ Safe parallel waves:
 - Wave G: P13 (okf-cli-e9hm) || P14 (okf-cli-sjqu) - new md vs catalogue-repo doc
 
 Hard limits (not a cut defect): (1) P5 baseline freeze is a deliberate global barrier. (2) okf-cli.py (P1/P8/P11) and okf_mcp.py (P8/P10) are shared files - worktree isolation is mandatory for concurrent edits.
+
+## PF-1 (PO, 2026-07-25, verbatim + interpretation)
+
+Verbatim: 'ab p12 arbeiten wir in dieser session inline ohne subagents. das ist kritisch'
+
+Interpretation (binding): From P12 (okf-cli-6gq6) onward — P12, P13, P14, P15 — all implementation and review work happens INLINE in the supervisor session itself; no ce-implementer/ce-specs-reviewer dispatches. The P8 cycle (implementer already running + its review) still completes in the old dispatch mode as the last subagent work. Supervisor no-feature-code rule is overridden by PO authority for these tasks. Quality mechanics stay: TDD, RED proof, mutation self-test, full-suite delta rule, catalogue clean.
