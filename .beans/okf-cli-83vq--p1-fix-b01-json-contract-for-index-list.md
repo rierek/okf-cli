@@ -1,13 +1,11 @@
 ---
 # okf-cli-83vq
 title: 'P1 — Fix B01: --json contract for index + list'
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T18:34:18Z
+updated_at: 2026-07-25T18:37:36Z
 parent: okf-cli-2lpu
 ---
 

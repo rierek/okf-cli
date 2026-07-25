@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T18:13:10Z
+updated_at: 2026-07-25T18:37:36Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-3geg
@@ -34,3 +34,7 @@ As an agent, I want `find` to rescue paraphrase queries semantically, be scopeab
 - Tests: `cli/test_okf_cli.py`, `cli/test_okf_mcp.py`
 Design keyed on P7's tags-vs-body finding. Full 8a/8b/8c steps: PLAN.md Task 8.
 Commit: `feat(cli): hybrid find — semantic backstop, filters, score breakdown`
+
+## Prelude 2026-07-25 — non-blocking finding from P1 review (okf-cli-83vq)
+
+F02 (style): cmd_index JSON branch (cli/okf-cli.py ~485-501) duplicates the concept-building loop between the args.bundle and no-bundle cases. Deduplicate opportunistically when touching okf-cli.py in this task. Source: ce-specs-reviewer verdict on okf-cli-83vq.
