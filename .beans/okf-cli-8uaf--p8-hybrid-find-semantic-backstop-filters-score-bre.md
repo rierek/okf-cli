@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T18:37:36Z
+updated_at: 2026-07-25T19:37:07Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-3geg
@@ -38,3 +38,7 @@ Commit: `feat(cli): hybrid find — semantic backstop, filters, score breakdown`
 ## Prelude 2026-07-25 — non-blocking finding from P1 review (okf-cli-83vq)
 
 F02 (style): cmd_index JSON branch (cli/okf-cli.py ~485-501) duplicates the concept-building loop between the args.bundle and no-bundle cases. Deduplicate opportunistically when touching okf-cli.py in this task. Source: ce-specs-reviewer verdict on okf-cli-83vq.
+
+## Prelude 2026-07-25 — P7 gating finding (okf-cli-3geg, CORRECTED post-review)
+
+BINDING for 8c scope: tag-embeddings are INSUFFICIENT to satisfy 8c's S3 acceptance as specified (98% concept-tag coverage, but S3 is tags=[]/body-only — structurally unreachable by a tag-keyed backstop). Per PLAN's contingency clause: 8c SHALL extend the offline producer (cli/embeddings/build_tagvec.py) to also embed titles/bodies, and the semantic pass reads those vectors. Full finding + data: bean okf-cli-3geg section 'Finding for Task 8 — CORRECTED 2026-07-25' and cli/embeddings/README.md. PO was informed (D01), default path (i) producer extension stands unless PO overrides. Follow LL-01 (docs/LESSONS-LEARNED.md): module-attr pinning + mutation self-test for any boundary test you add.

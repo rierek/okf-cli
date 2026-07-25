@@ -1,13 +1,11 @@
 ---
 # okf-cli-3geg
 title: 'P7 — .tagvec provenance: pull producer into repo'
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T19:35:00Z
+updated_at: 2026-07-25T19:37:07Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-5qmn
