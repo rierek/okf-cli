@@ -151,7 +151,12 @@ def _render(fx):
 
 def seed(root):
     """Write exactly one .md per fixture (S1-S4). Returns the abs paths
-    written."""
+    written.
+
+    Pre-cleans any stray FIXTURE_PREFIX files first (I09, P12 prelude):
+    an aborted prior run must never leave residue that a fresh run would
+    count as live fixtures. teardown() is idempotent, so this is safe."""
+    teardown(root)
     written = []
     for fx in _fixture_spec(root):
         ap = os.path.join(root, fx.rel_path.replace("/", os.sep))

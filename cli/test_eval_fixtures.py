@@ -62,6 +62,28 @@ class SeedThenTeardownIsClean(unittest.TestCase):
     def tearDown(self):
         fixtures.teardown(CATALOGUE_ROOT)
 
+    def test_seed_precleans_stray_fixture_files(self):
+        # I09 (P12 prelude, from P11 review): an aborted prior run can
+        # leave stray _okfeval-* files; seed() must clean them first so
+        # a fresh run never counts residue as live fixtures.
+        stray = os.path.join(
+            CATALOGUE_ROOT,
+            os.path.dirname(fixtures._fixture_spec(CATALOGUE_ROOT)[0]
+                            .rel_path.replace("/", os.sep)),
+            fixtures.FIXTURE_PREFIX + "stray.md",
+        )
+        with open(stray, "w", encoding="utf-8") as f:
+            f.write("---\ntitle: stray\ntype: Concept\n---\nstray body\n")
+        try:
+            written = fixtures.seed(CATALOGUE_ROOT)
+            self.assertFalse(
+                os.path.exists(stray),
+                "seed() must remove stray fixture residue before seeding",
+            )
+            self.assertEqual(len(written), 4)
+        finally:
+            fixtures.teardown(CATALOGUE_ROOT)
+
     def test_token_absent_before_seed(self):
         self.assertEqual(
             _find_hits(CATALOGUE_ROOT, fixtures.SEED_TOKEN),
