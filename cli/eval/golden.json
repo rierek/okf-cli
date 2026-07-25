@@ -1,0 +1,122 @@
+[
+  {
+    "id": "s1-literal",
+    "verb": "find",
+    "query": "zqxeval ceiling",
+    "class": "literal",
+    "expected_path": "agent-memory/_okfeval-s1",
+    "min_rank": 1,
+    "min_score_ratio": 0.30,
+    "expect": "hit"
+  },
+  {
+    "id": "s1-paraphrase",
+    "verb": "find",
+    "query": "reference calibration benchmark entry",
+    "class": "paraphrase",
+    "expected_path": "agent-memory/_okfeval-s1",
+    "min_rank": null,
+    "min_score_ratio": null,
+    "expect": "miss"
+  },
+  {
+    "id": "s2-literal",
+    "verb": "find",
+    "query": "zqxeval wrong bundle",
+    "class": "literal",
+    "expected_path": "ai-wiki/_okfeval-s2",
+    "min_rank": 1,
+    "min_score_ratio": 0.25,
+    "expect": "hit"
+  },
+  {
+    "id": "s2-paraphrase",
+    "verb": "find",
+    "query": "misfiled note in incorrect collection",
+    "class": "paraphrase",
+    "expected_path": "ai-wiki/_okfeval-s2",
+    "min_rank": null,
+    "min_score_ratio": null,
+    "expect": "miss"
+  },
+  {
+    "id": "s3-literal",
+    "verb": "find",
+    "query": "zqxeval",
+    "class": "literal",
+    "expected_path": "agent-memory/_okfeval-s3",
+    "min_rank": 4,
+    "min_score_ratio": 0.10,
+    "expect": "hit"
+  },
+  {
+    "id": "s3-paraphrase",
+    "verb": "find",
+    "query": "unmarked item lacking classification",
+    "class": "paraphrase",
+    "expected_path": "agent-memory/_okfeval-s3",
+    "min_rank": null,
+    "min_score_ratio": null,
+    "expect": "miss"
+  },
+  {
+    "id": "s4-literal",
+    "verb": "find",
+    "query": "zqxeval metadata",
+    "class": "literal",
+    "expected_path": "agent-memory/_okfeval-s4",
+    "min_rank": 1,
+    "min_score_ratio": 0.55,
+    "expect": "hit"
+  },
+  {
+    "id": "s4-paraphrase",
+    "verb": "find",
+    "query": "record absent structured labels discoverable only by browsing",
+    "class": "paraphrase",
+    "expected_path": "agent-memory/_okfeval-s4",
+    "min_rank": null,
+    "min_score_ratio": null,
+    "expect": "miss"
+  },
+  {
+    "id": "s4-index-walk",
+    "verb": "index",
+    "query": {"bundle": "agent-memory"},
+    "class": "index-walk",
+    "expected_path": "agent-memory/_okfeval-s4",
+    "min_rank": null,
+    "min_score_ratio": null,
+    "expect": "hit"
+  },
+  {
+    "id": "s1-list-metadata-hit",
+    "verb": "list",
+    "query": {"type": "Concept", "tag": "eval-fixture", "scope": "agent-memory"},
+    "class": "metadata",
+    "expected_path": "agent-memory/_okfeval-s1",
+    "min_rank": null,
+    "min_score_ratio": null,
+    "expect": "hit"
+  },
+  {
+    "id": "s4-list-metadata-miss",
+    "verb": "list",
+    "query": {"type": "Concept", "tag": "eval-fixture", "scope": "agent-memory"},
+    "class": "metadata",
+    "expected_path": "agent-memory/_okfeval-s4",
+    "min_rank": null,
+    "min_score_ratio": null,
+    "expect": "miss"
+  },
+  {
+    "id": "s2-list-location-miss",
+    "verb": "list",
+    "query": {"type": "Concept", "tag": "eval-fixture", "scope": "agent-memory"},
+    "class": "location",
+    "expected_path": "ai-wiki/_okfeval-s2",
+    "min_rank": null,
+    "min_score_ratio": null,
+    "expect": "miss"
+  }
+]
