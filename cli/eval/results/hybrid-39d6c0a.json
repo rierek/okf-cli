@@ -1,0 +1,123 @@
+{
+  "catalogue_rev": "39d6c0a",
+  "per_row": [
+    {
+      "id": "s1-literal",
+      "verb": "find",
+      "class": "literal",
+      "expect": "hit",
+      "rank": 1,
+      "score_ratio": 0.4166666666666667,
+      "correct": true
+    },
+    {
+      "id": "s1-paraphrase",
+      "verb": "find",
+      "class": "paraphrase",
+      "expect": "miss",
+      "rank": 2,
+      "score_ratio": 0.4166666666666667,
+      "correct": false
+    },
+    {
+      "id": "s2-literal",
+      "verb": "find",
+      "class": "literal",
+      "expect": "hit",
+      "rank": 1,
+      "score_ratio": 0.3333333333333333,
+      "correct": true
+    },
+    {
+      "id": "s2-paraphrase",
+      "verb": "find",
+      "class": "paraphrase",
+      "expect": "miss",
+      "rank": Infinity,
+      "score_ratio": 0.0,
+      "correct": true
+    },
+    {
+      "id": "s3-literal",
+      "verb": "find",
+      "class": "literal",
+      "expect": "hit",
+      "rank": 4,
+      "score_ratio": 0.16666666666666666,
+      "correct": true
+    },
+    {
+      "id": "s3-paraphrase",
+      "verb": "find",
+      "class": "paraphrase",
+      "expect": "miss",
+      "rank": 3,
+      "score_ratio": 0.4583333333333333,
+      "correct": false
+    },
+    {
+      "id": "s4-literal",
+      "verb": "find",
+      "class": "literal",
+      "expect": "hit",
+      "rank": 1,
+      "score_ratio": 0.6666666666666666,
+      "correct": true
+    },
+    {
+      "id": "s4-paraphrase",
+      "verb": "find",
+      "class": "paraphrase",
+      "expect": "miss",
+      "rank": Infinity,
+      "score_ratio": 0.0,
+      "correct": true
+    },
+    {
+      "id": "s4-index-walk",
+      "verb": "index",
+      "class": "index-walk",
+      "expect": "hit",
+      "rank": 1,
+      "score_ratio": null,
+      "correct": true
+    },
+    {
+      "id": "s1-list-metadata-hit",
+      "verb": "list",
+      "class": "metadata",
+      "expect": "hit",
+      "rank": 1,
+      "score_ratio": null,
+      "correct": true
+    },
+    {
+      "id": "s4-list-metadata-miss",
+      "verb": "list",
+      "class": "metadata",
+      "expect": "miss",
+      "rank": Infinity,
+      "score_ratio": null,
+      "correct": true
+    },
+    {
+      "id": "s2-list-location-miss",
+      "verb": "list",
+      "class": "location",
+      "expect": "miss",
+      "rank": Infinity,
+      "score_ratio": null,
+      "correct": true
+    }
+  ],
+  "metrics": {
+    "recall_at_1": 0.75,
+    "recall_at_5": 1.0,
+    "mrr": 0.8125,
+    "zero_hit_rate_literal": 0.0,
+    "zero_hit_rate_paraphrase": 0.5,
+    "mean_score_ratio": 0.3958333333333333,
+    "location_correct_rate": 1.0,
+    "metadata_hit_rate": 1.0
+  }
+}
