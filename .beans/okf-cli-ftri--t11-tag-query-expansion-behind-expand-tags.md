@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:11Z
+updated_at: 2026-07-25T23:32:42Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -27,7 +27,7 @@ Q06 is answered by construction — expansion embeds the whole query and compare
 #### Acceptance Criteria
 
 1. THE expansion SHALL be off unless `--expand-tags` is passed.
-2. THE expansion SHALL run only WHEN the unexpanded lexical arm is not the ranking owner, and SHALL then re-run the lexical arm over the widened term set.
+2. THE expansion SHALL run only WHEN the unexpanded lexical arm is not the ranking owner, and SHALL re-run the lexical arm over the widened term set.
 3. THE expansion SHALL return only tags whose similarity clears the configured floor, and SHALL return nothing IF the tag cache is absent or the backend is unavailable.
 4. THE semantic arm SHALL embed the original query, never the widened one, because widening before embedding dilutes the vector.
 5. THE expansion and the semantic arm SHALL share one query embedding call per invocation.
@@ -54,7 +54,7 @@ _Requirements: PLAN.md Task 11 · QUESTIONS Q05, Q06 · TASKS.md T05 · DECISION
 - [ ] Add `_load_tag_vectors()` and `_expand_query_tags()`
 - [ ] Wire expansion as a rescue path after the first lexical pass; register `--expand-tags`
 - [ ] Tests pass; suite still 19F/2E
-- [ ] Commit `feat(cli): experimental --expand-tags query expansion`
+- [ ] Commit `feat(cli): add --expand-tags query expansion`
 - [ ] Add the `--find-arg` passthrough to `remeasure.py`; measure with and without
 - [ ] Resolve Q05/Q06 in `QUESTIONS.md`; commit `test(eval): measure tag expansion, answer Q05/Q06`
 - [ ] Report the comparison to the PO; do not change the default unilaterally
@@ -62,3 +62,8 @@ _Requirements: PLAN.md Task 11 · QUESTIONS Q05, Q06 · TASKS.md T05 · DECISION
 ## Recommended Skills
 
 - `superpowers:test-driven-development`
+
+
+## Additional success criterion (global constraint, network)
+
+- SC-NET: no unit test added or touched by this task performs a real network call. Every embedding call under test is exercised through a faked `urlopen` or a patched module attribute. The producer's test module is network-free by construction and must stay that way.

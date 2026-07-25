@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:11Z
+updated_at: 2026-07-25T23:32:25Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-kc9x
@@ -52,7 +52,7 @@ _Requirements: PLAN.md Task 9 · REFERENCES R42, R43 · cli/eval/gate.py:56-81_
 - [ ] Add the index build to `cli/eval/runner.py:run()`
 - [ ] Run the bracketed gate sequence (seed, embed, score, gate, teardown, cleanup, rebuild) and verify SC-06
 - [ ] Record R44/R45 in `REFERENCES.md` with the real numbers
-- [ ] Commit `test(eval): re-measure shipped retrieval, gate pass`
+- [ ] Commit `test(eval): re-measure shipped retrieval`
 
 ## Recommended Skills
 

@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-25T23:21:47Z
+updated_at: 2026-07-25T23:32:42Z
 parent: okf-cli-wuiv
 ---
 
@@ -50,3 +50,13 @@ Both artefacts are optional: absent or unusable, `find` degrades (FTS to substri
 
 Measured through the shipped CLI against `eval/queries_v2.json + queries_real.json` (n=48):
 zero-hit ≤ 0.30 (was 0.979) · MRR ≥ 0.35 (was 0.021) · real-query zero-hit ≤ 0.25 (was 0.875) · p50 latency ≤ 2.0 s.
+
+
+## Reading the task numbers
+
+Two numbering schemes meet here, deliberately:
+
+- **Bean title `Txx`** = this plan's task order (`PLAN.md` Task 1..13), which is also the execution order.
+- **Footer `TASKS.md Txx`** = the pre-existing think-collection numbering in `docs/okf-retrieval-architecture/TASKS.md`, which predates the plan.
+
+They do not line up, and that is intended: e.g. bean "T01 Producer batching" implements `TASKS.md` T11, and bean "T12 Failure taxonomy" implements `TASKS.md` T03. Follow the bean title for order, the footer for provenance.

@@ -251,7 +251,7 @@ Expected: prints `voyage-3-large: 2437 concept(s) need title+body embedding` and
 
 ```bash
 git add cli/embeddings/build_tagvec.py cli/test_embeddings_tagvec.py
-git commit -m "perf(embeddings): batch embed calls, write per batch"
+git commit -m "perf(embeddings): batch calls, write per batch"
 ```
 
 ---
@@ -399,7 +399,7 @@ Expected: still exactly 19 failures, 2 errors.
 
 ```bash
 git add cli/embeddings/build_tagvec.py cli/test_embeddings_tagvec.py
-git commit -m "fix(embeddings): survive batch failures, skip not abort"
+git commit -m "fix(embeddings): skip failed batch, never abort"
 ```
 
 ---
@@ -1768,7 +1768,7 @@ git add docs/okf-retrieval-architecture/eval/remeasure.py \
         docs/okf-retrieval-architecture/eval/shipped_v2.json \
         docs/okf-retrieval-architecture/REFERENCES.md \
         cli/eval/runner.py cli/eval/results/
-git commit -m "test(eval): re-measure shipped retrieval, gate pass"
+git commit -m "test(eval): re-measure shipped retrieval"
 ```
 
 ---
@@ -2091,7 +2091,7 @@ Expected: PASS for the new class; total still exactly 19 failures, 2 errors.
 
 ```bash
 git add cli/okf-cli.py cli/test_okf_cli.py
-git commit -m "feat(cli): experimental --expand-tags query expansion"
+git commit -m "feat(cli): add --expand-tags query expansion"
 ```
 
 - [ ] **Step 6: Measure it, then decide**

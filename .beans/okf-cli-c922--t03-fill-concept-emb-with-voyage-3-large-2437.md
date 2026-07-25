@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:11Z
+updated_at: 2026-07-25T23:32:25Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-2a1w
@@ -25,7 +25,7 @@ This is the original Q03 question, now answered by measurement: `concept_emb` is
 
 1. THE producer SHALL write exactly one `concept_emb` row per catalogue concept for model `voyage-3-large`.
 2. THE producer SHALL NOT modify any row of the `emb` (tag-scope) table.
-3. IF the run is interrupted THEN re-running the command SHALL embed only the concepts still missing.
+3. IF a run is interrupted THEN THE producer SHALL embed only concepts still missing on its next invocation.
 4. THE embedding unit SHALL be `title + "\n\n" + body` — not chunks, not title-only (D11).
 
 #### Success Criteria

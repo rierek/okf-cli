@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:11Z
+updated_at: 2026-07-25T23:32:42Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-c922
@@ -55,3 +55,8 @@ _Requirements: PLAN.md Task 7 · DECISIONS D13, D16 · REFERENCES R05, R42_
 ## Recommended Skills
 
 - `superpowers:test-driven-development`
+
+
+## Additional success criterion (global constraint, network)
+
+- SC-NET: no unit test added or touched by this task performs a real network call. Every embedding call under test is exercised through a faked `urlopen` or a patched module attribute. The producer's test module is network-free by construction and must stay that way.

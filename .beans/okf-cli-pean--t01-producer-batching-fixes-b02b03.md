@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:05Z
+updated_at: 2026-07-25T23:32:42Z
 parent: okf-cli-cskz
 ---
 
@@ -42,8 +42,13 @@ _Requirements: PLAN.md Task 1 · findings B02/B03 · TASKS.md T11 · LESSONS-LEA
 - [ ] Wire both production blocks in `main()` to batch and write per batch
 - [ ] Tests pass; suite still 19F/2E
 - [ ] Verify the dry-run stays offline
-- [ ] Commit `perf(embeddings): batch embed calls, write per batch`
+- [ ] Commit `perf(embeddings): batch calls, write per batch`
 
 ## Recommended Skills
 
 - `superpowers:test-driven-development`
+
+
+## Additional success criterion (global constraint, network)
+
+- SC-NET: no unit test added or touched by this task performs a real network call. Every embedding call under test is exercised through a faked `urlopen` or a patched module attribute. The producer's test module is network-free by construction and must stay that way.

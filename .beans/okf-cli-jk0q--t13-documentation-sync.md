@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:12Z
+updated_at: 2026-07-25T23:32:25Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-snxj
@@ -23,11 +23,11 @@ Documentation trails the shipped end state, and one governance contradiction get
 
 #### Acceptance Criteria
 
-1. THE producer README SHALL document the batch limits, the retry/halve/skip ladder, the per-batch write and the resulting resumability, and the fact that `concept_emb` holds voyage rows for the whole catalogue while `emb` keeps both models for tags.
+1. THE producer README SHALL document the batch limits, the retry/halve/skip ladder, the per-batch write and the resulting resumability, and the fact that `concept_emb` holds voyage rows for the whole catalogue, and that `emb` keeps both models for tags.
 2. THE repo docs README SHALL describe the topic-folder layout and SHALL NOT mandate a separate plans folder.
 3. THE think collection SHALL carry D14 through D17 with their reasoning, and its task and question rows SHALL reflect the measured outcomes.
-4. THE SSTD entry point SHALL name the shipped state, the covering bean, where the measurement lives, and the open merge gate — and SHALL no longer warn about a parallel session owning Q03.
-5. IF files still sit under `docs/plans/` THEN they SHALL be left in place and the discrepancy reported, rather than moved.
+4. THE SSTD entry point SHALL name the shipped state, the covering bean, the location of the measurement files, and the open merge gate — and SHALL no longer warn about a parallel session owning Q03.
+5. IF files still sit under `docs/plans/` THEN THE implementer SHALL leave them in place and report the discrepancy, rather than moving them.
 
 #### Success Criteria
 

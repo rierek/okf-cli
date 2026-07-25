@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:11Z
+updated_at: 2026-07-25T23:32:25Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -24,7 +24,7 @@ Analysis, not code. The point is to separate what retrieval design can still fix
 1. THE re-measurement SHALL record, per query, the expected path, the achieved rank and the top-3 returned paths, because a failure cannot be classified without what was returned instead.
 2. THE taxonomy SHALL assign every query whose target did not reach rank 10 exactly one class from: catalogue-gap, synonymy, ranking, wrong-target.
 3. THE taxonomy document SHALL name the measurement it rests on — file, git sha and date.
-4. IF catalogue-gap dominates THEN the document SHALL say so explicitly, because that moves the next lever from retrieval to authoring.
+4. IF catalogue-gap dominates THEN THE document SHALL say so explicitly, because that moves the next lever from retrieval to authoring.
 
 #### Success Criteria
 
