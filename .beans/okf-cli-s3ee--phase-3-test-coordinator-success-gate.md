@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T20:34:39Z
+updated_at: 2026-07-25T21:01:02Z
 parent: okf-cli-wuiv
 ---
 
@@ -18,3 +18,7 @@ The maturity proof (D09). Re-run the mechanical eval against the frozen baseline
 ## DoD
 Regression gate green (paraphrase zero-hit down, recall/MRR up, no S1 literal regression); Modus B task set authored + run separately.
 Plan detail: `docs/okf-revision/PLAN.md` Phase 3 (Tasks 12,13).
+
+## Epic status note (2026-07-25)
+
+P12 completed inline (gate PASS, hybrid-39d6c0a.json committed). P13 deliberately open: task set + rubric shipped (cli/eval/modus-b-tasks.md), execution requires a SEPARATE agentic session by design (D12/Q07) — epic not tagged to-review until that run records outcomes.

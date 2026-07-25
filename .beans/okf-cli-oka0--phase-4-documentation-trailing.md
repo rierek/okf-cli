@@ -4,8 +4,10 @@ title: Phase 4 — Documentation (trailing)
 status: in-progress
 type: epic
 priority: normal
+tags:
+    - to-review
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T20:55:57Z
+updated_at: 2026-07-25T21:01:02Z
 parent: okf-cli-wuiv
 ---
 
@@ -19,3 +21,7 @@ De-stale the canonical reference to mirror the shipped end-state. Trailing — r
 ## DoD
 Overview lists 20 verbs, drops "100%", reflects new `find` capabilities + `okf_tags`. Optional partial --help table (Q04, PO-gated).
 Plan detail: `docs/okf-revision/PLAN.md` Phase 4 (Tasks 14,15).
+
+## Epic closure note (2026-07-25)
+
+P14 completed (all SCs, catalogue commit afe0bf7). P15 stays draft — optional, gated on open PO question Q04 (partial --help-derived verb tables); not started deliberately.

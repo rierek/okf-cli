@@ -5,7 +5,7 @@ status: in-progress
 type: milestone
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T20:04:39Z
+updated_at: 2026-07-25T21:01:02Z
 ---
 
 Raise okf-cli + okf-mcp maturity at its three weak edges — retrieval semantics, MCP->subprocess correctness, root-safety — with every retrieval change measured as a delta against a keyword baseline frozen BEFORE any optimization.
@@ -48,3 +48,7 @@ Hard limits (not a cut defect): (1) P5 baseline freeze is a deliberate global ba
 Verbatim: 'ab p12 arbeiten wir in dieser session inline ohne subagents. das ist kritisch'
 
 Interpretation (binding): From P12 (okf-cli-6gq6) onward — P12, P13, P14, P15 — all implementation and review work happens INLINE in the supervisor session itself; no ce-implementer/ce-specs-reviewer dispatches. The P8 cycle (implementer already running + its review) still completes in the old dispatch mode as the last subagent work. Supervisor no-feature-code rule is overridden by PO authority for these tasks. Quality mechanics stay: TDD, RED proof, mutation self-test, full-suite delta rule, catalogue clean.
+
+## Session close 2026-07-25 (realization session, PF-1 inline from P12)
+
+12/14 tasks completed (P1-P8, P10-P12, P14). Open by design: P13 step 3 (separate agentic session, task set ready) and P15 (optional, Q04-gated, draft). Epics: Phase 1 + Phase 2 + Phase 4 tagged to-review; Phase 3 open pending P13 run. Full suite 189 tests, exactly 19F/2E pre-existing (crosslink suites), 0 new. Baseline frozen (baseline-f0714b2.json) + hybrid re-measured (hybrid-39d6c0a.json), gate PASS: paraphrase zero-hit 1.000->0.500, no literal regression. Catalogue + live .tagvec pristine (md5-verified). Open PO questions: Q01 index.md-vs--json eval surface; Q02 --bundle-as-scope-alias semantics; Q03 populate concept_emb for the live catalogue productively (currently the backstop is dormant in production — no concept vectors); Q04 P15 go/no-go.
