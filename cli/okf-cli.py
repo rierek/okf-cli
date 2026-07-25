@@ -498,24 +498,27 @@ def render_bundle_block(root, b, full=False):
     return "\n".join(lines)
 
 
+def _concepts_json(bp):
+    """[{id, title, type, description}, ...] for every concept under `bp`,
+    sorted by concept id. Shared by both cmd_index --json branches (F02
+    dedup, prelude 2026-07-25 on okf-cli-83vq)."""
+    concepts = []
+    for cid, ap in sorted(iter_concepts(bp)):
+        t, title, desc = meta_of(ap)
+        concepts.append({"id": cid, "title": title, "type": t, "description": desc})
+    return concepts
+
+
 def cmd_index(root, args):
     if getattr(args, "json", False):
         if args.bundle:
             bp = os.path.join(root, args.bundle)
-            concepts = []
-            for cid, ap in sorted(iter_concepts(bp)):
-                t, title, desc = meta_of(ap)
-                concepts.append({"id": cid, "title": title, "type": t, "description": desc})
-            print(json.dumps({"bundle": args.bundle, "concepts": concepts}))
+            print(json.dumps({"bundle": args.bundle, "concepts": _concepts_json(bp)}))
             return
-        bundles = []
-        for b in list_bundles(root):
-            bp = os.path.join(root, b)
-            concepts = []
-            for cid, ap in sorted(iter_concepts(bp)):
-                t, title, desc = meta_of(ap)
-                concepts.append({"id": cid, "title": title, "type": t, "description": desc})
-            bundles.append({"bundle": b, "concepts": concepts})
+        bundles = [
+            {"bundle": b, "concepts": _concepts_json(os.path.join(root, b))}
+            for b in list_bundles(root)
+        ]
         print(json.dumps({"bundles": bundles}))
         return
     if args.bundle:
