@@ -1319,6 +1319,8 @@ def _semantic_hit_dicts(root, query, limit):
 
 `cli/test_okf_cli.py:1487-1690` monkeypatches `okf._embed_query_bge_m3` and seeds `concept_emb` rows with `model='bge-m3'`. Rename both throughout that suite: patch `okf._embed_query_voyage`, and insert rows with `model='voyage-3-large'`. Tests that assert the old `note: semantic backstop skipped …` wording must assert the new `note: semantic arm skipped …` wording. Do not weaken any assertion — only rename the model, the function, and the note text.
 
+**Also add `okf._QUERY_VEC_CACHE.clear()` to that suite's `setUp`** (the cache lands in Task 11; add the line now so it is never missing). Six of those methods share the literal query string `"zzz-no-keyword-match-zzz"` with a *different* embedding mock each — including one that mocks a raise and asserts the degradation note. A module-global cache keyed on query text makes one method's vector visible to the next. It happens not to bite today only because unittest orders methods alphabetically and the populating mocks all return the same vector; that is incidental, not an invariant. Do not rely on it.
+
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python3 -m unittest cli.test_okf_cli -v 2>&1 | tail -5`
@@ -1874,12 +1876,14 @@ git commit -m "feat(cli): suggest nearest tags on zero hit"
 ### Task 11: Tag query expansion behind a flag (T05, Q05/Q06)
 
 **Files:**
-- Modify: `cli/okf-cli.py` (expansion helper + `--expand-tags` flag on `find`)
+- Modify: `cli/okf-cli.py` — expansion helper, `--expand-tags` flag on `find`, the query-vector cache, **and `semantic_ranking()` (a Task 7 product) rerouted through `_query_vector`**
+- Modify: `docs/okf-retrieval-architecture/eval/remeasure.py` (Task 9 product) — `--find-arg` passthrough
 - Test: `cli/test_okf_cli.py`
 - Modify: `docs/okf-retrieval-architecture/QUESTIONS.md`
 
 **Interfaces:**
-- Consumes: the `emb` table of `.tagvec` (752 bge-m3 + 650 voyage rows, R09), `_load_concept_vectors`'s sibling read pattern, `_embed_query_voyage` (Task 7), `_cosine`.
+- Consumes: the `emb` table of `.tagvec` (752 bge-m3 + 650 voyage rows, R09), `_load_concept_vectors`'s sibling read pattern, `_embed_query_voyage` (Task 7), `_rank_lexically` and `_keyword_top1_is_confident` (Tasks 6/8), `_cosine`.
+- Produces (beyond the expansion helper): `_QUERY_VEC_CACHE: dict[str, list[float]]` and `_query_vector(text) -> list[float]`, which Task 7's `semantic_ranking()` is rewired to use.
 - Produces: `_expand_query_tags(root, query, top_k=3, floor=0.6) -> list[str]` — extra tag slugs to append to the lexical query terms; `[]` on any degradation.
 
 **Flag-gated by decision (D17).** This is the only change in the plan that alters ranking without prior measurement. It ships behind `--expand-tags`, off by default, and becomes a default only after Step 6 shows it does not regress the numbers from Task 9.
