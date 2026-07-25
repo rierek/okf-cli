@@ -1,13 +1,11 @@
 ---
 # okf-cli-8uaf
 title: 'P8 — Hybrid find: semantic backstop + filters + score breakdown'
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T20:28:30Z
+updated_at: 2026-07-25T20:32:39Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-3geg

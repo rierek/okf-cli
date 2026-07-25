@@ -25,3 +25,15 @@ Additive log. Each entry: Symptom · Fix · Forward-Guard.
 - **Symptom:** The pure 8-metric pin test asserts exact values, yet inverting the `recall_at_1` and `location_correct_rate` predicates passed unnoticed — the hand-built fixture splits those rows exactly 50/50, so the inverted predicate yields the same mean.
 - **Fix:** Prelude on P12 (okf-cli-6gq6): widen fixture to asymmetric splits before re-measurement.
 - **Forward-Guard:** Test fixtures for aggregate metrics must use asymmetric class splits so predicate inversions are never value-invariant; mutation probes belong to the review protocol for every metric added later.
+
+## LL-05 (2026-07-25, P8 / supervisor) — two committers in one workdir: staged-work capture + orphaning reset
+
+- **Symptom:** While a solo implementer worked main-direct in the shared workdir, the supervisor committed a bean update (`git add .beans && git commit`) and unknowingly swept the implementer's already-staged 825-line work into a mislabeled commit. The implementer's subsequent history cleanup (`reset --hard`) then orphaned that supervisor commit; one file (the PF-1 anchor) had to be recovered from the orphan by full-diff comparison.
+- **Fix:** Implementer diffed against the orphaned commit before completion, recovered the missing content as its own commit, verified zero remaining diff (reviewer confirmed via `git fsck` + empty `bc4feda..358ba01` diff).
+- **Forward-Guard:** "One committer per repo at a time" applies to the SUPERVISOR too. While an implementer runs main-direct in the main workdir, the supervisor makes NO commits there — bean lifecycle updates wait until the implementer reports, or the task runs in a worktree. If an urgent anchor commit is unavoidable: `git stash --staged` around it, never bare `git commit` after `git add`.
+
+## LL-06 (2026-07-25, P8 review) — absolute score-ratio gates misclassify legitimate partial matches
+
+- **Symptom:** Semantic-backstop trigger used absolute `score/max_score < 0.5` as "weak top-hit" signal; the repo's own golden fixtures (S1 0.417, S2 0.333) sat below it, so an unrelated semantic candidate at ordinary cosine (~0.7) displaced correct literal rank-1 hits. Dormant only because concept_emb was not yet populated — would have surfaced as a P12 gate failure.
+- **Fix:** Margin-based confidence check (top-1 vs runner-up) plus an unconditional rank-1 pin for the keyword top hit (`c646605`).
+- **Forward-Guard:** Fusion/trigger thresholds must be validated against the project's own golden fixtures BEFORE merge (the data was in-repo and contradicted the constant). Rank-guarantees belong in structure (pin), not in threshold tuning.
