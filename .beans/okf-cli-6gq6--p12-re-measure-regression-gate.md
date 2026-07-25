@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T19:19:12Z
+updated_at: 2026-07-25T19:35:02Z
 parent: okf-cli-s3ee
 blocked_by:
     - okf-cli-5qmn
@@ -33,3 +33,7 @@ Commit: `feat(eval): regression gate — hybrid vs frozen baseline`
 ## Prelude 2026-07-25 — from P5 review (okf-cli-5qmn, non-blocking F01, do FIRST)
 
 AggregateMetricsPureUnitTest fixture (cli/test_eval_runner.py:78-95) has 50/50 splits for recall_at_1 (2 literal rows) and location_correct_rate (2 location rows) — inverting those predicates is mean-invariant, mutations pass undetected. Before re-measuring: widen fixture to asymmetric splits (e.g. 3 literal rows 2/1, 3 location rows 2/1) so all 8 metric predicates are mutation-caught. Own commit. Frozen baseline itself is unaffected (independently verified byte-identical).
+
+## Prelude 2026-07-25 — from P11 review (non-blocking I09, optional)
+
+Eval test suite writes fixtures into the real unsandboxed KC; stray state from an aborted run caused 3 spurious errors until cleaned. If cheap during P12: add pre-flight teardown() call at runner/suite start (idempotent since P2). Full sandboxing is out of scope.

@@ -1,13 +1,11 @@
 ---
 # okf-cli-1617
 title: 'P11 — Root-safety: fail instead of scanning script dir'
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T19:27:30Z
+updated_at: 2026-07-25T19:35:02Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-5qmn
