@@ -1,13 +1,11 @@
 ---
 # okf-cli-asky
 title: P6 — Integration tests at MCP->subprocess boundary
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T18:49:25Z
+updated_at: 2026-07-25T18:51:17Z
 parent: okf-cli-2lpu
 blocked_by:
     - okf-cli-83vq
