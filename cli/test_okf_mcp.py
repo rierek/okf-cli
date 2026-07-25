@@ -108,5 +108,20 @@ class McpCheckRefsBoundary(McpBoundaryTestBase):
         self.assertEqual([h["source"] for h in out["inbound"]], ["b/index.md"])
 
 
+class McpTagsBoundary(McpBoundaryTestBase):
+    """SC-001 (okf-cli-x0l7): okf_tags registered + runs over subprocess —
+    both full audit-dump mode (empty query) and fuzzy candidate-search mode."""
+
+    def test_tags_full_dump_over_subprocess(self):
+        out = mcp.run_okf(self.root, "tags", {"query": ""})
+        self.assertIn("alpha", out)
+        self.assertIn("beta", out)
+
+    def test_tags_query_over_subprocess(self):
+        out = mcp.run_okf(self.root, "tags", {"query": "alph"})
+        self.assertIn("== searched: alph ==", out)
+        self.assertIn("alpha", out)
+
+
 if __name__ == "__main__":
     unittest.main()

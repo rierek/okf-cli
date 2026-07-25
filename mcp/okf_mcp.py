@@ -14,6 +14,7 @@ _COMMANDS = {
     "reindex": (["target"], False),
     "refs":  (["path"], True),
     "rename": (["old", "new"], False),
+    "tags":  (["query"], False),
 }
 # optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit"}
@@ -111,6 +112,13 @@ def _register(server):
         reindexes affected bundles. Defaults to a dry-run preview; pass apply=True
         to perform the move (git mv, staged). Reference-integrity step b."""
         return run_okf(root, "rename", {"old": old, "new": new, "apply": apply, "force": force})
+
+    @server.tool()
+    def okf_tags(root: str, query: str = "", limit: int = 8) -> str:
+        """List all tags with usage counts (query omitted), or fuzzy-search a
+        candidate tag against the tag universe. Write/admin tag verbs
+        (merge-tags, normalize-tags, --register) stay CLI-only by intent."""
+        return run_okf(root, "tags", {"query": query, "limit": limit})
 
     return server
 
