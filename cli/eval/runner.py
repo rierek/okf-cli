@@ -146,6 +146,47 @@ def _catalogue_rev(root):
     return None
 
 
+def aggregate_metrics(per_row):
+    """Pure aggregation of the eight metrics from a per_row list — no
+    catalogue, golden.json, or subprocess involved. Extracted out of
+    run() (F01, Prelude 2026-07-25, bean okf-cli-5qmn) so the exact
+    formula can be pinned by a unit test against a hand-built per_row
+    fixture, independent of the real catalogue/golden.json."""
+    by_class = {}
+    for r in per_row:
+        by_class.setdefault((r["verb"], r["class"]), []).append(r)
+
+    literal = by_class.get(("find", "literal"), [])
+    paraphrase = by_class.get(("find", "paraphrase"), [])
+    location = by_class.get(("list", "location"), [])
+    metadata = by_class.get(("list", "metadata"), [])
+
+    def is_zero_hit(r):
+        return r["rank"] == float("inf")
+
+    return {
+        "recall_at_1": _mean(1.0 if r["rank"] == 1 else 0.0 for r in literal),
+        "recall_at_5": _mean(1.0 if r["rank"] <= 5 else 0.0 for r in literal),
+        "mrr": _mean(
+            (1.0 / r["rank"]) if r["rank"] != float("inf") else 0.0
+            for r in literal
+        ),
+        "zero_hit_rate_literal": _mean(
+            1.0 if is_zero_hit(r) else 0.0 for r in literal
+        ),
+        "zero_hit_rate_paraphrase": _mean(
+            1.0 if is_zero_hit(r) else 0.0 for r in paraphrase
+        ),
+        "mean_score_ratio": _mean(r["score_ratio"] for r in literal),
+        "location_correct_rate": _mean(
+            1.0 if r["correct"] else 0.0 for r in location
+        ),
+        "metadata_hit_rate": _mean(
+            1.0 if r["correct"] else 0.0 for r in metadata
+        ),
+    }
+
+
 def run(catalogue_root, golden_path):
     """Score every golden.json row against catalogue_root, aggregate the
     eight metrics (bean okf-cli-o7z2 AC1/SC-002). Returns the result blob:
@@ -169,44 +210,10 @@ def run(catalogue_root, golden_path):
             "correct": actual_hit == expected_hit,
         })
 
-    by_class = {}
-    for r in per_row:
-        by_class.setdefault((r["verb"], r["class"]), []).append(r)
-
-    literal = by_class.get(("find", "literal"), [])
-    paraphrase = by_class.get(("find", "paraphrase"), [])
-    location = by_class.get(("list", "location"), [])
-    metadata = by_class.get(("list", "metadata"), [])
-
-    def is_zero_hit(r):
-        return r["rank"] == float("inf")
-
-    metrics = {
-        "recall_at_1": _mean(1.0 if r["rank"] == 1 else 0.0 for r in literal),
-        "recall_at_5": _mean(1.0 if r["rank"] <= 5 else 0.0 for r in literal),
-        "mrr": _mean(
-            (1.0 / r["rank"]) if r["rank"] != float("inf") else 0.0
-            for r in literal
-        ),
-        "zero_hit_rate_literal": _mean(
-            1.0 if is_zero_hit(r) else 0.0 for r in literal
-        ),
-        "zero_hit_rate_paraphrase": _mean(
-            1.0 if is_zero_hit(r) else 0.0 for r in paraphrase
-        ),
-        "mean_score_ratio": _mean(r["score_ratio"] for r in literal),
-        "location_correct_rate": _mean(
-            1.0 if r["correct"] else 0.0 for r in location
-        ),
-        "metadata_hit_rate": _mean(
-            1.0 if r["correct"] else 0.0 for r in metadata
-        ),
-    }
-
     return {
         "catalogue_rev": _catalogue_rev(root),
         "per_row": per_row,
-        "metrics": metrics,
+        "metrics": aggregate_metrics(per_row),
     }
 
 

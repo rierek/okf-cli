@@ -2,9 +2,14 @@
 """Tests for cli/eval/runner.py — mechanical golden-file eval runner
 (Modus A, Task 4 of docs/okf-revision/PLAN.md, bean okf-cli-o7z2).
 
-Two tiers:
+Three tiers:
   * ParseFindBlocks — pure unit test against a canned find stdout string,
     no subprocess, no catalogue (fast, deterministic).
+  * AggregateMetricsPureUnitTest (F01, Prelude 2026-07-25, bean
+    okf-cli-5qmn) — pins the exact aggregation formula for all eight
+    metrics against a hand-built per_row list. No subprocess, no
+    catalogue, no golden.json — protects the numbers Task 5 is about to
+    freeze from a silent formula regression.
   * RunnerAgainstRealCatalogue — seeds the real S1-S4 fixtures (D11:
     fixtures live in the real catalogue), runs run() against golden.json,
     tears down in a finally-block so a failed assertion never leaves
@@ -68,6 +73,72 @@ class ParseFindBlocksTest(unittest.TestCase):
     def test_no_matches_output_parses_to_empty_list(self):
         hits = runner._parse_find_blocks("(no matches for: zzz)\n")
         self.assertEqual(hits, [])
+
+
+class AggregateMetricsPureUnitTest(unittest.TestCase):
+    """F01 (Prelude 2026-07-25, bean okf-cli-5qmn) — pins the exact
+    aggregation formula for all eight metrics against a hand-built
+    per_row list. No subprocess, no catalogue, no golden.json: this must
+    keep passing even if the real catalogue or golden fixtures change."""
+
+    PER_ROW = [
+        # find/literal (n=2) -> recall_at_1, recall_at_5, mrr,
+        # zero_hit_rate_literal, mean_score_ratio
+        {"id": "lit-top1", "verb": "find", "class": "literal",
+         "expect": "hit", "rank": 1, "score_ratio": 1.0, "correct": True},
+        {"id": "lit-rank4", "verb": "find", "class": "literal",
+         "expect": "hit", "rank": 4, "score_ratio": 0.25, "correct": True},
+        # find/paraphrase (n=2) -> zero_hit_rate_paraphrase
+        {"id": "para-hit", "verb": "find", "class": "paraphrase",
+         "expect": "miss", "rank": 2, "score_ratio": 0.5,
+         "correct": False},
+        {"id": "para-zero", "verb": "find", "class": "paraphrase",
+         "expect": "miss", "rank": float("inf"), "score_ratio": 0.0,
+         "correct": True},
+        # list/location (n=2) -> location_correct_rate
+        {"id": "loc-correct", "verb": "list", "class": "location",
+         "expect": "miss", "rank": float("inf"), "score_ratio": None,
+         "correct": True},
+        {"id": "loc-wrong", "verb": "list", "class": "location",
+         "expect": "miss", "rank": 1, "score_ratio": None,
+         "correct": False},
+        # list/metadata (n=3) -> metadata_hit_rate
+        {"id": "meta-hit", "verb": "list", "class": "metadata",
+         "expect": "hit", "rank": 1, "score_ratio": None,
+         "correct": True},
+        {"id": "meta-miss-correct", "verb": "list", "class": "metadata",
+         "expect": "miss", "rank": float("inf"), "score_ratio": None,
+         "correct": True},
+        {"id": "meta-wrong", "verb": "list", "class": "metadata",
+         "expect": "hit", "rank": float("inf"), "score_ratio": None,
+         "correct": False},
+        # index-walk row — present in per_row like every real golden
+        # query, but must NOT be folded into any of the eight metrics
+        # and must not crash aggregation.
+        {"id": "idx-walk", "verb": "index", "class": "index-walk",
+         "expect": "hit", "rank": 1, "score_ratio": None,
+         "correct": True},
+    ]
+
+    def test_all_eight_metrics_match_hand_computed_values(self):
+        metrics = runner.aggregate_metrics(self.PER_ROW)
+        self.assertEqual(
+            set(metrics.keys()),
+            {
+                "recall_at_1", "recall_at_5", "mrr",
+                "zero_hit_rate_literal", "zero_hit_rate_paraphrase",
+                "mean_score_ratio", "location_correct_rate",
+                "metadata_hit_rate",
+            },
+        )
+        self.assertEqual(metrics["recall_at_1"], 0.5)
+        self.assertEqual(metrics["recall_at_5"], 1.0)
+        self.assertEqual(metrics["mrr"], 0.625)
+        self.assertEqual(metrics["zero_hit_rate_literal"], 0.0)
+        self.assertEqual(metrics["zero_hit_rate_paraphrase"], 0.5)
+        self.assertEqual(metrics["mean_score_ratio"], 0.625)
+        self.assertEqual(metrics["location_correct_rate"], 0.5)
+        self.assertEqual(metrics["metadata_hit_rate"], 2.0 / 3.0)
 
 
 class RunnerAgainstRealCatalogueTest(unittest.TestCase):
