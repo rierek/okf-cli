@@ -18,7 +18,7 @@ _COMMANDS = {
 }
 # optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
-          "scope": "--scope", "bundle": "--bundle"}
+          "scope": "--scope"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force"}
 
@@ -35,10 +35,11 @@ def build_argv(root, command, params):
     for key, flag in _FLAGS.items():
         if key in positional:
             # A _FLAGS key can collide with a POSITIONAL param name of a
-            # DIFFERENT command (e.g. "bundle" is index's positional but
-            # find's optional filter flag) — _FLAGS is shared across all
-            # commands, so skip re-marshaling as a flag here; the
-            # positional loop above already placed it correctly.
+            # DIFFERENT command — _FLAGS is shared across all commands, so
+            # skip re-marshaling as a flag here; the positional loop above
+            # already placed it correctly. (No live collision today since
+            # find's --bundle alias was removed D02, PO-grilling 2026-07-26;
+            # guard stays as defense against a future one.)
             continue
         if params.get(key) not in (None, ""):
             argv += [flag, str(params[key])]
@@ -74,13 +75,12 @@ def run_okf(root, command, params):
 def _register(server):
     @server.tool()
     def okf_find(root: str, query: str, limit: int = 10, type: str = "",
-                 tag: str = "", scope: str = "", bundle: str = "") -> list:
+                 tag: str = "", scope: str = "") -> list:
         """Ranked keyword search across a catalogue/repo root, composable
-        with exact-match type/tag filters and a bundle/subdir scope
-        (bundle is a scope alias; scope wins if both are given)."""
+        with exact-match type/tag filters and a bundle/subdir scope."""
         return run_okf(root, "find", {
             "query": query, "limit": limit, "type": type, "tag": tag,
-            "scope": scope, "bundle": bundle,
+            "scope": scope,
         })
 
     @server.tool()

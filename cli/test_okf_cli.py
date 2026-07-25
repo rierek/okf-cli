@@ -1346,8 +1346,9 @@ class RootSafety(unittest.TestCase):
 
 
 class FindFilterComposition(unittest.TestCase):
-    """P8/8a (okf-cli-8uaf, FIL03/FIL04) — find gains --type/--tag/--scope/
-    --bundle so keyword search is composable with exact-match filters."""
+    """P8/8a (okf-cli-8uaf, FIL03/FIL04) — find gains --type/--tag/--scope
+    so keyword search is composable with exact-match filters. --bundle was
+    a duplicate --scope alias, removed D02 (PO-grilling 2026-07-26)."""
 
     def setUp(self):
         import tempfile
@@ -1376,7 +1377,7 @@ class FindFilterComposition(unittest.TestCase):
         import io, contextlib, types
         args = types.SimpleNamespace(
             query=query, limit=10, type=None, tag=None, scope=None,
-            bundle=None, breakdown=False,
+            breakdown=False,
         )
         for k, v in kw.items():
             setattr(args, k, v)
@@ -1405,16 +1406,6 @@ class FindFilterComposition(unittest.TestCase):
         out = self._run(scope="correct")
         self.assertIn("path: correct/one", out)
         self.assertIn("path: correct/two", out)
-        self.assertNotIn("path: wrong/three", out)
-
-    def test_bundle_alias_behaves_like_scope(self):
-        out = self._run(bundle="correct")
-        self.assertIn("path: correct/one", out)
-        self.assertNotIn("path: wrong/three", out)
-
-    def test_scope_and_bundle_both_set_scope_wins(self):
-        out = self._run(scope="correct", bundle="wrong")
-        self.assertIn("path: correct/one", out)
         self.assertNotIn("path: wrong/three", out)
 
     def test_composed_filters_type_tag_scope(self):
@@ -1447,7 +1438,7 @@ class FindScoreBreakdown(unittest.TestCase):
         import io, contextlib, types
         args = types.SimpleNamespace(
             query="zqxbrk", limit=10, type=None, tag=None, scope=None,
-            bundle=None, breakdown=breakdown,
+            breakdown=breakdown,
         )
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
@@ -1533,7 +1524,7 @@ class SemanticBackstop(unittest.TestCase):
         import io, contextlib, types
         args = types.SimpleNamespace(
             query=query, limit=10, type=None, tag=None, scope=None,
-            bundle=None, breakdown=False,
+            breakdown=False,
         )
         for k, v in kw.items():
             setattr(args, k, v)

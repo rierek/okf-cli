@@ -793,10 +793,11 @@ def cmd_find(root, args):
     breakdown = getattr(args, "breakdown", False)
     type_filter = getattr(args, "type", None)
     tag_filter = getattr(args, "tag", None)
-    # 8a (FIL03/FIL04): --scope and --bundle both narrow via resolve_scopes;
-    # --scope wins if both are given. Without either, behavior is unchanged
-    # (resolve_scopes(root, None) == list_bundles(root) iteration, as before).
-    target = getattr(args, "scope", None) or getattr(args, "bundle", None)
+    # 8a (FIL03/FIL04): --scope narrows via resolve_scopes(); without it,
+    # behavior is unchanged (resolve_scopes(root, None) == list_bundles(root)
+    # iteration, as before). --bundle was a duplicate alias, removed D02
+    # (PO-grilling 2026-07-26) — --scope is the only filter dimension.
+    target = getattr(args, "scope", None)
     hits = []
     for b, bp in resolve_scopes(root, target):
         for cid, ap in iter_concepts(bp):
@@ -2225,8 +2226,6 @@ def main():
     pf.add_argument("--tag", help="filter by tag (exact match)")
     pf.add_argument("--scope", metavar="TARGET",
                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
-    pf.add_argument("--bundle", metavar="BUNDLE",
-                    help="alias for --scope (bundle-only); --scope wins if both are given")
     pf.add_argument("--breakdown", action="store_true",
                     help="print per-hit contributing field(s)/term(s); "
                          "output is byte-identical to today without this flag")
