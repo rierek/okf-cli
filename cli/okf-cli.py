@@ -582,11 +582,22 @@ def cmd_list(root, args):
     print("list: {} concept(s)".format(len(hits)))
 
 
+def _format_contrib(contrib):
+    """SC-002 — per-hit breakdown text: which field(s) each term hit."""
+    parts = []
+    for field in ("title", "tags", "body"):
+        terms = contrib.get(field) or []
+        if terms:
+            parts.append("{}=[{}]".format(field, ",".join(terms)))
+    return "; ".join(parts) if parts else "(none)"
+
+
 def cmd_find(root, args):
     terms = tokenize(args.query)
     if not terms:
         print("(empty query)")
         return
+    breakdown = getattr(args, "breakdown", False)
     type_filter = getattr(args, "type", None)
     tag_filter = getattr(args, "tag", None)
     # 8a (FIL03/FIL04): --scope and --bundle both narrow via resolve_scopes;
@@ -609,27 +620,41 @@ def cmd_find(root, args):
             hay_tags = tags.lower()
             hay_body = body.lower()
             score = 0
+            # 8b (SCO03): contrib records which field(s) each term hit, for
+            # --breakdown; the score arithmetic itself is unchanged.
+            contrib = {"title": [], "tags": [], "body": []}
             for term in terms:
-                score += (3 * min(hay_title.count(term), 1)
-                          + 2 * min(hay_tags.count(term), 1)
-                          + min(hay_body.count(term), 1))
+                if hay_title.count(term):
+                    score += 3
+                    contrib["title"].append(term)
+                if hay_tags.count(term):
+                    score += 2
+                    contrib["tags"].append(term)
+                if hay_body.count(term):
+                    score += 1
+                    contrib["body"].append(term)
             if score:
                 snip = make_snippet(body, terms)
                 desc = _dequote(fm.get("description", ""))
-                hits.append((score, "{}/{}".format(b, cid), title, t, desc, snip))
-    hits.sort(key=lambda x: -x[0])
+                hits.append({
+                    "score": score, "path": "{}/{}".format(b, cid), "title": title,
+                    "type": t, "desc": desc, "snip": snip, "contrib": contrib,
+                })
+    hits.sort(key=lambda h: -h["score"])
     if not hits:
         print("(no matches for: {})".format(args.query))
         return
     max_score = 6 * len(terms)
-    for score, path, title, typ, desc, snip in hits[: args.limit]:
+    for h in hits[: args.limit]:
         print("------")
-        print("score: {}/{}".format(score, max_score))
-        print("title: {}".format(title))
-        print("type: {}".format(typ))
-        print("path: {}".format(path))
-        print("description: {}".format(desc))
-        print("body-snippet: {}".format(snip))
+        print("score: {}/{}".format(h["score"], max_score))
+        print("title: {}".format(h["title"]))
+        print("type: {}".format(h["type"]))
+        print("path: {}".format(h["path"]))
+        print("description: {}".format(h["desc"]))
+        print("body-snippet: {}".format(h["snip"]))
+        if breakdown:
+            print("contrib: {}".format(_format_contrib(h["contrib"])))
     print("------")
 
 
@@ -1962,6 +1987,9 @@ def main():
                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
     pf.add_argument("--bundle", metavar="BUNDLE",
                     help="alias for --scope (bundle-only); --scope wins if both are given")
+    pf.add_argument("--breakdown", action="store_true",
+                    help="print per-hit contributing field(s)/term(s); "
+                         "output is byte-identical to today without this flag")
     pr = sub.add_parser("read")
     pr.add_argument("path")
     pp = sub.add_parser("prime", help="one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")

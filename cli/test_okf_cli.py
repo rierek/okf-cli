@@ -1399,7 +1399,7 @@ class FindScoreBreakdown(unittest.TestCase):
         with open(ap, "w", encoding="utf-8") as f:
             f.write(
                 "---\ntype: Runbook\ntitle: Zqxbrk One\ntags: [zqxbrk]\n"
-                "description: d\n---\n# Zqxbrk One\n\nbody prose only.\n"
+                "description: d\n---\n# Untitled Heading\n\nbody prose only.\n"
             )
 
     def tearDown(self):
