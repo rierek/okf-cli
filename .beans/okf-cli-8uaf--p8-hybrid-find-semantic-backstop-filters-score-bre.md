@@ -7,7 +7,7 @@ priority: normal
 tags:
     - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T20:03:06Z
+updated_at: 2026-07-25T20:09:29Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-3geg
@@ -269,3 +269,32 @@ the interleave fix (commit `1350b69`), confirmed green again.
 - `SEMANTIC_FALLBACK_RATIO = 0.5` and `OLLAMA_EMBED_TIMEOUT = 5` are the two
   tunables (`cli/okf-cli.py`) if P12's delta table suggests the threshold or
   timeout needs adjustment.
+
+
+## ERRATA — concurrent-commit collision during commit-title cleanup (2026-07-25, post-hoc)
+
+After the original 6 P8 commits landed, I found 3 titles exceeded the
+repo's strict 50-char limit (51/52/56 chars) and corrected them via
+`git reset --soft`/`--hard` + `git cherry-pick` (no `rebase -i`, per the
+harness's flag ban). Mid-sequence, the supervisor concurrently committed
+`bc4feda` ("docs(beans): anchor PF-1 inline-mode from P12") directly on top
+of my intermediate `ed53a58` reset-point in the SAME shared working
+directory — the exact shared-HEAD collision the worktree-isolation rule
+exists to prevent (main-workdir, no worktree, both of us writing at once).
+My subsequent `git reset --hard ed53a58` then orphaned that commit from
+`main`'s branch pointer (object stayed reachable only via reflog).
+
+Caught immediately by diffing the orphaned commit against my rebuilt HEAD
+before calling the task done: only ONE file differed —
+`.beans/okf-cli-wuiv--okf-climcp-maturity-revision.md` (the supervisor's PF-1
+PO-directive anchor, 8 lines) — everything else (all P8 code/test/bean
+content) was already byte-identical between the orphaned commit and my
+rebuilt history, since both derived from the same diffs. Recovered via
+`git checkout bc4feda -- <that file>` + a new commit (`358ba01`,
+`docs(beans): anchor PF-1 inline-mode from P12`, same message, correct
+content, now on `main`). Verified with a full `git diff bc4feda HEAD` across
+every file (empty) before proceeding. `backup-before-title-fix` safety
+branch (created before the reset sequence) deleted after parity was
+confirmed. No supervisor content was lost; the P8 deliverable itself was
+never at risk (rebuilt from the original, correctly-scoped commits via
+`git cherry-pick`, not reconstructed from memory).
