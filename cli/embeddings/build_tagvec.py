@@ -48,6 +48,17 @@ MODELS = {
 
 SCHEMA = "CREATE TABLE IF NOT EXISTS emb(key TEXT PRIMARY KEY, tag TEXT, model TEXT, dim INT, vec BLOB)"
 
+# P8/8c (okf-cli-8uaf) — separate table, NOT touching `emb`'s tags-only
+# schema/rows. Per the corrected Task-7 finding (bean okf-cli-3geg): tag
+# embeddings alone cannot satisfy fixture S3 (tags=[], body-only token), so
+# 8c extends this producer to also embed concept titles/bodies. `path` is
+# the concept identity (bundle/concept-id, no .md); `key` is content+path
+# addressed so re-embedding responds to either changing.
+CONCEPT_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS concept_emb"
+    "(key TEXT PRIMARY KEY, path TEXT, model TEXT, dim INT, vec BLOB)"
+)
+
 
 def _load_okf_cli():
     """Import okf-cli.py (hyphenated filename, not an importable package) for
@@ -100,6 +111,84 @@ def plan_delta(tags, model, db_path):
         if key not in have:
             out.append((tag, text, key))
     return out
+
+
+def concept_text(title, body):
+    """Title + body — the embedding unit for the concept-scope pass (8c),
+    deliberately distinct from slug_text()'s tag-only scope: this is what
+    lets a body-only-token concept (S3-class) be found by the semantic
+    backstop at all."""
+    return (title + "\n\n" + body).strip()
+
+
+def concept_cache_key(model, path, text):
+    """key = sha1(model + '\\x00concept\\x00' + path + '\\x00' + text) —
+    path-scoped (unlike cache_key()'s tag keys), so a concept's key changes
+    if EITHER its content or its identity (path) changes; two different
+    concepts with identical content never collide since path is part of
+    the payload."""
+    payload = (model + "\x00concept\x00" + path + "\x00" + text).encode("utf-8")
+    return hashlib.sha1(payload).hexdigest()
+
+
+def existing_concept_keys(db_path):
+    """Cache keys already present in concept_emb — the delta-reuse gate,
+    mirroring existing_keys() for the tag-scope table."""
+    if not os.path.exists(db_path):
+        return set()
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(CONCEPT_SCHEMA)
+        return {row[0] for row in conn.execute("SELECT key FROM concept_emb")}
+    finally:
+        conn.close()
+
+
+def _iter_all_concepts(okf, root):
+    """(path, abspath) for every concept in the catalogue, path = bundle/cid
+    (no .md) — the same identity form okf-cli.py's find prints."""
+    for b in okf.list_bundles(root):
+        bp = os.path.join(root, b)
+        for cid, ap in okf.iter_concepts(bp):
+            yield "{}/{}".format(b, cid), ap
+
+
+def plan_concept_delta(root, model, db_path, path_prefix=None, limit=None):
+    """Which (path, text, key) triples still need title+body embedding for
+    `model` against db_path. Pure/offline — no network. `path_prefix`
+    scopes candidates (e.g. to one bundle or one fixture prefix) — useful
+    to keep a manual --produce run small and deterministic; `limit` caps
+    the count after that filter."""
+    okf = _load_okf_cli()
+    have = existing_concept_keys(db_path)
+    out = []
+    for path, ap in sorted(_iter_all_concepts(okf, root)):
+        if path_prefix and not path.startswith(path_prefix):
+            continue
+        fm, body = okf.split_frontmatter(okf.read_file(ap))
+        title = okf._dequote(fm.get("title", "")) or os.path.basename(ap)[:-3]
+        text = concept_text(title, body)
+        key = concept_cache_key(model, path, text)
+        if key not in have:
+            out.append((path, text, key))
+            if limit and len(out) >= limit:
+                break
+    return out
+
+
+def write_concept_rows(db_path, rows):
+    """rows: iterable of (key, path, model, dim, vec_bytes)."""
+    os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(CONCEPT_SCHEMA)
+        conn.executemany(
+            "INSERT OR REPLACE INTO concept_emb(key, path, model, dim, vec) VALUES (?, ?, ?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def embed_bge_m3(texts):
@@ -177,6 +266,16 @@ def build_parser():
                     help="output sqlite path (default: <root>/.tagvec/tag_vectors.sqlite)")
     p.add_argument("--model", choices=sorted(MODELS), action="append", dest="models",
                     help="model to (re)embed with; repeatable. Default: both models.")
+    p.add_argument("--target", choices=("tags", "concepts", "both"), default="tags",
+                    help="what to embed: tags only (default, unchanged behavior), "
+                         "concept titles+bodies only (P8/8c), or both.")
+    p.add_argument("--concept-path-prefix", default=None,
+                    help="only plan/produce concept embeddings for paths starting with "
+                         "this prefix (e.g. 'bundle/' or 'bundle/_okfeval-') — scoping "
+                         "for small, deterministic manual --produce runs.")
+    p.add_argument("--concept-limit", type=int, default=None,
+                    help="cap the number of concepts (re-)embedded per model, after "
+                         "--concept-path-prefix filtering.")
     p.add_argument("--produce", action="store_true",
                     help="perform network embedding calls and write rows. Without this "
                          "flag: dry-run only (plan + print, no network, no writes).")
@@ -190,31 +289,52 @@ def main(argv=None):
     output = args.output or os.path.join(root, ".tagvec", "tag_vectors.sqlite")
     models = args.models or sorted(MODELS)
 
-    tags = set(okf.all_tags(root))
+    do_tags = args.target in ("tags", "both")
+    do_concepts = args.target in ("concepts", "both")
+
+    tags = set(okf.all_tags(root)) if do_tags else set()
     total_delta = 0
-    for model in models:
-        delta = plan_delta(tags, model, output)
-        total_delta += len(delta)
-        print("{}: {} tag(s) need embedding, {} already cached".format(
-            model, len(delta), len(tags) - len(delta)))
 
-        if not args.produce or not delta:
-            continue
-
-        texts = [text for _tag, text, _key in delta]
+    def _embed(model, texts):
         if model == "bge-m3":
-            vectors = embed_bge_m3(texts)
-        elif model == "voyage-3-large":
-            vectors = embed_voyage(texts)
-        else:
-            raise ValueError("unknown model: {}".format(model))
+            return embed_bge_m3(texts)
+        if model == "voyage-3-large":
+            return embed_voyage(texts)
+        raise ValueError("unknown model: {}".format(model))
 
-        rows = [
-            (key, tag, model, MODELS[model]["dim"], pack_vec(vec))
-            for (tag, _text, key), vec in zip(delta, vectors)
-        ]
-        write_rows(output, rows)
-        print("{}: wrote {} row(s) to {}".format(model, len(rows), output))
+    for model in models:
+        if do_tags:
+            delta = plan_delta(tags, model, output)
+            total_delta += len(delta)
+            print("{}: {} tag(s) need embedding, {} already cached".format(
+                model, len(delta), len(tags) - len(delta)))
+
+            if args.produce and delta:
+                texts = [text for _tag, text, _key in delta]
+                vectors = _embed(model, texts)
+                rows = [
+                    (key, tag, model, MODELS[model]["dim"], pack_vec(vec))
+                    for (tag, _text, key), vec in zip(delta, vectors)
+                ]
+                write_rows(output, rows)
+                print("{}: wrote {} row(s) to {}".format(model, len(rows), output))
+
+        if do_concepts:
+            cdelta = plan_concept_delta(
+                root, model, output,
+                path_prefix=args.concept_path_prefix, limit=args.concept_limit)
+            total_delta += len(cdelta)
+            print("{}: {} concept(s) need title+body embedding".format(model, len(cdelta)))
+
+            if args.produce and cdelta:
+                texts = [text for _path, text, _key in cdelta]
+                vectors = _embed(model, texts)
+                rows = [
+                    (key, path, model, MODELS[model]["dim"], pack_vec(vec))
+                    for (path, _text, key), vec in zip(cdelta, vectors)
+                ]
+                write_concept_rows(output, rows)
+                print("{}: wrote {} concept row(s) to {}".format(model, len(rows), output))
 
     if not args.produce and total_delta:
         print("(dry-run — no network calls, no writes. Re-run with --produce to embed.)")

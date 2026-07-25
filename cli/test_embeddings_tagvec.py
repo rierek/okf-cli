@@ -155,5 +155,123 @@ class ParserHelp(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
 
 
+class ConceptText(unittest.TestCase):
+    """P8/8c (okf-cli-8uaf) — the corrected Task-7 finding requires the
+    producer to ALSO embed titles/bodies (not tags only), so S3-class
+    body-only-token concepts are reachable by the semantic backstop."""
+
+    def test_combines_title_and_body(self):
+        text = bt.concept_text("One", "prose body here")
+        self.assertIn("One", text)
+        self.assertIn("prose body here", text)
+
+
+class ConceptCacheKey(unittest.TestCase):
+    def test_matches_documented_scheme(self):
+        model, path, text = "bge-m3", "b/one", "One\n\nprose"
+        expected = hashlib.sha1(
+            (model + "\x00concept\x00" + path + "\x00" + text).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(bt.concept_cache_key(model, path, text), expected)
+
+    def test_differs_by_path_not_just_text(self):
+        # same text, different path -> different key (path-scoped, unlike
+        # tag keys, so re-embedding responds to a concept's identity too)
+        k1 = bt.concept_cache_key("bge-m3", "b/one", "same text")
+        k2 = bt.concept_cache_key("bge-m3", "b/two", "same text")
+        self.assertNotEqual(k1, k2)
+
+
+class PlanConceptDelta(unittest.TestCase):
+    def setUp(self):
+        self.root = _make_tmp_catalogue()
+        self.tmp = tempfile.mkdtemp()
+        self.db = os.path.join(self.tmp, "tag_vectors.sqlite")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_no_db_yet_plans_every_concept(self):
+        delta = bt.plan_concept_delta(self.root, "bge-m3", self.db)
+        paths = {path for path, _text, _key in delta}
+        self.assertEqual(paths, {"b/one", "b/two"})
+
+    def test_existing_key_is_skipped(self):
+        first = bt.plan_concept_delta(self.root, "bge-m3", self.db)
+        rows = [(key, path, "bge-m3", 2, struct.pack("<2f", 0.1, 0.2))
+                for path, _text, key in first if path == "b/one"]
+        bt.write_concept_rows(self.db, rows)
+        second = bt.plan_concept_delta(self.root, "bge-m3", self.db)
+        paths = {path for path, _text, _key in second}
+        self.assertEqual(paths, {"b/two"})
+
+    def test_path_prefix_filters_candidates(self):
+        delta = bt.plan_concept_delta(
+            self.root, "bge-m3", self.db, path_prefix="b/one")
+        paths = {path for path, _text, _key in delta}
+        self.assertEqual(paths, {"b/one"})
+
+
+class MainConceptsTarget(unittest.TestCase):
+    """--target default stays "tags" (regression-safe); --target concepts/
+    both additionally plans/produces title+body embeddings, still gated by
+    --produce alone (hard constraint: no network without --produce)."""
+
+    def setUp(self):
+        self.root = _make_tmp_catalogue()
+        self.tmp_out = tempfile.mkdtemp()
+        self.output = os.path.join(self.tmp_out, "tag_vectors.sqlite")
+        self._orig_bge = bt.embed_bge_m3
+        self._orig_voyage = bt.embed_voyage
+        self.calls = []
+        bt.embed_bge_m3 = lambda texts: self.calls.append(("bge-m3", texts)) or [
+            [0.1, 0.2] for _ in texts]
+        bt.embed_voyage = lambda texts: self.calls.append(("voyage", texts)) or [
+            [0.1, 0.2] for _ in texts]
+
+    def tearDown(self):
+        bt.embed_bge_m3 = self._orig_bge
+        bt.embed_voyage = self._orig_voyage
+        shutil.rmtree(self.root, ignore_errors=True)
+        shutil.rmtree(self.tmp_out, ignore_errors=True)
+
+    def test_default_target_never_touches_concept_emb(self):
+        rc = bt.main(["--root", self.root, "--output", self.output,
+                      "--model", "bge-m3", "--produce"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(all(name == "bge-m3" for name, _texts in self.calls))
+        # concept_emb table must not exist / stay empty — default is tags-only
+        if os.path.exists(self.output):
+            conn = sqlite3.connect(self.output)
+            try:
+                cur = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND name='concept_emb'")
+                row = cur.fetchone()
+                if row:
+                    count = conn.execute("SELECT COUNT(*) FROM concept_emb").fetchone()[0]
+                    self.assertEqual(count, 0)
+            finally:
+                conn.close()
+
+    def test_target_concepts_produce_writes_concept_rows(self):
+        rc = bt.main(["--root", self.root, "--output", self.output,
+                      "--model", "bge-m3", "--target", "concepts", "--produce"])
+        self.assertEqual(rc, 0)
+        conn = sqlite3.connect(self.output)
+        try:
+            rows = conn.execute("SELECT path FROM concept_emb").fetchall()
+        finally:
+            conn.close()
+        self.assertEqual({r[0] for r in rows}, {"b/one", "b/two"})
+
+    def test_target_concepts_dry_run_never_calls_network(self):
+        rc = bt.main(["--root", self.root, "--output", self.output,
+                      "--model", "bge-m3", "--target", "concepts"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()
