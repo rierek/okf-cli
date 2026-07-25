@@ -7,7 +7,7 @@ priority: normal
 tags:
     - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T18:44:25Z
+updated_at: 2026-07-25T18:49:25Z
 parent: okf-cli-2lpu
 blocked_by:
     - okf-cli-83vq
@@ -105,3 +105,45 @@ After (baseline + new suite): `python3 -m unittest cli.test_okf_cli cli.test_okf
 - Pre-existing baseline (19 failures + 2 errors in `test_okf_cli.py`) is
   unrelated to this task -- see P1's bean/commits for that history; not
   touched here per no-scope-creep.
+
+
+## Deviations/ERRATA — correction 2026-07-25 (post-review, F01)
+
+**The earlier "Notes for T(n+1)" claim below is WRONG and superseded:**
+> "`cli/test_okf_mcp.py` pins `OKF_CLI` to this worktree's own
+> `cli/okf-cli.py` in setUp (not the env default), so it is deterministic
+> regardless of what `OKF_CLI` is set to outside the test run."
+
+Reviewer (F01, blocking) found `okf_mcp.OKF_CLI` is bound from
+`os.environ.get(...)` at **import time** as a module-level global
+(`mcp/okf_mcp.py:47-48`), then read as a plain global inside `run_okf()` --
+never re-read from `os.environ`. The test module's `importlib` load runs
+before any `setUp`, so `os.environ["OKF_CLI"] = ...` in `setUp` was a no-op:
+the 6 new tests were silently exercising whatever `OKF_CLI` the module
+picked up at import (the installed/default path), NOT this worktree's CLI.
+Reviewer proof: removing `--json` from the worktree's `list` subparser left
+the old 6 tests green -- i.e. SC-003 ("would FAIL on pre-P1 CLI") was false.
+
+**Fix (commit `5a25ac6`):** patch the module attribute directly --
+`mcp.OKF_CLI = <worktree-cli-path>` in `setUp`, restored in `tearDown` --
+instead of setting the environment variable. No change to `mcp/okf_mcp.py`.
+
+**Mutation self-test (post-fix, proves the fix works):** removed `--json`
+from `cli/okf-cli.py`'s `list` subparser (uncommitted), ran
+`python3 -m unittest cli.test_okf_mcp -v`:
+
+```
+test_list_json_filters_by_type ... ERROR
+test_list_json_over_subprocess ... ERROR
+RuntimeError: okf-cli list failed: ... error: unrecognized arguments: --json
+Ran 6 tests in 0.339s
+FAILED (errors=2)
+```
+
+Then `git checkout -- cli/okf-cli.py` (byte-identical revert, `git status`
+clean). Confirms the committed test file now genuinely targets the worktree
+CLI and would have failed on the pre-fix bug.
+
+**Full suite after fix:** `python3 -m unittest cli.test_okf_cli cli.test_okf_mcp`
+-> Ran 110 tests, FAILED (failures=19, errors=2) -- same pre-existing 19/2,
+all 6 new tests green.
