@@ -4,8 +4,10 @@ title: 'P13 — Modus B: agentic realism check (SEPARATE session)'
 status: todo
 type: task
 priority: normal
+tags:
+    - separate-session
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T18:13:10Z
+updated_at: 2026-07-25T20:59:40Z
 parent: okf-cli-s3ee
 blocked_by:
     - okf-cli-6gq6
