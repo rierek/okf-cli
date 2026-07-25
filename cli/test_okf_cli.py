@@ -1243,5 +1243,70 @@ class CmdIndexJson(unittest.TestCase):
         self.assertNotIn("{", out_json_false)
 
 
+class RootSafety(unittest.TestCase):
+    """okf-cli-1617 (P11) — no --root + no auto-detectable catalogue must
+    hard-fail instead of silently scanning the script's own directory."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.cwd = os.getcwd()
+
+    def tearDown(self):
+        import shutil
+        os.chdir(self.cwd)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_explicit_root_returns_abspath_unchanged(self):
+        # SC-002: --root behavior unchanged regardless of cwd/markers
+        got = okf.catalogue_root(self.tmp)
+        self.assertEqual(got, os.path.abspath(self.tmp))
+
+    def test_no_root_no_catalogue_returns_none(self):
+        os.chdir(self.tmp)
+        self.assertIsNone(okf.catalogue_root(None))
+
+    def test_no_root_no_catalogue_hard_fails_via_main(self):
+        # SC-001
+        os.chdir(self.tmp)
+        import sys as _sys
+        old_argv = _sys.argv
+        _sys.argv = ["okf-cli.py", "find", "test"]
+        try:
+            with self.assertRaises(SystemExit) as ctx:
+                okf.main()
+        finally:
+            _sys.argv = old_argv
+        self.assertIn("--root", str(ctx.exception))
+
+    def test_auto_detect_okf_toml_marker(self):
+        # SC-003
+        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
+            f.write("")
+        os.chdir(self.tmp)
+        self.assertEqual(okf.catalogue_root(None), os.getcwd())
+
+    def test_auto_detect_spec_types_marker(self):
+        # SC-003
+        open(os.path.join(self.tmp, "SPEC.md"), "w", encoding="utf-8").close()
+        open(os.path.join(self.tmp, "TYPES.md"), "w", encoding="utf-8").close()
+        os.chdir(self.tmp)
+        self.assertEqual(okf.catalogue_root(None), os.getcwd())
+
+    def test_partial_marker_not_enough(self):
+        open(os.path.join(self.tmp, "SPEC.md"), "w", encoding="utf-8").close()
+        os.chdir(self.tmp)
+        self.assertIsNone(okf.catalogue_root(None))
+
+    def test_auto_detect_walks_up_from_subdir(self):
+        # SC-003: ancestor lookup
+        open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8").close()
+        sub = os.path.join(self.tmp, "a", "b")
+        os.makedirs(sub)
+        os.chdir(sub)
+        expected = os.path.dirname(os.path.dirname(os.getcwd()))
+        self.assertEqual(okf.catalogue_root(None), expected)
+
+
 if __name__ == "__main__":
     unittest.main()
