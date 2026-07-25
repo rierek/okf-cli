@@ -48,6 +48,7 @@ Run from the catalogue root, or pass --root <path>.
 """
 import argparse
 import difflib
+import json
 import os
 import re
 import subprocess
@@ -480,6 +481,25 @@ def render_bundle_block(root, b, full=False):
 
 
 def cmd_index(root, args):
+    if getattr(args, "json", False):
+        if args.bundle:
+            bp = os.path.join(root, args.bundle)
+            concepts = []
+            for cid, ap in sorted(iter_concepts(bp)):
+                t, title, desc = meta_of(ap)
+                concepts.append({"id": cid, "title": title, "type": t, "description": desc})
+            print(json.dumps({"bundle": args.bundle, "concepts": concepts}))
+            return
+        bundles = []
+        for b in list_bundles(root):
+            bp = os.path.join(root, b)
+            concepts = []
+            for cid, ap in sorted(iter_concepts(bp)):
+                t, title, desc = meta_of(ap)
+                concepts.append({"id": cid, "title": title, "type": t, "description": desc})
+            bundles.append({"bundle": b, "concepts": concepts})
+        print(json.dumps({"bundles": bundles}))
+        return
     if args.bundle:
         bp = os.path.join(root, args.bundle)
         if args.full:
@@ -522,6 +542,12 @@ def cmd_list(root, args):
             path = rel[:-3] if rel.endswith(".md") else rel
             hits.append((title, t, path, desc))
     hits.sort(key=lambda x: x[0].casefold())
+    if getattr(args, "json", False):
+        print(json.dumps([
+            {"title": title, "type": t, "path": path, "description": desc}
+            for (title, t, path, desc) in hits
+        ]))
+        return
     if not hits:
         print("(no matches)")
         return
@@ -1886,11 +1912,13 @@ def main():
     pi.add_argument("--full", action="store_true",
                     help="add per-bundle types+tags used (catalogue TOC), or print the "
                          "structured bundle summary instead of the raw index.md (with a bundle arg)")
+    pi.add_argument("--json", action="store_true", help="machine-readable output")
     pls = sub.add_parser("list", help="list concepts filtered by frontmatter type and/or tag")
     pls.add_argument("--type", help="filter by frontmatter `type` (exact match)")
     pls.add_argument("--tag", help="filter by tag (exact match)")
     pls.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+    pls.add_argument("--json", action="store_true", help="machine-readable output")
     pf = sub.add_parser("find")
     pf.add_argument("query")
     pf.add_argument("--limit", type=int, default=10)

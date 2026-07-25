@@ -1136,5 +1136,112 @@ class CmdPrimeBundleListing(unittest.TestCase):
         self.assertIn("concepts: 1", out)
 
 
+class CmdListJson(unittest.TestCase):
+    """okf-cli-83vq (B01) — `list --json` emits a json.loads-parseable array;
+    non-json output stays byte-identical to today's human-readable form."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        ap = os.path.join(self.tmp, "b", "one.md")
+        os.makedirs(os.path.dirname(ap))
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: Runbook\ntitle: One\ndescription: first\n"
+                "tags: [alpha]\n---\n# One\n"
+            )
+        ap2 = os.path.join(self.tmp, "b", "two.md")
+        with open(ap2, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: Runbook\ntitle: Two\ndescription: second\n"
+                "tags: [beta]\n---\n# Two\n"
+            )
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, **kw):
+        import io, contextlib, types
+        args = types.SimpleNamespace(type=None, tag=None, scope=None, json=False)
+        for k, v in kw.items():
+            setattr(args, k, v)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_list(self.tmp, args)
+        return buf.getvalue()
+
+    def test_json_output_is_parseable_array(self):
+        import json
+        out = self._run(type="Runbook", json=True)
+        data = json.loads(out)
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 2)
+        self.assertTrue(all("path" in r and "type" in r and "title" in r
+                            and "description" in r for r in data))
+
+    def test_json_empty_result_is_parseable_empty_array(self):
+        import json
+        out = self._run(type="Nope", json=True)
+        data = json.loads(out)
+        self.assertEqual(data, [])
+
+    def test_non_json_output_unchanged(self):
+        out_json_false = self._run(type="Runbook", json=False)
+        out_no_flag = self._run(type="Runbook")
+        self.assertEqual(out_json_false, out_no_flag)
+        self.assertIn("list: 2 concept(s)", out_json_false)
+        self.assertNotIn("{", out_json_false)
+
+
+class CmdIndexJson(unittest.TestCase):
+    """okf-cli-83vq (B01) — `index <bundle> --json` emits a json.loads-parseable
+    object with the bundle's concepts; non-json output stays unchanged."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        ap = os.path.join(self.tmp, "b", "one.md")
+        os.makedirs(os.path.dirname(ap))
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: One\ndescription: first\n---\n# One\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, bundle=None, json_flag=False, full=False):
+        import io, contextlib, types
+        args = types.SimpleNamespace(bundle=bundle, full=full, json=json_flag)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_index(self.tmp, args)
+        return buf.getvalue()
+
+    def test_json_output_with_bundle_is_parseable_object(self):
+        import json
+        out = self._run(bundle="b", json_flag=True)
+        data = json.loads(out)
+        self.assertEqual(data["bundle"], "b")
+        self.assertIsInstance(data["concepts"], list)
+        self.assertEqual(len(data["concepts"]), 1)
+        concept = data["concepts"][0]
+        self.assertTrue(all(k in concept for k in ("id", "title", "type", "description")))
+
+    def test_json_output_without_bundle_is_parseable_object(self):
+        import json
+        out = self._run(bundle=None, json_flag=True)
+        data = json.loads(out)
+        self.assertIsInstance(data["bundles"], list)
+        self.assertTrue(any(entry.get("bundle") == "b" for entry in data["bundles"]))
+
+    def test_non_json_output_unchanged(self):
+        out_json_false = self._run(bundle="b", json_flag=False)
+        out_no_flag = self._run(bundle="b")
+        self.assertEqual(out_json_false, out_no_flag)
+        self.assertIn("* [One]", out_json_false)
+        self.assertNotIn("{", out_json_false)
+
+
 if __name__ == "__main__":
     unittest.main()
