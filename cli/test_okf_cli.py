@@ -997,6 +997,43 @@ class TagRegistryGate(unittest.TestCase):
         self.assertIn("| `a` | keep me |", body)
 
 
+class AutoEmbedOnRegister(unittest.TestCase):
+    """cmd_tags --register must auto-embed new tags (bge-m3) so registration
+    and embedding coverage never drift apart (PO-review reject 2026-07-25,
+    bean okf-cli-3geg: 125/418 tags were unembedded at review time because
+    embedding was a fully manual, separate step). Best-effort: an embedding
+    failure (e.g. Ollama down) must never block registration itself."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.bt = okf._load_build_tagvec()
+        self._orig_embed = self.bt.embed_bge_m3
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        self.bt.embed_bge_m3 = self._orig_embed
+
+    def test_register_command_auto_embeds_without_manual_produce(self):
+        import types
+        self.bt.embed_bge_m3 = lambda texts: [[0.1, 0.2, 0.3] for _ in texts]
+        args = types.SimpleNamespace(register=["freshly-minted"])
+        okf.cmd_tags(self.tmp, args)
+        db_path = os.path.join(self.tmp, ".tagvec", "tag_vectors.sqlite")
+        delta_after = self.bt.plan_delta({"freshly-minted"}, "bge-m3", db_path)
+        self.assertEqual(delta_after, [])
+
+    def test_embedding_failure_never_blocks_registration(self):
+        import types
+        def _boom(texts):
+            raise RuntimeError("connection refused")
+        self.bt.embed_bge_m3 = _boom
+        args = types.SimpleNamespace(register=["still-registered"])
+        okf.cmd_tags(self.tmp, args)  # must not raise
+        self.assertEqual(okf.load_tags(self.tmp), {"still-registered"})
+
+
 class RemoveTags(unittest.TestCase):
     """remove-tags: strip tags from frontmatter (no merge target), dry-run default,
     empties strip the whole tags field."""

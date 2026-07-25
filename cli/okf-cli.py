@@ -48,6 +48,7 @@ Run from the catalogue root, or pass --root <path>.
 """
 import argparse
 import difflib
+import importlib.util
 import json
 import math
 import os
@@ -402,11 +403,57 @@ def fuzzy_matches(query, candidates, limit=8):
     return merged[:limit]
 
 
+_BUILD_TAGVEC_MODULE = None
+
+
+def _load_build_tagvec():
+    """Lazy-load cli/embeddings/build_tagvec.py (not a hard import — see its
+    module docstring: offline/optional). Cached module-level so a test can
+    monkeypatch the SAME object's embed_bge_m3 that auto_embed_new_tags() uses."""
+    global _BUILD_TAGVEC_MODULE
+    if _BUILD_TAGVEC_MODULE is None:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "embeddings", "build_tagvec.py")
+        spec = importlib.util.spec_from_file_location("build_tagvec", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _BUILD_TAGVEC_MODULE = mod
+    return _BUILD_TAGVEC_MODULE
+
+
+def auto_embed_new_tags(root, tags):
+    """Best-effort bge-m3 embedding of newly registered tags, scoped to just
+    `tags` (never a full re-embed). Fix for PO-review reject 2026-07-25
+    (bean okf-cli-3geg): registration and embedding coverage must not drift
+    apart. Never raises — `tags --register` must succeed even if Ollama/
+    network is unavailable; a failure here is a stderr warning, not an error."""
+    if not tags:
+        return
+    try:
+        bt = _load_build_tagvec()
+        output = os.path.join(root, ".tagvec", "tag_vectors.sqlite")
+        delta = bt.plan_delta(set(tags), "bge-m3", output)
+        if not delta:
+            return
+        texts = [text for _tag, text, _key in delta]
+        vectors = bt.embed_bge_m3(texts)
+        rows = [
+            (key, tag, "bge-m3", bt.MODELS["bge-m3"]["dim"], bt.pack_vec(vec))
+            for (tag, _text, key), vec in zip(delta, vectors)
+        ]
+        bt.write_rows(output, rows)
+        print("auto-embedded {} new tag(s) (bge-m3)".format(len(rows)), file=sys.stderr)
+    except Exception as e:
+        print("warning: auto-embed skipped for new tag(s) ({}: {}) — "
+              "run cli/embeddings/build_tagvec.py --produce manually later".format(
+                  type(e).__name__, e), file=sys.stderr)
+
+
 def cmd_tags(root, args):
     if getattr(args, "register", None):
         added, already = register_tags(root, args.register)
         if added:
             print("registered {} new tag(s) in TAGS.md: {}".format(len(added), ", ".join(added)))
+            auto_embed_new_tags(root, added)
         if already:
             print("already registered: {}".format(", ".join(already)))
         return
