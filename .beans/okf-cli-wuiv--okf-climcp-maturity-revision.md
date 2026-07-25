@@ -5,7 +5,7 @@ status: in-progress
 type: milestone
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T21:01:02Z
+updated_at: 2026-07-25T21:35:49Z
 ---
 
 Raise okf-cli + okf-mcp maturity at its three weak edges — retrieval semantics, MCP->subprocess correctness, root-safety — with every retrieval change measured as a delta against a keyword baseline frozen BEFORE any optimization.
@@ -52,3 +52,37 @@ Interpretation (binding): From P12 (okf-cli-6gq6) onward — P12, P13, P14, P15 
 ## Session close 2026-07-25 (realization session, PF-1 inline from P12)
 
 12/14 tasks completed (P1-P8, P10-P12, P14). Open by design: P13 step 3 (separate agentic session, task set ready) and P15 (optional, Q04-gated, draft). Epics: Phase 1 + Phase 2 + Phase 4 tagged to-review; Phase 3 open pending P13 run. Full suite 189 tests, exactly 19F/2E pre-existing (crosslink suites), 0 new. Baseline frozen (baseline-f0714b2.json) + hybrid re-measured (hybrid-39d6c0a.json), gate PASS: paraphrase zero-hit 1.000->0.500, no literal regression. Catalogue + live .tagvec pristine (md5-verified). Open PO questions: Q01 index.md-vs--json eval surface; Q02 --bundle-as-scope-alias semantics; Q03 populate concept_emb for the live catalogue productively (currently the backstop is dormant in production — no concept vectors); Q04 P15 go/no-go.
+
+## Q03 — revised 2026-07-25 (PO-Review, live evidence)
+
+**Frage:** concept_emb produktiv befüllen — und mit welchem Embedding-Design?
+
+**Hintergrund:** Backstop (P8) liest concept_emb; Live-Katalog aktuell 0 Zeilen -> Backstop in Produktion tot. Live-Test während Review: Paraphrase ohne Keyword-Overlap fand mit leerem concept_emb den Zieltreffer gar nicht. Scoped Demo-Befuellung (10 Konzepte devdash-tui/, bge-m3, danach zurueckgerollt) zeigte: Backstop feuert, matcht aber auf falsche Konzepte (cosine 0.40-0.44), Zieltreffer fehlte komplett in der Trefferliste -- reales False-Positive-Muster, gleiche Kategorie wie der bereits gefixte P8-Fund LL-06, jetzt mit echten statt Fixture-Daten reproduziert.
+
+**Root cause (Design-Review im PO-Gate):** concept_emb embedded pro Konzept EIN Vektor aus title+"
+
+"+body (concept_text()) -- ganzes Dokument als ein Punkt. Genau dieses Muster (Titel/Body-Anreicherung ins Embedding mischen) hat das Projekt bei TAG-Embeddings bereits als Kontaminationsquelle dokumentiert und verworfen (cli/embeddings/README.md:27-35: title/description-Anreicherung liess unabhaengige Tags faelschlich aehnlich werden, z.B. task-brief <-> superwhisper 0.92; Fix war Slug-only-Embedding). concept_emb macht fuer Konzepte, was fuer Tags bereits als Fehler identifiziert wurde -- ein ganzer Body verwaessert zu einem Durchschnittspunkt, wodurch thematisch aehnlich strukturierte, aber inhaltlich falsche Konzepte (z.B. andere Entity-Fields-Referenzseiten) naeher an die Query ruecken als der tatsaechliche Treffer.
+
+**Optionen:**
+- (a) Jetzt voll produktiv befuellen (--target concepts, alle ~2435 Konzepte), Risiko dokumentiert in Kauf nehmen. Recall fuer echte Paraphrasen steigt, aber belegtes False-Positive-Risiko bleibt ungemindert im Live-Katalog.
+- (b) Erst Schwellenwerte/Margin fuer provenance:semantic nachschaerfen (kleiner Rework, gleiche Architektur), dann befuellen.
+- (c) Dormant lassen -- Backstop bleibt Feature-ohne-Wirkung bis auf Weiteres.
+- (d) NEU, empfohlen: Chunk-Embedding statt Dokument-Embedding. Nicht ein Vektor pro ganzem Konzept, sondern mehrere kleinere Einheiten pro Konzept (Titel separat + Body in Absaetze/Chunks aufgeteilt), je ein Embedding-Vektor; Retrieval matched gegen die spezifischste Chunk statt den verwaesserten Gesamtdurchschnitt. Behaelt Body-Abdeckung (S3-Fixture-Garantie -- Konzept nur ueber Body-Vokabular auffindbar -- bleibt erfuellt, anders als bei Titel-only-Begriffszerlegung, die den bereits verworfenen Tag-only-Rueckschritt wiederholen wuerde). Vermeidet die Verwaesserung, die den heutigen Live-Fehltreffer erklaert. Erfordert eigenen scoped Rework-Task (Schema-Erweiterung concept_emb -> concept_chunk_emb oder aehnlich, Chunking-Strategie, Re-Aggregation im Retrieval) -- kein Threshold-Tweak, ein Architektur-Umbau.
+
+**Empfehlung:** (d) vor (a) -- die 0.40-0.44-Cosine-Fehltreffer sind ein Verwaesserungs-Symptom, kein Schwellenwert-Symptom; ein Threshold-Fix (b) haette die Wurzel nicht behoben. (b) bleibt als guenstiger Zwischenschritt denkbar, falls (d) nicht sofort priorisiert wird.
+
+**Status:** offen, PO-Entscheidung.
+
+## Q03 — Unterfrage ergaenzt 2026-07-25 (PO)
+
+Zusaetzlich zur Design-Frage (Dokument- vs Chunk-Embedding, siehe oben): PO wirft die vorgelagerte Frage auf, OB Embedding ueberhaupt noetig ist -- gegenueber besserem Keyword-/Lexikal-Retrieval (z.B. echtes FTS5 mit Stemming/BM25/Prefix statt des aktuellen reinen Substring-Scorings). Gegenprobe waehrend Review live gefahren: reale Nutzeranfrage (Tailscale/Mac-Thinkpad/Mockup-HTML-Bereitstellung) gegen den aktuellen keyword-only find, siehe Ergebnis unten. Falls Keyword-Retrieval (ggf. mit FTS5-Aufwertung) das Gros der Faelle bereits loest, waere die Antwort auf Q03 ggf. (c)/(e, neu: FTS5-Aufwertung statt Embedding) statt (d).
+
+## Q03 — Gegenprobe-Ergebnis 2026-07-25
+
+Live-Gegenprobe (PO): find "mockup tailscale" gegen echten Katalog fand serve-excalidraw-drafts.md (dev-wiki/testsystem-vite-tailscale) NICHT -- Konzept nutzt Vokabular Excalidraw/PNG-Vorschau, nie das Wort mockup; nur Browsing (index) fand es. Reales Zero-Hit-Beispiel mit heutigem keyword-only find, spricht FUER Embedding-Notwendigkeit (Antwort auf die ergaenzte Unterfrage 'ist Embedding ueberhaupt noetig' faellt hier zugunsten ja aus) -- unabhaengig von der separaten Chunk-vs-Dokument-Designfrage oben. Nebenbefund: keine der beiden thematisch naechsten Konzepte (serve-excalidraw-drafts.md fuer PNG-Mockups, serve-dev-server-to-tailnet.md fuer generisches HTML-via-tailscale) deckt beide Aspekte (Mockup + HTML) gemeinsam ab -- echte Katalog-Luecke, kein Suchproblem, nicht Teil dieses Reviews.
+
+## Q03 — Nebenbefund Tag-Ebene 2026-07-25 (PO-Gegenprobe Teil 2)
+
+PO testete zusaetzlich: --tag tailscale filtert korrekt, aber 'mockup' kommt in keinem tailscale-getaggten Konzept literal vor (serve-excalidraw-drafts.md ist mit excalidraw/tailscale/export/remote-access getaggt, nicht mockup) -> 0 Treffer trotz Filter. 'mockup' ist zudem gar kein registrierter Tag (okf-cli tags mockup liefert nur entfernte Naeherungen: backup/mcp/molecule/mouse). Das Paraphrase-Problem (mockup vs excalidraw) besteht also auch auf TAG-Ebene, nicht nur in Titel/Body.
+
+Relevant fuer die Design-Entscheidung: die Tag-Embeddings (emb-Tabelle) sind -- anders als concept_emb -- bereits produktiv befuellt (752 bge-m3-Zeilen, diese Session). Ein Tag-Synonym-Backstop (Query-Term gegen Tag-Vektor-Naehe, z.B. mockup~excalidraw) waere ein guenstigerer, sofort einsetzbarer Hebel gegenueber der riskanteren concept_emb/Chunk-Frage oben -- nutzt bereits vorhandene, saubere Infrastruktur (keine Kontaminationsgefahr, da Slug-only-Embedding bereits bewaehrt ist), statt neue Dokument/Chunk-Embeddings einzufuehren. Wert als zusaetzliche Option (e) fuer Q03 pruefen: Tag-Vektor-Expansion der Query VOR dem Keyword-Scoring, orthogonal zur concept_emb-Frage.

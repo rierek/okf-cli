@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T19:37:07Z
+updated_at: 2026-07-25T21:41:53Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-5qmn
@@ -168,3 +168,36 @@ a Task-7 finding.
 This corrected finding supersedes the "Finding for Task 8" section above in
 full; that section is left unmodified (verbatim) and marked superseded, not
 rewritten.
+
+## Review 2026-07-25
+
+PO feedback on US-04 (Epic okf-cli-5hg4, Round 2), verbatim: "wann werden neue Tags embedded? => das muss automatisch erfolgen sonst haben wir das dilemma, dass dann xxx tags nicht embedded sind. Also rework erforderlich."
+
+**Verdict: r (rejected).** Live-demo during PO-review confirmed the gap directly: 125 of 418 tags in the real catalogue were unembedded at review time (`build_tagvec.py --model bge-m3` dry-run), purely because embedding is a manual, human-triggered offline pass (README.md:11-18) fully decoupled from `okf-cli.py tags --register` (cmd_tags, okf-cli.py:406-409 -> register_tags at :1516). Every newly registered tag silently drifts out of embedding coverage until someone remembers to re-run `--produce` by hand.
+
+**Fix-Prelude:**
+- Schwere: medium (silent coverage drift, no crash/data-loss, but defeats the semantic backstop for every tag registered after the last manual run — degrades to keyword-only for those tags without any signal that it happened).
+- Fundort: `cmd_tags` / `register_tags()` call site, okf-cli.py:406-409 (register path) + cli/embeddings/build_tagvec.py (producer, currently only invoked manually per README.md).
+- Fix-Rezept: after `register_tags()` successfully adds new tag(s) in cmd_tags (okf-cli.py:406-409), auto-invoke the bge-m3 embedding step scoped to just the newly-added tag(s) — e.g. shell out to `build_tagvec.py --produce --model bge-m3` (tags target is already the default) or call its embedding function in-process for `added` only. Must stay best-effort/graceful (Ollama down -> warn on stderr, do NOT fail the `--register` call itself — registering the tag in TAGS.md must still succeed even if embedding fails). Add a regression test asserting: after `tags --register <new-tag>`, the tag is present in `emb` for model bge-m3 without a separate manual `--produce` call.
+- Quelle: PO-Review-Session 2026-07-25, Runde 2 (Epic okf-cli-5hg4).
+
+## Fix closure 2026-07-25 (inline, no subagent, per PF-1)
+
+**Summary:** tags --register now auto-embeds newly added tag(s) with bge-m3, scoped to just those tags (no full re-embed). Best-effort: embedding failure (Ollama down, network error) prints a stderr warning and does NOT block registration -- TAGS.md write always succeeds.
+
+**Implementation:** okf-cli.py: _load_build_tagvec() (lazy importlib load, cached module-level so tests can monkeypatch the same object's embed_bge_m3, mirroring cli/test_embeddings_tagvec.py's existing pattern) + auto_embed_new_tags(root, tags), called from cmd_tags right after register_tags() succeeds.
+
+**Test-Output (RED->GREEN):**
+- RED: AttributeError: module 'okf_cli' has no attribute '_load_build_tagvec' (2 new tests failed before implementation).
+- GREEN: both new tests pass (test_register_command_auto_embeds_without_manual_produce, test_embedding_failure_never_blocks_registration).
+- Full suite: 191 tests, 19 failures / 2 errors -- byte-identical to the pre-existing baseline (was 189 tests before these 2 additions), 0 new failures.
+
+**Mutation self-test (2/2 caught):**
+1. Disabled the auto_embed_new_tags() call site -> test_register_command_auto_embeds_without_manual_produce failed (delta_after non-empty, tag stayed unembedded). Reverted, re-verified GREEN.
+2. Removed the try/except around the embed/write call -> test_embedding_failure_never_blocks_registration failed with an uncaught RuntimeError propagating through cmd_tags. Reverted, re-verified GREEN.
+
+**Commit:** cc2696e (fix(cli): auto-embed new tags on register).
+
+**Deviations:** none from the fix-prelude's recipe.
+
+**Notes:** does not touch the separate concept_emb/Q03 question (chunk-vs-document embedding) -- this fix is tag-embedding-only, already-populated infrastructure.

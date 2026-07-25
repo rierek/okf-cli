@@ -5,9 +5,9 @@ status: in-progress
 type: epic
 priority: normal
 tags:
-    - to-review
+    - accepted
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T19:20:18Z
+updated_at: 2026-07-25T21:36:42Z
 parent: okf-cli-wuiv
 ---
 
@@ -22,3 +22,9 @@ Build the measurement + correctness fundament that MUST stand before any retriev
 ## DoD
 B01 fixed; subprocess integration tests green; eval runner + golden fixtures S1-S4 built; keyword baseline frozen + committed.
 Plan detail: `docs/okf-revision/PLAN.md` Phase 1 (Tasks 1-6).
+
+## Review 2026-07-25
+
+US-01 · MCP okf_index/okf_list liefern via --json sauberes JSON statt RuntimeError (B01-Fix, abgesichert durch Subprocess-Boundary-Tests) · a
+US-02 · Eval-Runner seedet S1–S4 transient in den echten Katalog, misst 12 golden Queries mit 8 Metriken, idempotenter Teardown lässt den Katalog clean · a
+US-03 · Keyword-Baseline als immutable baseline-f0714b2.json eingefroren; P12-Gate misst Hybrid als Delta dagegen (PASS) · a

@@ -5,9 +5,9 @@ status: in-progress
 type: epic
 priority: normal
 tags:
-    - to-review
+    - accepted
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T21:01:02Z
+updated_at: 2026-07-25T21:36:42Z
 parent: okf-cli-wuiv
 ---
 
@@ -25,3 +25,5 @@ Plan detail: `docs/okf-revision/PLAN.md` Phase 4 (Tasks 14,15).
 ## Epic closure note (2026-07-25)
 
 P14 completed (all SCs, catalogue commit afe0bf7). P15 stays draft — optional, gated on open PO question Q04 (partial --help-derived verb tables); not started deliberately.
+
+US-10 · Kanonische Overview zeigt jetzt 20/20 Verben + neue find-Faehigkeiten + okf_tags, falsche 100%-Behauptung entfernt (P14) · a
