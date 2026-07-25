@@ -11,9 +11,11 @@
 | **git** | Code-/Change-Verlauf | `git log` / `git diff` | dieses Repo |
 | **SSTD.md** | Continuity/Entry-Point (dieses File) | Read | `docs/SSTD.md` |
 
-## Entry-Point (Stand 2026-07-18)
+## Entry-Point (Stand 2026-07-25)
 
-- `beans list --ready` aktuell leer — kein offenes Bean. Letztes bearbeitetes: `okf-cli-dwcq` (completed, Summary im Bean-Body).
+- **Aktives Milestone: `okf-cli-wuiv` — okf-cli/mcp maturity revision** (4 Epics, 14 Tasks, operationalisiert aus `docs/okf-revision/PLAN.md`; ce-plan-reviewer GRÜN, PO-approved, Gate-B verify GRÜN).
+- **Nächster Schritt (Realisierung startklar):** `cc --implement "/ce-implement-beans okf-cli-wuiv"`. Ready ohne Blocker: **P1 `okf-cli-83vq`** (B01 --json-fix) · **P2 `okf-cli-ez6f`** (seed golden fixtures S1-S4). Rest blockiert bis Baseline-Freeze `okf-cli-5qmn` (hartes Gate vor Phase 2).
+- Reihenfolge/Deps: `beans roadmap` / `beans list --ready`. Plan-Detail je Task: `docs/okf-revision/PLAN.md`.
 - Repo-Konvention (nicht verhandelbar pro Session, s. `/tools/CLAUDE.md`): **Worktree-Weiche = main-direkt erlaubt** (Solo-Repo, ein Repo für `cli/`+`mcp/`+`plugin/`).
 
 ## Attention (noch nicht in kanonischer Senke)
