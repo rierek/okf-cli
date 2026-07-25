@@ -37,3 +37,9 @@ Additive log. Each entry: Symptom · Fix · Forward-Guard.
 - **Symptom:** Semantic-backstop trigger used absolute `score/max_score < 0.5` as "weak top-hit" signal; the repo's own golden fixtures (S1 0.417, S2 0.333) sat below it, so an unrelated semantic candidate at ordinary cosine (~0.7) displaced correct literal rank-1 hits. Dormant only because concept_emb was not yet populated — would have surfaced as a P12 gate failure.
 - **Fix:** Margin-based confidence check (top-1 vs runner-up) plus an unconditional rank-1 pin for the keyword top hit (`c646605`).
 - **Forward-Guard:** Fusion/trigger thresholds must be validated against the project's own golden fixtures BEFORE merge (the data was in-repo and contradicted the constant). Rank-guarantees belong in structure (pin), not in threshold tuning.
+
+## LL-07 (2026-07-25, P12 inline) — stale bytecode cache silently falsifies mutation proofs
+
+- **Symptom:** During mutation self-tests, a predicate inversion appeared "still green" and later the reverted file appeared "still mutated": mutation and revert had the same file size and landed within the same mtime second, so Python kept serving the stale `__pycache__` .pyc for a module loaded via `spec_from_file_location`.
+- **Fix:** All mutation/revert cycles re-run with `rm -rf __pycache__` before every test invocation.
+- **Forward-Guard:** Any mutation-proof protocol on this repo clears `__pycache__` between runs (same-size single-character edits are exactly the blind spot of mtime+size cache invalidation).
