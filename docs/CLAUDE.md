@@ -20,6 +20,7 @@ central `TYPES.md` at `/Users/erik/Obsidian/Knowledge-Catalogue/TYPES.md`. Do no
 - `GLOSSARY.md` (domain terms) is maintained via the `ce-glossary` skill.
 - Conformance: `/okf-p audit` (wraps `okf-cli check`). Must be `OK — 0 violations`.
 - This is a plain git repo — normal Read/Write/Edit/git. Not the Obsidian Vault.
+- **PO-Review rejects with a small, bounded fix** (single function/flag, one file or two): fix inline immediately (TDD — RED proof, GREEN, mutation self-test), re-accept the story in the same session — don't defer to a separate `ce-beans-operationalize`/implementer cycle. Confirmed 2026-07-25/26 (US-04 auto-embed reject, D02 `--bundle` removal).
 
 ## Repo-Kontext
 `okf-tools` bündelt die komplette OKF-Tool-Kette in einem Repo, aus
