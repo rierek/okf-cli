@@ -11,12 +11,14 @@
 | **git** | Code-/Change-Verlauf | `git log` / `git diff` | dieses Repo |
 | **SSTD.md** | Continuity/Entry-Point (dieses File) | Read | `docs/SSTD.md` |
 
-## Entry-Point (Stand 2026-07-25)
+## Entry-Point (Stand 2026-07-25, Realisierungs-Session abgeschlossen)
 
-- **Aktives Milestone: `okf-cli-wuiv` — okf-cli/mcp maturity revision** (4 Epics, 14 Tasks, operationalisiert aus `docs/okf-revision/PLAN.md`; ce-plan-reviewer GRÜN, PO-approved, Gate-B verify GRÜN).
-- **Nächster Schritt (Realisierung startklar):** `cc --implement "/ce-implement-beans okf-cli-wuiv"`. Ready ohne Blocker: **P1 `okf-cli-83vq`** (B01 --json-fix) · **P2 `okf-cli-ez6f`** (seed golden fixtures S1-S4). Rest blockiert bis Baseline-Freeze `okf-cli-5qmn` (hartes Gate vor Phase 2).
-- Reihenfolge/Deps: `beans roadmap` / `beans list --ready`. Plan-Detail je Task: `docs/okf-revision/PLAN.md`.
-- Repo-Konvention (nicht verhandelbar pro Session, s. `/tools/CLAUDE.md`): **Worktree-Weiche = main-direkt erlaubt** (Solo-Repo, ein Repo für `cli/`+`mcp/`+`plugin/`).
+- **Milestone `okf-cli-wuiv`: 12/14 Tasks completed** (P1–P8, P10–P12, P14). Epics Phase 1 (`okf-cli-2lpu`), Phase 2 (`okf-cli-5hg4`), Phase 4 (`okf-cli-oka0`) auf Tag `to-review` — **PO-Merge-Gate ist der nächste Schritt:** `/ce-po-review okf-cli-wuiv`.
+- **Bewusst offen:** P13 (`okf-cli-e9hm`) Step 3 — Modus-B-Lauf in SEPARATER Agent-Session (Task-Set fertig: `cli/eval/modus-b-tasks.md`); P15 (`okf-cli-cfgj`) draft, Q04-gated.
+- **Beweislage:** Suite 189 Tests, exakt 19F/2E pre-existing (Crosslink-Suiten), 0 neue. Baseline `cli/eval/results/baseline-f0714b2.json` (frozen) vs `hybrid-39d6c0a.json`: Gate PASS, Paraphrase-Zero-Hit 1.000→0.500, keine Literal-Regression. Katalog + Live-`.tagvec` pristine.
+- **Offene PO-Fragen (im Milestone-bean verankert):** Q01 index.md-vs-`--json`-Mess-Surface · Q02 `--bundle`-als-`--scope`-Alias · Q03 concept_emb produktiv befüllen (Backstop in Produktion bisher dormant) · Q04 P15 go/no-go.
+- Lessons: `docs/LESSONS-LEARNED.md` LL-01…LL-07 (je mit Forward-Guard).
+- Repo-Konvention (s. `/tools/CLAUDE.md`): **Worktree-Weiche = main-direkt erlaubt** (Solo); bei parallelen Implementern in DIESEM Repo: Worktrees Pflicht + Supervisor committet währenddessen nie im Haupt-Workdir (LL-05).
 
 ## Attention (noch nicht in kanonischer Senke)
 
