@@ -1546,6 +1546,43 @@ class SemanticBackstop(unittest.TestCase):
         self.assertEqual(lines[4], "path: b/strong")  # Top-1
         self.assertNotIn("provenance: semantic", out)
 
+    def test_noise_single_hit_still_fires_backstop(self):
+        """P12 re-measure finding (8c EARS, S3 rescue): a paraphrase query
+        against a real catalogue rarely gets ZERO keyword hits — it gets
+        NOISE (a stray body-word match, e.g. 1/24 = 0.042). A single such
+        hit must not suppress the backstop: the wanted concept has to
+        surface (rank >= 2, noise top-1 stays pinned)."""
+        self._w("b/noise.md", "Unrelated Note", [],
+                "mentions classification once in passing.\n")
+        self._w("b/wanted.md", "Wanted Concept", [],
+                "totally different content words only.\n")
+        self._make_tagvec([("k1", "b/wanted", [1.0, 0.0])])
+        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        out, err = self._run("unmarked item lacking classification")
+        self.assertIn("path: b/wanted", out)
+        self.assertIn("provenance: semantic", out)
+        # pin: the keyword hit (noise or not) keeps rank 1
+        first_path = [l for l in out.splitlines()
+                      if l.startswith("path: ")][0]
+        self.assertEqual(first_path, "path: b/noise")
+
+    def test_noise_top1_with_clear_margin_still_fires_backstop(self):
+        """Same finding, margin variant (real S3-paraphrase shape: top-1
+        3/24 vs runner-up 1/24 — margin 0.667 looks 'confident' but both
+        are noise). An absolute noise floor must fire the backstop even
+        when the margin gate would not."""
+        self._w("b/noise3.md", "Unrelated Prose Note", [],
+                "item classification unmarked in passing prose.\n")
+        self._w("b/noise1.md", "Other Note", [],
+                "classification mentioned once.\n")
+        self._w("b/wanted.md", "Wanted Concept", [],
+                "totally different content words only.\n")
+        self._make_tagvec([("k1", "b/wanted", [1.0, 0.0])])
+        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        out, err = self._run("unmarked item lacking classification")
+        self.assertIn("path: b/wanted", out)
+        self.assertIn("provenance: semantic", out)
+
     def test_near_threshold_literal_top1_survives_unrelated_semantic(self):
         """F01 (post-review, blocking) — a legitimate partial-title-match
         literal top-1 at a REAL repo ratio (~0.417, matching S1's actual

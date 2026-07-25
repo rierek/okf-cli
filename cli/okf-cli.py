@@ -615,6 +615,14 @@ def _format_contrib(contrib):
 SEMANTIC_MARGIN_RATIO = 0.5  # top-1 must lead the runner-up by at least this
                               # fraction of its own score to count as
                               # "confident" (top1 >= (1+ratio) * top2)
+SEMANTIC_NOISE_RATIO = 0.25   # P12 re-measure finding: below this
+                              # score/max_score the keyword top-1 is noise
+                              # (stray body-word matches), regardless of its
+                              # margin over the runner-up — the backstop must
+                              # fire or paraphrase queries never get rescued
+                              # against a real catalogue (8c EARS, S3).
+                              # Strictly below every legitimate literal
+                              # golden ratio (S2 floor is 0.25, S1 0.30).
 SEMANTIC_MODEL = "bge-m3"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embed"
 OLLAMA_EMBED_TIMEOUT = 5
@@ -787,9 +795,17 @@ def cmd_find(root, args):
     # runner-up to be ambiguous against, so it is trusted as-is (no fire) —
     # this also means the backstop only ever spends a network call when it
     # can plausibly add value, not on every merely-partial literal match.
+    # P12 re-measure finding (8c EARS, S3 rescue): a real catalogue almost
+    # never yields ZERO hits for a paraphrase query — it yields NOISE (stray
+    # body-word matches, e.g. 3/24), which can carry a deceptively clear
+    # margin over an even weaker runner-up. An absolute noise floor
+    # (SEMANTIC_NOISE_RATIO) therefore fires the backstop regardless of
+    # margin or hit count; the rank-1 pin below keeps the keyword top-1 in
+    # place either way.
     semantic_hits = []
     fire_backstop = (
         not hits
+        or hits[0]["score"] < SEMANTIC_NOISE_RATIO * max_score
         or (len(hits) >= 2 and not _keyword_top1_is_confident(hits))
     )
     if fire_backstop:
