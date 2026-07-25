@@ -45,20 +45,23 @@ def _make_tmp_catalogue():
 
 class McpBoundaryTestBase(unittest.TestCase):
     """setUp/tearDown shared by both boundary suites: real tmp catalogue,
-    OKF_CLI pinned to this worktree's cli/okf-cli.py (not whatever the env
-    happens to default to)."""
+    OKF_CLI pinned to this worktree's cli/okf-cli.py.
+
+    okf_mcp.OKF_CLI is bound from os.environ at IMPORT time (module-level
+    global, mcp/okf_mcp.py:47-48) and read as a plain global inside
+    run_okf() -- it is never re-read from os.environ afterwards. Since this
+    module's import (above) already ran before any setUp, setting
+    os.environ["OKF_CLI"] here would be a no-op. Patch the module attribute
+    directly instead."""
 
     def setUp(self):
         self.root = _make_tmp_catalogue()
-        self._prev_okf_cli = os.environ.get("OKF_CLI")
-        os.environ["OKF_CLI"] = os.path.join(_HERE, "okf-cli.py")
+        self._prev_okf_cli = mcp.OKF_CLI
+        mcp.OKF_CLI = os.path.join(_HERE, "okf-cli.py")
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
-        if self._prev_okf_cli is None:
-            os.environ.pop("OKF_CLI", None)
-        else:
-            os.environ["OKF_CLI"] = self._prev_okf_cli
+        mcp.OKF_CLI = self._prev_okf_cli
 
 
 class McpIndexListBoundary(McpBoundaryTestBase):
