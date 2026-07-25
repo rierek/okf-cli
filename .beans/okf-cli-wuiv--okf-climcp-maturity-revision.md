@@ -71,7 +71,25 @@ Interpretation (binding): From P12 (okf-cli-6gq6) onward — P12, P13, P14, P15 
 
 **Empfehlung:** (d) vor (a) -- die 0.40-0.44-Cosine-Fehltreffer sind ein Verwaesserungs-Symptom, kein Schwellenwert-Symptom; ein Threshold-Fix (b) haette die Wurzel nicht behoben. (b) bleibt als guenstiger Zwischenschritt denkbar, falls (d) nicht sofort priorisiert wird.
 
-**Status:** offen, PO-Entscheidung.
+**Status:** ANSWERED 2026-07-26 by measurement — see "Q03 resolution" below.
+
+## Q03 resolution 2026-07-26 (think session, full-catalogue experiment)
+
+Design collection + evidence: `docs/okf-retrieval-architecture/` (DESIGN.md, REFERENCES R01-R43, eval/).
+
+Experiment: 2437 concepts embedded in 6 arms (bge-m3 and voyage-3-large, each over title / title+body / h2-h3-chunks, 35800 vectors) measured against 48 queries with known targets — 40 written by subagents with 0.6 % vocabulary overlap to their target document, plus 8 real PO queries. The live `.tagvec` was never touched; arms were namespaced through the existing `model` column in a separate eval DB.
+
+Answers, all measured rather than argued:
+- **Option (d) chunking is rejected.** With the chosen model it is worse than document embedding (MRR 0.394 vs 0.452); it only compensates a weak model on long texts. Title-only is the worst arm of all, below today's substring scoring — the S3 guarantee is now empirically confirmed.
+- **The dilution root cause does not hold.** The original 0.40-0.44 finding was a scope confound: only 10 concepts of one bundle were populated while the counter-test target lived in another.
+- **An absolute cosine floor is impossible.** Correct targets and wrong top hits overlap completely (wrong up to 0.813, correct down to 0.494). Cosine ranks, it does not certify.
+- **The actual defect is the fusion rule.** The backstop fired on 47 of 48 queries and stayed ineffective: normalised BM25 values at ranks 2-10 sit near 0.9, good cosines near 0.6, and both are interleaved by raw score. Today's rule is second-worst of five tested; conditional handover (lexical owns the ranking only on a clear top-1 margin, otherwise semantic owns it) has the best worst case across query regimes.
+- **A lexical upgrade does not replace embeddings.** FTS5+BM25+porter+prefix finds zero of 40 pure paraphrases; it solves morphology, not synonymy. It stays worthwhile for literal queries and latency.
+- **Model choice decides usability.** voyage-3-large MRR 0.452 / zero-hit 0.167 against bge-m3 0.150 / 0.646.
+
+PO decision 2026-07-26: populate `concept_emb` productively with **voyage-3-large**, unit **title+body**, network dependency accepted under the existing graceful-degradation rule.
+
+Follow-up work (ordered by leverage, to be operationalised from the plan session): fusion rule first (without it every embedding gain is wasted), then productive population, then producer hardening (see LL-08/LL-09 in docs/LESSONS-LEARNED.md), then the FTS5 lexical path, then versioning the eval assets.
 
 ## Q03 — Unterfrage ergaenzt 2026-07-25 (PO)
 
