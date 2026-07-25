@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T18:13:10Z
+updated_at: 2026-07-25T18:40:55Z
 parent: okf-cli-2lpu
 blocked_by:
     - okf-cli-ez6f
@@ -31,3 +31,8 @@ As the maturity gate, I want a deterministic runner that scores golden queries a
 - Test: `cli/test_eval_runner.py`
 Consumes P2 (seed/teardown), P3 (golden.json). Produces run()-shape consumed by P5,P12. Full steps: PLAN.md Task 4.
 Commit: `feat(eval): mechanical golden-file eval runner (Modus A)`
+
+## Prelude 2026-07-25 (from P2 completion, okf-cli-ez6f)
+
+- EVAL-DESIGN.md EXISTS at ~/Obsidian/Vault/okf-revision/EVAL-DESIGN.md (P2 bean's original deviation note claiming otherwise was wrong; corrected).
+- Fixtures are TRANSIENT by design (reviewer-confirmed conformant): the eval runner must call cli/eval/fixtures.py seed()/teardown() around its own runs and leave the real catalogue clean.

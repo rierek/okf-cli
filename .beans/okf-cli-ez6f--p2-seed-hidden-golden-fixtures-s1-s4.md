@@ -1,13 +1,11 @@
 ---
 # okf-cli-ez6f
 title: P2 — Seed hidden golden fixtures S1-S4
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T18:36:35Z
+updated_at: 2026-07-25T18:40:45Z
 parent: okf-cli-2lpu
 ---
 
@@ -130,3 +128,7 @@ pre-existing untracked `.claude/`, not touched by this task).
   — Task 5's/Task 12's baseline-freeze/re-measure scripts should call
   `teardown()` in a `finally` around their `run()` invocation, same pattern
   used in `test_eval_fixtures.py`.
+
+## ERRATA correction 2026-07-25 (Supervisor, from P2 review)
+
+The Deviations note above claiming EVAL-DESIGN.md does not exist is WRONG. The file exists at ~/Obsidian/Vault/okf-revision/EVAL-DESIGN.md (Think collection named in milestone okf-cli-wuiv). Reviewer verified PLAN.md Task 2/3/4 line-refs resolve correctly against it. Do not author a new EVAL-DESIGN.md.
