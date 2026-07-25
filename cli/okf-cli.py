@@ -49,10 +49,15 @@ Run from the catalogue root, or pass --root <path>.
 import argparse
 import difflib
 import json
+import math
 import os
 import re
+import sqlite3
+import struct
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from collections import Counter
 
 RESERVED = {"index.md", "log.md", "readme.md", "index-map.md"}
@@ -592,6 +597,114 @@ def _format_contrib(contrib):
     return "; ".join(parts) if parts else "(none)"
 
 
+# 8c (D04) — semantic backstop. Fires only as a fallback (zero/weak keyword
+# hits), reads .tagvec's concept_emb table (title+body scope, cli/embeddings/
+# build_tagvec.py) via stdlib sqlite3, and embeds the query with a LOCAL
+# Ollama bge-m3 call — best-effort: any failure (cache absent, backend
+# unreachable) degrades to keyword-only with a one-line stderr note, never
+# raises, never blocks the keyword path (Global Constraints).
+SEMANTIC_FALLBACK_RATIO = 0.5
+SEMANTIC_MODEL = "bge-m3"
+OLLAMA_EMBED_URL = "http://localhost:11434/api/embed"
+OLLAMA_EMBED_TIMEOUT = 5
+
+
+def _tagvec_db_path(root):
+    return os.path.join(root, ".tagvec", "tag_vectors.sqlite")
+
+
+def _load_concept_vectors(db_path, model):
+    """[(path, [float, ...]), ...] for every concept_emb row of `model`, or
+    None if the cache file/table is absent or has no rows for this model
+    (the graceful-skip signal semantic_backstop() acts on)."""
+    if not os.path.isfile(db_path):
+        return None
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT path, dim, vec FROM concept_emb WHERE model = ?", (model,)
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return None
+    if not rows:
+        return None
+    return [(path, list(struct.unpack("<{}f".format(dim), vec_blob)))
+            for path, dim, vec_blob in rows]
+
+
+def _embed_query_bge_m3(text):
+    """Best-effort LOCAL Ollama embed call for the query string. NETWORK —
+    reached only when the semantic pass actually fires (never at import
+    time, never unconditionally). Any failure propagates so the caller
+    degrades gracefully; this function never catches."""
+    req = urllib.request.Request(
+        OLLAMA_EMBED_URL,
+        data=json.dumps({"model": SEMANTIC_MODEL, "input": text}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=OLLAMA_EMBED_TIMEOUT) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+    return body["embeddings"][0]
+
+
+def _cosine(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def semantic_backstop(root, query, exclude_paths, limit):
+    """[(cosine, path), ...] sorted descending, excluding exclude_paths, or
+    [] with one stderr note on any degradation (cache/table absent, backend
+    unreachable) — see module docstring above."""
+    vectors = _load_concept_vectors(_tagvec_db_path(root), SEMANTIC_MODEL)
+    if vectors is None:
+        print("note: semantic backstop skipped (.tagvec cache/concept "
+              "embeddings absent) — keyword-only results", file=sys.stderr)
+        return []
+    try:
+        qvec = _embed_query_bge_m3(query)
+    except Exception as exc:
+        print("note: semantic backstop skipped (embedding backend "
+              "unavailable: {}) — keyword-only results".format(exc),
+              file=sys.stderr)
+        return []
+    ranked = sorted(
+        ((_cosine(qvec, vec), path) for path, vec in vectors if path not in exclude_paths),
+        key=lambda x: -x[0],
+    )
+    return ranked[:limit]
+
+
+def _semantic_hit_dicts(root, query, exclude_paths, limit, max_score):
+    """semantic_backstop() results, re-hydrated with title/type/description/
+    snippet (read from the concept's own file) into the same hit-dict shape
+    cmd_find's keyword loop produces, so both can be printed uniformly."""
+    terms = tokenize(query)
+    out = []
+    for cosine, path in semantic_backstop(root, query, exclude_paths, limit):
+        ap = os.path.join(root, path + ".md")
+        if not os.path.isfile(ap):
+            continue
+        fm, body = split_frontmatter(read_file(ap))
+        title = fm.get("title", path.rsplit("/", 1)[-1])
+        typ = fm.get("type", "")
+        desc = _dequote(fm.get("description", ""))
+        snip = make_snippet(body, terms)
+        out.append({
+            "score": round(cosine * max_score), "path": path, "title": title,
+            "type": typ, "desc": desc, "snip": snip, "provenance": "semantic",
+            "cosine": cosine,
+        })
+    return out
+
+
 def cmd_find(root, args):
     terms = tokenize(args.query)
     if not terms:
@@ -641,11 +754,21 @@ def cmd_find(root, args):
                     "type": t, "desc": desc, "snip": snip, "contrib": contrib,
                 })
     hits.sort(key=lambda h: -h["score"])
-    if not hits:
+    max_score = 6 * len(terms)
+
+    # 8c: semantic backstop — only as a fallback (zero hits, or a weak top
+    # hit), never overriding a strong keyword top-1 (Global Constraints).
+    semantic_hits = []
+    top_ratio = (hits[0]["score"] / max_score) if hits and max_score else 0.0
+    if not hits or top_ratio < SEMANTIC_FALLBACK_RATIO:
+        exclude = {h["path"] for h in hits}
+        semantic_hits = _semantic_hit_dicts(root, args.query, exclude, args.limit, max_score)
+
+    all_hits = hits + semantic_hits
+    if not all_hits:
         print("(no matches for: {})".format(args.query))
         return
-    max_score = 6 * len(terms)
-    for h in hits[: args.limit]:
+    for h in all_hits[: args.limit]:
         print("------")
         print("score: {}/{}".format(h["score"], max_score))
         print("title: {}".format(h["title"]))
@@ -653,8 +776,13 @@ def cmd_find(root, args):
         print("path: {}".format(h["path"]))
         print("description: {}".format(h["desc"]))
         print("body-snippet: {}".format(h["snip"]))
+        if h.get("provenance") == "semantic":
+            print("provenance: semantic (cosine={:.2f})".format(h["cosine"]))
         if breakdown:
-            print("contrib: {}".format(_format_contrib(h["contrib"])))
+            if h.get("provenance") == "semantic":
+                print("contrib: semantic-only (cosine={:.2f}, no keyword field match)".format(h["cosine"]))
+            else:
+                print("contrib: {}".format(_format_contrib(h["contrib"])))
     print("------")
 
 

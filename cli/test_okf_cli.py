@@ -1429,5 +1429,140 @@ class FindScoreBreakdown(unittest.TestCase):
         self.assertNotIn("contrib:", out_flag_false)
 
 
+class SemanticBackstop(unittest.TestCase):
+    """P8/8c (okf-cli-8uaf, D04) — find's semantic pass is a best-effort
+    backstop: fires only on zero/weak keyword hits, degrades gracefully on
+    any failure (cache absent, backend unreachable), and never overrides a
+    strong keyword top-hit."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self._w("b/near.md", "Near Concept", [], "alpha beta near-body prose.\n")
+        self._w("b/far.md", "Far Concept", [], "alpha beta far-body prose.\n")
+        self._w("b/strong.md", "Zqxstrong Sanity", ["zqxstrong"],
+                "zqxstrong appears in title tags and body.\n")
+        self._orig_embed = okf._embed_query_bge_m3
+        self._orig_cosine = okf._cosine
+
+    def tearDown(self):
+        import shutil
+        okf._embed_query_bge_m3 = self._orig_embed
+        okf._cosine = self._orig_cosine
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, title, tags, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: Concept\ntitle: {}\ntags: [{}]\ndescription: d\n---\n"
+                "# Untitled\n\n{}".format(title, ", ".join(tags), body)
+            )
+
+    def _make_tagvec(self, rows):
+        db = os.path.join(self.tmp, ".tagvec", "tag_vectors.sqlite")
+        os.makedirs(os.path.dirname(db), exist_ok=True)
+        import sqlite3, struct
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE concept_emb(key TEXT PRIMARY KEY, path TEXT, "
+            "model TEXT, dim INT, vec BLOB)"
+        )
+        for key, path, vec in rows:
+            conn.execute(
+                "INSERT INTO concept_emb VALUES (?,?,?,?,?)",
+                (key, path, "bge-m3", len(vec), struct.pack("<{}f".format(len(vec)), *vec)),
+            )
+        conn.commit()
+        conn.close()
+        return db
+
+    def _run(self, query, **kw):
+        import io, contextlib, types
+        args = types.SimpleNamespace(
+            query=query, limit=10, type=None, tag=None, scope=None,
+            bundle=None, breakdown=False,
+        )
+        for k, v in kw.items():
+            setattr(args, k, v)
+        out_buf, err_buf = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+            okf.cmd_find(self.tmp, args)
+        return out_buf.getvalue(), err_buf.getvalue()
+
+    def test_no_tagvec_cache_degrades_gracefully(self):
+        out, err = self._run("zzz-no-keyword-match-zzz")
+        self.assertIn("(no matches", out)
+        self.assertIn("semantic backstop skipped", err)
+
+    def test_empty_concept_emb_table_degrades_gracefully(self):
+        self._make_tagvec([])
+        out, err = self._run("zzz-no-keyword-match-zzz")
+        self.assertIn("(no matches", out)
+        self.assertIn("semantic backstop skipped", err)
+
+    def test_embedding_backend_failure_degrades_gracefully(self):
+        self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
+
+        def _raise(_text):
+            raise OSError("connection refused")
+        okf._embed_query_bge_m3 = _raise
+        out, err = self._run("zzz-no-keyword-match-zzz")
+        self.assertIn("(no matches", out)
+        self.assertIn("semantic backstop skipped", err)
+
+    def test_zero_keyword_hit_is_rescued_with_provenance(self):
+        self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
+        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        out, err = self._run("zzz-no-keyword-match-zzz")
+        self.assertIn("path: b/near", out)
+        self.assertIn("provenance: semantic", out)
+
+    def test_strong_keyword_top_hit_is_never_overridden(self):
+        # Backend guarded to raise if ever called — proves the semantic
+        # pass does not even fire when the keyword top hit is strong.
+        self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
+
+        def _must_not_be_called(_text):
+            raise AssertionError("semantic backstop must not fire on a strong hit")
+        okf._embed_query_bge_m3 = _must_not_be_called
+        out, err = self._run("zqxstrong")
+        lines = out.splitlines()
+        self.assertEqual(lines[4], "path: b/strong")  # Top-1
+        self.assertNotIn("provenance: semantic", out)
+
+    def test_semantic_rescue_ranks_nearer_concept_first(self):
+        self._make_tagvec([
+            ("k1", "b/near", [1.0, 0.0]),
+            ("k2", "b/far", [0.1, 0.99]),
+        ])
+        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        out, _err = self._run("zzz-no-keyword-match-zzz")
+        paths = [line[len("path: "):] for line in out.splitlines()
+                 if line.startswith("path: ")]
+        self.assertEqual(paths, ["b/near", "b/far"])
+
+    def test_mutation_self_test_inverted_cosine_breaks_ranking(self):
+        """LL-01 forward-guard: prove the ranking assertion actually
+        detects a broken fusion — invert cosine, watch the order assertion
+        fail, then revert."""
+        self._make_tagvec([
+            ("k1", "b/near", [1.0, 0.0]),
+            ("k2", "b/far", [0.1, 0.99]),
+        ])
+        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        orig_cosine = okf._cosine
+        okf._cosine = lambda a, b: -orig_cosine(a, b)
+        try:
+            out, _err = self._run("zzz-no-keyword-match-zzz")
+            paths = [line[len("path: "):] for line in out.splitlines()
+                     if line.startswith("path: ")]
+            with self.assertRaises(AssertionError):
+                self.assertEqual(paths, ["b/near", "b/far"])
+        finally:
+            okf._cosine = orig_cosine
+
+
 if __name__ == "__main__":
     unittest.main()
