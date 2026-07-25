@@ -1,11 +1,11 @@
 ---
 # okf-cli-6gq6
 title: P12 — Re-measure + regression gate
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T19:35:02Z
+updated_at: 2026-07-25T20:34:39Z
 parent: okf-cli-s3ee
 blocked_by:
     - okf-cli-5qmn
