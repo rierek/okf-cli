@@ -81,22 +81,36 @@ class AggregateMetricsPureUnitTest(unittest.TestCase):
     per_row list. No subprocess, no catalogue, no golden.json: this must
     keep passing even if the real catalogue or golden fixtures change."""
 
+    # Splits are deliberately ASYMMETRIC (2/1, never 1/1): with a 50/50
+    # split, inverting a predicate (rank == 1 -> rank != 1, correct ->
+    # not correct, zero-hit -> non-zero-hit) yields the same mean and the
+    # mutation passes undetected (LL-04, P12 prelude from P5 review).
     PER_ROW = [
-        # find/literal (n=2) -> recall_at_1, recall_at_5, mrr,
-        # zero_hit_rate_literal, mean_score_ratio
+        # find/literal (n=3, 2x rank-1 / 1x rank-4) -> recall_at_1,
+        # recall_at_5, mrr, zero_hit_rate_literal, mean_score_ratio
         {"id": "lit-top1", "verb": "find", "class": "literal",
          "expect": "hit", "rank": 1, "score_ratio": 1.0, "correct": True},
+        {"id": "lit-top1b", "verb": "find", "class": "literal",
+         "expect": "hit", "rank": 1, "score_ratio": 0.55, "correct": True},
         {"id": "lit-rank4", "verb": "find", "class": "literal",
          "expect": "hit", "rank": 4, "score_ratio": 0.25, "correct": True},
-        # find/paraphrase (n=2) -> zero_hit_rate_paraphrase
+        # find/paraphrase (n=3, 2x zero-hit / 1x rank-2)
+        # -> zero_hit_rate_paraphrase
         {"id": "para-hit", "verb": "find", "class": "paraphrase",
          "expect": "miss", "rank": 2, "score_ratio": 0.5,
          "correct": False},
         {"id": "para-zero", "verb": "find", "class": "paraphrase",
          "expect": "miss", "rank": float("inf"), "score_ratio": 0.0,
          "correct": True},
-        # list/location (n=2) -> location_correct_rate
+        {"id": "para-zero-b", "verb": "find", "class": "paraphrase",
+         "expect": "miss", "rank": float("inf"), "score_ratio": 0.0,
+         "correct": True},
+        # list/location (n=3, 2x correct / 1x wrong)
+        # -> location_correct_rate
         {"id": "loc-correct", "verb": "list", "class": "location",
+         "expect": "miss", "rank": float("inf"), "score_ratio": None,
+         "correct": True},
+        {"id": "loc-correct-b", "verb": "list", "class": "location",
          "expect": "miss", "rank": float("inf"), "score_ratio": None,
          "correct": True},
         {"id": "loc-wrong", "verb": "list", "class": "location",
@@ -131,13 +145,13 @@ class AggregateMetricsPureUnitTest(unittest.TestCase):
                 "metadata_hit_rate",
             },
         )
-        self.assertEqual(metrics["recall_at_1"], 0.5)
+        self.assertEqual(metrics["recall_at_1"], 2.0 / 3.0)
         self.assertEqual(metrics["recall_at_5"], 1.0)
-        self.assertEqual(metrics["mrr"], 0.625)
+        self.assertEqual(metrics["mrr"], 0.75)
         self.assertEqual(metrics["zero_hit_rate_literal"], 0.0)
-        self.assertEqual(metrics["zero_hit_rate_paraphrase"], 0.5)
-        self.assertEqual(metrics["mean_score_ratio"], 0.625)
-        self.assertEqual(metrics["location_correct_rate"], 0.5)
+        self.assertEqual(metrics["zero_hit_rate_paraphrase"], 2.0 / 3.0)
+        self.assertAlmostEqual(metrics["mean_score_ratio"], 0.6)
+        self.assertEqual(metrics["location_correct_rate"], 2.0 / 3.0)
         self.assertEqual(metrics["metadata_hit_rate"], 2.0 / 3.0)
 
 
