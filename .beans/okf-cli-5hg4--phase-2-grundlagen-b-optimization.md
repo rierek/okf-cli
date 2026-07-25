@@ -1,11 +1,11 @@
 ---
 # okf-cli-5hg4
 title: 'Phase 2 — Grundlagen-B: optimization'
-status: todo
+status: in-progress
 type: epic
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T18:13:10Z
+updated_at: 2026-07-25T19:20:36Z
 parent: okf-cli-wuiv
 ---
 
