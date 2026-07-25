@@ -24,7 +24,7 @@
 | Dxx | Decision | Status |
 |-----|----------|--------|
 | D04 | Retrieval strategy = **hybrid**: keyword primary + semantic backstop in `find`; `.tagvec` provenance first (T08), then activate or extend to body-embeddings | 🟢 |
-| D05 | MCP parity = only agent-relevant gaps. Candidates check/tags/refs — but check+refs are already registered (okf_mcp.py:91-104); the real gap is `tags`. Write/admin verbs stay CLI-only by intent | 🟢 |
+| D05 | MCP parity = only agent-relevant gaps. Candidates check/tags/refs — but check (okf_mcp.py:91-94) + refs (okf_mcp.py:101-104) are already registered; the real gap is `tags`. Write/admin verbs stay CLI-only by intent | 🟢 |
 | D06 | B01 root cause = integration gap at MCP→subprocess boundary → plan adds a subprocess-level integration test layer (T09) | 🟢 |
 | D07 | `okf-cli-mcp-overview.md` stays the canonical reference — de-stale it, do not replace with pure `--help` generation | 🟢 |
 | D09 | **Eval-first**: keyword baseline (S1–S4, 2 query classes) frozen BEFORE WS1; success = metric delta; Modus A mechanical = metric basis | 🟢 |
@@ -48,7 +48,7 @@
 
 **Created (measurement):**
 - `cli/eval/runner.py` — mechanical eval runner (Modus A): reads golden file, invokes `find`/`list`/`index`, scores, emits metric table (Task 4).
-- `cli/eval/golden.yaml` — `query → expected concept path + threshold`, per fixture × {literal, paraphrase} (Task 3).
+- `cli/eval/golden.json` — `query → expected concept path + threshold`, per fixture × {literal, paraphrase} (Task 3; JSON not YAML to stay stdlib-only).
 - `cli/eval/fixtures.py` — seed/teardown of the S1–S4 hidden fake concepts in the real catalogue (Task 2).
 - `cli/eval/results/baseline-<catalogue-rev>.json` — frozen keyword baseline (Task 5).
 - `cli/eval/results/hybrid-<catalogue-rev>.json` — post-WS1 re-measurement (Task 12).
@@ -67,29 +67,30 @@
 
 ## Sequencing (blocked_by → beans)
 
+Labels below are **Plan-task numbers** (`Task N`, abbreviated `P<N>` in the diagram) — NOT the Think-collection `Txx` IDs (TASKS.md). Mapping to Think-IDs is in each task heading.
+
 ```
 Phase 1 (Grundlagen-A) ── all independent, parallelizable ────────────┐
-  T1 B01-fix ─┐                                                        │
-  T6 integ-tests (needs T1 to assert the fixed contract) ← T1         │
-  T2 fixtures-seed ─┐                                                  │
-  T3 golden-file  ← T2                                                 │
-  T4 eval-runner  ─┘ (parallel to T2/T3, joins at T5)                 │
-  T5 FREEZE baseline ← T2,T3,T4  ◄── hard gate: nothing in Phase 2    │
+  P1 B01-fix ─┐                                                        │
+  P6 integ-tests (needs P1 to assert the fixed contract) ← P1         │
+  P2 fixtures-seed ─┐                                                  │
+  P3 golden-file  ← P2                                                 │
+  P4 eval-runner  ─┘ (parallel to P2/P3, joins at P5)                 │
+  P5 FREEZE baseline ← P2,P3,P4  ◄── hard gate: nothing in Phase 2    │
                                      may run until baseline frozen     │
                                                                        ▼
-Phase 2 (Grundlagen-B) ── after T5 ──────────────────────────────────
-  T7 .tagvec provenance ─┐
-  T8 hybrid find        ← T7  (semantic fallback + filters + score breakdown)
-  T9 (== T8, same file; kept as one task — see Task 8)
-  T10 MCP tags-parity   ── independent, parallel
-  T11 root-safety       ── independent, parallel
+Phase 2 (Grundlagen-B) ── after P5 ──────────────────────────────────
+  P7 .tagvec provenance ─┐
+  P8 hybrid find        ← P7  (semantic fallback + filters + score breakdown)
+  P10 MCP tags-parity   ── independent, parallel
+  P11 root-safety       ── independent, parallel
                                                                        ▼
-Phase 3 (Test-Coordinator) ── after T8 ──────────────────────────────
-  T12 re-measure + regression gate ← T5,T8   (own bean)
-  T13 Modus B agentic check ← T12            (own bean, SEPARATE session)
+Phase 3 (Test-Coordinator) ── after P8 ──────────────────────────────
+  P12 re-measure + regression gate ← P5,P8   (own bean)
+  P13 Modus B agentic check ← P12            (own bean, SEPARATE session)
                                                                        ▼
-Phase 4 (Docs, trailing) ── after T12 green ─────────────────────────
-  T14 de-stale overview.md ← T8,T10,T11
+Phase 4 (Docs, trailing) ── after P12 green ─────────────────────────
+  P14 de-stale overview.md ← P8,P10,P11
 ```
 
 Numbering below is task-execution order. The **baseline freeze (Task 5) is the pivot**: every retrieval change lives after it so its effect is a measurable delta (D09).
@@ -100,7 +101,7 @@ Numbering below is task-execution order. The **baseline freeze (Task 5) is the p
 
 ## Task 1: Fix B01 — `--json` contract for `index` + `list`
 
-**Root cause (grounded):** `mcp/okf_mcp.py:15-16` marks `index`/`list` as `supports_json=True`, so `build_argv` appends `--json` (okf_mcp.py:39-40) and `run_okf` does `json.loads(out)` (okf_mcp.py:60-61). But the CLI argparse for `index` (okf-cli.py:1884-1888) and `list` (okf-cli.py:1889-1893) declares **no** `--json` flag → argparse exits non-zero → MCP raises `RuntimeError`. `check` (okf-cli.py:1970) and `refs` (okf-cli.py:1914) already have `--json`, so they are intact.
+**Root cause (grounded):** `mcp/okf_mcp.py:11-12` marks `index`/`list` as `supports_json=True` (the `_COMMANDS` dict, okf_mcp.py:7-17), so `build_argv` appends `--json` (okf_mcp.py:39-40) and `run_okf` does `json.loads(out)` (okf_mcp.py:60-61). But the CLI argparse for `index` (okf-cli.py:1884-1888) and `list` (okf-cli.py:1889-1893) declares **no** `--json` flag → argparse exits non-zero → MCP raises `RuntimeError`. `check` (okf-cli.py:1970) and `refs` (okf-cli.py:1914) already have `--json`, so they are intact.
 
 **Files:**
 - Modify: `cli/okf-cli.py:1884-1893` (add `--json` to `index` + `list` parsers)
@@ -179,11 +180,12 @@ pi.add_argument("--json", action="store_true", help="machine-readable output")
 - Test: `cli/test_eval_fixtures.py`
 
 **Interfaces:**
-- Produces: `SEED_TOKEN: str`, `FIXTURES: list[Fixture]` (each `Fixture(sz, rel_path, title, type, tags, body, correct_bundle)`), `seed(catalogue_root) -> list[str]` (returns written abs paths), `teardown(catalogue_root) -> list[str]` (returns removed paths; idempotent). Consumed by the golden file (Task 3) and runner (Task 4).
+- Produces: `SEED_TOKEN: str`, `FIXTURES: list[Fixture]` (each `Fixture(sz, rel_path, title, type, tags, body, correct_bundle)`), `seed(catalogue_root) -> list[str]` (returns written abs paths), `teardown(catalogue_root) -> list[str]` (returns removed paths; idempotent), **and a `__main__` argparse CLI** `python3 fixtures.py --root <cat> {--seed|--teardown}` (default root = the canonical catalogue). Consumed by the golden file (Task 3), runner (Task 4), and invoked as a CLI from Tasks 5/12.
 
 **Acceptance:**
 - WHEN `seed(root)` runs, THE module SHALL write exactly one `.md` per fixture (S1–S4) under real bundles, each reachable by `iter_concepts` (okf-cli.py:89-98).
 - WHEN `teardown(root)` runs after any partial seed, THE module SHALL remove every `_`-prefixed fixture file it owns and leave no fixture residue (idempotent).
+- WHEN invoked as `python3 fixtures.py --root <cat> --seed` / `--teardown`, THE module SHALL run the matching function and print the affected paths (this is the entrypoint Tasks 5/12 call).
 - THE seed token SHALL NOT appear in any real catalogue concept (verified by a pre-seed `find` returning zero hits for the token).
 
 - [ ] **Step 1: Write failing test** — `test_seed_then_teardown_is_clean`: assert token has 0 hits before seed (via `okf.cmd_find`), 4 fixture files exist after `seed`, 0 fixture files after `teardown`.
@@ -192,9 +194,11 @@ pi.add_argument("--json", action="store_true", help="machine-readable output")
 
 - [ ] **Step 3: Implement `fixtures.py`** — define `SEED_TOKEN`, the four `Fixture` records with the placement table above, `seed()` writing frontmatter+body, `teardown()` globbing the owned `_`-prefixed paths and unlinking. Choose real target bundles from `list_bundles(root)` deterministically (e.g. first two bundles for S1/S3/S4 correct-bundle, a different bundle for S2 wrong-bundle).
 
-- [ ] **Step 4: Run test** → PASS.
+- [ ] **Step 4: Add the `__main__` CLI** — `argparse` with `--root` (default canonical catalogue) + mutually-exclusive `--seed`/`--teardown`; dispatch to the matching function and print affected paths. Add a test asserting `--teardown` after `--seed` leaves zero residue.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(eval): seed/teardown hidden golden fixtures S1-S4"`
+- [ ] **Step 5: Run test** → PASS.
+
+- [ ] **Step 6: Commit** — `git commit -m "feat(eval): seed/teardown hidden golden fixtures S1-S4"`
 
 ---
 
@@ -211,9 +215,10 @@ pi.add_argument("--json", action="store_true", help="machine-readable output")
 
 **Acceptance:**
 - THE golden file SHALL contain ≥2 rows per fixture (one `literal`, one `paraphrase`) plus the S4 index-walk and S1/S4 `list`-metadata rows from EVAL-DESIGN.md:27-32.
+- THE golden file SHALL contain an explicit **S2 location row**: `list --scope=<correct-bundle>` expected to MISS the S2 fixture (it lives in the wrong bundle) — the comparative core of S2's location-blindness finding (EVAL-DESIGN.md:12,16-17). Each `list` row carries an `expect` field (`hit`/`miss`) so the runner can score location-correctness and metadata-hit.
 - EACH row SHALL name the verb (`find`/`list`/`index`) and the expected concept path.
 
-- [ ] **Step 1: Write `golden.yaml`** with the literal + paraphrase queries for S1–S4, the S4 index-walk row (verb `index`, expected concept listed in bundle TOC), and the Ziel-3 `list` rows (S1 correct type/tag hit, S4 expected miss). No stdlib YAML — either add a tiny hand-rolled parser in the runner or use JSON (`golden.json`) to stay dependency-free. **Decision: use `golden.json`** (stdlib `json`, no PyYAML dependency — honors the no-deps constraint).
+- [ ] **Step 1: Write `golden.yaml`** with the literal + paraphrase queries for S1–S4, the S4 index-walk row (verb `index`, expected concept listed in bundle TOC), the Ziel-3 `list` rows (S1 correct type/tag hit, S4 expected miss), and the **S2 `list --scope=<correct-bundle>` expected-miss row**. No stdlib YAML — either add a tiny hand-rolled parser in the runner or use JSON (`golden.json`) to stay dependency-free. **Decision: use `golden.json`** (stdlib `json`, no PyYAML dependency — honors the no-deps constraint).
 
 - [ ] **Step 2: Commit** — `git commit -m "feat(eval): add golden.json query set for S1-S4"`
 
@@ -231,10 +236,11 @@ pi.add_argument("--json", action="store_true", help="machine-readable output")
 
 **Interfaces:**
 - Consumes: `fixtures.seed/teardown` (Task 2), `golden.json` (Task 3).
-- Produces: `run(catalogue_root, golden_path) -> dict` returning `{catalogue_rev, per_row:[...], metrics:{recall_at_1, recall_at_5, mrr, zero_hit_rate_literal, zero_hit_rate_paraphrase, mean_score_ratio}}`. `main()` CLI: `python3 runner.py --root <cat> --golden golden.json [--out results/x.json]`. Invokes `find`/`list`/`index` via `subprocess` against `okf-cli.py` (real process path — same boundary the MCP uses, so the runner doubles as a smoke of that path).
+- Produces: `run(catalogue_root, golden_path) -> dict` returning `{catalogue_rev, per_row:[...], metrics:{recall_at_1, recall_at_5, mrr, zero_hit_rate_literal, zero_hit_rate_paraphrase, mean_score_ratio, location_correct_rate, metadata_hit_rate}}`. `location_correct_rate` scores the S2 `list --scope` rows (expected miss counts as location-correct); `metadata_hit_rate` scores the Ziel-3 `list(type,tag)` rows (S1 hit / S4 miss, EVAL-DESIGN.md:31,41-42). `main()` CLI: `python3 runner.py --root <cat> --golden golden.json [--out results/x.json]`. Invokes `find`/`list`/`index` via `subprocess` against `okf-cli.py` (real process path — same boundary the MCP uses, so the runner doubles as a smoke of that path).
 
 **Acceptance:**
-- WHEN `run()` executes against a seeded catalogue, THE runner SHALL emit all six metrics and a per-row rank for every golden query.
+- WHEN `run()` executes against a seeded catalogue, THE runner SHALL emit all eight metrics (six retrieval + `location_correct_rate` + `metadata_hit_rate`) and a per-row rank for every golden query.
+- WHEN scoring a `list` row, THE runner SHALL compare actual hit/miss against the row's `expect` field and fold it into `location_correct_rate` (S2) or `metadata_hit_rate` (Ziel-3).
 - THE runner SHALL record the catalogue git rev (`git -C <root> rev-parse --short HEAD`) into the result blob so a baseline is traceable to catalogue state.
 - WHEN a query returns zero hits, THE runner SHALL record rank=∞ and count it toward the class-appropriate zero-hit-rate (never crash).
 
@@ -352,11 +358,11 @@ class McpSubprocessBoundary(unittest.TestCase):
 
 **Files:**
 - Modify: `cli/okf-cli.py:538-574` (`cmd_find`) + argparse `pf` (okf-cli.py:1894-1896)
-- Modify: `mcp/okf_mcp.py:67-69` (`okf_find` — expose new filter params)
-- Test: `cli/test_okf_cli.py`
+- Modify: `mcp/okf_mcp.py:67-69` (`okf_find` tool — expose new filter params) **AND** `mcp/okf_mcp.py:18-19` (`_FLAGS` dict — register `scope`/`bundle` so `build_argv` marshals them; `type`/`tag` already present at :19). Without the `_FLAGS` entry, `build_argv` (okf_mcp.py:33-35) silently drops `scope`/`bundle` — a silent-failure bug, not an exception.
+- Test: `cli/test_okf_cli.py`, `cli/test_okf_mcp.py` (assert `scope`/`bundle` reach the CLI over subprocess)
 
 **Interfaces:**
-- Produces: `find` gains `--type`, `--tag`, `--scope`, `--bundle` (filter composition), `--breakdown` (per-field/term score), and a semantic fallback controlled by a threshold constant. `okf_find` MCP tool gains `type`, `tag`, `scope`, `bundle` optional params.
+- Produces: `find` gains `--type`, `--tag`, `--scope`, `--bundle` (filter composition), `--breakdown` (per-field/term score), and a semantic fallback controlled by a threshold constant. `okf_find` MCP tool gains `type`, `tag`, `scope`, `bundle` optional params; `_FLAGS` extended with `"scope": "--scope", "bundle": "--bundle"` (okf_mcp.py:19).
 - Consumes: `.tagvec` reader (stdlib sqlite3) — **graceful skip if cache absent** (Global Constraints).
 
 ### 8a — Search+filter composition (FIL03/FIL04)
@@ -370,7 +376,8 @@ class McpSubprocessBoundary(unittest.TestCase):
 - [ ] **Step 1:** Failing test `test_find_scoped_by_type_excludes_other_types`.
 - [ ] **Step 2:** Verify fail.
 - [ ] **Step 3:** Add `--type/--tag/--scope/--bundle` to `pf`; in `cmd_find`, replace the bare `list_bundles(root)` loop (okf-cli.py:544) with a scope/type/tag pre-filter before scoring.
-- [ ] **Step 4:** Test → PASS. **Step 5:** hold commit until 8c (shared file).
+- [ ] **Step 4:** Register `scope`/`bundle` in `_FLAGS` (okf_mcp.py:19) and add the four params to the `okf_find` tool signature (okf_mcp.py:67); add a `test_okf_mcp.py` case asserting `--scope` reaches the CLI over subprocess.
+- [ ] **Step 5:** Test → PASS. **Step 6:** hold commit until 8c (shared file).
 
 ### 8b — Score breakdown transparency (SCO03)
 
@@ -406,7 +413,7 @@ class McpSubprocessBoundary(unittest.TestCase):
 
 ## Task 10: MCP parity — register `okf_tags` (T02, D05)
 
-**Grounded (RET12, D05):** MCP already exposes find/read/toc/index/list/check/reindex/refs/rename (okf_mcp.py:65-115). Of the D05 candidates check/tags/refs, **check + refs are already registered** — the only real agent-relevant gap is `tags` (CLI-only, okf-cli.py:1939-1948). Write/admin verbs (merge-tags, normalize-tags, fix-*, rename-writes, log, visualize, prime, info) stay CLI-only by intent (documented in Task 14).
+**Grounded (RET12, D05):** MCP already exposes find/read/toc/index/list/check/reindex/refs/rename (okf_mcp.py:65-115). Of the D05 candidates check/tags/refs, **check (okf_mcp.py:91-94) + refs (okf_mcp.py:101-104) are already registered** — the only real agent-relevant gap is `tags` (CLI-only, okf-cli.py:1939-1948). Write/admin verbs (merge-tags, normalize-tags, fix-*, rename-writes, log, visualize, prime, info) stay CLI-only by intent (documented in Task 14).
 
 **Files:**
 - Modify: `mcp/okf_mcp.py:7-17` (`_COMMANDS`) + `:65-115` (register tool)
@@ -454,7 +461,7 @@ class McpSubprocessBoundary(unittest.TestCase):
 - Create: `cli/eval/gate.py` — loads baseline + hybrid result, prints per-metric/per-scenario delta table, exits non-zero if any guard metric regressed.
 
 **Acceptance:**
-- THE gate SHALL compute per-metric delta (baseline vs hybrid) and per-scenario delta (S1–S4 × literal/paraphrase).
+- THE gate SHALL compute per-metric delta (baseline vs hybrid) across all eight metrics — including `location_correct_rate` (S2) and `metadata_hit_rate` (Ziel-3) — and per-scenario delta (S1–S4 × literal/paraphrase).
 - THE gate SHALL FAIL (exit non-zero) if paraphrase zero-hit-rate did not decrease OR if any literal S1 recall regressed.
 - THE re-measurement SHALL write a NEW result file (baseline immutability, Global Constraints).
 
@@ -515,7 +522,8 @@ class McpSubprocessBoundary(unittest.TestCase):
 ## Self-Review
 
 **Spec coverage (DESIGN.md phases → tasks):**
-- Phase 1 Grundlagen-A: T10 eval-runner → Task 4; T11 fixtures → Task 2; T12 freeze → Task 5; T01 B01 → Task 1; T09 integ-tests → Task 6. ✅
+- Phase 1 Grundlagen-A: T11 fixtures → Task 2; golden-file authoring → Task 3; T10 eval-runner → Task 4; T12 freeze → Task 5; T01 B01 → Task 1; T09 integ-tests → Task 6. ✅
+- Note (Q01): Think-collection TASKS.md skips T07 (IDs jump T06→T08); no plan task is missing as a result — QUESTIONS.md:9 references "T07/T09" but only T09 exists. Provenance quirk in the Think session, flagged not blocking.
 - Phase 2 Grundlagen-B: T08 provenance → Task 7; WS1 hybrid (fallback+FIL03/04+SCO03) → Task 8; T02 parity → Task 10; T03 root-safety → Task 11. ✅
 - Phase 3 Test-Coordinator: re-eval+gate → Task 12 (own bean); Modus B → Task 13 (own bean, separate session). ✅
 - Phase 4 Docs: T04 → Task 14; T05 → Task 15 (optional). ✅
