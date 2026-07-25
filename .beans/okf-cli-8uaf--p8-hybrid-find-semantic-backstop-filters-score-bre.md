@@ -7,7 +7,7 @@ priority: normal
 tags:
     - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T20:09:29Z
+updated_at: 2026-07-25T20:28:30Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-3geg
@@ -298,3 +298,105 @@ branch (created before the reset sequence) deleted after parity was
 confirmed. No supervisor content was lost; the P8 deliverable itself was
 never at risk (rebuilt from the original, correctly-scoped commits via
 `git cherry-pick`, not reconstructed from memory).
+
+
+## CORRECTION 2026-07-25 (post-review F01, blocking — supersedes prior fusion-gate claims)
+
+**Reviewer finding (reproduced, blocking):** the original gate compared the
+keyword top-1's RAW score against an ABSOLUTE fraction of the theoretical
+max (`score/max_score < SEMANTIC_FALLBACK_RATIO=0.5`). This repo's OWN
+golden fixtures (`cli/eval/golden.json`) have literal `min_score_ratio`
+0.25-0.55 — BELOW 0.5 by construction, because a legitimate multi-term
+partial title/tag match is a confident top-1, not a weak one; the ratio is
+a function of term count and per-field weighting, not of actual retrieval
+confidence. Concretely: `s1-literal` ("zqxeval ceiling") scores 5/12
+(0.417) and `s2-literal` ("zqxeval wrong bundle") scores 6/18 (0.333) —
+both below the old 0.5 threshold, so the backstop fired for BOTH real
+literal fixtures once `concept_emb` exists, and the fusion step (plain
+score-interleave, no pin) let an unrelated semantic candidate at ordinary
+model-noise cosine (~0.7, converting to a HIGHER raw score than the
+literal's own 5/12 or 6/18) outrank the correct concept at rank 1. This
+falsified the EARS line "never replacing a strong keyword top-hit (S1
+literal stays Top-1)" and the (now superseded) Notes-for-T(n+1) claim below
+that "literal rows UNCHANGED by construction" — that claim assumed the old
+absolute-ratio gate would never fire for literal rows, which was false.
+
+**Superseded claim (left verbatim below, not deleted):** the original
+"Notes for T(n+1)" section's bullet "Literal S1-S4 ... are UNCHANGED — the
+semantic pass never fires when the keyword top hit is strong (ratio >=
+0.5), which is true for every literal-class golden row by construction."
+is WRONG for this repo's actual fixture ratios and is superseded by the
+fix below.
+
+**Fix, two independent layers (commit `c646605`):**
+1. **Gate redesign (margin, not absolute ratio).** `_keyword_top1_is_confident()`
+   compares the keyword top-1's score against the RUNNER-UP's score:
+   confident (skip backstop) when `(top1 - top2) / top1 >=
+   SEMANTIC_MARGIN_RATIO (0.5)`, i.e. top1 at least doubles the runner-up.
+   Zero hits always fire; a single hit (no runner-up to be ambiguous
+   against) is trusted as-is. This correctly stops firing on a genuinely
+   dominant literal hit (rare token, few/no competing matches) regardless
+   of its absolute ratio, and correctly keeps firing on real
+   ambiguity/noise (many near-tied weak matches, e.g. a generic-word
+   paraphrase query against ~4000 real concepts).
+2. **Absolute pin (defense-in-depth, not gate-dependent).** Whenever `hits`
+   (keyword) is non-empty, `hits[0]` is UNCONDITIONALLY placed at rank 1 of
+   the final output — the remaining keyword hits plus all semantic hits are
+   interleaved by score from rank 2 down. This makes "never replacing a
+   strong keyword top-hit" an absolute invariant independent of the gate's
+   tuning, so a future gate mistune (or a pathological cosine value) can
+   never again displace an existing keyword top-1, only ever compete for
+   rank 2+.
+
+**RED proof (reviewer's exact repro, reconstructed as a permanent test):**
+`SemanticBackstop.test_near_threshold_literal_top1_survives_unrelated_semantic`
+— literal top-1 at ratio 5/12=0.417 (`b/top1`), a close keyword runner-up
+at 4/12 (`b/rival`, margin 0.2 < 0.5 so the gate DOES fire — the genuinely
+ambiguous case), and an unrelated semantic candidate stubbed at cosine=0.7
+(`b/unrelated`, converts to 8/12 > 5/12). Verified RED against the
+pre-fix code via `git stash` (temporarily reverting `cli/okf-cli.py` only):
+`AssertionError: 'path: b/unrelated' != 'path: b/top1'` — exactly the
+rank-1 displacement the reviewer reported. Restored the fix
+(`git stash pop`), re-ran green. All pre-existing `SemanticBackstop` tests
+(S3 zero-hit rescue, crowd-out guard, mutation self-test, graceful
+degradation) stayed green throughout — 178 tests total (was 177), 19F/2E
+unchanged.
+
+**Real-catalogue re-validation (not just unit tests):** re-seeded S1-S4
+into the live Knowledge-Catalogue, produced `concept_emb` (bge-m3) for all
+four fixtures across both bundles (`agent-memory`, `ai-wiki`) into a
+scratch copy, swapped it into the live `.tagvec` path, then ran the ACTUAL
+`s1-literal`/`s2-literal` golden queries against the real catalogue with
+the fixed code:
+- `find "zqxeval ceiling"` → rank 1 = `agent-memory/_okfeval-s1` (5/12),
+  `provenance: semantic` absent from rank 1 (gate fired per the margin
+  check — top2 was 4/12 — but the pin held).
+- `find "zqxeval wrong bundle"` → rank 1 = `ai-wiki/_okfeval-s2` (6/18).
+Both literal fixtures land at rank 1 exactly as the frozen baseline
+expects, WITH the semantic backstop live and firing. Restored the live
+`.tagvec` cache from the pristine backup (md5-verified identical,
+`0ad92871cfc0a13cdb5baadefdc21ce2`) and tore down the fixtures; catalogue
+`git status --short` = 0 lines afterward.
+
+**Corrected fusion semantics for P12 (supersedes the prior Notes-for-T(n+1)
+"literal rows UNCHANGED" claim):**
+- Whenever keyword `find` returns AT LEAST ONE hit, that hit's rank-1
+  position is now an absolute invariant — no golden literal row (S1/S2/S4)
+  can ever regress at `recall_at_1`/`mrr` due to the semantic backstop,
+  REGARDLESS of whether the gate fires for that query. This is stronger
+  than the prior (false) "gate never fires on literal rows" assumption —
+  P12 does not need the gate to stay silent on literals; the pin makes it
+  irrelevant either way.
+- The gate itself is now margin-based: it may fire MORE often than before
+  (any query with a close keyword runner-up, not just an absolutely-weak
+  top hit) or LESS often (a dominant literal hit with a weak/no runner-up
+  now correctly skips the network call entirely — an efficiency gain, not
+  just a correctness fix).
+- `zero_hit_rate_paraphrase`/S3-rescue behavior is UNCHANGED by this fix —
+  the zero-hit branch of the gate (`not hits`) was never the buggy path;
+  P12's S3-rescue expectation (rank 2/5 in the earlier real smoke) still
+  holds under the corrected code (re-verified: gate/pin change does not
+  alter the zero-hit branch's control flow at all).
+- `SEMANTIC_FALLBACK_RATIO` no longer exists; the new tunable is
+  `SEMANTIC_MARGIN_RATIO` (0.5, same constant name style, different
+  semantics — margin fraction, not absolute ratio) in `cli/okf-cli.py`.
