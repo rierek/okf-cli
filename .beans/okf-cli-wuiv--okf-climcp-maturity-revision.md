@@ -5,7 +5,7 @@ status: in-progress
 type: milestone
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T21:35:49Z
+updated_at: 2026-07-25T22:16:14Z
 ---
 
 Raise okf-cli + okf-mcp maturity at its three weak edges — retrieval semantics, MCP->subprocess correctness, root-safety — with every retrieval change measured as a delta against a keyword baseline frozen BEFORE any optimization.
@@ -86,3 +86,13 @@ Live-Gegenprobe (PO): find "mockup tailscale" gegen echten Katalog fand serve-ex
 PO testete zusaetzlich: --tag tailscale filtert korrekt, aber 'mockup' kommt in keinem tailscale-getaggten Konzept literal vor (serve-excalidraw-drafts.md ist mit excalidraw/tailscale/export/remote-access getaggt, nicht mockup) -> 0 Treffer trotz Filter. 'mockup' ist zudem gar kein registrierter Tag (okf-cli tags mockup liefert nur entfernte Naeherungen: backup/mcp/molecule/mouse). Das Paraphrase-Problem (mockup vs excalidraw) besteht also auch auf TAG-Ebene, nicht nur in Titel/Body.
 
 Relevant fuer die Design-Entscheidung: die Tag-Embeddings (emb-Tabelle) sind -- anders als concept_emb -- bereits produktiv befuellt (752 bge-m3-Zeilen, diese Session). Ein Tag-Synonym-Backstop (Query-Term gegen Tag-Vektor-Naehe, z.B. mockup~excalidraw) waere ein guenstigerer, sofort einsetzbarer Hebel gegenueber der riskanteren concept_emb/Chunk-Frage oben -- nutzt bereits vorhandene, saubere Infrastruktur (keine Kontaminationsgefahr, da Slug-only-Embedding bereits bewaehrt ist), statt neue Dokument/Chunk-Embeddings einzufuehren. Wert als zusaetzliche Option (e) fuer Q03 pruefen: Tag-Vektor-Expansion der Query VOR dem Keyword-Scoring, orthogonal zur concept_emb-Frage.
+
+## Grilling 2026-07-26 -- Q01/Q02/Q04 entschieden
+
+D01 (Q01) 🟢 -- Eval misst index-walk (S4) nur ueber --json-Surface, keine index.md-Assertion. Fakt: bewusste, bereits dokumentierte Scope-Entscheidung (runner.py:22-24, P3-Review-Prelude 2026-07-25). Keine Aenderung.
+
+D02 (Q02) 🟢 -- --bundle bei find wird ENTFERNT, --scope bleibt einziger Filter-Flag (nicht nur Alias-Beibehaltung -- echte Streichung). Beide Flags loesen identisch ueber resolve_scopes() auf (okf-cli.py:796-798), reine API-Verdopplung. Folge-Task T01: --bundle aus find-Argparse (okf-cli.py:2228) + MCP _FLAGS (okf_mcp.py:21,83) + Test (test_okf_cli.py:1350) + Doku (okf-cli-mcp-overview.md:31,74) entfernen.
+
+D04 (Q04) 🟢 -- P15 (okf-cli-cfgj) gestrichen. P14 ist akzeptierter Endstand (20/20 Verben), kein Beleg fuer wiederkehrende Verb-Drift, die einen Generator rechtfertigt. Folge-Task T02: Bean okf-cli-cfgj auf scrapped setzen.
+
+Q03 bleibt gesondert offen (Design-Groesse Chunk-vs-Dokument-Embedding, nicht Teil dieser Grilling-Runde).
