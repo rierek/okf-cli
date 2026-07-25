@@ -532,5 +532,3 @@ class McpSubprocessBoundary(unittest.TestCase):
 **Placeholder scan:** semantic-backstop code (8c) is design-level, not literal — deliberately, because its exact surface (tag-only vs body embeddings) is gated on Task 7's recorded finding. This is a real dependency, not a placeholder: Task 7 produces the decision, Task 8c documents both branches. No "TBD"/"handle edge cases" left.
 
 **Type consistency:** `seed()/teardown()` (Task 2) ↔ used in Tasks 4/5/12. `run()` result shape (Task 4) ↔ consumed by `gate.py` (Task 12). `SEED_TOKEN`/`FIXTURES` (Task 2) ↔ golden.json (Task 3). `--json` shapes (Task 1) ↔ subprocess tests (Task 6). `find` filter params (Task 8) ↔ `okf_find` MCP params (Task 8). Consistent. ✅
-
-**Note:** `golden.yaml` in File Structure is superseded by `golden.json` (Task 3, no-deps decision) — the runner reads JSON.
