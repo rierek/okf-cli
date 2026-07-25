@@ -623,7 +623,7 @@ class FtsIndexBuild(unittest.TestCase):
             conn.close()
 ```
 
-Ensure `tempfile`, `shutil`, `sqlite3`, and `os` are imported in the test module.
+**Import convention — a deliberate departure.** `cli/test_okf_cli.py` imports only `importlib.util`, `os` and `unittest` at module level today; every other test imports `tempfile`/`shutil` locally inside the method that needs them (e.g. `cli/test_okf_cli.py:1372-1374`). The new suites in Tasks 5, 6, 7 and 11 need `tempfile`, `shutil`, `sqlite3`, `struct` and `json` across many methods. Add those five at module top level once and accept the style break — repeating five local imports in ~25 methods is worse. Do it here, in Task 5, so the later tasks find them already present.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -739,7 +739,7 @@ Next to the `reindex` subparser (line 2261), add:
                         "<root>/.fts/fts.sqlite (local only, no network)")
 ```
 
-In the dispatch dict (line 2321-2327), add `"build-index": cmd_build_index,`.
+In the dispatch dict (`cli/okf-cli.py:2321-2328`, the `[args.cmd](root, args)` call closes it on 2328), add `"build-index": cmd_build_index,`.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -858,14 +858,43 @@ class FindDegradesWithoutIndex(unittest.TestCase):
             with open(os.path.join(root, "b", "index.md"), "w",
                       encoding="utf-8") as f:
                 f.write("# B\n")
-            out = _run_find(root, ["tunnel"])
+            out = _run_find(root, "tunnel")
             self.assertIn("path: b/one", out)
             self.assertIn("score: 3/6", out)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 ```
 
-`_run_find(root, argv)` should invoke the CLI the way the module's existing CLI-level tests do — reuse that helper if one exists; otherwise add a thin `subprocess.run([sys.executable, CLI, "--root", root, "find", *argv], capture_output=True, text=True).stdout` wrapper.
+**`_run_find` does not exist yet — define it in this task.** The file's existing
+CLI-level `find` tests use a per-class in-process helper (`cli/test_okf_cli.py:1376-1387`):
+`types.SimpleNamespace` args, `okf.cmd_find(root, args)` under
+`redirect_stdout`/`redirect_stderr`. Tasks 10 and 11 reuse it, so lift that
+pattern to module level once, right above the first new test class:
+
+```python
+def _run_find(root, query, **kw):
+    """Module-level twin of the per-class _run() helper at
+    cli/test_okf_cli.py:1376 — same in-process convention (SimpleNamespace
+    args, cmd_find, redirected streams), but parameterised by root so the new
+    suites can each use their own temp catalogue. Returns stdout."""
+    import io
+    import contextlib
+    import types
+    args = types.SimpleNamespace(
+        query=query, limit=10, type=None, tag=None, scope=None,
+        breakdown=False,
+    )
+    for k, v in kw.items():
+        setattr(args, k, v)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+        okf.cmd_find(root, args)
+    return buf.getvalue()
+```
+
+In-process, not subprocess: that is the file's convention and it keeps the
+suite fast. The argument parser and the dispatch entry are covered separately
+by the subprocess smoke check in Task 5, Step 6.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -1000,26 +1029,37 @@ def _substring_ranking(root, query, terms, limit, type_filter=None,
 
 - [ ] **Step 5: Rewrite the lexical half of `cmd_find`**
 
-Replace `cmd_find`'s body from line 801 down to the `max_score = 6 * len(terms)` line with:
+Put the arm selection in its own function, so it can be called more than once (Task 11 needs a second pass) and so the two score scales travel with the branch that chooses them:
 
 ```python
-    ranked = _fts_ranking(root, args.query, args.limit, type_filter,
-                          tag_filter, target)
+def _rank_lexically(root, query, terms, limit, type_filter=None,
+                    tag_filter=None, scope=None):
+    """(hits, max_score) — the FTS arm when the index is usable, otherwise the
+    substring scan (D15). The two arms report on different scales, so the
+    scale is returned with the result instead of being recomputed by the
+    caller: 0..100 for BM25 (relative to this run's own top hit), and
+    6*len(terms) for the substring fallback, which keeps that path
+    byte-identical to pre-plan output."""
+    ranked = _fts_ranking(root, query, limit, type_filter, tag_filter, scope)
     if ranked is None:
-        # degradation: no usable index -> the pre-FTS scan, unchanged scale
-        lexical_hits = _substring_ranking(root, args.query, terms, args.limit,
-                                          type_filter, tag_filter, target)
-        max_score = 6 * len(terms)
-    else:
-        max_score = 100
-        top = ranked[0][1] if ranked else 1.0
-        lexical_hits = []
-        for path, s in ranked:
-            hit = _hydrate_hit(root, path, terms,
-                               int(round(100 * s / top)) if top else 0,
-                               "lexical")
-            if hit is not None:
-                lexical_hits.append(hit)
+        return (_substring_ranking(root, query, terms, limit, type_filter,
+                                   tag_filter, scope),
+                6 * len(terms))
+    top = ranked[0][1] if ranked else 1.0
+    hits = []
+    for path, s in ranked:
+        hit = _hydrate_hit(root, path, terms,
+                           int(round(100 * s / top)) if top else 0, "lexical")
+        if hit is not None:
+            hits.append(hit)
+    return hits, 100
+```
+
+Then replace `cmd_find`'s body from line 801 down to the `max_score = 6 * len(terms)` line with:
+
+```python
+    hits, max_score = _rank_lexically(root, args.query, terms, args.limit,
+                                      type_filter, tag_filter, target)
 ```
 
 `--breakdown` prints `contrib` (line 894-898). FTS hits have no `contrib`, so add the branch there:
@@ -1035,7 +1075,9 @@ Replace `cmd_find`'s body from line 801 down to the `max_score = 6 * len(terms)`
                       "available)")
 ```
 
-Leave the semantic block untouched in this task — Tasks 7 and 8 replace it. To keep the tool working in between, keep the existing gate and fusion operating on `lexical_hits` under the variable name `hits`, i.e. add `hits = lexical_hits` right after the block above.
+Leave the semantic block untouched in this task — Tasks 7 and 8 replace it. It already operates on the name `hits`, which is what `_rank_lexically` now supplies, so the tool keeps working in between with no bridging variable.
+
+**Interfaces (added):** `_rank_lexically(root, query, terms, limit, type_filter=None, tag_filter=None, scope=None) -> tuple[list[dict], int]`.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
@@ -1172,7 +1214,7 @@ class SemanticRankingDegradation(unittest.TestCase):
             shutil.rmtree(root, ignore_errors=True)
 ```
 
-Ensure `struct` and `json` are imported in the test module.
+`struct` and `json` were added to the module's top-level imports in Task 5, Step 1.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -1365,6 +1407,23 @@ class FuseConditional(unittest.TestCase):
         self.assertTrue(lex_owned)
         self.assertEqual(out[0]["path"], "a")
 
+    def test_margin_band_matches_the_measured_rule(self):
+        """The measured rule is top1 >= 1.5*top2 (eval/hybrid_eval.py:151).
+        The pre-plan arithmetic was top1 >= 2*top2. 100 vs 60 sits inside the
+        band where the two disagree: the measured rule says the lexical arm
+        is confident, the old one says it is not. Pin the measured one."""
+        lex = [_h("a", 100, "lexical"), _h("b", 60, "lexical")]
+        sem = [_h("c", 90, "semantic")]
+        out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertTrue(lex_owned)
+        self.assertEqual([h["path"] for h in out], ["a", "b", "c"])
+
+    def test_just_below_the_band_hands_over(self):
+        lex = [_h("a", 100, "lexical"), _h("b", 68, "lexical")]
+        sem = [_h("c", 90, "semantic")]
+        _out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertFalse(lex_owned)
+
 
 class NoiseRatioIsGone(unittest.TestCase):
     """The absolute noise floor was a crutch for the blend rule; conditional
@@ -1387,7 +1446,14 @@ Replace `_keyword_top1_is_confident` (lines 728-739) with:
 def _keyword_top1_is_confident(hits):
     """True when the lexical arm may OWN the ranking: it has hits and either a
     single one (nothing to be ambiguous against) or a top-1 leading the
-    runner-up by at least SEMANTIC_MARGIN_RATIO of its own score."""
+    runner-up by the measured margin.
+
+    The comparison is `top1 >= (1 + SEMANTIC_MARGIN_RATIO) * top2`, i.e.
+    top1 >= 1.5x top2 — copied from the rule that actually produced R43's
+    0.437 (eval/hybrid_eval.py:151). The pre-plan code computed
+    `(top1-top2)/top1 >= SEMANTIC_MARGIN_RATIO`, which is top1 >= 2x top2: a
+    stricter bar that hands over to the semantic arm LESS often than what was
+    measured. Do not "simplify" it back."""
     if not hits:
         return False
     if len(hits) == 1:
@@ -1395,8 +1461,11 @@ def _keyword_top1_is_confident(hits):
     top1, top2 = hits[0]["score"], hits[1]["score"]
     if top1 <= 0:
         return False
-    return (top1 - top2) / top1 >= SEMANTIC_MARGIN_RATIO
+    return top1 >= (1 + SEMANTIC_MARGIN_RATIO) * top2
 ```
+
+The two formulas disagree for every score pair in the 1.5x–2x band, which is
+why the test below pins exactly that band.
 
 Delete `SEMANTIC_NOISE_RATIO` (lines 665-672) and add, next to the fusion code:
 
@@ -1453,6 +1522,13 @@ The printing loop below stays as it is; it already special-cases `provenance == 
 
 Run: `python3 -m unittest cli.test_okf_cli -v 2>&1 | tail -5`
 Expected: the new classes pass; total still exactly 19 failures, 2 errors.
+
+The threshold moved from `top1 >= 2*top2` to `top1 >= 1.5*top2`, so any existing
+test in the semantic suite (`cli/test_okf_cli.py:1487-1690`) whose score pair
+sits in that band flips its expectation. If one fails, check whether it asserts
+*firing behaviour* (then update it to the measured rule and say so in the commit
+body) or *a different invariant that happens to use such a pair* (then change the
+pair, not the assertion). Do not change `SEMANTIC_MARGIN_RATIO` itself.
 
 - [ ] **Step 6: Verify the architecture end-to-end on the live catalogue**
 
@@ -1530,11 +1606,13 @@ def ranked_paths(root, query, limit):
 
 
 def measure(root, rows, limit):
+    """The query files use the keys "query", "target", "source" — verified in
+    queries_v2.json and queries_real.json. `target` is the concept path."""
     ranks, times = [], []
     for row in rows:
         paths, elapsed = ranked_paths(root, row["query"], limit)
         times.append(elapsed)
-        target = row["expected_path"]
+        target = row["target"]
         ranks.append(paths.index(target) + 1 if target in paths else None)
     n = len(ranks) or 1
     hit = [r for r in ranks if r is not None]
@@ -1581,7 +1659,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-Before running it, confirm the key name each query file uses for the target (`expected_path`): `python3 -c "import json;print(json.load(open('docs/okf-retrieval-architecture/eval/queries_v2.json'))[0])"`. Adjust the two `row[...]` lookups if the files use different key names — do not adjust the query files.
+Both query files were checked while writing this plan: each row is `{"query": ..., "target": ..., "source": ...}`, 40 rows in `queries_v2.json` and 8 in `queries_real.json`. No key adjustment is needed; never adjust the query files themselves.
 
 - [ ] **Step 2: Run the re-measurement**
 
@@ -1620,16 +1698,49 @@ Use whatever constant the module already has for the CLI path (see `_run_cli`, l
 
 - [ ] **Step 4: Run the fixture gate**
 
+The golden fixtures S1–S4 are `_okfeval-*` files that `cli/eval/fixtures.py` seeds into **the live catalogue** (`fixtures.py:41 DEFAULT_ROOT = ~/Obsidian/Knowledge-Catalogue`); they are not present between runs. Without seeding, every literal row misses and `gate.py:69-79` reports a false "literal S1 recall regressed". The predecessor plan bracketed the run with seed/teardown (`docs/okf-revision/PLAN.md:269,275`) — do the same, plus two steps that plan did not need:
+
 ```bash
-python3 cli/eval/runner.py --root <fixture-root> --golden cli/eval/golden.json \
-  --out cli/eval/results/architecture-$(git rev-parse --short HEAD).json
+REV=$(git rev-parse --short HEAD)
+ROOT=~/Obsidian/Knowledge-Catalogue
+
+# 1. seed the hidden fixtures into the live catalogue
+python3 cli/eval/fixtures.py --root $ROOT --seed
+
+# 2. the fixtures are brand-new concepts, so they have no concept_emb rows.
+#    S3 exists precisely to be rescued by the semantic arm, which cannot
+#    happen without a vector. Everything else is already embedded from Task 3,
+#    so this delta is exactly the four fixtures and costs cents.
+python3 cli/embeddings/build_tagvec.py --root $ROOT \
+  --target concepts --model voyage-3-large --produce
+
+# 3. score + gate (runner.py builds the FTS index itself, see Step 3)
+python3 cli/eval/runner.py --root $ROOT --golden cli/eval/golden.json \
+  --out cli/eval/results/architecture-$REV.json
 python3 cli/eval/gate.py --baseline cli/eval/results/baseline-f0714b2.json \
-  --hybrid cli/eval/results/architecture-$(git rev-parse --short HEAD).json
+  --hybrid cli/eval/results/architecture-$REV.json
+
+# 4. remove the fixtures again — the real catalogue must end clean
+python3 cli/eval/fixtures.py --root $ROOT --teardown
+
+# 5. drop the now-dangling fixture vectors and rebuild the index, so the
+#    live catalogue is not left with rows and an index pointing at files
+#    that no longer exist
+sqlite3 $ROOT/.tagvec/tag_vectors.sqlite \
+  "DELETE FROM concept_emb WHERE path LIKE '%/_okfeval-%';"
+python3 cli/okf-cli.py --root $ROOT build-index
 ```
 
-The fixture root is the one the previous gate runs used — find it in `cli/eval/fixtures.py` or in the bean `okf-cli-6gq6`.
-
 Expected: `GATE: PASS`. The gate checks that the paraphrase zero-hit rate decreased and that no literal S1 row regressed (`cli/eval/gate.py:56-81`). `mean_score_ratio` will move because of the 0..100 scale — that is expected and ungated; note it in the commit body.
+
+Verify the catalogue is clean afterwards:
+
+```bash
+find $ROOT -name "_okfeval-*" | wc -l
+sqlite3 $ROOT/.tagvec/tag_vectors.sqlite \
+  "SELECT COUNT(*) FROM concept_emb WHERE path LIKE '%/_okfeval-%';"
+```
+Expected: `0` and `0`.
 
 - [ ] **Step 5: Record the numbers as new references**
 
@@ -1702,7 +1813,7 @@ class ZeroHitSuggestions(unittest.TestCase):
         self.assertEqual(got, [])
 
     def test_output_names_the_suggestions(self):
-        out = _run_find(self.root, ["tailscal"])
+        out = _run_find(self.root, "tailscal")
         self.assertIn("(no matches for: tailscal)", out)
         self.assertIn("tailscale", out)
 ```
@@ -1771,7 +1882,11 @@ git commit -m "feat(cli): suggest nearest tags on zero hit"
 - Consumes: the `emb` table of `.tagvec` (752 bge-m3 + 650 voyage rows, R09), `_load_concept_vectors`'s sibling read pattern, `_embed_query_voyage` (Task 7), `_cosine`.
 - Produces: `_expand_query_tags(root, query, top_k=3, floor=0.6) -> list[str]` — extra tag slugs to append to the lexical query terms; `[]` on any degradation.
 
-**Flag-gated by decision (D17).** This is the only change in the plan that alters ranking without prior measurement. It ships behind `--expand-tags`, off by default, and becomes a default only after Step 6 shows it does not regress the numbers from Task 9. Q06 (how to embed a query term that is not a registered tag) is answered by construction here: the query is embedded anyway by the semantic arm, so expansion reuses that call rather than adding one.
+**Flag-gated by decision (D17).** This is the only change in the plan that alters ranking without prior measurement. It ships behind `--expand-tags`, off by default, and becomes a default only after Step 6 shows it does not regress the numbers from Task 9.
+
+**Where it fires.** Expansion is a *rescue* path, on the same terms as the semantic arm: it runs only when the unexpanded lexical arm is not confident. Running it on every query would spend a network call on exactly the queries that did not need one, which contradicts Task 8's cost rule. Concretely: run the lexical arm once unexpanded → if `_keyword_top1_is_confident()` says it owns the ranking, stop; otherwise expand and re-run the lexical arm with the widened term set.
+
+**Q06 answered by construction.** A query term that is not a registered tag never needs its own embedding call — expansion embeds the *whole query* and compares it against the tag vectors. And because the semantic arm embeds the same string in the same invocation, Step 3 adds a one-entry cache so both share a single call.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1779,6 +1894,9 @@ git commit -m "feat(cli): suggest nearest tags on zero hit"
 class ExpandQueryTags(unittest.TestCase):
     """T05/Q05 — the tag vectors are already populated and clean (R09); this
     asks whether they can pull a synonym into the lexical query."""
+
+    def setUp(self):
+        okf._QUERY_VEC_CACHE.clear()
 
     def _seed(self, root, rows):
         db = okf._tagvec_db_path(root)
@@ -1841,7 +1959,7 @@ class ExpandQueryTags(unittest.TestCase):
             with open(os.path.join(root, "b", "index.md"), "w",
                       encoding="utf-8") as f:
                 f.write("# B\n")
-            out = _run_find(root, ["mockup"])
+            out = _run_find(root, "mockup")
             self.assertIn("(no matches for: mockup)", out)
         finally:
             shutil.rmtree(root, ignore_errors=True)
@@ -1889,7 +2007,7 @@ def _expand_query_tags(root, query, top_k=3, floor=0.6):
     if not vectors:
         return []
     try:
-        qvec = _embed_query_voyage(query)
+        qvec = _query_vector(query)
     except Exception:
         return []
     ranked = sorted(((_cosine(qvec, v), tag) for tag, v in vectors),
@@ -1897,18 +2015,59 @@ def _expand_query_tags(root, query, top_k=3, floor=0.6):
     return [tag for score, tag in ranked[:top_k] if score >= floor]
 ```
 
-In `cmd_find`, right after `terms = tokenize(args.query)` and the empty check, add:
+Share the query vector between the two consumers. Add above `_embed_query_voyage`:
 
 ```python
-    if getattr(args, "expand_tags", False):
+# One CLI invocation answers one query, and both the semantic arm and (when
+# enabled) tag expansion embed the SAME string. Cache it so --expand-tags
+# costs zero extra network calls rather than doubling them.
+_QUERY_VEC_CACHE = {}
+
+
+def _query_vector(text):
+    """Cached _embed_query_voyage(). Raises exactly what it raises, so every
+    caller keeps its own degradation behaviour."""
+    if text not in _QUERY_VEC_CACHE:
+        _QUERY_VEC_CACHE[text] = _embed_query_voyage(text)
+    return _QUERY_VEC_CACHE[text]
+```
+
+Change `semantic_ranking()` (Task 7) and `_expand_query_tags()` to call `_query_vector(query)` instead of `_embed_query_voyage(query)` directly. The tests monkeypatch `_embed_query_voyage`, which still works — but each test that patches it must clear the cache in `setUp` with `okf._QUERY_VEC_CACHE.clear()`, or a value from a previous test leaks in.
+
+In `cmd_find`, wire expansion as a rescue path **after** the first lexical pass and **before** the semantic arm. Replace the gate block from Task 8, Step 4 with:
+
+```python
+    lexical_owned_provisionally = _keyword_top1_is_confident(hits)
+
+    # T05/Q05 (experimental, off by default): when the unexpanded lexical arm
+    # is not confident, widen the query with semantically near registered tags
+    # and give the lexical arm a second chance. Deliberately NOT run when the
+    # lexical arm is already confident — that query needs no rescue, and the
+    # call would be pure cost (same rule the semantic arm follows below).
+    if getattr(args, "expand_tags", False) and not lexical_owned_provisionally:
         extra = _expand_query_tags(root, args.query)
         if extra:
             print("note: query expanded with tag(s): {}".format(
                 ", ".join(extra)), file=sys.stderr)
             terms = terms + [t for t in extra if t not in terms]
+            hits, max_score = _rank_lexically(
+                root, " ".join(terms), terms, args.limit,
+                type_filter, tag_filter, target)
+            lexical_owned_provisionally = _keyword_top1_is_confident(hits)
+
+    semantic_hits = []
+    if not lexical_owned_provisionally or len(hits) < args.limit:
+        semantic_hits = _semantic_hit_dicts(root, args.query, args.limit)
+
+    all_hits, lexical_owned = fuse_conditional(hits, semantic_hits, args.limit)
+    if not lexical_owned and semantic_hits:
+        print("note: semantic arm owns this ranking (lexical top-1 lacked a "
+              "clear margin)", file=sys.stderr)
 ```
 
-The expanded `terms` must reach the lexical arm, so pass `" ".join(terms)` instead of `args.query` into `_fts_ranking`/`_substring_ranking`, and keep `args.query` for the semantic arm (expanding a query before embedding it would dilute the vector — the exact contamination R06 documents).
+`_rank_lexically` is the helper Task 6, Step 5 already introduced — the second pass reuses it unchanged, including its `max_score`, which is why the rebind above assigns both names.
+
+Note that the semantic arm still embeds `args.query`, never the expanded string: widening a query before embedding it dilutes the vector — the exact contamination `cli/embeddings/README.md:27-35` (R06) documents for tags.
 
 Register the flag next to the other `find` options (line 2222-2231):
 
@@ -1933,7 +2092,37 @@ git commit -m "feat(cli): experimental --expand-tags query expansion"
 
 - [ ] **Step 6: Measure it, then decide**
 
-`remeasure.py` runs `find` without the flag. Add a `--find-arg` passthrough to it (append the value to the subprocess argv) and run both:
+`remeasure.py` runs `find` without the flag. Add a passthrough. In
+`docs/okf-retrieval-architecture/eval/remeasure.py`, thread an `extra` argv
+list through `ranked_paths` and `measure`:
+
+```python
+def ranked_paths(root, query, limit, extra=()):
+    """Ordered result paths of one `okf-cli find`, plus its wall time."""
+    t0 = time.time()
+    proc = subprocess.run(
+        [sys.executable, CLI, "--root", root, "find", query,
+         "--limit", str(limit), *extra],
+        capture_output=True, text=True)
+    elapsed = time.time() - t0
+    paths = [line[len("path: "):] for line in proc.stdout.splitlines()
+             if line.startswith("path: ")]
+    return paths, elapsed
+```
+
+```python
+def measure(root, rows, limit, extra=()):
+    ...
+        paths, elapsed = ranked_paths(root, row["query"], limit, extra)
+```
+
+```python
+    ap.add_argument("--find-arg", action="append", default=[], dest="find_args",
+                    help="extra argument passed through to `okf-cli find`; "
+                         "repeatable")
+```
+
+and pass `args.find_args` into both `measure(...)` calls in `main()`. Then run both:
 
 ```bash
 python3 docs/okf-retrieval-architecture/eval/remeasure.py \
