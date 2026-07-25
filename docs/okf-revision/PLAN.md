@@ -276,6 +276,28 @@ pi.add_argument("--json", action="store_true", help="machine-readable output")
 
 - [ ] **Step 5: Commit the frozen baseline** — `git add cli/eval/results/baseline-*.json && git commit -m "chore(eval): freeze keyword baseline before WS1"`
 
+### FROZEN — 2026-07-25
+
+`cli/eval/results/baseline-f0714b2.json` — committed, immutable. `catalogue_rev: f0714b2`
+(unchanged since Task 4). Determinism proof: three independent `seed -> run -> teardown`
+cycles produced byte-identical `metrics`/`per_row` before this file was written.
+
+| Metric | Value |
+|---|---|
+| recall_at_1 | 0.750 |
+| recall_at_5 | 1.000 |
+| mrr | 0.812 |
+| **zero_hit_rate_literal** | **0.000** |
+| **zero_hit_rate_paraphrase** | **1.000** |
+| mean_score_ratio | 0.396 |
+| location_correct_rate | 1.000 |
+| metadata_hit_rate | 1.000 |
+
+Headline (SC-002): zero-hit-rate literal 0.000 vs paraphrase 1.000 — the full 1.000 gap IS
+the semantic blind spot pure keyword/substring `find` has today. This is the number WS1
+(hybrid retrieval) must move; re-measurement (Task 12) writes a new `results/baseline-<rev>.json`
+file, this one is never regenerated in place.
+
 ---
 
 ## Task 6: Integration tests at the MCP→subprocess boundary (T09)
