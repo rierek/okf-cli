@@ -603,7 +603,18 @@ def _format_contrib(contrib):
 # Ollama bge-m3 call — best-effort: any failure (cache absent, backend
 # unreachable) degrades to keyword-only with a one-line stderr note, never
 # raises, never blocks the keyword path (Global Constraints).
-SEMANTIC_FALLBACK_RATIO = 0.5
+# Post-review fix (F01, 2026-07-25): the original absolute score/max_score
+# ratio gate misclassified legitimate literal top-1 hits as "weak" — this
+# repo's OWN golden fixtures have literal min_score_ratio well below any
+# sane absolute threshold (S1=0.30, S2=0.25, S4=0.55), because a partial
+# multi-term title/tag/body match is a perfectly confident top-1, not a weak
+# one; the ratio depends on term count and per-field weighting, not on
+# actual retrieval confidence. Replaced with a margin gate: fire the
+# backstop on zero hits OR when the keyword top-1 has no clear lead over
+# the runner-up (ambiguous ranking) — never on an absolute ratio.
+SEMANTIC_MARGIN_RATIO = 0.5  # top-1 must lead the runner-up by at least this
+                              # fraction of its own score to count as
+                              # "confident" (top1 >= (1+ratio) * top2)
 SEMANTIC_MODEL = "bge-m3"
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embed"
 OLLAMA_EMBED_TIMEOUT = 5
@@ -657,6 +668,20 @@ def _cosine(a, b):
     if na == 0.0 or nb == 0.0:
         return 0.0
     return dot / (na * nb)
+
+
+def _keyword_top1_is_confident(hits):
+    """Post-review (F01) margin gate — replaces the old absolute-ratio
+    check. True when the keyword top-1 clearly leads the runner-up (no
+    ambiguity to resolve semantically); False when there's no runner-up to
+    compare (a single hit is trusted as-is) is NOT covered here — callers
+    treat `len(hits) <= 1` as its own case. Only meaningful for
+    `len(hits) >= 2`."""
+    top1, top2 = hits[0]["score"], hits[1]["score"]
+    if top1 <= 0:
+        return False
+    margin = (top1 - top2) / top1
+    return margin >= SEMANTIC_MARGIN_RATIO
 
 
 def semantic_backstop(root, query, exclude_paths, limit):
@@ -756,25 +781,39 @@ def cmd_find(root, args):
     hits.sort(key=lambda h: -h["score"])
     max_score = 6 * len(terms)
 
-    # 8c: semantic backstop — only as a fallback (zero hits, or a weak top
-    # hit), never overriding a strong keyword top-1 (Global Constraints).
+    # 8c: semantic backstop gate (post-review F01) — fire on zero keyword
+    # hits, or when there IS a keyword ranking but it's ambiguous (top-1 has
+    # no clear margin over the runner-up). A single keyword hit has no
+    # runner-up to be ambiguous against, so it is trusted as-is (no fire) —
+    # this also means the backstop only ever spends a network call when it
+    # can plausibly add value, not on every merely-partial literal match.
     semantic_hits = []
-    top_ratio = (hits[0]["score"] / max_score) if hits and max_score else 0.0
-    if not hits or top_ratio < SEMANTIC_FALLBACK_RATIO:
+    fire_backstop = (
+        not hits
+        or (len(hits) >= 2 and not _keyword_top1_is_confident(hits))
+    )
+    if fire_backstop:
         exclude = {h["path"] for h in hits}
         semantic_hits = _semantic_hit_dicts(root, args.query, exclude, args.limit, max_score)
 
-    all_hits = hits + semantic_hits
-    if semantic_hits:
-        # Interleave by score (both are on the same 0..max_score scale) —
-        # a strong semantic candidate must not be crowded out by a long
-        # tail of weak keyword noise-hits (real-catalogue smoke finding,
-        # P8/8c). Python's sort is stable, and keyword hits were
-        # concatenated first, so equal-score ties still favor keyword
-        # (priority preserved as the tie-break, per PLAN's
-        # "appended/interleaved" fusion rule) — this is a merge, not a
-        # keyword-hits-only reorder.
-        all_hits.sort(key=lambda h: -h["score"])
+    # Fuse: the keyword top-1 (if any) is PINNED at rank 1 — this is an
+    # absolute invariant, independent of the gate above, so "never replacing
+    # a strong keyword top-hit" (EARS) holds even if the gate is ever mistuned
+    # or a semantic candidate's converted score would otherwise outrank it
+    # (post-review F01 repro: an unrelated concept at cosine ~0.7 converts to
+    # a HIGHER raw score than a legitimate partial-match literal top-1).
+    # Everything else — the remaining keyword hits plus all semantic hits —
+    # is interleaved by score from rank 2 down (both scales are comparable,
+    # 0..max_score; stable sort keeps keyword-before-semantic on exact ties,
+    # per PLAN's "appended/interleaved" fusion rule).
+    if hits:
+        pinned_top1 = hits[0]
+        rest = hits[1:] + semantic_hits
+        rest.sort(key=lambda h: -h["score"])
+        all_hits = [pinned_top1] + rest
+    else:
+        all_hits = semantic_hits
+
     if not all_hits:
         print("(no matches for: {})".format(args.query))
         return

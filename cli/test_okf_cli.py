@@ -1532,6 +1532,37 @@ class SemanticBackstop(unittest.TestCase):
         self.assertEqual(lines[4], "path: b/strong")  # Top-1
         self.assertNotIn("provenance: semantic", out)
 
+    def test_near_threshold_literal_top1_survives_unrelated_semantic(self):
+        """F01 (post-review, blocking) — a legitimate partial-title-match
+        literal top-1 at a REAL repo ratio (~0.417, matching S1's actual
+        golden min_score_ratio=0.30 / S2's 0.25) must never be displaced,
+        even when: (a) the margin over the keyword runner-up is small
+        enough to fire the backstop, and (b) an UNRELATED semantic
+        candidate's cosine (~0.7, ordinary model background noise for
+        unrelated text) converts to a raw score HIGHER than the literal
+        top-1's own score. Reviewer repro: unrelated cosine=0.7 -> score
+        8/12, literal top-1 = 5/12 -> old code let 8/12 outrank 5/12."""
+        self._w("b/top1.md", "Zqxmargin One", ["zqxmargin"],
+                "no second query term appears here.\n")
+        # top1: "zqxmargin" hits title(3)+tags(2)=5; "raretermxyz" hits
+        # nothing -> score 5/12 (ratio 0.417, matches S1's real ratio).
+        self._w("b/rival.md", "Rival Zqxmargin Concept", [],
+                "zqxmargin body only, a close competing score.\n")
+        # rival: "zqxmargin" hits title(3)+body(1)=4/12 -> margin vs top1
+        # (5-4)/5 = 0.2 < SEMANTIC_MARGIN_RATIO(0.5) -> gate DOES fire
+        # (genuinely ambiguous keyword ranking), which is the scenario the
+        # pin must still protect against.
+        self._w("b/unrelated.md", "Totally Unrelated Concept", [],
+                "nothing to do with the query at all.\n")
+        self._make_tagvec([("k1", "b/unrelated", [0.0, 1.0])])
+        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        okf._cosine = lambda a, b: 0.7  # reviewer's exact repro value
+        out, _err = self._run("zqxmargin raretermxyz")
+        lines = out.splitlines()
+        self.assertEqual(lines[4], "path: b/top1")  # literal Top-1, pinned
+        self.assertIn("path: b/unrelated", out)  # still surfaced, not rank 1
+        self.assertNotEqual(lines[4], "path: b/unrelated")
+
     def test_semantic_rescue_ranks_nearer_concept_first(self):
         self._make_tagvec([
             ("k1", "b/near", [1.0, 0.0]),
