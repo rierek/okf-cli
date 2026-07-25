@@ -1,0 +1,214 @@
+metadata:
+  catalogue: okf-cli + okf MCP server
+  cli_source: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py
+  mcp_source: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py
+  total_cli_verbs: 20
+  total_mcp_tools: 9
+  coverage: 9 CLI verbs exposed as MCP tools; 11 CLI-only verbs (agent-facing, viz, admin)
+
+cli_verbs:
+  - id: VRB01
+    name: index
+    line: 1884
+    purpose: Catalogue TOC (bundle/description/concepts/directories), or one bundle's index; --full adds types+tags per bundle
+
+  - id: VRB02
+    name: list
+    line: 1889
+    purpose: List concepts filtered by frontmatter type and/or tag (exact match, AND-combined)
+
+  - id: VRB03
+    name: find
+    line: 1894
+    purpose: Ranked keyword search across all bundles; returns score/title/type/path/description/body-snippet
+
+  - id: VRB04
+    name: read
+    line: 1897
+    purpose: Print one concept page (bundle/concept-id)
+
+  - id: VRB05
+    name: prime
+    line: 1899
+    purpose: One-shot agent onboarding: CLAUDE.md guide + catalogue TOC (start here in new session)
+
+  - id: VRB06
+    name: info
+    line: 1903
+    purpose: Print catalogue schema docs (TYPES.md + PROPERTIES.md)
+
+  - id: VRB07
+    name: toc
+    line: 1904
+    purpose: Print a concept's headings (default h2 only); --level to specify heading level or 0 for full tree
+
+  - id: VRB08
+    name: visualize
+    line: 1908
+    purpose: Write a self-contained viz.html graph for a bundle
+
+  - id: VRB09
+    name: refs
+    line: 1911
+    purpose: List inbound markdown references to a file; --scan-root to limit scan scope, --json for machine output
+
+  - id: VRB10
+    name: rewrite-path
+    line: 1915
+    purpose: Literal path-string rewrite across text files; --check for dry-run (default mutates)
+
+  - id: VRB11
+    name: rename
+    line: 1920
+    purpose: Move a concept + rewrite every inbound/outbound link + reindex (dry-run default, --apply to execute)
+
+  - id: VRB12
+    name: reindex
+    line: 1926
+    purpose: Regenerate marker-bounded index.md listings; --init for recursive migration, --check for dry-run
+
+  - id: VRB13
+    name: log
+    line: 1935
+    purpose: Render git history for the catalogue or a bundle as a SPEC §7 changelog; --since for filter, --write to file
+
+  - id: VRB14
+    name: tags
+    line: 1939
+    purpose: List all tags with usage counts (--singletons for 1-use only), or fuzzy-search candidates; --register/--validate for registry management
+
+  - id: VRB15
+    name: merge-tags
+    line: 1949
+    purpose: Merge/rename one or more tags into a target tag across concept frontmatter (dry-run default, --apply to write)
+
+  - id: VRB16
+    name: remove-tags
+    line: 1956
+    purpose: Remove one or more tags from concept frontmatter (no merge target); dry-run default, --apply to write
+
+  - id: VRB17
+    name: normalize-tags
+    line: 1962
+    purpose: Convert inline tags [..] fields to YAML block-list form (local convention, dry-run default)
+
+  - id: VRB18
+    name: check
+    line: 1967
+    purpose: Conformance scan §9 hard rules + local invariants; --strict, --json, --types for custom TYPES.md
+
+  - id: VRB19
+    name: fix-crosslinks
+    line: 1972
+    purpose: Rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md); --check for dry-run
+
+  - id: VRB20
+    name: fix-xml-tags
+    line: 1976
+    purpose: Wrap <tag>/<tag>.<tag2> placeholders in inline code so Obsidian doesn't misparse as XML/HTML
+
+mcp_tools:
+  - id: MCP01
+    name: okf_find
+    line: 67
+    purpose: Ranked keyword search across a catalogue/repo root
+    params:
+      - root (str)
+      - query (str, required)
+      - limit (int, default=10)
+
+  - id: MCP02
+    name: okf_read
+    line: 72
+    purpose: Print one concept page (bundle/concept-id)
+    params:
+      - root (str, required)
+      - path (str, required)
+
+  - id: MCP03
+    name: okf_toc
+    line: 77
+    purpose: Section headings of a concept
+    params:
+      - root (str, required)
+      - path (str, required)
+
+  - id: MCP04
+    name: okf_index
+    line: 82
+    purpose: Catalogue/bundle TOC
+    params:
+      - root (str, required)
+      - bundle (str, default="")
+
+  - id: MCP05
+    name: okf_list
+    line: 87
+    purpose: Concepts filtered by frontmatter type and/or tag
+    params:
+      - root (str, required)
+      - type (str, default="")
+      - tag (str, default="")
+
+  - id: MCP06
+    name: okf_check
+    line: 92
+    purpose: §9 conformance scan (config-aware TYPES); returns {errors, warnings}
+    params:
+      - root (str, required)
+      - target (str, default="")
+
+  - id: MCP07
+    name: okf_reindex
+    line: 97
+    purpose: Regenerate marker-bounded index listings for a bundle/subdir
+    params:
+      - root (str, required)
+      - target (str, required)
+
+  - id: MCP08
+    name: okf_refs
+    line: 102
+    purpose: Inbound markdown references to a file (reference-integrity step a)
+    params:
+      - root (str, required)
+      - path (str, required)
+      - scan_root (str, default="")
+
+  - id: MCP09
+    name: okf_rename
+    line: 107
+    purpose: Move a concept and keep every reference intact; dry-run by default (apply=True to execute)
+    params:
+      - root (str, required)
+      - old (str, required)
+      - new (str, required)
+      - apply (bool, default=False)
+      - force (bool, default=False)
+
+coverage_analysis:
+  cli_verbs_in_mcp:
+    - check
+    - find
+    - index
+    - list
+    - read
+    - refs
+    - reindex
+    - rename
+    - toc
+
+  cli_verbs_not_in_mcp:
+    - fix-crosslinks
+    - fix-xml-tags
+    - info
+    - log
+    - merge-tags
+    - normalize-tags
+    - prime
+    - remove-tags
+    - rewrite-path
+    - tags
+    - visualize
+
+  gap_summary: 11 CLI verbs (55%) lack MCP bindings—agent onboarding (prime), schema docs (info), visualization, path rewrites, git history logging, tag management (3 verbs), and link/XML fixes not available to MCP clients

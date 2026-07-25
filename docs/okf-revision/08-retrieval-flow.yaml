@@ -1,0 +1,96 @@
+# OKF Abruf-Flow (Retrieval Pipeline) — source-verified
+# Question: how exactly does retrieval from okf work, verb by verb?
+# Generated: 2026-07-25. Grounds: okf-cli.py + okf_mcp.py (line-exact).
+
+pipeline:
+  # Stages an agent walks: onboard -> browse -> search -> read -> trace
+  - id: FLW01
+    stage: onboard
+    verb: prime
+    claim: "prime prints CLAUDE.md guide + catalogue TOC in one call; CLI-only, no MCP tool."
+    path: cli/okf-cli.py:631
+  - id: FLW02
+    stage: browse
+    verb: index
+    claim: "index prints catalogue/bundle TOC (directory listing). MCP okf_index BROKEN (B01, --json)."
+    path: mcp/okf_mcp.py:82
+  - id: FLW03
+    stage: browse
+    verb: list
+    claim: "list filters concepts by --type and/or --tag, EXACT match, AND-combined; supports --scope. MCP okf_list BROKEN (B01)."
+    path: cli/okf-cli.py:509-535
+  - id: FLW04
+    stage: search
+    verb: find
+    claim: "find = ranked keyword search over the whole catalogue; the only search verb; MCP okf_find works."
+    path: cli/okf-cli.py:538-574
+  - id: FLW05
+    stage: read
+    verb: read
+    claim: "read prints one concept page full-text (bundle/concept-id)."
+    path: cli/okf-cli.py:600-601
+  - id: FLW06
+    stage: read
+    verb: toc
+    claim: "toc extracts markdown headings of one concept (skips fenced code)."
+    path: cli/okf-cli.py:617-628
+  - id: FLW07
+    stage: trace
+    verb: refs
+    claim: "refs lists inbound markdown references (backlinks) to a file."
+    path: mcp/okf_mcp.py:101-104
+  - id: FLW08
+    stage: schema
+    verb: info
+    claim: "info prints TYPES.md + PROPERTIES.md so an agent loads the type vocabulary; CLI-only."
+    path: cli/okf-cli.py:604-614
+
+find_internals:
+  - id: FND01
+    claim: "Query tokenized to lowercase alphanumeric terms: re.split('[^a-z0-9]+', query.lower())."
+    path: cli/okf-cli.py:505-506,539
+  - id: FND02
+    claim: "find does a FULL SCAN — iterates every bundle × every concept, no precomputed index."
+    path: cli/okf-cli.py:544-545
+  - id: FND03
+    claim: "Per term score = 3×min(title.count,1) + 2×min(tags.count,1) + 1×min(body.count,1); capped at 1 hit per field per term."
+    path: cli/okf-cli.py:552-556
+  - id: FND04
+    claim: "Terms are OR-combined (any single term match yields score>0); results sorted score-descending, sliced to --limit."
+    path: cli/okf-cli.py:557-566
+  - id: FND05
+    claim: "Snippet = 140-char window around first term occurrence, whitespace-collapsed."
+    path: cli/okf-cli.py:577-588
+
+filtering:
+  - id: FIL01
+    claim: "find has NO content filter — only --limit. No --type, --tag, --bundle, or --scope on find."
+    path: cli/okf-cli.py:1894 (argparse) + 538-574 (no filter logic)
+  - id: FIL02
+    claim: "MCP okf_find exposes only root, query, limit — no filter params at all."
+    path: mcp/okf_mcp.py:67
+  - id: FIL03
+    claim: "Filtering is a SEPARATE verb (list), by exact type/tag; it cannot combine with keyword search. No search+filter composition exists."
+    path: cli/okf-cli.py:509-535 vs 538-574
+  - id: FIL04
+    claim: "find cannot be scoped to one bundle — it always iterates list_bundles(root) (whole catalogue); only list has --scope."
+    path: cli/okf-cli.py:544 vs 514
+
+score_output:
+  - id: SCO01
+    claim: "The score IS emitted per hit as 'score: {score}/{max_score}', e.g. 8/18."
+    path: cli/okf-cli.py:568
+  - id: SCO02
+    claim: "max_score denominator = 6 × number_of_terms (6 = 3 title + 2 tags + 1 body). '18' = 3 terms."
+    path: cli/okf-cli.py:565
+  - id: SCO03
+    claim: "Only the AGGREGATE score + denominator are shown. The breakdown (which field/term contributed) is NOT emitted — agent sees 8/18 without knowing if it came from title or body."
+    path: cli/okf-cli.py:566-573 (no per-field output)
+
+implications:
+  - id: IMP01
+    severity: med
+    claim: "No search+filter composition (FIL03) + find not scopeable (FIL04) → an agent cannot ask 'keyword X within type=LessonLearned' or 'within bundle Y' in one call. Retrieval precision is coarse."
+  - id: IMP02
+    severity: low
+    claim: "Opaque score (SCO03) → agent cannot tell a strong title match from a weak incidental body match at equal score; ranking trust is limited."

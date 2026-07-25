@@ -43,3 +43,15 @@ Additive log. Each entry: Symptom · Fix · Forward-Guard.
 - **Symptom:** During mutation self-tests, a predicate inversion appeared "still green" and later the reverted file appeared "still mutated": mutation and revert had the same file size and landed within the same mtime second, so Python kept serving the stale `__pycache__` .pyc for a module loaded via `spec_from_file_location`.
 - **Fix:** All mutation/revert cycles re-run with `rm -rf __pycache__` before every test invocation.
 - **Forward-Guard:** Any mutation-proof protocol on this repo clears `__pycache__` between runs (same-size single-character edits are exactly the blind spot of mtime+size cache invalidation).
+
+## LL-08 (2026-07-26, retrieval-architecture experiment) — a single HTTP 400 destroys a whole embedding pass
+
+- **Symptom:** A full-catalogue `concept_emb` pass (title+body, 2437 concepts) died at ~550 rows on a plain `HTTP Error 400: Bad Request` from Ollama while three workers shared the host. `build_tagvec.py`'s `embed_bge_m3()` has no retry, no skip and no per-item isolation, so the exception propagated out of the run; every vector computed since the last 50-row batch write was lost with it. The offending concept could not even be identified afterwards, because the crash reports the exception but not the input. Re-embedding the same candidate in isolation succeeded — i.e. the failure was transient/load-related, not a poisoned document.
+- **Fix:** In the experiment harness only: retry with exponential backoff, then progressive halving of the input (a 400 on this endpoint is usually over-long input), then skip the item with a logged path. `cli/embeddings/build_tagvec.py` is **still unguarded** — this entry is the record, not a shipped fix.
+- **Forward-Guard:** Any long-running producer pass over the whole catalogue must be resumable and item-isolating: never let one item's transport error end the pass, always log the failing identity, and make the delta-reuse gate (`existing_concept_keys`) the resume mechanism. A pass that costs hours must not be all-or-nothing.
+
+## LL-09 (2026-07-26, retrieval-architecture experiment) — unbatched embedding is 10–35× slower and shapes what is maintainable
+
+- **Symptom:** `embed_bge_m3()` issues one HTTP request per text, `embed_voyage()` sends the whole list in one request. Measured on the same catalogue: Ollama 1.5–5.4 vectors/s (three workers, two hosts), Voyage **55 vectors/s** single-threaded. A full three-arm local pass takes ~45 minutes; the same work against the batching backend takes minutes.
+- **Fix:** None yet. The experiment batches only on the Voyage path, because that is what the existing function already supported.
+- **Forward-Guard:** Ollama's `/api/embed` accepts a list for `input` — batch it. This is not only a speed nicety: re-embedding after catalogue changes is an operational cost that decides whether a semantic layer stays current or silently rots. Evaluate an embedding design's *maintenance* cost (full re-embed wall clock) alongside its retrieval quality, before choosing it.

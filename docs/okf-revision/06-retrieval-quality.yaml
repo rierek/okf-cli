@@ -1,0 +1,91 @@
+findings:
+  - id: RET01
+    claim: "tokenize() lowercases the query and splits on any non-alphanumeric run via re.split(r\"[^a-z0-9]+\", s.lower()), so tokens are pure lowercase alnum substrings with no stemming."
+    path: "okf-cli.py:505-506"
+
+  - id: RET02
+    claim: "cmd_find scores each concept by summing, per query term, 3*min(title_count,1) + 2*min(tags_count,1) + 1*min(body_count,1), i.e. title=3x, tags=2x, body=1x weight with a hard cap of 1 hit per field per term (no frequency bonus)."
+    path: "okf-cli.py:552-556"
+
+  - id: RET03
+    claim: "Field matching uses Python str.count() on lowercased haystacks (hay_title/hay_tags/hay_body), which is plain substring counting — not word-boundary, not stemmed, not fuzzy; a term like 'ai' substring-matches inside 'again' or 'said'."
+    path: "okf-cli.py:549-556"
+
+  - id: RET04
+    claim: "A concept is included in results whenever total score > 0 (`if score: hits.append(...)`), so any single matching term across all query terms is sufficient — multi-term queries behave as OR across terms with additive scoring, not AND."
+    path: "okf-cli.py:557-560"
+
+  - id: RET05
+    claim: "Results are sorted purely descending by the summed integer score (hits.sort(key=lambda x: -x[0])), with no tie-breaking rule specified, so concepts with identical scores retain iteration order of list_bundles()/iter_concepts() (bundle-then-filesystem order)."
+    path: "okf-cli.py:561"
+
+  - id: RET06
+    claim: "make_snippet() builds the displayed snippet as a fixed 140-char window starting near the earliest term match position across ALL terms combined (min index found via low.find(t) per term), not a window scored for term density or relevance."
+    path: "okf-cli.py:577-588"
+
+  - id: RET07
+    claim: "cmd_find's only inputs are the raw file title/tags/body strings from split_frontmatter/read_file; no embedding model, vector, or similarity call appears anywhere in the function body."
+    path: "okf-cli.py:538-574"
+
+  - id: RET08
+    claim: "No .py file under /Users/erik/Obsidian/tools/okf-tools (cli or mcp) contains the strings 'tagvec', 'tag_vectors', 'embedding', 'sqlite3', or 'vector' — confirmed via full-tree grep with zero matches."
+    path: "grep -rn tagvec|tag_vectors|embedding|sqlite3|vector /Users/erik/Obsidian/tools/okf-tools/ → no output"
+
+  - id: RET09
+    claim: "cmd_tags's fuzzy search (used for `tags <candidate>` and by cmd_find's tag validation flow) is implemented by fuzzy_matches(), which shells out to `fzf --filter` for subsequence matching and combines it with difflib.SequenceMatcher ratio — a lexical/character-level method, not embeddings."
+    path: "okf-cli.py:344-364 (fuzzy_matches), invoked from cmd_tags at okf-cli.py:401-424"
+
+  - id: RET10
+    claim: "The .tagvec/tag_vectors.sqlite file has a single table `emb(key, tag, model, dim, vec BLOB)` containing 627 bge-m3 rows and 650 voyage-3-large rows (verified via sqlite3 .schema and a row count query against the live 5.7MB file)."
+    path: "/Users/erik/Obsidian/Knowledge-Catalogue/.tagvec/tag_vectors.sqlite (schema + row counts queried directly)"
+
+  - id: RET11
+    claim: "The documented producer/consumer of tag_vectors.sqlite is an ad-hoc offline SOP (embedding-based-tag-consolidation.md) describing a periodic manual pass using Ollama bge-m3 and Voyage API calls invoked from a standalone Bash/urllib script — not part of okf-cli.py or okf_mcp.py, and the doc itself notes the ctx_execute sandbox doesn't even inherit the API key needed to run it."
+    path: "/Users/erik/Obsidian/Knowledge-Catalogue/okf-meta-wiki/extensions/embedding-based-tag-consolidation.md (sections 'Persistenz — SQLite-Vektor-Cache' and 'Technischer Workaround')"
+
+  - id: RET12
+    claim: "okf_mcp.py registers 9 tools (okf_find, okf_read, okf_toc, okf_index, okf_list, okf_check, okf_reindex, okf_refs, okf_rename); `tags`/`merge-tags`/`normalize-tags` are absent from _COMMANDS and are documented elsewhere as CLI-only, meaning the tag-vector consolidation path is not reachable from the agent-facing MCP surface at all."
+    path: "okf_mcp.py:7-17,65-115"
+
+  - id: RET13
+    claim: "cmd_list requires --type and/or --tag and matches by exact equality (`if args.type and t != args.type: continue`) and exact membership (`if args.tag and args.tag not in extract_tags(...)`) — no fuzzy or partial matching in the list retrieval path."
+    path: "okf-cli.py:509-523"
+
+  - id: RET14
+    claim: "cmd_index either prints a bundle's INDEX-MAP.md/index.md verbatim or synthesizes a flat bullet list from frontmatter (title/type/description) when no such entry file exists; it performs no query matching or scoring, and no tagvec/embedding lookup, at all."
+    path: "okf-cli.py:482-502"
+
+  - id: RET15
+    claim: "The catalogue's own reference doc (okf-cli-mcp-overview.md §6) independently derives the identical scoring formula (3/2/1 weights, min-count-1 cap, max score = 6*#terms) by reading the same source lines, corroborating RET02/RET03 rather than adding new capability."
+    path: "/Users/erik/Obsidian/Knowledge-Catalogue/okf-meta-wiki/okf-cli-mcp-overview.md:166-176 (section '6. Find-Ranking (exakt)')"
+
+assessment:
+  - id: ASM01
+    verdict: "find is pure lexical substring keyword search with zero semantic/embedding component in the retrieval path — an agent query using a synonym or paraphrase of a concept's vocabulary (e.g. 'auth' vs 'authentication', 'delete' vs 'remove') will silently score 0 and return no hits even when a directly relevant concept exists."
+    severity: high
+    rationale: "RET01-RET03, RET07 — tokenize is regex+lowercase only, scoring is str.count() substring matching, and cmd_find's body contains no model/vector call."
+
+  - id: ASM02
+    verdict: "The tag_vectors.sqlite embedding cache is a dead asset from the agent's perspective: it exists, is populated (1277 rows), and is documented, but no code path an agent can invoke (CLI or MCP) reads it — it is reachable only via a standalone offline script outside the tracked tool surface."
+    severity: high
+    rationale: "RET08, RET10, RET11, RET12 — no .py in okf-tools references the file, and the MCP surface doesn't even expose the tags/merge-tags verbs that are its nearest CLI relatives."
+
+  - id: ASM03
+    verdict: "Because per-term-per-field scoring caps at 1 (min(count,1)), find cannot distinguish a concept that mentions a term once from one that is entirely about it, and ties are common for short/generic queries — combined with the undocumented iteration-order tie-break, agents will see ranking that looks arbitrary for anything but the top 1-2 hits."
+    severity: med
+    rationale: "RET02, RET05 — the min(...,1) cap plus unspecified sort stability."
+
+  - id: ASM04
+    verdict: "Multi-term queries are OR-scored, not AND-filtered, so a 3-term query returns and ranks above zero any concept matching even one term; an agent cannot rely on find to narrow by conjunction, only to bias ranking toward better overlap."
+    severity: med
+    rationale: "RET04 — inclusion gate is `score > 0` summed across terms, not a per-term all-terms-present check."
+
+  - id: ASM05
+    verdict: "Snippet extraction is not relevance-scored — it is a fixed window around the single earliest term occurrence — so for multi-concept-per-file catalogue pages the shown snippet can be unrelated to why the concept actually scored high (a later, denser cluster of matching terms is invisible)."
+    severity: low
+    rationale: "RET06 — make_snippet anchors on earliest position only, independent of the score computation."
+
+  - id: ASM06
+    verdict: "list/index are adequate as exact-filter/browse primitives (type+tag AND, or verbatim TOC) but provide zero retrieval value for natural-language agent queries — they are navigation aids, not a fallback for find's keyword gaps, so the overall retrieval layer has no semantic or fuzzy-concept fallback anywhere in the agent-facing surface."
+    severity: high
+    rationale: "RET12, RET13, RET14 — list is exact-match only, index has no query input at all, and tagvec (the only semantic asset in the system) is unwired per RET08/RET11/ASM02."

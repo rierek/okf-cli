@@ -1,0 +1,1335 @@
+{
+  "summary": {
+    "all": {
+      "L_fts5": {
+        "n": 48,
+        "recall@1": 0.020833333333333332,
+        "recall@5": 0.10416666666666667,
+        "recall@10": 0.10416666666666667,
+        "mrr": 0.057291666666666664,
+        "zero_hit": 0.8958333333333334
+      },
+      "S_voyage-3-large+titlebody": {
+        "n": 48,
+        "recall@1": 0.2708333333333333,
+        "recall@5": 0.6875,
+        "recall@10": 0.8333333333333334,
+        "mrr": 0.45216600529100526,
+        "zero_hit": 0.16666666666666666
+      },
+      "H_voyage-3-large+titlebody": {
+        "n": 48,
+        "recall@1": 0.020833333333333332,
+        "recall@5": 0.14583333333333334,
+        "recall@10": 0.25,
+        "mrr": 0.08110119047619048,
+        "zero_hit": 0.75
+      },
+      "R_voyage-3-large+titlebody": {
+        "n": 48,
+        "recall@1": 0.0625,
+        "recall@5": 0.4791666666666667,
+        "recall@10": 0.7083333333333334,
+        "mrr": 0.2535548941798942,
+        "zero_hit": 0.2916666666666667
+      },
+      "C_voyage-3-large+titlebody": {
+        "n": 48,
+        "recall@1": 0.2708333333333333,
+        "recall@5": 0.6875,
+        "recall@10": 0.8333333333333334,
+        "mrr": 0.45042989417989415,
+        "zero_hit": 0.16666666666666666
+      }
+    },
+    "generated_v2": {
+      "L_fts5": {
+        "n": 40,
+        "recall@1": 0.0,
+        "recall@5": 0.0,
+        "recall@10": 0.0,
+        "mrr": 0.0,
+        "zero_hit": 1.0
+      },
+      "S_voyage-3-large+titlebody": {
+        "n": 40,
+        "recall@1": 0.25,
+        "recall@5": 0.7,
+        "recall@10": 0.825,
+        "mrr": 0.43902777777777774,
+        "zero_hit": 0.175
+      },
+      "H_voyage-3-large+titlebody": {
+        "n": 40,
+        "recall@1": 0.0,
+        "recall@5": 0.05,
+        "recall@10": 0.175,
+        "mrr": 0.02857142857142857,
+        "zero_hit": 0.825
+      },
+      "R_voyage-3-large+titlebody": {
+        "n": 40,
+        "recall@1": 0.0,
+        "recall@5": 0.45,
+        "recall@10": 0.7,
+        "mrr": 0.20069444444444443,
+        "zero_hit": 0.3
+      },
+      "C_voyage-3-large+titlebody": {
+        "n": 40,
+        "recall@1": 0.25,
+        "recall@5": 0.7,
+        "recall@10": 0.825,
+        "mrr": 0.43694444444444447,
+        "zero_hit": 0.175
+      }
+    },
+    "real": {
+      "L_fts5": {
+        "n": 8,
+        "recall@1": 0.125,
+        "recall@5": 0.625,
+        "recall@10": 0.625,
+        "mrr": 0.34375,
+        "zero_hit": 0.375
+      },
+      "S_voyage-3-large+titlebody": {
+        "n": 8,
+        "recall@1": 0.375,
+        "recall@5": 0.625,
+        "recall@10": 0.875,
+        "mrr": 0.5178571428571429,
+        "zero_hit": 0.125
+      },
+      "H_voyage-3-large+titlebody": {
+        "n": 8,
+        "recall@1": 0.125,
+        "recall@5": 0.625,
+        "recall@10": 0.625,
+        "mrr": 0.34375,
+        "zero_hit": 0.375
+      },
+      "R_voyage-3-large+titlebody": {
+        "n": 8,
+        "recall@1": 0.375,
+        "recall@5": 0.625,
+        "recall@10": 0.75,
+        "mrr": 0.5178571428571429,
+        "zero_hit": 0.25
+      },
+      "C_voyage-3-large+titlebody": {
+        "n": 8,
+        "recall@1": 0.375,
+        "recall@5": 0.625,
+        "recall@10": 0.875,
+        "mrr": 0.5178571428571429,
+        "zero_hit": 0.125
+      }
+    }
+  },
+  "per_query": [
+    {
+      "query": "reihenfolge hochfahren ereignis paralleler vorgang oberfläche",
+      "target": "dev-wiki/tui-architecture-design/app-shell-bootstrap-and-program-handle",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "jupyter pandas numpy conda",
+      "target": "general-knowledge-wiki/ai-agentic-coding/python",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 4,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 4,
+          "lexical_owned": true
+        }
+      }
+    },
+    {
+      "query": "hunderte flugkörper agieren gemeinsam führerlos",
+      "target": "general-knowledge-wiki/defense-and-geopolitics/orchestrierung-und-koordination-des-schwarms",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 9,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "barrierefreiheit richtlinien sehbehinderte nutzer prüfen",
+      "target": "linear-design-system/accessibility/wcag-2.2-aa-compliance",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 3,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "digitaler helfer protokolliert besprechungen eigenständig",
+      "target": "general-knowledge-wiki/ai-agentic-coding/fireflies-ai",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 2,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "obergrenze der aufnahmefähigkeit bei chatbots",
+      "target": "general-knowledge-wiki/ai-agentic-coding/kontext-fenster",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 8
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 4,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "schrittweise bauanleitung tastaturbedientes konsolenprogramm vorgangsverwaltung",
+      "target": "devdash-tui/tui-implementation-plan",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "aufgabenübersicht im notizprogramm ohne eigenentwicklung",
+      "target": "agent-memory/po-immersion-beans-via-obsidian-bases-no-custom-tui",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": false
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": null,
+          "lexical_owned": true
+        }
+      }
+    },
+    {
+      "query": "bots aus hauseigener oberfläche beauftragen",
+      "target": "ai-wiki/claude-dispatch",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": null,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "know-how bewahren beim ruhestand älterer belegschaft",
+      "target": "km-wiki/wissenstransfer-zwischen-generationen-wird-vernachlaessigt",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 3,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Fußtruppen schießen Helikopter vom Himmel",
+      "target": "general-knowledge-wiki/defense-and-geopolitics/manpads",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 2,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "wer hat Vorrang bei widersprüchlichen Bauplänen",
+      "target": "dev-arch-wiki/architecture-methodology/single-source-of-truth-prinzip",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": null,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Pflichtunterlagen Norm lernendes Unternehmen",
+      "target": "km-wiki/iso-30401-dokumentationsanforderungen",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 3,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Gefahren und Potenziale vorausschauend abwägen",
+      "target": "qm-wiki/norm-reference/umgang-mit-chancen-und-risiken",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 3,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Folienrahmen für Präsentation im Breitbild",
+      "target": "linear-design-system/dev-build/components/linear-slide",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Sorten von Algorithmen Aufbau und Aufsicht",
+      "target": "ai-wiki/ai-model",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": null,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "wo lege ich Erinnerungen richtig ab",
+      "target": "memory-layer-wiki/architecture/two-store-model-and-routing",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 6,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Ansicht umschalten ohne Stapel im Terminal",
+      "target": "dev-wiki/tui-architecture-design/value-receiver-model-discipline",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 2,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Weckruf Blogbeitrag bedrohte Angestellte",
+      "target": "ai-wiki/something-big-is-happening-matt-schumer",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 4,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 2,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Platzhalter für Ansicht mit null Einträgen",
+      "target": "linear-design-system/patterns/empty-states",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "handgepflegte Übersicht zusammengehöriger Artikel",
+      "target": "general-knowledge-wiki/personal-knowledge-mgmt/map-of-content",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 6,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Kollegen Mannschaft Abgrenzung Kriterien",
+      "target": "qm-wiki/qmb-training/knowledge-blocks/unterschied-zwischen-team-und-gruppe",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 9
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 9,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Staffelstab automatisch weiterreichen Etappe",
+      "target": "lean-stack-okf/tpic-phasen-transit",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 2,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "typische Stolperfallen Selbsthosten zuhause",
+      "target": "home-lab-wiki/context/lessons/synology-spezifisch",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": null,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Startseite Vorlage Eingangskorb Besprechungen Vorhaben",
+      "target": "obsidian-vault-mgmt-wiki/konventionen-templates/template-para-dashboard",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Liste nützlicher KI-Assistenten für Vortragsfolien",
+      "target": "ai-wiki/custom-gpts-collection",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 2,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Aufstellung gewünschter Funktionen mit Rangfolge",
+      "target": "dev-arch-wiki/archive/project-documents/fpd-feature-planning-document",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 10
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 10,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Alarm aufs Handy bei Serverproblemen",
+      "target": "general-knowledge-wiki/ai-agentic-coding/telegram",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 3,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Firma hinter dem Programmier-Assistenten aus Kalifornien",
+      "target": "general-knowledge-wiki/ai-agentic-coding/anthropic",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 9
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 4,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Leitplanken für Beiträge zum Gestaltungshandbuch",
+      "target": "design-wiki/conventions",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "metadaten auswerten erweiterung wissensarchiv",
+      "target": "general-knowledge-wiki/ai-agentic-coding/dataview",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": null,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "chatverlauf wegwerfen übergabenotiz fortsetzen",
+      "target": "general-knowledge-wiki/ai-agentic-coding/context-reset",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 9,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 8
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 4,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "chatgpt gegenstück konkurrenz vergleich",
+      "target": "general-knowledge-wiki/ai-agentic-coding/openai-codex",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": null,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "vorschrift arbeitsklima raumbedingungen qualitätsmanagement",
+      "target": "qm-wiki/norm-reference/prozess-und-umgebungsfaktoren",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 6,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "werkzeug misst restliches kontingent in euro",
+      "target": "ai-wiki/claude-code-usage-limits-ccmeter",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 10
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 10,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "säugling ernährung notieren heimserver anwendung",
+      "target": "home-lab-wiki/services/mybabytracker",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 9,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 4
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 2,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "wesenszug leitfigur auftreten werbefloskeln vermeiden",
+      "target": "linear-design-system/voice-and-tone/personality",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "stolpersteine probelauf katalogwerkzeug erfahrungsbericht",
+      "target": "claude-code-wiki/optimization-lessons-learned/okf-p-init-testlauf-sproutling",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 7,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "kommandozeilenwerkzeug unleserliche töne bei fernsitzung",
+      "target": "dev-wiki/tui-architecture-design/color-profile-and-dark-bg",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 3,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "protokoll der beschlüsse zur werkzeugauswahl",
+      "target": "lean-stack-okf/lean-stack-key-decisions",
+      "source": "generated_v2",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 3,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Wie sieht eine typische Übersichtsdatei in OKF aus?",
+      "target": "okf-meta-wiki/examples/index-map-skeleton",
+      "source": "real",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 7
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 7,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Was sind die Grundbestandteile eines Systems für das Wissensmangement?",
+      "target": "km-wiki/bausteine-des-wissensmanagements-probst-2006",
+      "source": "real",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": null
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": null,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Wie wird das IP forewarding auf macOS für tailscale konfiguriert?",
+      "target": "dev-wiki/testsystem-vite-tailscale/tailscale-subnet-routing",
+      "source": "real",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": 2
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 2,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "data-ui konvention namensschema",
+      "target": "dev-wiki/debug-interface/data-ui-convention",
+      "source": "real",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": 2
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 2,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "reverse extraction DESIGN.md",
+      "target": "dev-wiki/design-system-replication/replikations-playbook",
+      "source": "real",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": 1
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 6
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 1,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 6,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "Persistente KI-Betriebsschicht auf Basis eines lokalen Second Brains",
+      "target": "ai-wiki/ai-operating-system",
+      "source": "real",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": 2
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 2,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 2,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "service home-lab photos",
+      "target": "home-lab-wiki/services/immich",
+      "source": "real",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": 4
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 1
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": 4,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 2
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 1,
+          "lexical_owned": false
+        }
+      }
+    },
+    {
+      "query": "mockup tailscale",
+      "target": "dev-wiki/testsystem-vite-tailscale/serve-excalidraw-drafts",
+      "source": "real",
+      "leaked": false,
+      "arms": {
+        "L_fts5": {
+          "rank": null
+        },
+        "S_voyage-3-large+titlebody": {
+          "rank": 3
+        },
+        "H_voyage-3-large+titlebody": {
+          "rank": null,
+          "backstop_fired": true
+        },
+        "R_voyage-3-large+titlebody": {
+          "rank": 7
+        },
+        "C_voyage-3-large+titlebody": {
+          "rank": 3,
+          "lexical_owned": false
+        }
+      }
+    }
+  ],
+  "backstop_fired": {
+    "voyage-3-large+titlebody": 47
+  }
+}
