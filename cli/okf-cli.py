@@ -765,6 +765,16 @@ def cmd_find(root, args):
         semantic_hits = _semantic_hit_dicts(root, args.query, exclude, args.limit, max_score)
 
     all_hits = hits + semantic_hits
+    if semantic_hits:
+        # Interleave by score (both are on the same 0..max_score scale) —
+        # a strong semantic candidate must not be crowded out by a long
+        # tail of weak keyword noise-hits (real-catalogue smoke finding,
+        # P8/8c). Python's sort is stable, and keyword hits were
+        # concatenated first, so equal-score ties still favor keyword
+        # (priority preserved as the tie-break, per PLAN's
+        # "appended/interleaved" fusion rule) — this is a merge, not a
+        # keyword-hits-only reorder.
+        all_hits.sort(key=lambda h: -h["score"])
     if not all_hits:
         print("(no matches for: {})".format(args.query))
         return

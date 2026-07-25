@@ -1543,6 +1543,20 @@ class SemanticBackstop(unittest.TestCase):
                  if line.startswith("path: ")]
         self.assertEqual(paths, ["b/near", "b/far"])
 
+    def test_strong_semantic_hit_is_not_crowded_out_by_weak_keyword_noise(self):
+        """Real-catalogue smoke finding (P8/8c): many weak keyword
+        noise-hits must not push a strong semantic candidate past --limit.
+        Fusion must be a score-interleave, not a keyword-hits-first append."""
+        for i in range(8):
+            self._w("b/noise{}.md".format(i), "Noise {}".format(i), [],
+                    "zzz-no-keyword-match-zzz appears once, weakly.\n")
+        self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
+        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        out, _err = self._run("zzz-no-keyword-match-zzz", limit=3)
+        paths = [line[len("path: "):] for line in out.splitlines()
+                 if line.startswith("path: ")]
+        self.assertIn("b/near", paths)
+
     def test_mutation_self_test_inverted_cosine_breaks_ranking(self):
         """LL-01 forward-guard: prove the ranking assertion actually
         detects a broken fusion — invert cosine, watch the order assertion
