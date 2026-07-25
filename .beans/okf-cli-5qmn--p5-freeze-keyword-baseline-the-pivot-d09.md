@@ -1,13 +1,11 @@
 ---
 # okf-cli-5qmn
 title: P5 — FREEZE keyword baseline (the pivot, D09)
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T19:10:57Z
+updated_at: 2026-07-25T19:19:12Z
 parent: okf-cli-2lpu
 blocked_by:
     - okf-cli-ez6f
