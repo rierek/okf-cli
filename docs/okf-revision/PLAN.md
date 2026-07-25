@@ -67,7 +67,7 @@
 
 ## Sequencing (blocked_by → beans)
 
-Labels below are **Plan-task numbers** (`Task N`, abbreviated `P<N>` in the diagram) — NOT the Think-collection `Txx` IDs (TASKS.md). Mapping to Think-IDs is in each task heading.
+Labels below are **Plan-task numbers** (`Task N`, abbreviated `P<N>` in the diagram) — NOT the Think-collection `Txx` IDs (TASKS.md). Full Plan↔Think-ID mapping is in the Self-Review coverage table at the end.
 
 ```
 Phase 1 (Grundlagen-A) ── all independent, parallelizable ────────────┐
@@ -207,22 +207,20 @@ pi.add_argument("--json", action="store_true", help="machine-readable output")
 **Design (EVAL-DESIGN.md:19-32):** Two query classes per fixture — **literal** (contains the exact token) and **paraphrase** (synonym/rewrite, keyword-zero-hit). The literal-vs-paraphrase zero-hit delta is the primary optimization signal.
 
 **Files:**
-- Create: `cli/eval/golden.yaml`
+- Create: `cli/eval/golden.json`
 - Test: covered by the runner test (Task 4)
 
 **Interfaces:**
-- Produces: `golden.yaml` — a list of `{id, verb, query, class, expected_path, min_rank, min_score_ratio}` rows. `expected_path` matches the `bundle/concept-id` form `find` prints (okf-cli.py:560,571).
+- Produces: `golden.json` — a list of `{id, verb, query, class, expected_path, min_rank, min_score_ratio, expect}` rows. `expected_path` matches the `bundle/concept-id` form `find` prints (okf-cli.py:560,571); `expect` (`hit`/`miss`) applies to `list` rows.
 
 **Acceptance:**
 - THE golden file SHALL contain ≥2 rows per fixture (one `literal`, one `paraphrase`) plus the S4 index-walk and S1/S4 `list`-metadata rows from EVAL-DESIGN.md:27-32.
 - THE golden file SHALL contain an explicit **S2 location row**: `list --scope=<correct-bundle>` expected to MISS the S2 fixture (it lives in the wrong bundle) — the comparative core of S2's location-blindness finding (EVAL-DESIGN.md:12,16-17). Each `list` row carries an `expect` field (`hit`/`miss`) so the runner can score location-correctness and metadata-hit.
 - EACH row SHALL name the verb (`find`/`list`/`index`) and the expected concept path.
 
-- [ ] **Step 1: Write `golden.yaml`** with the literal + paraphrase queries for S1–S4, the S4 index-walk row (verb `index`, expected concept listed in bundle TOC), the Ziel-3 `list` rows (S1 correct type/tag hit, S4 expected miss), and the **S2 `list --scope=<correct-bundle>` expected-miss row**. No stdlib YAML — either add a tiny hand-rolled parser in the runner or use JSON (`golden.json`) to stay dependency-free. **Decision: use `golden.json`** (stdlib `json`, no PyYAML dependency — honors the no-deps constraint).
+- [ ] **Step 1: Write `golden.json`** with the literal + paraphrase queries for S1–S4, the S4 index-walk row (verb `index`, expected concept listed in bundle TOC), the Ziel-3 `list` rows (S1 correct type/tag hit, S4 expected miss), and the **S2 `list --scope=<correct-bundle>` expected-miss row**. JSON (stdlib `json`, no PyYAML dependency — honors the no-deps constraint).
 
 - [ ] **Step 2: Commit** — `git commit -m "feat(eval): add golden.json query set for S1-S4"`
-
-*(Rename the created file to `cli/eval/golden.json`; the File Structure `golden.yaml` entry is superseded by this no-deps decision.)*
 
 ---
 
