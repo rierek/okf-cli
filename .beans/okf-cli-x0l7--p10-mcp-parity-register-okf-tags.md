@@ -1,13 +1,11 @@
 ---
 # okf-cli-x0l7
 title: 'P10 — MCP parity: register okf_tags'
-status: in-progress
+status: completed
 type: task
 priority: normal
-tags:
-    - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T19:24:34Z
+updated_at: 2026-07-25T19:29:40Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-5qmn
