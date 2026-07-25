@@ -70,10 +70,17 @@ Ollama instance (`http://localhost:11434/api/embed`); `voyage-3-large`
 
 ## Finding for Task 8: tag-embeddings only vs. body-embeddings needed
 
-**Verdict: tag-embeddings suffice as Task 8's semantic-backstop surface.**
-Extending embedding to concept titles/bodies is NOT required for P8 — it
-would be a materially bigger, separately-scoped undertaking, and the
-residual gap it would close is small and already documented (see below).
+**Verdict (corrected 2026-07-25, post-review F01): tag-embeddings alone are
+INSUFFICIENT to satisfy Task 8c's S3 acceptance as specified.** PLAN.md
+Task 8c's EARS names fixture S3 by name ("WHEN a paraphrase query ... for
+fixture S3 AND an embedding backend is available, THE CLI SHALL surface the
+expected concept within top-5"); S3 is `tags=[]` by construction with the
+token only in its body, so a tag-only backstop cannot satisfy that SHALL —
+see "Where tag-only structurally cannot help" below. Per PLAN.md Task 8c's
+own contingency clause, Task 8c SHALL extend the offline producer to also
+embed titles/bodies (not tags only). Full corrected finding + reasoning:
+bean `okf-cli-3geg`, section "Finding for Task 8 — CORRECTED 2026-07-25
+(post-review F01)".
 
 **Coverage.** As of this pass, 2.0% of concepts in the live catalogue
 (49 / 2435) carry zero tags; the remaining 98.0% carry at least one. A
@@ -98,10 +105,9 @@ S1/S2-class ones (tags present, `["eval-fixture"]`). This is the same 2.0%
 untagged slice quantified above; it is not a bug in Task 8, it's an inherent
 boundary of a tag-keyed cache.
 
-**Recommendation.** Ship P8's semantic backstop against `.tagvec` as
-specified (tag-only). Treat the untagged-concept gap as an accepted,
-documented residual — not silently absorbed into P8's scope. If it proves
-material in practice (e.g. via P12's re-measurement), title/body embedding
-is a legitimate follow-up task, but it is a different (larger: ~2435
-concepts vs. 418 tags today) indexing problem and should be scoped as such
-rather than folded into this task.
+**Recommendation.** Task 8c extends this producer to also embed concept
+titles/bodies (not tags only) so S3-class, body-only-token concepts are
+reachable by the semantic backstop — this is the scope call PLAN.md's
+contingency clause already anticipated for this exact finding. Alternative
+(PO-only): formally revise or drop 8c's S3 acceptance criterion before
+implementation; a Task-7 finding is not the authority to drop it silently.

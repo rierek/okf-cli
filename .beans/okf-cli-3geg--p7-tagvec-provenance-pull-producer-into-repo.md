@@ -7,7 +7,7 @@ priority: normal
 tags:
     - to-review
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T19:27:09Z
+updated_at: 2026-07-25T19:35:00Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-5qmn
@@ -78,6 +78,10 @@ are the exact pre-existing crosslink-suite set (unrelated to this task).
 
 ## Finding for Task 8
 
+**[SUPERSEDED 2026-07-25 — post-review F01 (blocking). See "Finding for Task 8
+— CORRECTED 2026-07-25 (post-review F01)" below for the current verdict.
+Left verbatim, not rewritten, per review instruction.]**
+
 **Verdict: tag-embeddings only suffice as P8's semantic-backstop surface —
 body-embeddings are NOT required for this task.**
 
@@ -128,3 +132,41 @@ body-embeddings are NOT required for this task.**
   — likely drift from Phase-1 tag-merge work since the 2026-07-13 SOP pass.
   P8 should not assume the cache is fully up to date; the graceful-skip
   design already tolerates missing keys per-tag.
+
+
+## Finding for Task 8 — CORRECTED 2026-07-25 (post-review F01)
+
+**Reviewer defect (F01, blocking):** the original verdict ("tag-embeddings
+only suffice") contradicted its own analysis in the same section ("tag-only
+structurally CANNOT rescue concepts with zero tags") and PLAN.md Task 8c's
+EARS acceptance, which names S3 explicitly: *"WHEN a paraphrase query ... for
+fixture S3 AND an embedding backend is available, THE CLI SHALL surface the
+expected concept within top-5."* S3 is `tags=[]` by construction, token only
+in body — tag-only cannot satisfy that SHALL, by construction, no matter the
+coverage percentage. Recommending "ship tag-only, escalate only if P12 shows
+it's material" silently dropped a written acceptance criterion; a finding is
+not the authority to do that.
+
+**Corrected verdict: tag-embeddings are INSUFFICIENT to satisfy 8c's S3
+acceptance as specified.** Coverage is still 98.0% of concepts (2386/2435)
+carrying ≥1 tag, but the 2.0% untagged slice (of which S3 is a modeled
+instance) is structurally unreachable by a tag-keyed backstop — no vector
+exists to match a body-only paraphrase query against.
+
+**Path forward — per PLAN.md's own contingency clause (Task 8c, ~line 395):
+"If Task 7 found tag-embeddings insufficient for body-only fixtures (S3
+paraphrase), 8c extends the offline producer to also embed titles/bodies and
+reads those."** That is now the recorded scope call for Task 8c: it SHALL
+extend the offline producer to also embed concept titles/bodies (not tags
+only) so S3-class, body-only-token concepts are reachable by the semantic
+backstop.
+
+**Alternative path (PO-only):** if extending the producer to titles/bodies is
+judged out of proportion to Task 8's remaining scope, the only other
+legitimate route is a PO decision to formally revise or drop 8c's S3
+acceptance criterion before implementation — not a silent scope-drop inside
+a Task-7 finding.
+
+This corrected finding supersedes the "Finding for Task 8" section above in
+full; that section is left unmodified (verbatim) and marked superseded, not
+rewritten.
