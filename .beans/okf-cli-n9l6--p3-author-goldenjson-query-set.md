@@ -1,11 +1,11 @@
 ---
 # okf-cli-n9l6
 title: P3 — Author golden.json query set
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T18:40:55Z
+updated_at: 2026-07-25T18:41:02Z
 parent: okf-cli-2lpu
 blocked_by:
     - okf-cli-ez6f
