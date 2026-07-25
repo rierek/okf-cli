@@ -1,11 +1,11 @@
 ---
 # okf-cli-2lpu
 title: 'Phase 1 — Grundlagen-A: measurement & correctness'
-status: todo
+status: in-progress
 type: epic
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T18:13:10Z
+updated_at: 2026-07-25T18:30:45Z
 parent: okf-cli-wuiv
 ---
 
