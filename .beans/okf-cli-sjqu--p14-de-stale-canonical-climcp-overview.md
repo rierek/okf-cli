@@ -1,11 +1,11 @@
 ---
 # okf-cli-sjqu
 title: P14 — De-stale canonical cli/mcp overview
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T18:13:10Z
+updated_at: 2026-07-25T20:55:57Z
 parent: okf-cli-oka0
 blocked_by:
     - okf-cli-8uaf
