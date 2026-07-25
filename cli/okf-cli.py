@@ -71,7 +71,25 @@ LOG_NOTICE = (
 
 
 def catalogue_root(explicit):
-    return os.path.abspath(explicit or os.path.dirname(os.path.abspath(__file__)))
+    """Resolve the catalogue root. Explicit --root wins unchanged (abspath,
+    even if nonexistent — main() validates that). Absent --root, auto-detect
+    by walking cwd upward for a catalogue marker (.okf.toml, or SPEC.md +
+    TYPES.md together); return None if no marker is found anywhere up to the
+    filesystem root — never silently fall back to the script's own directory.
+    """
+    if explicit:
+        return os.path.abspath(explicit)
+    d = os.getcwd()
+    while True:
+        if os.path.isfile(os.path.join(d, ".okf.toml")) or (
+            os.path.isfile(os.path.join(d, "SPEC.md"))
+            and os.path.isfile(os.path.join(d, "TYPES.md"))
+        ):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
 
 
 def is_bundle_dir(name):
@@ -1905,7 +1923,8 @@ def cmd_rename(root, args):
 def main():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--root", help="catalogue root (default: script directory)")
+    ap.add_argument("--root", help="catalogue root (default: auto-detect from cwd; "
+                    "hard-fails if none found)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     pi = sub.add_parser("index")
     pi.add_argument("bundle", nargs="?")
@@ -2007,9 +2026,10 @@ def main():
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
     args = ap.parse_args()
     root = catalogue_root(args.root)
+    if root is None:
+        sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
     if not os.path.isdir(root):
-        sys.exit("ERROR: root not found: {} (pass --root <path>; without it, defaults to "
-                  "the script's own directory)".format(root))
+        sys.exit("ERROR: root not found: {} (pass --root <path>)".format(root))
     {"prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "refs": cmd_refs,
