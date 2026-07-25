@@ -108,6 +108,58 @@ class McpCheckRefsBoundary(McpBoundaryTestBase):
         self.assertEqual([h["source"] for h in out["inbound"]], ["b/index.md"])
 
 
+class BuildArgvBundlePositionalGuard(unittest.TestCase):
+    """P8/8a (okf-cli-8uaf, SC-004) — adding "bundle": "--bundle" to the
+    shared _FLAGS dict must NOT resurface as an extra --bundle flag for
+    commands where "bundle" is already a POSITIONAL param name (index).
+    build_argv must skip a _FLAGS key when it is also in that command's
+    positional list."""
+
+    def test_index_bundle_stays_positional_only(self):
+        argv = mcp.build_argv("/root", "index", {"bundle": "b"})
+        self.assertEqual(argv, ["--root", "/root", "index", "b", "--json"])
+        self.assertNotIn("--bundle", argv)
+
+    def test_find_bundle_is_marshaled_as_flag(self):
+        argv = mcp.build_argv("/root", "find", {"query": "q", "bundle": "b"})
+        self.assertIn("--bundle", argv)
+        self.assertEqual(argv[argv.index("--bundle") + 1], "b")
+
+
+class McpFindFilterBoundary(McpBoundaryTestBase):
+    """P8/8a (okf-cli-8uaf, SC-004) — okf_find exposes type/tag/scope/bundle;
+    _FLAGS marshals all four across the real subprocess boundary. A second
+    bundle sharing the query token proves the filter actually excludes
+    (not a silent no-op, per the bean's B01-class warning)."""
+
+    def setUp(self):
+        super().setUp()
+        _w(self.root, "other/dupe.md",
+           "---\ntype: Runbook\ntitle: Dupe\ndescription: third\ntags: [gamma]\n"
+           "---\n# Dupe\n\nalpha shared token.\n")
+
+    def test_find_scope_reaches_cli_over_subprocess(self):
+        out = mcp.run_okf(self.root, "find", {"query": "alpha", "scope": "b"})
+        self.assertIn("path: b/one", out)
+        self.assertNotIn("path: other/dupe", out)
+
+    def test_find_bundle_reaches_cli_over_subprocess(self):
+        out = mcp.run_okf(self.root, "find", {"query": "alpha", "bundle": "b"})
+        self.assertIn("path: b/one", out)
+        self.assertNotIn("path: other/dupe", out)
+
+    def test_find_type_and_tag_reach_cli_over_subprocess(self):
+        out = mcp.run_okf(
+            self.root, "find", {"query": "one two", "type": "Runbook", "tag": "alpha"})
+        self.assertIn("path: b/one", out)
+        self.assertNotIn("path: b/two", out)
+
+    def test_index_with_bundle_still_works_after_flags_change(self):
+        # Regression guard for the positional-collision fix above.
+        out = mcp.run_okf(self.root, "index", {"bundle": "b"})
+        self.assertEqual(out["bundle"], "b")
+
+
 class McpTagsBoundary(McpBoundaryTestBase):
     """SC-001 (okf-cli-x0l7): okf_tags registered + runs over subprocess —
     both full audit-dump mode (empty query) and fuzzy candidate-search mode."""

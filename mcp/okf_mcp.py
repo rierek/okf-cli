@@ -17,7 +17,8 @@ _COMMANDS = {
     "tags":  (["query"], False),
 }
 # optional value-flag params: tool-key -> okf-cli flag
-_FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit"}
+_FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
+          "scope": "--scope", "bundle": "--bundle"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force"}
 
@@ -32,6 +33,13 @@ def build_argv(root, command, params):
         if val is not None and val != "":
             argv.append(str(val))
     for key, flag in _FLAGS.items():
+        if key in positional:
+            # A _FLAGS key can collide with a POSITIONAL param name of a
+            # DIFFERENT command (e.g. "bundle" is index's positional but
+            # find's optional filter flag) — _FLAGS is shared across all
+            # commands, so skip re-marshaling as a flag here; the
+            # positional loop above already placed it correctly.
+            continue
         if params.get(key) not in (None, ""):
             argv += [flag, str(params[key])]
     for key, flag in _BOOL_FLAGS.items():
@@ -65,9 +73,15 @@ def run_okf(root, command, params):
 
 def _register(server):
     @server.tool()
-    def okf_find(root: str, query: str, limit: int = 10) -> list:
-        """Ranked keyword search across a catalogue/repo root."""
-        return run_okf(root, "find", {"query": query, "limit": limit})
+    def okf_find(root: str, query: str, limit: int = 10, type: str = "",
+                 tag: str = "", scope: str = "", bundle: str = "") -> list:
+        """Ranked keyword search across a catalogue/repo root, composable
+        with exact-match type/tag filters and a bundle/subdir scope
+        (bundle is a scope alias; scope wins if both are given)."""
+        return run_okf(root, "find", {
+            "query": query, "limit": limit, "type": type, "tag": tag,
+            "scope": scope, "bundle": bundle,
+        })
 
     @server.tool()
     def okf_read(root: str, path: str) -> str:

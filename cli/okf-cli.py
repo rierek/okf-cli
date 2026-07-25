@@ -587,24 +587,36 @@ def cmd_find(root, args):
     if not terms:
         print("(empty query)")
         return
+    type_filter = getattr(args, "type", None)
+    tag_filter = getattr(args, "tag", None)
+    # 8a (FIL03/FIL04): --scope and --bundle both narrow via resolve_scopes;
+    # --scope wins if both are given. Without either, behavior is unchanged
+    # (resolve_scopes(root, None) == list_bundles(root) iteration, as before).
+    target = getattr(args, "scope", None) or getattr(args, "bundle", None)
     hits = []
-    for b in list_bundles(root):
-        for cid, ap in iter_concepts(os.path.join(root, b)):
-            fm, body = split_frontmatter(read_file(ap))
+    for b, bp in resolve_scopes(root, target):
+        for cid, ap in iter_concepts(bp):
+            text = read_file(ap)
+            fm, body = split_frontmatter(text)
+            t = fm.get("type", "")
+            if type_filter and t != type_filter:
+                continue
+            if tag_filter and tag_filter not in extract_tags(text):
+                continue
             title = fm.get("title", cid)
             tags = fm.get("tags", "")
             hay_title = title.lower()
             hay_tags = tags.lower()
             hay_body = body.lower()
             score = 0
-            for t in terms:
-                score += (3 * min(hay_title.count(t), 1)
-                          + 2 * min(hay_tags.count(t), 1)
-                          + min(hay_body.count(t), 1))
+            for term in terms:
+                score += (3 * min(hay_title.count(term), 1)
+                          + 2 * min(hay_tags.count(term), 1)
+                          + min(hay_body.count(term), 1))
             if score:
                 snip = make_snippet(body, terms)
                 desc = _dequote(fm.get("description", ""))
-                hits.append((score, "{}/{}".format(b, cid), title, fm.get("type", ""), desc, snip))
+                hits.append((score, "{}/{}".format(b, cid), title, t, desc, snip))
     hits.sort(key=lambda x: -x[0])
     if not hits:
         print("(no matches for: {})".format(args.query))
@@ -1944,6 +1956,12 @@ def main():
     pf = sub.add_parser("find")
     pf.add_argument("query")
     pf.add_argument("--limit", type=int, default=10)
+    pf.add_argument("--type", help="filter by frontmatter `type` (exact match)")
+    pf.add_argument("--tag", help="filter by tag (exact match)")
+    pf.add_argument("--scope", metavar="TARGET",
+                    help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+    pf.add_argument("--bundle", metavar="BUNDLE",
+                    help="alias for --scope (bundle-only); --scope wins if both are given")
     pr = sub.add_parser("read")
     pr.add_argument("path")
     pp = sub.add_parser("prime", help="one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")

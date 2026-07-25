@@ -1308,5 +1308,126 @@ class RootSafety(unittest.TestCase):
         self.assertEqual(okf.catalogue_root(None), expected)
 
 
+class FindFilterComposition(unittest.TestCase):
+    """P8/8a (okf-cli-8uaf, FIL03/FIL04) — find gains --type/--tag/--scope/
+    --bundle so keyword search is composable with exact-match filters."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self._w("correct/one.md", "Runbook", "One", ["alpha"],
+                "zqxfil appears here in the body.\n")
+        self._w("correct/two.md", "Concept", "Two", ["beta"],
+                "zqxfil appears here too, different type.\n")
+        self._w("wrong/three.md", "Runbook", "Three", ["alpha"],
+                "zqxfil appears in the wrong bundle.\n")
+
+    def _w(self, rel, typ, title, tags, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: {}\ntitle: {}\ntags: [{}]\ndescription: d\n---\n"
+                "# {}\n\n{}".format(typ, title, ", ".join(tags), title, body)
+            )
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, query="zqxfil", **kw):
+        import io, contextlib, types
+        args = types.SimpleNamespace(
+            query=query, limit=10, type=None, tag=None, scope=None,
+            bundle=None, breakdown=False,
+        )
+        for k, v in kw.items():
+            setattr(args, k, v)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+            okf.cmd_find(self.tmp, args)
+        return buf.getvalue()
+
+    def test_no_filters_behavior_unchanged_all_three_hit(self):
+        out = self._run()
+        self.assertEqual(out.count("path: "), 3)
+
+    def test_type_filter_excludes_other_types(self):
+        out = self._run(type="Runbook")
+        self.assertIn("path: correct/one", out)
+        self.assertIn("path: wrong/three", out)
+        self.assertNotIn("path: correct/two", out)
+
+    def test_tag_filter_excludes_non_matching_tag(self):
+        out = self._run(tag="beta")
+        self.assertIn("path: correct/two", out)
+        self.assertNotIn("path: correct/one", out)
+        self.assertNotIn("path: wrong/three", out)
+
+    def test_scope_filter_excludes_other_bundle(self):
+        out = self._run(scope="correct")
+        self.assertIn("path: correct/one", out)
+        self.assertIn("path: correct/two", out)
+        self.assertNotIn("path: wrong/three", out)
+
+    def test_bundle_alias_behaves_like_scope(self):
+        out = self._run(bundle="correct")
+        self.assertIn("path: correct/one", out)
+        self.assertNotIn("path: wrong/three", out)
+
+    def test_scope_and_bundle_both_set_scope_wins(self):
+        out = self._run(scope="correct", bundle="wrong")
+        self.assertIn("path: correct/one", out)
+        self.assertNotIn("path: wrong/three", out)
+
+    def test_composed_filters_type_tag_scope(self):
+        out = self._run(type="Runbook", tag="alpha", scope="correct")
+        self.assertIn("path: correct/one", out)
+        self.assertNotIn("path: correct/two", out)
+        self.assertNotIn("path: wrong/three", out)
+
+
+class FindScoreBreakdown(unittest.TestCase):
+    """P8/8b (okf-cli-8uaf, SCO03) — --breakdown lists which field(s)/term(s)
+    contributed to each hit's score; without it, output is byte-identical."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        ap = os.path.join(self.tmp, "b", "one.md")
+        os.makedirs(os.path.dirname(ap))
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: Runbook\ntitle: Zqxbrk One\ntags: [zqxbrk]\n"
+                "description: d\n---\n# Zqxbrk One\n\nbody prose only.\n"
+            )
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, breakdown=False):
+        import io, contextlib, types
+        args = types.SimpleNamespace(
+            query="zqxbrk", limit=10, type=None, tag=None, scope=None,
+            bundle=None, breakdown=breakdown,
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+            okf.cmd_find(self.tmp, args)
+        return buf.getvalue()
+
+    def test_breakdown_lists_contributing_fields(self):
+        out = self._run(breakdown=True)
+        self.assertIn("contrib: ", out)
+        self.assertIn("title=[zqxbrk]", out)
+        self.assertIn("tags=[zqxbrk]", out)
+        self.assertNotIn("body=[zqxbrk]", out)  # term not in body prose
+
+    def test_default_output_unchanged_without_breakdown(self):
+        out_flag_false = self._run(breakdown=False)
+        self.assertNotIn("contrib:", out_flag_false)
+
+
 if __name__ == "__main__":
     unittest.main()
