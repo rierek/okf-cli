@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T20:32:39Z
+updated_at: 2026-07-25T20:55:21Z
 parent: okf-cli-5hg4
 blocked_by:
     - okf-cli-3geg
@@ -398,3 +398,7 @@ expects, WITH the semantic backstop live and firing. Restored the live
 - `SEMANTIC_FALLBACK_RATIO` no longer exists; the new tunable is
   `SEMANTIC_MARGIN_RATIO` (0.5, same constant name style, different
   semantics — margin fraction, not absolute ratio) in `cli/okf-cli.py`.
+
+## ERRATA 2026-07-25 (post-P12 measurement, commit 0235eb8)
+
+P12's first real measurement showed the margin gate alone never fires on real-catalogue noise (top1 3/24 with clear margin over even weaker runner-up) — S3-paraphrase rescue was structurally unreachable, violating 8c EARS. Supplemented under P12 with SEMANTIC_NOISE_RATIO=0.25 absolute floor in cmd_find; rank-1 pin untouched. Two new SemanticBackstop tests cover single-hit noise and clear-margin noise. See bean okf-cli-6gq6 Deviations.
