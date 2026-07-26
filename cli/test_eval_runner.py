@@ -184,6 +184,88 @@ def _park_fts_index(root):
             os.rename(parked, db)
 
 
+@contextlib.contextmanager
+def _park_voyage_key():
+    """Temporarily unset VOYAGE_API_KEY (if present) so a caller inside the
+    `with` block sees no credential, restoring it on EVERY exit path —
+    clean return or an exception raised inside the block. Same
+    exception-safety shape as `_park_fts_index()` above (T06), for the
+    analogous reason.
+
+    WHY this is a legitimate park, not a silenced failure (RULING
+    2026-07-26, bean okf-cli-kc9x, B01 fix): `RunnerAgainstRealCatalogueTest`
+    seeds the S1-S4 fixtures fresh on every run (`fixtures.seed()`). A
+    freshly seeded fixture is BY CONSTRUCTION absent from every
+    precomputed index — the FTS index (parked above by `_park_fts_index`)
+    AND the voyage embedding cache (`concept_emb`) alike; nothing seeds
+    concept_emb here. This test exercises the EVAL RUNNER's mechanics
+    (subprocess boundary, per-row parsing, metric aggregation), not
+    retrieval quality — the semantic arm cannot possibly surface an
+    unembedded fixture, so leaving a live key wired in only turns a
+    deterministic unit test into a live-network one that spends real
+    money and can fail for reasons this test was never meant to catch: an
+    unrelated, real `concept_emb` candidate crowding the fixture out of
+    the fusion window once the lexical arm hands the ranking to semantic
+    (conditional handover, D12). That crowding is real and it is tracked
+    where it belongs — `okf-cli-uumj` (stale-`concept_emb` visibility) and
+    a dedicated `cmd_find`-level integration test — not papered over here.
+    Parking the credential for THIS test keeps it measuring what it
+    claims to measure, exactly as `_park_fts_index()` already does for the
+    lexical arm."""
+    had_key = "VOYAGE_API_KEY" in os.environ
+    saved = os.environ.pop("VOYAGE_API_KEY", None)
+    try:
+        yield
+    finally:
+        if had_key:
+            os.environ["VOYAGE_API_KEY"] = saved
+
+
+class ParkVoyageKeyTest(unittest.TestCase):
+    """B01 fix round 1 (RULING 2026-07-26, bean okf-cli-kc9x, park variant) —
+    `_park_voyage_key()` must restore `os.environ` on EVERY exit path,
+    including an exception inside the `with` body — the same exception-
+    safety guarantee `_park_fts_index()` already proves for T06, and for
+    the same underlying reason (unittest does not call tearDown() when
+    setUp() itself raises, so restoration must live in a `with`-block's
+    `finally`, not a setUp/tearDown pair). Exercised against a disposable
+    fake value, never against a real key."""
+
+    def setUp(self):
+        self._had = "VOYAGE_API_KEY" in os.environ
+        self._saved = os.environ.pop("VOYAGE_API_KEY", None)
+
+    def tearDown(self):
+        if self._had:
+            os.environ["VOYAGE_API_KEY"] = self._saved
+        else:
+            os.environ.pop("VOYAGE_API_KEY", None)
+
+    def test_key_is_absent_inside_the_with_block(self):
+        os.environ["VOYAGE_API_KEY"] = "test-disposable-value"
+        with _park_voyage_key():
+            self.assertNotIn("VOYAGE_API_KEY", os.environ)
+
+    def test_restores_the_key_after_a_clean_exit(self):
+        os.environ["VOYAGE_API_KEY"] = "test-disposable-value"
+        with _park_voyage_key():
+            pass
+        self.assertEqual(os.environ.get("VOYAGE_API_KEY"), "test-disposable-value")
+
+    def test_restores_the_key_when_the_body_raises(self):
+        os.environ["VOYAGE_API_KEY"] = "test-disposable-value"
+        with self.assertRaises(RuntimeError):
+            with _park_voyage_key():
+                raise RuntimeError("simulated runner.run() failure")
+        self.assertEqual(os.environ.get("VOYAGE_API_KEY"), "test-disposable-value")
+
+    def test_absent_key_is_a_silent_no_op(self):
+        os.environ.pop("VOYAGE_API_KEY", None)
+        with _park_voyage_key():
+            self.assertNotIn("VOYAGE_API_KEY", os.environ)
+        self.assertNotIn("VOYAGE_API_KEY", os.environ)
+
+
 class ParkFtsIndexTest(unittest.TestCase):
     """I01 (T06 review, 2026-07-26) — the parking helper used by
     RunnerAgainstRealCatalogueTest must restore the index on every exit
@@ -246,7 +328,13 @@ class RunnerAgainstRealCatalogueTest(unittest.TestCase):
         # exit path, including an exception raised inside runner.run() —
         # see _park_fts_index's docstring for why this must be a context
         # manager rather than a rename-in-setUp/restore-in-tearDown pair.
-        with _park_fts_index(CATALOGUE_ROOT):
+        #
+        # B01 fix round 1 (RULING 2026-07-26, bean okf-cli-kc9x): the same
+        # freshness gap applies to the semantic arm's concept_emb cache —
+        # the fixtures are never embedded either. _park_voyage_key() parks
+        # VOYAGE_API_KEY for the same span, for the same reason; see its
+        # docstring for why this is a park and not a silenced defect.
+        with _park_fts_index(CATALOGUE_ROOT), _park_voyage_key():
             self.result = runner.run(CATALOGUE_ROOT, GOLDEN_PATH)
 
     def tearDown(self):

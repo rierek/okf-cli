@@ -1735,6 +1735,52 @@ class SemanticBackstop(unittest.TestCase):
         self.assertIn("path: b/unrelated", out)  # still surfaced, appended
         self.assertNotEqual(lines[4], "path: b/unrelated")
 
+    def test_ambiguous_lexical_hands_over_but_keeps_its_hits_appended_behind(self):
+        """I01 (review round 1) / SUPERVISOR RULING item 2 — the hard case at
+        cmd_find level: the lexical arm has REAL, NONZERO, AMBIGUOUS hits
+        (ratio inside the 1.0x-1.5x band, not zero hits like the other
+        SemanticBackstop rescue tests) AND semantic candidates are present.
+        Required: the semantic arm owns the ranking (D12), AND the lexical
+        top-1 (and runner-up) are still PRESENT in the result, appended
+        behind, in their own order. That second property is what makes
+        handover tolerable in production — an ambiguous-but-real lexical
+        hit must not vanish, only yield first place. Reviewer's exact repro
+        shape: lexical pair scores in a 1.0x-1.5x ratio (ambiguous under
+        BOTH the pre-plan 2x rule and the measured 1.5x rule) plus one
+        semantic-only candidate. Builds a real FTS index
+        (okf.build_fts_index) so the lexical arm is NOT ALSO degraded,
+        matching the reviewer's live-probe setup exactly: one stderr note
+        (handover), not two (handover + degradation)."""
+        self._w("b/amba.md", "Zqxambig A", ["zqxambig"],
+                "no second query term appears here.\n")
+        self._w("b/ambb.md", "Zqxambig B", [],
+                "zqxambig body only, a close competing score.\n")
+        self._w("b/ambc.md", "Semantic Only Concept", [],
+                "nothing lexically related here.\n")
+        okf.build_fts_index(self.tmp)
+        self._make_tagvec([("k1", "b/ambc", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, err = self._run("zqxambig")
+        lines = out.splitlines()
+        lex_top1, lex_top2 = None, None
+        for i, l in enumerate(lines):
+            if l == "path: b/amba":
+                lex_top1 = int(lines[i - 3].split("score: ")[1].split("/")[0])
+            if l == "path: b/ambb":
+                lex_top2 = int(lines[i - 3].split("score: ")[1].split("/")[0])
+        self.assertIsNotNone(lex_top1)
+        self.assertIsNotNone(lex_top2)
+        self.assertTrue(
+            1.0 <= lex_top1 / lex_top2 < 1.5,
+            "fixture must land the lexical pair inside the ambiguous band, "
+            "got {}/{}".format(lex_top1, lex_top2),
+        )
+        paths = [l[len("path: "):] for l in lines if l.startswith("path: ")]
+        self.assertEqual(paths, ["b/ambc", "b/amba", "b/ambb"])
+        notes = [l for l in err.splitlines() if l]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("semantic arm owns this ranking", notes[0])
+
     def test_semantic_rescue_ranks_nearer_concept_first(self):
         self._make_tagvec([
             ("k1", "b/near", [1.0, 0.0]),
