@@ -1,11 +1,11 @@
 ---
 # okf-cli-ftri
 title: T11 Tag query expansion behind --expand-tags
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:32:42Z
+updated_at: 2026-07-26T08:39:52Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -67,3 +67,14 @@ _Requirements: PLAN.md Task 11 · QUESTIONS Q05, Q06 · TASKS.md T05 · DECISION
 ## Additional success criterion (global constraint, network)
 
 - SC-NET: no unit test added or touched by this task performs a real network call. Every embedding call under test is exercised through a faked `urlopen` or a patched module attribute. The producer's test module is network-free by construction and must stay that way.
+
+
+## Prelude from T10 review (2026-07-26, supervisor)
+
+T10 (`okf-cli-snxj`) is closed and approved after one fix round. Three things carry into this task:
+
+1. **Baseline moved.** The suite is now **253 tests**, still exactly **19 failures / 2 errors**. SC-06 measures against that count.
+2. **No interface collision expected, but verify rather than assume.** T10 added `_zero_hit_suggestions()` as an independent helper plus a branch inside `cmd_find`. This task touches `all_tags`, `tokenize`, `difflib`, adds `_query_vector`/`_expand_query_tags` and rewires `semantic_ranking()` and the lexical-confidence gate — all of that sits upstream of where the zero-hit branch fires. If expansion changes whether the zero-hit branch is entered at all, that is a real interaction and belongs in this bean.
+3. **A feature bound was established and must not be contradicted.** `_zero_hit_suggestions()` reaches typos and synonyms ONLY. Truncated or partially typed terms never arrive there, because the substring scan matches any prefix and the FTS arm matches it via prefix query — both catch it first by construction. It is marked to carry into T13 documentation.
+
+Standing quality note (PF-5, bean `okf-cli-cskz`): a sentence in a bean whose function is to end review is the sentence that gets checked. Claims of the form "verified", "behaviour-identical", "reverted byte-identically" must name the command and its observed output, or not be written.
