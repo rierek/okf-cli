@@ -1,11 +1,11 @@
 ---
 # okf-cli-8j7l
 title: T07 Semantic arm on voyage-3-large
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T07:06:52Z
+updated_at: 2026-07-26T07:07:51Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-c922
@@ -339,4 +339,4 @@ FAIL/ERROR set re-diffed byte-identical against the pre-task baseline
 (229-test commit `ea23f50`) — still nothing new, nothing silenced. 233 -> 234
 tests (the one new regression test), all green.
 
-Commit: `<filled in after commit — see report>`.
+Commit: `be08f8c` (fix(cli): shim excludes before slicing).
