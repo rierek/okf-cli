@@ -2,8 +2,18 @@
 
 Based on: `docs/okf-retrieval-architecture/eval/shipped_v2.json`, regenerated
 2026-07-26 via `remeasure.py --root ~/Obsidian/Knowledge-Catalogue --queries
-queries_v2.json queries_real.json --out shipped_v2.json`, okf-tools git sha
-`cdd7a0b4824f7d232fb0b6aa393a9aff8e7e2328`.
+queries_v2.json queries_real.json --out shipped_v2.json`. Logic baseline
+(the `find`/fusion code being measured, unchanged by this task) sha
+`cdd7a0b4824f7d232fb0b6aa393a9aff8e7e2328`; artefact commit (the `rows`-key
+extension to `remeasure.py` that produced this table, plus this file itself)
+sha `81a0368`.
+
+**Strongest finding: `catalogue-gap` = 0 of 8 (0%).** Every expected concept
+in the residual zero-hit set, read directly (`okf-cli read <path>`),
+genuinely answers its query. This answers Q10 completely and moves the next
+lever unambiguously to retrieval design, not authoring — contrary to what the
+older R12 finding (a real catalogue gap, tracked separately in
+`okf-cli-iw0d`, not part of this set) might have suggested.
 
 `rank` = achieved rank at the shipped default (`--limit 10`) — blank on every
 row here, since this table is exactly the 8 queries (of 48) that missed it.
@@ -14,7 +24,7 @@ at `--limit 10`.
 
 | query | expected_path | rank | class | note |
 |---|---|---|---|---|
-| aufgabenübersicht im notizprogramm ohne eigenentwicklung | agent-memory/po-immersion-beans-via-obsidian-bases-no-custom-tui | – | ranking | top-3@10: replikation, detail-vergleichstabelle-feature-matrix, ki-im-alltag-claude-code-praxis. Semantic arm never fires, even at `--limit 50`: lexical top-1 is wrong but keeps a clear margin (`SEMANTIC_MARGIN_RATIO` gate) past 50 hits. Standalone `semantic_ranking()`: rank 40/2443, cosine 0.46 — close enough to matter, but the fusion gate never lets it run. |
+| aufgabenübersicht im notizprogramm ohne eigenentwicklung | agent-memory/po-immersion-beans-via-obsidian-bases-no-custom-tui | – | ranking | top-3@10: replikation, detail-vergleichstabelle-feature-matrix, ki-im-alltag-claude-code-praxis. Semantic arm never fires, even at `--limit 50`: lexical top-1 is wrong but keeps a clear margin (`SEMANTIC_MARGIN_RATIO` gate, `_keyword_top1_is_confident` True at 100 vs 65) past 50 hits. Standalone `semantic_ranking()`: rank 40/2443, cosine 0.46 — close enough to matter, but the fusion gate never lets it run. **This is a characterised limit of the shipped fusion rule, not a defect**: R43 measured exactly this margin rule and it won in the worst case; it affects 1 of 48 queries here; lowering the threshold on the strength of a single query would be the overfitting this project has avoided three times already. See `okf-cli-uumj`, where the related question already sits — whether the binary ownership decision is too absolute in both directions. Both belong in a future *measured* round, not this one. |
 | bots aus hauseigener oberfläche beauftragen | ai-wiki/claude-dispatch | – | ranking | top-3@10: telegram, tools-ki-agenten, ai-agent-tools. Found at rank 27/2443 with `--limit 50` (semantic arm already owns at `--limit 10`) — past the display window only. |
 | wer hat Vorrang bei widersprüchlichen Bauplänen | dev-arch-wiki/architecture-methodology/single-source-of-truth-prinzip | – | ranking | top-3@10: adr-0025, adr-0026, adr-0037. Found at rank 35/2443 with `--limit 50`; 34 governance/ADR docs sharing "Architektur" vocabulary outrank the SSoT concept that actually answers the query. |
 | Sorten von Algorithmen Aufbau und Aufsicht | ai-wiki/ai-model | – | synonymy | top-3@10: gliederung-der-auditarten, in-memory-rebuild-index, managementbewertung-ablauf-aufbau. Not found at `--limit 50`. Standalone `semantic_ranking()`: rank 90/2443, cosine 0.395. Concept answers the query ("Typen von KI-Modellen" section) but shares zero surface vocabulary with the paraphrase (`queries_v2.json` construction) and the embedding placed it far outside any plausible rescue window. |
