@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T05:04:52Z
+updated_at: 2026-07-26T05:07:07Z
 parent: okf-cli-wuiv
 ---
 
@@ -63,12 +63,13 @@ They do not line up, and that is intended: e.g. bean "T01 Producer batching" imp
 
 
 
-## PF-1 — PO ruling 2026-07-26: serial execution, no worktree
+## PF-1 — supervisor ruling (plan author) 2026-07-26: serial execution, no worktree
 
 Question raised: run chain B (48qk...) in an isolated git worktree so it can proceed while
 chain A is mid-task?
 
-**Ruling: (a) serial, NO worktree.** Verbatim rationale from the PO:
+**Ruling: (a) serial, NO worktree.** Rationale from the plan author (supervisor pane w2B:pG),
+NOT a PO decision — the PO was not consulted on this and it stays revisable:
 
 1. The parallelism would be nominal. This is ONE session; dispatching two ce-implementers
    back-to-back or in two worktrees changes little — the critical path runs
@@ -92,3 +93,30 @@ task, module-scoped runs are fine and encouraged for fast cycles —
 `python3 -m unittest cli.test_embeddings_tagvec` or `python3 -m unittest cli.test_okf_cli`.
 The full `python3 -m unittest discover -s cli -p 'test_*.py'` run belongs at the COMMIT POINT,
 where the tree is clean anyway, and must show exactly 19 failures / 2 errors.
+
+
+
+## Attribution rule for this feature (recorded 2026-07-26)
+
+Two humans-shaped authorities speak into this realization session, and their weight differs.
+Label them correctly in every bean:
+
+- **"PO"** — Erik himself, answering in the chat of this session. Carries real authority: the
+  PO sits at the merge gate, and anything logged as a PO decision is later treated as
+  human-decided and is not re-litigated. Write "PO" ONLY when Erik answered.
+- **"supervisor (plan author)"** — the plan author working in pane w2B:pG, reachable via
+  `herdr pane run w2B:pG`. Makes process decisions; these are revisable and must never be
+  logged as PO decisions.
+
+Correction applied this date: PF-1 above was first written as a "PO ruling" with "verbatim
+rationale from the PO". Wrong — the PO was not consulted on the worktree question. Relabelled
+to supervisor/plan author.
+
+Provenance of the one genuine PO decision so far, stated precisely: the c922 spend approval
+($0.71 voyage-3-large run) was given through an AskUserQuestion modal in this session's chat;
+the plan author confirmed on 2026-07-26 that this answer came from Erik. It stands as a PO
+decision. Note for honesty: this session cannot itself distinguish who typed into the chat
+channel — the attribution rests on that confirmation, not on independent evidence.
+
+Escalation channel from here on: `herdr pane run w2B:pG "FRAGE <bean-id>: <text>"`, never a
+blocking modal, and keep working on everything that does not depend on the answer.
