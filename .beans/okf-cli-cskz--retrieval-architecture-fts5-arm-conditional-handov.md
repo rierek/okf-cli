@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T05:07:07Z
+updated_at: 2026-07-26T05:09:29Z
 parent: okf-cli-wuiv
 ---
 
@@ -120,3 +120,21 @@ channel — the attribution rests on that confirmation, not on independent evide
 
 Escalation channel from here on: `herdr pane run w2B:pG "FRAGE <bean-id>: <text>"`, never a
 blocking modal, and keep working on everything that does not depend on the answer.
+
+
+
+## Lessons pending (write to docs/LESSONS-LEARNED.md at epic close)
+
+- **LL-pending-01 — reviewer verdict line missing.** The ce-specs-reviewer report on
+  `okf-cli-pean` (2026-07-26) started directly with the findings table; the mandatory first
+  line `APPROVED` / `CHANGES_REQUIRED` was absent. Both findings were self-declared
+  non-blocking, so the supervisor scored it APPROVED — but that was an interpretation, and the
+  verdict line exists precisely so the control signal is not interpreted.
+  *Forward-guard:* dispatch prompts for ce-specs-reviewer must say "first line EXACTLY
+  APPROVED or CHANGES_REQUIRED, nothing before it"; if it is missing, demand it via
+  SendMessage instead of inferring.
+- **LL-pending-02 — plan grounded against a moving foreign repo.** PLAN.md SC-03 names
+  "2437 concept(s)"; the live catalogue had grown to 2443 by realization time, so a literal
+  success criterion was unmeetable while its intent was met.
+  *Forward-guard:* success criteria that quote a count from a separate, live repo should state
+  the count as ">= N as of <date>" or name the invariant instead of the number.
