@@ -274,6 +274,56 @@ class MainConceptsTarget(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
 
+class MainPersistsBatchBeforeNextEmbed(unittest.TestCase):
+    """T01 review I01 — no end-to-end test exercised the property that
+    main() commits each batch's rows via write_concept_rows() BEFORE the
+    NEXT batch's embed call, so a batch failure never loses an
+    already-embedded batch. This characterizes existing T01 behavior
+    (reviewer-verified by code reading, cli/embeddings/build_tagvec.py:349-
+    364) as a committed regression test; T02's embed_resilient then builds
+    on this exact seam (skip-and-continue instead of raise-and-abort)."""
+
+    def setUp(self):
+        self.root = _make_tmp_catalogue()
+        self.tmp_out = tempfile.mkdtemp()
+        self.output = os.path.join(self.tmp_out, "tag_vectors.sqlite")
+        self._orig_bge = bt.embed_bge_m3
+        self._orig_limit = bt.BATCH_LIMITS["bge-m3"]
+        bt.BATCH_LIMITS["bge-m3"] = (1, 90000)  # force one concept per batch
+
+    def tearDown(self):
+        bt.embed_bge_m3 = self._orig_bge
+        bt.BATCH_LIMITS["bge-m3"] = self._orig_limit
+        shutil.rmtree(self.root, ignore_errors=True)
+        shutil.rmtree(self.tmp_out, ignore_errors=True)
+
+    def test_batch_one_rows_survive_batch_two_failure(self):
+        calls = {"n": 0}
+
+        def _flaky(texts):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("HTTP 400")
+            return [[0.1, 0.2] for _ in texts]
+
+        bt.embed_bge_m3 = _flaky
+
+        try:
+            bt.main(["--root", self.root, "--output", self.output,
+                     "--model", "bge-m3", "--target", "concepts", "--produce"])
+        except RuntimeError:
+            pass  # today (pre-T02) this raises and aborts; T02 changes that
+            # to skip-and-continue. Either way batch 1 must already be
+            # committed — that is the property under test.
+
+        conn = sqlite3.connect(self.output)
+        try:
+            rows = conn.execute("SELECT path FROM concept_emb").fetchall()
+        finally:
+            conn.close()
+        self.assertEqual({r[0] for r in rows}, {"b/one"})
+
+
 class Batches(unittest.TestCase):
     """T11 — a 2437-concept run must be cut into API-sized pieces, by item
     count AND by payload size (Voyage caps a request by token budget, not by
