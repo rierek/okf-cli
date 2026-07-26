@@ -4,8 +4,10 @@ title: Follow-up Retrieval architecture 2026-07-26
 status: todo
 type: epic
 priority: normal
+tags:
+    - to-review
 created_at: 2026-07-26T12:22:18Z
-updated_at: 2026-07-26T13:01:48Z
+updated_at: 2026-07-26T14:36:52Z
 parent: okf-cli-wuiv
 ---
 
@@ -39,3 +41,22 @@ This epic is **strand A** of the follow-up: the part that needs no measurement. 
 ## Definition of Done
 
 All leaves completed; `okf-cli --help` shows every command with a description, alphabetically, plus the grouped overview and the `<command> --help` pointer; `CommandHelpConformance` is green and has been seen failing; `build-index`, `prime` and `info` are reachable over MCP; the topic-note migration (`okf-cli-t7jz`) has run. Then `to-review` for the PO.
+
+
+
+## Realization complete 2026-07-26 — handed to the PO gate
+
+All seven leaves `completed`, each reviewed by `ce-specs-reviewer` with independent re-verification (own test runs, own snapshots, own mutation probes — never the implementer's quoted output). Status left at `todo` with tag `to-review`: closing an epic is the PO's call at the merge gate.
+
+**Definition of Done, item by item.** `okf-cli --help` shows every one of the 21 commands with a description, alphabetically, plus the rendered grouped overview and the `<command> --help` pointer — verified live. `CommandHelpConformance` is green and has been seen failing: four separate invariants were broken and each produced its assertion, with byte-identical reverts confirmed by md5. `build-index`, `prime` and `info` are reachable over MCP. The topic-note migration `okf-cli-t7jz` has run.
+
+**Evidence.** Suite `Ran 279 tests` with exactly `failures=19, errors=2` — the 19F/2E unchanged and pre-existing in the crosslink suites, zero new. The plan's own arithmetic resolves: 259 baseline + 2+4+2+5+3+4 per task = 279. Commits `67f7b3e` (T01), `4f6ac34` (T02), `ea18873` (T03), `ecd2058` (T04), `7dade90` (T05), `826fcbf` (T06), `697dc99`+`ab57e29` (migration).
+
+**Two things for the PO to decide, neither of them defects in the shipped work.**
+
+1. `okf-cli-x60r` (new bug, `low`, unscheduled): the conformance gate iterates the subcommand parsers and not the top-level parser, so an undocumented top-level option would pass it. Proven by mutation — `--root` stripped of its help text left the gate green. No live defect, and PLAN.md did not ask for that coverage. The epic's claim therefore holds for the 21 subcommands and their arguments, which is narrower than "every command and option".
+2. Which of the remaining eight CLI commands belong on the MCP surface stays open by D04. `visualize` writes `viz.html` into the catalogue and `log --write` materialises `log.md`, so neither is the read-only addition it looks like; the six tag/fix/rewrite commands mutate catalogue content.
+
+**The plan shipped two untrue passages and both were caught at the point of use, not in review.** Task 3's literal help string contradicted the plan's own test; Task 6's literal docstring promised a `provenance: lexical` line that `cmd_find` never prints. Corrected in place, re-established by the reviewer against the code, and written up as LL-15. Worth the PO's attention because the plan had passed two rounds of `ce-plan-reviewer` and three of `ce-verify-operationalization` before either defect surfaced.
+
+Lessons LL-15, LL-16, LL-17 recorded in `docs/LESSONS-LEARNED.md`. Origin records `okf-cli-3suc`, `okf-cli-6zhw` and `okf-cli-4ws6` stay on `todo` and now each carry a table mapping their findings to the leaf and commit that fixed them.
