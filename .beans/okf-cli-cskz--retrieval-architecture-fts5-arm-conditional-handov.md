@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T05:18:32Z
+updated_at: 2026-07-26T05:39:20Z
 parent: okf-cli-wuiv
 ---
 
@@ -186,3 +186,42 @@ subagent reads its dispatch prompt reliably and a file it never opens not at all
 The agent definition itself is owned by the plan author, not this session: it lives in
 `~/.claude/agents/`, is global user config affecting all projects, and needs Erik's approval.
 Not touched from here.
+
+
+
+## PF-3 — commit invocation form (supervisor ruling, plan author, 2026-07-26)
+
+**Binding for every agent in this chain: commit SINGLE-LINE.**
+
+    git commit -m "subject"                 # correct
+    git commit -m "subject" -m "body"        # correct
+    git commit -m \ <newline> "subject"      # WRONG - silently defeats the guard
+
+Never put a backslash line-continuation between `-m` and its message.
+
+Why (root cause, established by test, not inference): `~/.claude/hooks/git-enforce.py`
+tokenises the command with `shlex(punctuation_chars=True)` in NON-POSIX mode. That mode does
+not resolve `backslash + newline`; it emits a literal backslash token, so the argv seen by the
+hook is `[git, commit, -m, \, "subject"]`. `check_commit` takes `args[j+1]` after `-m`
+— the BACKSLASH — as the message. Title = `\`, length 1, E1 passes, and the real message is
+never inspected.
+
+Verified both ways:
+- `git commit --dry-run -m \ <newline> "<55-char subject>"` -> passes, exit 0, no E1.
+- Same subject single-line -> `E1: Commit-Title >50 Zeichen (55). Kuerzen.`
+
+Scope: **E1 and E2 are defeated** by this form (a `Co-Authored-By` trailer is likewise not
+seen). E3/E4 are NOT affected — they do not read the value token. This is also NOT the
+knowingly accepted D11 gap ("no `-m` -> allow"): here `-m` IS present, the hook just mistakes
+the backslash for the message.
+
+**Retracted supervisor claim:** an earlier note in bean `okf-cli-2a1w` concluded that
+"PreToolUse hooks do not fire for Agent-tool subagents". That is WRONG and is withdrawn. The
+plan author disproved it by having a general-purpose subagent attempt the same 55-character
+commit in a throwaway repo: it was blocked verbatim with E1 and never executed. Hooks fire for
+subagents. The defect was always the parser, and the tell was the backslash continuation.
+
+*Forward-guard:* this rule goes into EVERY ce-implementer dispatch prompt of this chain, since
+the subagents author most of the commits. The hook fix itself (strip continuations before
+tokenising) is owned by the plan author and needs Erik's approval — `~/.claude/` is global
+user config and is not touched from this session.
