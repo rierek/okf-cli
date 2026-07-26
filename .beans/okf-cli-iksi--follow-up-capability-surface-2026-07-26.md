@@ -5,9 +5,9 @@ status: todo
 type: epic
 priority: normal
 tags:
-    - to-review
+    - accepted
 created_at: 2026-07-26T15:09:34Z
-updated_at: 2026-07-26T17:07:10Z
+updated_at: 2026-07-26T17:08:42Z
 parent: okf-cli-wuiv
 ---
 
@@ -105,3 +105,16 @@ loudly on `cmd` rather than pass silently.
 **Lessons recorded:** LL-18 (a channel claim is true only where its reader stands) and
 LL-19 (widening a gate re-opens the exemption list tuned for the narrower collection) in
 docs/LESSONS-LEARNED.md.
+
+
+## PO review, 2026-07-26 — accepted
+
+The PO reviewed the epic at the gate and accepted both leaves without exception
+("T01: all accepted"). No rework ordered, no finding reclassified. The three
+non-blocking findings recorded above (I01 missing delimiter, I02 stub-tested SC-02,
+I03 test-local `_SubParsersAction` filter) stay as they are — the PO's standing rule
+for this epic was that only findings with real runtime or gate-integrity impact get
+fixed, and all three were assessed as having none.
+
+Tag moved from `to-review` to `accepted`. The merge decision remains the PO's; this
+repo runs main-direct, so the work is already on `main` and nothing is pending a merge.
