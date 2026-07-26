@@ -281,7 +281,17 @@ class MainPersistsBatchBeforeNextEmbed(unittest.TestCase):
     already-embedded batch. This characterizes existing T01 behavior
     (reviewer-verified by code reading, cli/embeddings/build_tagvec.py:349-
     364) as a committed regression test; T02's embed_resilient then builds
-    on this exact seam (skip-and-continue instead of raise-and-abort)."""
+    on this exact seam (skip-and-continue instead of raise-and-abort).
+
+    Review round 1 / B01: the first version of this test only proved the
+    END-STATE ("batch 2's rows are never written when batch 2 fails"),
+    which an accumulate-then-write-once-after-the-loop mutation also
+    satisfies without preserving ORDER (batch 2 always contributes zero
+    rows there too, since it never recovers). Fixed below to check the
+    ORDERING directly: the flaky callable queries concept_emb itself, on
+    every call it makes for batch 2, and requires batch 1's row to
+    ALREADY be present at that moment — i.e. committed before batch 2's
+    embed call starts, not merely before the run ends."""
 
     def setUp(self):
         self.root = _make_tmp_catalogue()
@@ -307,13 +317,42 @@ class MainPersistsBatchBeforeNextEmbed(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
         shutil.rmtree(self.tmp_out, ignore_errors=True)
 
-    def test_batch_one_rows_survive_batch_two_failure(self):
+    def test_batch_one_already_committed_when_batch_two_starts(self):
         calls = {"n": 0}
+        order_failures = []
 
         def _flaky(texts):
             calls["n"] += 1
             if calls["n"] == 1:
                 return [[0.1, 0.2] for _ in texts]
+            # Every call from here on is embed_resilient retrying batch 2
+            # (b/two). Check, at THIS moment, whether batch 1 (b/one) is
+            # already committed to the output db.
+            #
+            # This does not use assertEqual directly here: embed_resilient
+            # wraps fn() in "except Exception" by design (LL-08 — a
+            # transient HTTP error must retry, not abort), and an
+            # AssertionError raised inside this callable would be an
+            # ordinary Exception to that catch — silently swallowed and
+            # retried, never surfacing as a test failure. So the check
+            # result is captured here and re-raised by the test body
+            # itself, after main() has returned and nothing can catch it.
+            try:
+                committed = set()
+                if os.path.exists(self.output):
+                    conn = sqlite3.connect(self.output)
+                    try:
+                        conn.execute(bt.CONCEPT_SCHEMA)
+                        committed = {r[0] for r in conn.execute(
+                            "SELECT path FROM concept_emb")}
+                    finally:
+                        conn.close()
+                self.assertEqual(
+                    committed, {"b/one"},
+                    "batch 1 not committed yet when batch 2 was embedded "
+                    "(call {})".format(calls["n"]))
+            except AssertionError as exc:
+                order_failures.append(exc)
             raise RuntimeError("HTTP 400")  # batch 2 never recovers
 
         bt.embed_bge_m3 = _flaky
@@ -322,6 +361,11 @@ class MainPersistsBatchBeforeNextEmbed(unittest.TestCase):
         # None, main() skips it and continues — no exception propagates.
         bt.main(["--root", self.root, "--output", self.output,
                  "--model", "bge-m3", "--target", "concepts", "--produce"])
+
+        if order_failures:
+            raise order_failures[0]
+        self.assertGreater(calls["n"], 1,
+                            "flaky callable was never invoked for batch 2")
 
         conn = sqlite3.connect(self.output)
         try:
