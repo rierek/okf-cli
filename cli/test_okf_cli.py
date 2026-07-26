@@ -1793,6 +1793,227 @@ class FtsIndexBuild(unittest.TestCase):
             conn.close()
 
 
+def _run_find(root, query, **kw):
+    """Module-level twin of the per-class _run() helper at
+    cli/test_okf_cli.py:1381 — same in-process convention (SimpleNamespace
+    args, cmd_find, redirected streams), but parameterised by root so the new
+    suites can each use their own temp catalogue. Returns stdout."""
+    import io
+    import contextlib
+    import types
+    args = types.SimpleNamespace(
+        query=query, limit=10, type=None, tag=None, scope=None,
+        breakdown=False,
+    )
+    for k, v in kw.items():
+        setattr(args, k, v)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+        okf.cmd_find(root, args)
+    return buf.getvalue()
+
+
+class FtsRanking(unittest.TestCase):
+    """T13 — the lexical arm is BM25 over the index, and it degrades to the
+    substring scan rather than failing when the artefact is missing (D15)."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: Serve Excalidraw drafts\n"
+                    "description: d\ntags: [excalidraw, tailscale]\n---\n"
+                    "Render the drawing to PNG and expose it over the tunnel.\n")
+        with open(os.path.join(self.root, "b", "two.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Konzept\ntitle: Tunnel basics\n"
+                    "description: d\ntags: [tailscale]\n---\nA tunnel primer.\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_returns_none_without_an_index(self):
+        self.assertIsNone(okf._fts_ranking(self.root, "tunnel", 10))
+
+    def test_absent_index_prints_exactly_one_stderr_note(self):
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            result = okf._fts_ranking(self.root, "tunnel", 10)
+        self.assertIsNone(result)
+        lines = [l for l in buf.getvalue().splitlines() if l]
+        self.assertEqual(len(lines), 1)
+        self.assertIn("note:", lines[0])
+
+    def test_ranks_title_match_above_body_match(self):
+        okf.build_fts_index(self.root)
+        ranked = okf._fts_ranking(self.root, "tunnel", 10)
+        self.assertEqual(ranked[0][0], "b/two")
+
+    def test_type_filter_narrows(self):
+        okf.build_fts_index(self.root)
+        ranked = okf._fts_ranking(self.root, "tunnel", 10, type_filter="Runbook")
+        self.assertEqual([p for p, _s in ranked], ["b/one"])
+
+    def test_tag_filter_matches_whole_tags_only(self):
+        okf.build_fts_index(self.root)
+        ranked = okf._fts_ranking(self.root, "tunnel", 10, tag_filter="tail")
+        self.assertEqual(ranked, [])
+
+    def test_scope_filter_narrows_to_a_bundle(self):
+        okf.build_fts_index(self.root)
+        self.assertNotEqual(okf._fts_ranking(self.root, "tunnel", 10, scope="b"), [])
+        self.assertEqual(okf._fts_ranking(self.root, "tunnel", 10, scope="zz"), [])
+
+    def test_corrupt_index_degrades_to_none(self):
+        okf.build_fts_index(self.root)
+        with open(okf._fts_db_path(self.root), "wb") as f:
+            f.write(b"not a database")
+        self.assertIsNone(okf._fts_ranking(self.root, "tunnel", 10))
+
+    def test_corrupt_index_prints_exactly_one_stderr_note(self):
+        import io
+        import contextlib
+        okf.build_fts_index(self.root)
+        with open(okf._fts_db_path(self.root), "wb") as f:
+            f.write(b"not a database")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            result = okf._fts_ranking(self.root, "tunnel", 10)
+        self.assertIsNone(result)
+        lines = [l for l in buf.getvalue().splitlines() if l]
+        self.assertEqual(len(lines), 1)
+        self.assertIn("note:", lines[0])
+
+    def test_unreadable_index_degrades_to_none_with_one_note(self):
+        """D15's third case (permission-denied): sqlite3.OperationalError is
+        a subclass of DatabaseError (verified via __mro__), so the same
+        except clause that catches corruption also catches this. Proven
+        here, not assumed."""
+        import io
+        import contextlib
+        okf.build_fts_index(self.root)
+        db_path = okf._fts_db_path(self.root)
+        os.chmod(db_path, 0o000)
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                result = okf._fts_ranking(self.root, "tunnel", 10)
+        finally:
+            os.chmod(db_path, 0o644)
+        self.assertIsNone(result)
+        lines = [l for l in buf.getvalue().splitlines() if l]
+        self.assertEqual(len(lines), 1)
+        self.assertIn("note:", lines[0])
+
+
+class FindDegradesWithoutIndex(unittest.TestCase):
+    """D15 — no artefact, no crash: the substring path still answers, and
+    its output shape is unchanged from before this plan."""
+
+    def test_find_without_index_still_prints_a_hit(self):
+        root = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(root, "b"))
+            with open(os.path.join(root, "b", "one.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("---\ntype: Runbook\ntitle: Tunnel\ndescription: d\n"
+                        "tags: [net]\n---\nbody\n")
+            with open(os.path.join(root, "b", "index.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("# B\n")
+            out = _run_find(root, "tunnel")
+            self.assertIn("path: b/one", out)
+            self.assertIn("score: 3/6", out)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_find_without_index_prints_exactly_one_stderr_note(self):
+        import io
+        import contextlib
+        root = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(root, "b"))
+            with open(os.path.join(root, "b", "one.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("---\ntype: Runbook\ntitle: Tunnel\ndescription: d\n"
+                        "tags: [net]\n---\nbody\n")
+            with open(os.path.join(root, "b", "index.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("# B\n")
+            import types
+            args = types.SimpleNamespace(
+                query="tunnel", limit=10, type=None, tag=None, scope=None,
+                breakdown=False,
+            )
+            out_buf, err_buf = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+                okf.cmd_find(root, args)
+            lines = [l for l in err_buf.getvalue().splitlines() if l]
+            self.assertEqual(len(lines), 1)
+            self.assertIn("note:", lines[0])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
+class FtsBm25WeightsApplied(unittest.TestCase):
+    """FTS_BM25_WEIGHTS is DEFINED (title 3 / tags 2 / body 1) but was
+    consumed nowhere before this task — applying it in the ranking call is
+    the point, not a side-effect. Chosen fixture (3 body occurrences) is a
+    measured crossover point, not a guess: with unweighted bm25() bodyhit
+    ranks first (denser text wins on raw term frequency); only when the
+    title=3/body=1 weights are actually passed into bm25() does the single
+    title occurrence outrank it. Verified empirically before committing —
+    at 1-3 body reps weighted favours the title, unweighted always favours
+    the body; the crossover for weighted flips only above ~4 reps."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "titlehit.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Konzept\ntitle: zqxwgt marker\n"
+                    "description: d\ntags: []\n---\n"
+                    "unrelated body text filler words here.\n")
+        with open(os.path.join(self.root, "b", "bodyhit.md"), "w",
+                  encoding="utf-8") as f:
+            f.write(
+                "---\ntype: Konzept\ntitle: other concept\ndescription: d\n"
+                "tags: []\n---\n" + ("zqxwgt " * 3)
+                + "filler body text more words.\n"
+            )
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+        okf.build_fts_index(self.root)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_title_weight_outranks_denser_body_match(self):
+        ranked = okf._fts_ranking(self.root, "zqxwgt", 10)
+        self.assertEqual(ranked[0][0], "b/titlehit")
+
+    def test_unweighted_bm25_would_rank_body_first(self):
+        """Control probe (not exercising production code): confirms the
+        fixture's crossover claim so the test above cannot be a fluke of
+        this specific corpus."""
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            rows = conn.execute(
+                "SELECT path FROM docs WHERE docs MATCH ? "
+                "ORDER BY bm25(docs)", ('"zqxwgt"*',)
+            ).fetchall()
+        finally:
+            conn.close()
+        self.assertEqual(rows[0][0], "b/bodyhit")
+
+
 class FtsTokenizerRegression(unittest.TestCase):
     """I01 (T05 review 2026-07-26, ce-specs-reviewer on okf-cli-ntc8) — the
     FTS_TOKENIZER config (porter unicode61 remove_diacritics 2) was

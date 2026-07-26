@@ -764,6 +764,164 @@ def cmd_build_index(root, args):
     print("indexed {} concept(s) -> {}".format(n, db))
 
 
+def _fts_ranking(root, query, limit, type_filter=None, tag_filter=None,
+                 scope=None):
+    """[(path, positive_score), ...] best first, or None when the index is
+    unusable (absent or corrupt) — None is the caller's signal to degrade to
+    the substring scan (D15). bm25() is lower-is-better, so it is negated.
+    Filters run inside SQL against the UNINDEXED ctype/path columns and the
+    indexed tags column, so filtering never re-reads a concept file."""
+    db = _fts_db_path(root)
+    if not os.path.isfile(db):
+        # D15 requires a note for EVERY degradation, absent included — the
+        # semantic arm does the same for its missing cache. Silent degradation
+        # is the failure mode where "running fine" and "running on the weaker
+        # arm" look identical from the outside. It goes to stderr, so stdout
+        # stays byte-identical to the pre-plan output.
+        print("note: lexical index absent — falling back to substring scan; "
+              "run `okf-cli build-index` for BM25 ranking", file=sys.stderr)
+        return None
+    terms = tokenize(query)
+    if not terms:
+        return []
+    expr = " OR ".join('"{}"*'.format(t.replace('"', "")) for t in terms)
+    sql = ("SELECT path, bm25(docs, {}) AS r FROM docs WHERE docs MATCH ?"
+           .format(FTS_BM25_WEIGHTS))
+    params = [expr]
+    if type_filter:
+        sql += " AND ctype = ?"
+        params.append(type_filter)
+    if tag_filter:
+        # whole-tag match: tags is a space-joined slug list, so pad both sides
+        # rather than substring-matching (a "tail" query must not hit
+        # "tailscale").
+        sql += " AND instr(' ' || tags || ' ', ' ' || ? || ' ') > 0"
+        params.append(tag_filter)
+    if scope:
+        sql += " AND (path = ? OR path LIKE ?)"
+        params.extend([scope.rstrip("/"), scope.rstrip("/") + "/%"])
+    sql += " ORDER BY r LIMIT ?"
+    params.append(limit)
+    try:
+        conn = sqlite3.connect(db)
+        try:
+            # Run the real query FIRST. A corrupt file raises DatabaseError
+            # here (garbage bytes still open() fine — sqlite3 does not
+            # validate the format until the first read), caught below by the
+            # single except. _fts_index_stale() has its own except branch
+            # that SWALLOWS DatabaseError and reports "stale" (T05 AC7,
+            # locked by FtsIndexStaleDegrades) — calling it before the query
+            # would print a second, misleading "stale" note ahead of the
+            # "unusable" one for the exact same corrupt file (caught by
+            # adversarial testing, not in the original plan). Checking
+            # staleness only after a successful query keeps the corrupt path
+            # at exactly one stderr note without changing what
+            # _fts_index_stale() itself reports when called directly.
+            rows = conn.execute(sql, params).fetchall()
+            if _fts_index_stale(root, conn):
+                print("note: lexical index is stale (catalogue changed since "
+                      "build) — run `okf-cli build-index`", file=sys.stderr)
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        print("note: lexical index unusable — falling back to substring scan",
+              file=sys.stderr)
+        return None
+    return [(p, -r) for p, r in rows]
+
+
+def _hydrate_hit(root, path, terms, score, provenance, cosine=None):
+    """Build the hit dict cmd_find prints, reading the concept file itself.
+    Only ever called for the <= limit paths that actually rank, which is what
+    makes the FTS path cheaper than the full scan. Returns None when the path
+    no longer resolves (index or embedding cache newer than the file tree)."""
+    ap = os.path.join(root, path + ".md")
+    if not os.path.isfile(ap):
+        return None
+    fm, body = split_frontmatter(read_file(ap))
+    hit = {
+        "score": score,
+        "path": path,
+        "title": _dequote(fm.get("title", "")) or path.rsplit("/", 1)[-1],
+        "type": fm.get("type", ""),
+        "desc": _dequote(fm.get("description", "")),
+        "snip": make_snippet(body, terms),
+        "provenance": provenance,
+    }
+    if cosine is not None:
+        hit["cosine"] = cosine
+    return hit
+
+
+def _substring_ranking(root, query, terms, limit, type_filter=None,
+                       tag_filter=None, scope=None):
+    """The pre-FTS lexical arm, unchanged: substring matching with field
+    weights title 3 / tags 2 / body 1 over a full scan. It stays in the tool
+    as the degradation target for a missing or unusable index (D15) — its
+    scoring, its `contrib` breakdown and its 6*len(terms) scale must remain
+    byte-identical, because the frozen eval baseline was recorded against it."""
+    hits = []
+    for b, bp in resolve_scopes(root, scope):
+        for cid, ap in iter_concepts(bp):
+            text = read_file(ap)
+            fm, body = split_frontmatter(text)
+            t = fm.get("type", "")
+            if type_filter and t != type_filter:
+                continue
+            if tag_filter and tag_filter not in extract_tags(text):
+                continue
+            title = fm.get("title", cid)
+            tags = fm.get("tags", "")
+            hay_title = title.lower()
+            hay_tags = tags.lower()
+            hay_body = body.lower()
+            score = 0
+            contrib = {"title": [], "tags": [], "body": []}
+            for term in terms:
+                if hay_title.count(term):
+                    score += 3
+                    contrib["title"].append(term)
+                if hay_tags.count(term):
+                    score += 2
+                    contrib["tags"].append(term)
+                if hay_body.count(term):
+                    score += 1
+                    contrib["body"].append(term)
+            if score:
+                hits.append({
+                    "score": score, "path": "{}/{}".format(b, cid),
+                    "title": title, "type": t,
+                    "desc": _dequote(fm.get("description", "")),
+                    "snip": make_snippet(body, terms), "contrib": contrib,
+                    "provenance": "lexical",
+                })
+    hits.sort(key=lambda h: -h["score"])
+    return hits[:limit]
+
+
+def _rank_lexically(root, query, terms, limit, type_filter=None,
+                    tag_filter=None, scope=None):
+    """(hits, max_score) — the FTS arm when the index is usable, otherwise the
+    substring scan (D15). The two arms report on different scales, so the
+    scale is returned with the result instead of being recomputed by the
+    caller: 0..100 for BM25 (relative to this run's own top hit), and
+    6*len(terms) for the substring fallback, which keeps that path
+    byte-identical to pre-plan output."""
+    ranked = _fts_ranking(root, query, limit, type_filter, tag_filter, scope)
+    if ranked is None:
+        return (_substring_ranking(root, query, terms, limit, type_filter,
+                                   tag_filter, scope),
+                6 * len(terms))
+    top = ranked[0][1] if ranked else 1.0
+    hits = []
+    for path, s in ranked:
+        hit = _hydrate_hit(root, path, terms,
+                           int(round(100 * s / top)) if top else 0, "lexical")
+        if hit is not None:
+            hits.append(hit)
+    return hits, 100
+
+
 # 8c (D04) — semantic backstop. Fires only as a fallback (zero/weak keyword
 # hits), reads .tagvec's concept_emb table (title+body scope, cli/embeddings/
 # build_tagvec.py) via stdlib sqlite3, and embeds the query with a LOCAL
@@ -918,44 +1076,8 @@ def cmd_find(root, args):
     # iteration, as before). --bundle was a duplicate alias, removed D02
     # (PO-grilling 2026-07-26) — --scope is the only filter dimension.
     target = getattr(args, "scope", None)
-    hits = []
-    for b, bp in resolve_scopes(root, target):
-        for cid, ap in iter_concepts(bp):
-            text = read_file(ap)
-            fm, body = split_frontmatter(text)
-            t = fm.get("type", "")
-            if type_filter and t != type_filter:
-                continue
-            if tag_filter and tag_filter not in extract_tags(text):
-                continue
-            title = fm.get("title", cid)
-            tags = fm.get("tags", "")
-            hay_title = title.lower()
-            hay_tags = tags.lower()
-            hay_body = body.lower()
-            score = 0
-            # 8b (SCO03): contrib records which field(s) each term hit, for
-            # --breakdown; the score arithmetic itself is unchanged.
-            contrib = {"title": [], "tags": [], "body": []}
-            for term in terms:
-                if hay_title.count(term):
-                    score += 3
-                    contrib["title"].append(term)
-                if hay_tags.count(term):
-                    score += 2
-                    contrib["tags"].append(term)
-                if hay_body.count(term):
-                    score += 1
-                    contrib["body"].append(term)
-            if score:
-                snip = make_snippet(body, terms)
-                desc = _dequote(fm.get("description", ""))
-                hits.append({
-                    "score": score, "path": "{}/{}".format(b, cid), "title": title,
-                    "type": t, "desc": desc, "snip": snip, "contrib": contrib,
-                })
-    hits.sort(key=lambda h: -h["score"])
-    max_score = 6 * len(terms)
+    hits, max_score = _rank_lexically(root, args.query, terms, args.limit,
+                                      type_filter, tag_filter, target)
 
     # 8c: semantic backstop gate (post-review F01) — fire on zero keyword
     # hits, or when there IS a keyword ranking but it's ambiguous (top-1 has
@@ -1014,8 +1136,11 @@ def cmd_find(root, args):
         if breakdown:
             if h.get("provenance") == "semantic":
                 print("contrib: semantic-only (cosine={:.2f}, no keyword field match)".format(h["cosine"]))
-            else:
+            elif "contrib" in h:
                 print("contrib: {}".format(_format_contrib(h["contrib"])))
+            else:
+                print("contrib: bm25 (fts5 index; field-level breakdown not "
+                      "available)")
     print("------")
 
 

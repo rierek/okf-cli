@@ -166,10 +166,27 @@ class RunnerAgainstRealCatalogueTest(unittest.TestCase):
         )
         fixtures.teardown(CATALOGUE_ROOT)  # defensive pre-clean
         fixtures.seed(CATALOGUE_ROOT)
+        # T06: the live catalogue may already carry a persistent .fts index
+        # (okf-cli build-index) that predates these freshly-seeded fixtures.
+        # A stale index still degrades to ITSELF, not to the file tree (D15)
+        # — it never re-reads files it does not know about — so a brand-new
+        # fixture concept is invisible to the FTS arm no matter how "stale"
+        # is handled. Renaming the index out of the way for this test makes
+        # find() degrade cleanly to the substring scan, which always reads
+        # the fixtures fresh; restored byte-identically in tearDown either
+        # way. This test predates T06's FTS arm and never assumed one could
+        # exist at this root.
+        self._fts_db = os.path.join(CATALOGUE_ROOT, ".fts", "fts.sqlite")
+        self._fts_db_parked = self._fts_db + ".parked-by-test-eval-runner"
+        self._fts_db_was_present = os.path.isfile(self._fts_db)
+        if self._fts_db_was_present:
+            os.rename(self._fts_db, self._fts_db_parked)
         self.result = runner.run(CATALOGUE_ROOT, GOLDEN_PATH)
 
     def tearDown(self):
         fixtures.teardown(CATALOGUE_ROOT)
+        if self._fts_db_was_present:
+            os.rename(self._fts_db_parked, self._fts_db)
 
     def _row(self, row_id):
         for r in self.result["per_row"]:
