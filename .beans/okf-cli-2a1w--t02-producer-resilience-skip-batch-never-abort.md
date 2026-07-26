@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T05:27:02Z
+updated_at: 2026-07-26T05:33:02Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-pean
@@ -377,3 +377,44 @@ reviewer found (`Ran 29 tests ... OK`). The old test's assertion (end-state
 only) could not tell the difference; that is the same root cause as B01,
 now fixed by the same change. The stale `## Mutation probes §1` entry is
 superseded by this section; treat it as retracted.
+
+
+
+## REVIEW ROUND 2 — 2026-07-26 (ce-specs-reviewer)
+
+**B01 and I01 from round 1 are CLOSED** on independent adversarial verification:
+
+- The strengthened test asserts ORDER, not end-state. The reviewer broke it with TWO
+  structurally different reorderings — the round-1 accumulate-then-write-once mutation AND a
+  swap-write-after-next-embed mutation — each producing
+  `AssertionError: 'b/one' : batch 1 not committed yet when batch 2 was embedded (call 2)`,
+  reverted byte-identically both times, suite green again.
+- Vacuous-pass ruled out: forcing a single-batch run (patched `BATCH_LIMITS`) makes the test's
+  own guard fail loudly — `AssertionError: 1 not greater than 1 : flaky callable was never
+  invoked for batch 2` — instead of passing silently.
+- The I01 retraction is TRUE, not fabricated. The reviewer restored both files as of
+  `ca92706` via `git show <rev>:<path>`, applied the same mutation, and reproduced
+  `sqlite3.OperationalError: no such table: concept_emb` exactly as originally claimed —
+  because at that commit a batch-2 exception still propagated out of `main()`, so the deferred
+  write never ran at all. Files restored byte-identically afterwards.
+- `git diff f63847e 203a1b0 -- cli/embeddings/build_tagvec.py` empty (production code
+  untouched this round). Gate 197 tests / 19F/2E. Module suite 29 tests in 0.027s, no real
+  sleep. No `Co-Authored-By`.
+
+**B02 (medium, open — mechanical, not substantive).** Commit `203a1b0` has a 55-character
+subject; the repo limit is 50. Measured, not eyeballed:
+
+    len('fix(embeddings): prove batch write ORDER, not end-state') = 55
+    len('chore(beans): T02 fix round 1 done, complete')            = 44
+
+**Supervisor investigation of the cause — the implementer bypassed nothing.**
+`~/.claude/hooks/git-enforce.py` exists and is executable (4684 bytes, mode 755), but it is
+registered in NO settings file: `grep -rln "git-enforce" ~/.claude/ --include="*.json"`
+returns nothing, and `~/.claude/settings.local.json` does not exist. The rule documented in
+`/tools/CLAUDE.md` as "hook-enforced (E1)" is currently not enforced at all — which also
+leaves E2 (no `Co-Authored-By`), E3 (annotated tags) and E4 (no `push --tags`) unguarded,
+across all projects, not just this repo.
+
+Escalated to the plan author 2026-07-26 (second CHANGES_REQUIRED on the same task = the
+playbook's escalation threshold). Backup tag `backup/t02-before-rebase` placed on `b571109`
+so a history rewrite stays cheap and reversible if that is the decision.
