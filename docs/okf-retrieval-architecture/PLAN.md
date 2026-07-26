@@ -947,10 +947,16 @@ def _fts_ranking(root, query, limit, type_filter=None, tag_filter=None,
     try:
         conn = sqlite3.connect(db)
         try:
+            # Staleness is checked AFTER a successful query, not before.
+            # sqlite3.connect() on a corrupt file succeeds (it validates on
+            # first read), and _fts_index_stale() swallows DatabaseError to
+            # report "stale" (T05 AC7). Checking first would therefore print a
+            # misleading "stale" note ahead of the "unusable" one for the same
+            # corrupt file — two stderr notes for one event.
+            rows = conn.execute(sql, params).fetchall()
             if _fts_index_stale(root, conn):
                 print("note: lexical index is stale (catalogue changed since "
                       "build) — run `okf-cli build-index`", file=sys.stderr)
-            rows = conn.execute(sql, params).fetchall()
         finally:
             conn.close()
     except sqlite3.DatabaseError:
