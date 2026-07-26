@@ -1,11 +1,11 @@
 ---
 # okf-cli-2ljd
 title: T03 Document --limit, correct the --expand-tags promise
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-26T13:02:45Z
-updated_at: 2026-07-26T13:03:39Z
+updated_at: 2026-07-26T13:40:43Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-lbh1
@@ -50,3 +50,10 @@ Two option texts on `find`. The second is the finding the PO did not raise.
 ## Recommended Skills
 
 - superpowers:test-driven-development
+
+
+
+## Prelude from the T01/T02 reviews (2026-07-26, non-blocking)
+
+1. The 50-character subject cap applies to EVERY commit, including the bean-close meta commit. T02's close commit `1fb3463` ("chore(beans): close lbh1, commands registered via _sub") was 54 characters and nothing caught it: there is no `commit-msg` hook in `.git/hooks/`, so the cap is a discipline, not a guard. Count the subject before committing.
+2. For any before/after proof, snapshot with `git show <rev>:<path> > /tmp/<x>.py` and diff against the working tree. Do not use `git stash` — it is a shared-tree operation and this repo sees concurrent activity.
