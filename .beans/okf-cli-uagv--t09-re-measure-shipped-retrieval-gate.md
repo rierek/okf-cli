@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:32:25Z
+updated_at: 2026-07-26T05:02:09Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-kc9x
@@ -57,3 +57,15 @@ _Requirements: PLAN.md Task 9 · REFERENCES R42, R43 · cli/eval/gate.py:56-81_
 ## Recommended Skills
 
 - `superpowers:verification-before-completion`
+
+
+
+## HARD STOP 2026-07-26 (PO/plan author, realization kickoff)
+
+Verbatim (PO): "Wenn in okf-cli-uagv ein Retrieval-Kriterium reisst: stoppen und mit der
+JSON melden."
+
+Interpretation: the gate criteria (zero-hit <= 0.30, MRR >= 0.35, real-query zero-hit <= 0.25,
+p50 latency <= 2.0 s) are pass/fail, not negotiable. If any one of them fails, do NOT retune,
+re-run selectively, or relax a threshold. Stop, attach the full remeasure JSON, and report to
+the supervisor.

@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: critical
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:11Z
+updated_at: 2026-07-26T05:02:09Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-8j7l
@@ -58,3 +58,17 @@ _Requirements: PLAN.md Task 8 · DECISIONS D12, D14 · TASKS.md T12 · REFERENCE
 ## Recommended Skills
 
 - `superpowers:test-driven-development`
+
+
+
+## HARD STOP 2026-07-26 (PO/plan author, realization kickoff)
+
+Verbatim (PO): "Wenn in okf-cli-kc9x die Live-Gegenprobe find \"mockup tailscale\" das
+Zielkonzept NICHT liefert: stoppen und melden, NIEMALS SEMANTIC_MARGIN_RATIO verstellen,
+um die Zahl zu bewegen."
+
+Interpretation: SEMANTIC_MARGIN_RATIO = 1.5 is a MEASURED constant
+(eval/hybrid_eval.py:151), not a tuning knob. If the live counter-probe
+`okf-cli find "mockup tailscale"` does not return the target concept, that is a finding,
+not a calibration task. Stop, report to the supervisor with the observed ranking, and wait.
+Touching the ratio to make the probe pass is an explicit protocol violation.
