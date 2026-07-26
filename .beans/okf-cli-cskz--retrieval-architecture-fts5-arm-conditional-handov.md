@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T05:39:20Z
+updated_at: 2026-07-26T06:00:37Z
 parent: okf-cli-wuiv
 ---
 
@@ -225,3 +225,39 @@ subagents. The defect was always the parser, and the tell was the backslash cont
 the subagents author most of the commits. The hook fix itself (strip continuations before
 tokenising) is owned by the plan author and needs Erik's approval — `~/.claude/` is global
 user config and is not touched from this session.
+
+
+
+## PF-4 — supervisor ruling (plan author) 2026-07-26: no silent degradation
+
+**Every degradation path emits exactly one stderr note. When in doubt whether a path needs
+one: it does.**
+
+Origin: T06 (`okf-cli-17y7`) asked whether the absent-index branch was deliberately silent.
+It was not — the plan's CODE contradicted its own decision D15 ("absent or unusable ->
+degradation with an stderr note", no exception). PLAN.md corrected in commit `daac681`; the
+absent branch now prints
+`note: lexical index absent — falling back to substring scan; run \`okf-cli build-index\` for
+BM25 ranking`. Recorded as a PLAN defect owned by the plan author, NOT as an implementer
+deviation.
+
+Three reasons the note belongs there, reusable as a test for similar cases:
+1. D15 admits no exception.
+2. Asymmetry is worse than verbosity: the semantic arm already notes its absent case
+   (`note: semantic arm skipped (.tagvec cache/concept embeddings absent)`). Two degradation
+   contracts for one class of event in one tool is the inconsistency a later reader mistakes
+   for intent.
+3. The noise objection does not carry: notes go to **stderr**, so SC-04 (stdout byte-identical)
+   is untouched and MCP consumers never see them. For a human, a line that names the state AND
+   the fixing command disappears the moment they act on it — same property as the stale note,
+   which was never contested.
+
+**Rationale, project-wide:** silent degradation is the most expensive failure class here. Three
+instances in a single day, each one where silence was indistinguishable from success:
+- an agent reporting "working" while actually blocked on a modal question;
+- a `grep` whose shell-level abort looked exactly like a genuine negative result, and was
+  written up as a defect;
+- a commit hook that mistook a backslash continuation for the commit message and passed
+  everything.
+
+Applies to every remaining leaf, not just T06.
