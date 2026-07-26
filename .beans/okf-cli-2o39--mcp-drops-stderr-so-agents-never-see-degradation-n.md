@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: high
 created_at: 2026-07-26T15:09:51Z
-updated_at: 2026-07-26T16:40:30Z
+updated_at: 2026-07-26T16:43:26Z
 parent: okf-cli-iksi
 ---
 
@@ -62,3 +62,32 @@ Concretely: for commands whose `supports_json` flag is false, `run_okf` prepends
 Rejected alternatives, with the reason: a structured `{results, notes}` payload for every tool was rejected as a breaking change for every existing MCP consumer and for the JSON paths. Wiring the notes only into `okf_find` was rejected because the rule would stop being uniform — any tool that can degrade should report it the same way.
 
 Two constraints the fix must respect: `check` is special-cased today (exit 1 is data, not a crash) and that path must keep working; and the `--json` commands must remain parseable, which is the reason for the split above.
+
+
+
+### Requirement 1: Degradation notes reach the MCP consumer
+
+**Objective:** As an agent calling okf_find over MCP, I want the degradation notes the CLI emits, so that I can act on the remedy they name instead of silently working against a degraded index.
+
+#### Acceptance Criteria
+
+1. WHEN the CLI writes a note to stderr AND the invoked command does not support JSON output, THE MCP wrapper SHALL return that note to the caller together with the command's stdout.
+2. THE note text SHALL precede the command's stdout in the returned string.
+3. THE MCP wrapper SHALL leave the return value of every JSON-supporting command byte-identical to its current behaviour, so that json.loads keeps parsing it.
+4. IF the CLI writes nothing to stderr THEN THE MCP wrapper SHALL return the stdout text unchanged.
+5. THE existing special case for check SHALL keep working: an exit code of 1 from check is data, not a crash, and SHALL NOT raise.
+6. WHEN a command exits non-zero and is not check, THE MCP wrapper SHALL keep raising RuntimeError with the stderr text, as it does today.
+
+#### Success Criteria
+
+- SC-01: A boundary test drives okf_find against a fixture catalogue with no lexical index and asserts that the returned value contains the stale-or-absent note. The test fails if the note is dropped — demonstrate this by observing it red before the fix.
+- SC-02: A boundary test asserts that a JSON-supporting command still parses, with a note present on stderr during the same call.
+- SC-03: The full suite reads exactly 19 failures and 2 errors plus the tests added by this leaf, all green.
+- SC-04: The okf_find docstring's degradation sentence is re-read against the shipped behaviour and is true of it, or is corrected in the same commit.
+
+_Requirements: R-01_
+
+## Recommended Skills
+
+- superpowers:test-driven-development
+- superpowers:systematic-debugging
