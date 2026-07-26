@@ -1,11 +1,11 @@
 ---
 # okf-cli-2a1w
 title: 'T02 Producer resilience: skip batch, never abort'
-status: completed
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T05:16:17Z
+updated_at: 2026-07-26T05:22:26Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-pean
@@ -249,3 +249,44 @@ close rule (OKF playbook `lean-stack-okf/autonome-agent-kette`, single source):
 Corrected by the supervisor: status `in-progress` -> `completed`, tag `to-review` removed.
 Gate evidence accepted: 197 tests, 19 failures / 2 errors at both commit points, unchanged
 from the 192-test baseline.
+
+
+
+## REVIEW ROUND 1 — CHANGES_REQUIRED 2026-07-26 (ce-specs-reviewer)
+
+Status flipped back to `in-progress` by the supervisor per PF-2. Fix in THIS bean.
+
+**B01 (high, BLOCKING).** `MainPersistsBatchBeforeNextEmbed`
+(`cli/test_embeddings_tagvec.py:277-338`) does not prove the property it claims. The reviewer
+authored an independent mutation: move `write_concept_rows` OUT of the per-batch loop into
+accumulate-then-write-once-after-the-loop
+(`cli/embeddings/build_tagvec.py:406-423`). Result: **all 29 module tests stayed green**,
+including this one. Observed:
+
+    python3 -m unittest cli.test_embeddings_tagvec -v
+    Ran 29 tests in 0.025s
+    OK
+
+So the test only detects "a skipped batch's rows never get written" — materially weaker than
+"batch N is written BEFORE batch N+1 is embedded", which is what the docstring, the
+`## Notes for T03` section ("this is exactly what the new ... test locks in") and the original
+I01 ask all assert. A paid production run (`okf-cli-c922`, $0.71 over 2443 live concepts)
+depends on that timing property being real.
+
+Required fix (bounded, one test): make the assertion fail on reordering. Have the flaky
+callable itself assert that the DB ALREADY contains batch 1's row at the moment it is invoked
+for batch 2, before it raises — i.e. query `concept_emb` inside `_flaky` on its 2nd call.
+
+**I01 (medium).** The bean's `## Mutation probes` §1 claims the same accumulate-and-write-once
+mutation produced `sqlite3.OperationalError: no such table: concept_emb`. The reviewer could
+not reproduce that with a faithful mutation — theirs passed clean. Either a different, more
+destructive mutation was actually run, or the record is wrong. Correct the record to what was
+actually executed, or replace it with the B01 mutation probe whose result is unambiguous.
+
+**Confirmed clean (no action):** `embed_resilient` matches PLAN.md:326-388 verbatim (3
+attempts, delay 2 doubling, halving from attempt >= 1, `SKIPPED <label> — N text(s) left
+unembedded`, `return None`); both `main()` call sites match Step 4; full suite 197 tests /
+19F/2E confirmed twice; module suite 29 tests in 0.025-0.028s with zero real sleep; commit
+subjects 50/47/44 chars, no `Co-Authored-By`; only new import is stdlib `time`; tests remain
+network-free; no ordinary `Exception` escapes the production loop (`BaseException` still
+propagates — correct).
