@@ -1,11 +1,11 @@
 ---
 # okf-cli-2a1w
 title: 'T02 Producer resilience: skip batch, never abort'
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T05:22:26Z
+updated_at: 2026-07-26T05:27:02Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-pean
@@ -290,3 +290,90 @@ unembedded`, `return None`); both `main()` call sites match Step 4; full suite 1
 subjects 50/47/44 chars, no `Co-Authored-By`; only new import is stdlib `time`; tests remain
 network-free; no ordinary `Exception` escapes the production loop (`BaseException` still
 propagates — correct).
+
+
+## Fix round 1 — 2026-07-26 (response to REVIEW ROUND 1)
+
+**B01 fixed.** `MainPersistsBatchBeforeNextEmbed` in
+`cli/test_embeddings_tagvec.py` no longer only checks the end-state ("batch
+2's rows are never written"). The flaky callable now queries `concept_emb`
+itself, on every call embed_resilient makes for batch 2, and requires batch
+1's row to already be present at that moment. The check result is captured
+into `order_failures` rather than raised inline, because `embed_resilient`
+catches `Exception` broadly by design (LL-08 — a transient HTTP error must
+retry, not abort) and would otherwise silently swallow a raised
+`AssertionError` the same way it swallows the intended `RuntimeError`; the
+test body re-raises the captured failure itself, after `main()` has
+returned, where nothing can catch it.
+
+Test renamed:
+`test_batch_one_rows_survive_batch_two_failure` →
+`test_batch_one_already_committed_when_batch_two_starts`.
+
+**RED — reviewer's exact mutation applied live** (moved `write_concept_rows`
+out of the per-batch loop into accumulate-then-write-once-after-the-loop,
+`cli/embeddings/build_tagvec.py:406-423` as in the review, applied to the
+working tree, not committed):
+
+```
+python3 -m unittest cli.test_embeddings_tagvec.MainPersistsBatchBeforeNextEmbed -v
+...
+FAIL: test_batch_one_already_committed_when_batch_two_starts
+AssertionError: Items in the second set but not the first:
+'b/one' : batch 1 not committed yet when batch 2 was embedded (call 2)
+Ran 1 test in 0.008s
+FAILED (failures=1)
+```
+
+The strengthened test now catches exactly the reordering the reviewer
+found — confirmed the fix targets the right property.
+
+**Revert — byte-identical:**
+```
+git diff cli/embeddings/build_tagvec.py
+(empty)
+```
+
+**GREEN — after revert, real code:**
+```
+python3 -m unittest cli.test_embeddings_tagvec -v
+...
+Ran 29 tests in 0.026s
+OK
+```
+
+**Full suite at the commit point:**
+```
+python3 -m unittest discover -s cli -p 'test_*.py'
+Ran 197 tests in 14.338s
+FAILED (failures=19, errors=2)
+```
+Same 197/19F/2E as before the fix — only the test file changed;
+`embed_resilient` and both `main()` call sites are untouched (review
+confirmed those clean already).
+
+**I01 corrected — the record was stale, not fabricated.** Re-ran exactly
+what the original `## Mutation probes §1` described, against the exact code
+state it was actually run against (commit `ca92706`, PRELUDE — before
+`embed_resilient`/Step 4 existed, when a batch failure still propagated as
+a raw, uncaught exception through `main()`):
+
+```
+# build_tagvec.py checked out at ca92706, same accumulate-mutation applied
+python3 -m unittest cli.test_embeddings_tagvec.MainPersistsBatchBeforeNextEmbed -v
+...
+sqlite3.OperationalError: no such table: concept_emb
+Ran 1 test in 0.018s
+FAILED (errors=1)
+```
+This reproduces exactly as originally claimed — *at that commit*. The
+record's error was leaving that result standing, unchanged, after T02's
+Step 4 later wrapped every production call in `embed_resilient`, which
+catches the batch-2 exception and lets the deferred
+`write_concept_rows(output, accumulated)` line execute anyway (batch 2
+contributes zero rows either way, since it never recovers) — so against
+the FINAL code the same mutation produces no error at all, exactly as the
+reviewer found (`Ran 29 tests ... OK`). The old test's assertion (end-state
+only) could not tell the difference; that is the same root cause as B01,
+now fixed by the same change. The stale `## Mutation probes §1` entry is
+superseded by this section; treat it as retracted.
