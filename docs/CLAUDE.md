@@ -24,6 +24,7 @@ central `TYPES.md` at `/Users/erik/Obsidian/Knowledge-Catalogue/TYPES.md`. Do no
 - Conformance: `/okf-p audit` (wraps `okf-cli check`). Must be `OK — 0 violations`.
 - This is a plain git repo — normal Read/Write/Edit/git. Not the Obsidian Vault.
 - **PO-Review rejects with a small, bounded fix** (single function/flag, one file or two): fix inline immediately (TDD — RED proof, GREEN, mutation self-test), re-accept the story in the same session — don't defer to a separate `ce-beans-operationalize`/implementer cycle. Confirmed 2026-07-25/26 (US-04 auto-embed reject, D02 `--bundle` removal).
+- **Review findings are sorted by live impact, not by tidiness.** A finding that can really affect runtime behaviour or the integrity of a gate gets a bean and a fix, straight away and without a planning round. A finding with no live impact — a missing delimiter nobody parses, a disclosed test-convention deviation, a filter placed in the test instead of the shared helper — is anchored as a dated section on the epic bean and left alone. Reviewers are asked to state which side of that line each finding falls on, and to say why. PO instruction, 2026-07-26 (epic `okf-cli-iksi`).
 
 ## Repo-Kontext
 `okf-tools` bündelt die komplette OKF-Tool-Kette in einem Repo, aus
