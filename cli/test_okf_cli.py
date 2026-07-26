@@ -3,6 +3,7 @@
 
 Run: python3 -m unittest test_okf_cli -v
 """
+import argparse
 import importlib.util
 import json
 import os
@@ -2702,6 +2703,23 @@ class CommandHelpConformance(unittest.TestCase):
     def test_every_command_is_grouped_and_dispatchable(self):
         self.assertEqual(set(okf.COMMAND_GROUPS), set(self.parsers))
         self.assertEqual(set(okf.COMMAND_DISPATCH), set(self.parsers))
+
+    def test_top_level_option_has_help(self):
+        """R-02 (okf-cli-x60r): the subcommand-only gate above missed the
+        top-level parser's own options (e.g. --root). parser_actions()
+        drops the auto-added -h/--help (AC-2), but on the top-level parser
+        object it also yields the add_subparsers() dispatch action itself
+        (dest="cmd") — that is not a user-facing option; the summary each
+        subcommand carries is already asserted by
+        test_every_subcommand_has_a_summary above, so it is filtered here
+        too. A separate method, rather than folding this into
+        test_every_option_and_positional_has_help, gives a failure message
+        scoped to the top-level surface and keeps that existing method's
+        assertion untouched (AC-4)."""
+        missing = [act.dest for act in okf.parser_actions(self.ap)
+                   if not isinstance(act, argparse._SubParsersAction)
+                   and not (act.help or "").strip()]
+        self.assertEqual(missing, [])
 
 
 if __name__ == "__main__":
