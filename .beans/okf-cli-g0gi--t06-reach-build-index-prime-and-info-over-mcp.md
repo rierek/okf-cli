@@ -1,11 +1,11 @@
 ---
 # okf-cli-g0gi
 title: T06 Reach build-index, prime and info over MCP
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-26T13:03:25Z
-updated_at: 2026-07-26T13:10:30Z
+updated_at: 2026-07-26T14:05:44Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-z0tt
@@ -49,3 +49,13 @@ Plan: `docs/okf-cli-capability-surface/PLAN.md` → **Task 6**. Independent of T
 ## Sequencing note
 
 `blocked_by: okf-cli-z0tt` is deliberate although the plan calls this task otherwise independent: `McpSurfaceParity` consumes `COMMAND_DISPATCH`, which T01 introduces. The plan permits writing the other three tests first and adding the parity class later; the stricter dependency was chosen so no leaf ever ships with a weakened test. If T01 stalls, relax this and add `McpSurfaceParity` in a follow-up commit — do not replace it with a hardcoded command list.
+
+
+
+## Prelude from the T01-T05 reviews (2026-07-26, non-blocking)
+
+1. **If plan text and plan test disagree, adapt the text and keep the test.** T03 hit this: PLAN.md's literal replacement string started a sentence with capital `Measured` while the plan's own test asserted the case-sensitive substring `"measured"`. The implementer joined the clauses with a semicolon and left the test untouched. Weakening a plan-authored test to accept plan-authored text is a defect, not a fix.
+2. **Your Step 1 has an ordering condition the plan states explicitly.** `McpSurfaceParity` consumes `COMMAND_DISPATCH` from Task 1. Task 1 HAS landed (commit 67f7b3e, reviewed APPROVED), so write the class as the plan wrote it. Do not weaken it to a hardcoded command list.
+3. **Task 5's gate has a known hole and it is already filed** as bug `okf-cli-x60r` (top-level parser options escape `CommandHelpConformance`). Do not fix it here and do not treat it as your finding — it is out of your scope.
+4. The 50-character subject cap applies to EVERY commit, the bean-close meta commit included. No `commit-msg` hook exists in `.git/hooks/`; nothing catches an overrun.
+5. For any before/after proof, snapshot with `git show <rev>:<path> > /tmp/<x>.py` and diff. Do not use `git stash`.
