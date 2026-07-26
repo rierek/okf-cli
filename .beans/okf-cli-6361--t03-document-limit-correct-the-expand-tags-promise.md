@@ -1,10 +1,11 @@
 ---
 # okf-cli-6361
 title: T03 Document --limit, correct the --expand-tags promise
-status: todo
+status: scrapped
 type: task
+priority: normal
 created_at: 2026-07-26T13:02:30Z
-updated_at: 2026-07-26T13:02:30Z
+updated_at: 2026-07-26T13:23:29Z
 ---
 
 Plan: `docs/okf-cli-capability-surface/PLAN.md` → **Task 3**.
@@ -46,3 +47,7 @@ Two option texts on `find`. The second is the finding the PO did not raise.
 ## Recommended Skills
 
 - superpowers:test-driven-development
+
+
+
+Scrapped 2026-07-26: orphaned duplicate of okf-cli-2ljd (same operationalization run, no parent, no blocked_by). The canonical leaf under epic okf-cli-5uog is okf-cli-2ljd.

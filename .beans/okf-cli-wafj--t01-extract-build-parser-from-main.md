@@ -1,10 +1,11 @@
 ---
 # okf-cli-wafj
 title: T01 Extract build_parser from main
-status: todo
+status: scrapped
 type: task
+priority: normal
 created_at: 2026-07-26T13:02:30Z
-updated_at: 2026-07-26T13:02:30Z
+updated_at: 2026-07-26T13:23:29Z
 ---
 
 Plan: `docs/okf-cli-capability-surface/PLAN.md` → **Task 1**. Follow it step by step; it carries the literal code, commands and expected output.
@@ -43,3 +44,7 @@ Pure refactor. Nothing else in this epic can be tested until the parser can be b
 ## Recommended Skills
 
 - superpowers:test-driven-development
+
+
+
+Scrapped 2026-07-26: orphaned duplicate of okf-cli-z0tt (same operationalization run, 14s earlier, no parent, no blocked_by). The canonical leaf under epic okf-cli-5uog is okf-cli-z0tt.

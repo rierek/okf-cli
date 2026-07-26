@@ -1,10 +1,11 @@
 ---
 # okf-cli-ku01
 title: T02 Register every command through _sub with summary and group
-status: todo
+status: scrapped
 type: task
+priority: normal
 created_at: 2026-07-26T13:02:30Z
-updated_at: 2026-07-26T13:02:30Z
+updated_at: 2026-07-26T13:23:29Z
 ---
 
 Plan: `docs/okf-cli-capability-surface/PLAN.md` → **Task 2**, including **Step 4b**. Follow it step by step.
@@ -54,3 +55,7 @@ This is where the reported defect dies structurally: a command cannot be registe
 ## Recommended Skills
 
 - superpowers:test-driven-development
+
+
+
+Scrapped 2026-07-26: orphaned duplicate of okf-cli-lbh1 (same operationalization run, no parent, no blocked_by). The canonical leaf under epic okf-cli-5uog is okf-cli-lbh1.
