@@ -116,6 +116,47 @@ Ollama instance (`http://localhost:11434/api/embed`); `voyage-3-large`
 (1024-dim, `input_type=document`) via `https://api.voyageai.com/v1/embeddings`
 — requires `VOYAGE_API_KEY` in the environment for `--produce`.
 
+## Batching, resilience and resumability (T01-T03)
+
+**Batch limits per model** (`BATCH_LIMITS`, `build_tagvec.py:68`): `bge-m3`
+(32 items, 90000 chars per request), `voyage-3-large` (128 items, 90000 chars
+per request). Voyage caps a request by token budget, so the char budget is
+the binding limit there; Ollama has no documented list cap, but a smaller
+batch keeps a single failure cheap to retry. `batches()` cuts the delta into
+request-sized pieces bounded by BOTH the item count and the running char
+total — an item that alone exceeds `max_chars` is still yielded on its own
+(dropping it would leave a concept permanently unembeddable).
+
+**Retry / halve / skip ladder** (`embed_resilient()`, `build_tagvec.py:219`):
+an earlier unguarded run died on a single HTTP 400 and threw away ~550
+already-embedded concepts (LL-08). The guarded version retries a batch up to
+3 times with exponential backoff (2s, 4s, 8s); from the second retry on it
+also halves every text in the batch (floor 500 chars — a 400 on these
+endpoints is usually caused by an over-long input). If all 3 attempts still
+fail, only **that batch** is skipped and reported (`SKIPPED ... left
+unembedded`) — the run continues with the next batch. A skipped batch is not
+retried within the same run; it simply reappears in the next `--produce`
+invocation's delta plan, because `plan_delta()`/`plan_concept_delta()` only
+know about rows that made it into the sqlite db, never about rows that were
+attempted and failed.
+
+**Per-batch write = resumability.** `write_rows()`/`write_concept_rows()`
+commit to the sqlite db after **every batch**, not once at the end of the
+whole model pass — this is what makes a `--produce` run resumable rather
+than all-or-nothing: a killed, crashed, or rate-limited run has already
+durably written every batch that completed before the interruption, and a
+plain re-run only replans the remaining delta (nothing already written is
+re-embedded, since `cache_key()`/`concept_cache_key()` are already present).
+
+**`concept_emb` scope, current state.** As of the T03 production run
+(bean `okf-cli-c922`), `concept_emb` holds `voyage-3-large` rows for the
+**whole catalogue** — 2443/2443 concepts (100% coverage), one model group
+only, `dim=1024` throughout. (The plan named 2437 at authoring time; the
+live catalogue is a separately-growing repo and had organically grown to
+2443 concepts by the time this run executed — accepted growth, not a bug,
+see `REFERENCES.md` R44 footnote r44.) `emb` (the tag-scope table) is
+untouched by this and keeps rows for **both** models, as documented above.
+
 ## Finding for Task 8: tag-embeddings only vs. body-embeddings needed
 
 **Verdict (corrected 2026-07-25, post-review F01): tag-embeddings alone are

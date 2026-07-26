@@ -7,7 +7,10 @@ This `/docs` folder is OKF-structured project knowledge, driven by the `/okf-p` 
   frontmatter with a non-empty `type`. Written only via `/okf-p ingest` (never by hand).
 - **`okf-tools-okf-inbox/`** — git-ignored staging for `/okf-p ingest` sources.
 - **`_free-notes/`** — freeform, git-ignored, no rules. Scratch, drafts, dumps.
-- **`plans/<beans-id>-<slug>/`** — mandatory home for plan-skills (writing-plans).
+- **`<topic-slug>/`** — one folder per topic: the whole think chain co-located
+  (SPEC/DECISIONS/QUESTIONS/TASKS/REFERENCES) plus `PLAN.md`. Both brainstorming
+  and writing-plans write here. No separate `plans/` folder — the governing
+  `/tools/CLAUDE.md` Docs-Standard forbids it (one topic, one folder).
 - **`docs-index-map.md`** — docs-root Map of Content, loaded by ce-start (Awareness).
 
 ## Type + config authority
