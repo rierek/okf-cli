@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T08:53:23Z
+updated_at: 2026-07-26T08:56:42Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -189,3 +189,26 @@ The mutation-probe gap on the `cmd_find` gate (finding 3 above) is disclosed rat
 ## Notes for T12 (okf-cli-1mxp, failure taxonomy)
 
 `shipped_expand.json` and `shipped_v2.json` are now both available for T12's `remeasure.py --find-arg` extension (adding the `"rows"` key), but per this task's finding, expansion changed nothing about which queries fail — so the T12 failure taxonomy can be built from either file's failing-query set and will be identical either way. All 46 lexically-unconfident queries in the combined 48-query set had their rescue attempted and got zero tags back; that data (query → top-3 tag cosines, printed during this task's diagnostics) is not persisted anywhere in the repo — if T12's taxonomy wants a `synonymy`-vs-other split informed by "how close did the nearest tag get", it will need to regenerate that from scratch (`_expand_query_tags`'s internals, or a small ad-hoc script like the one used here), since it was not part of this task's committed deliverables.
+
+
+## Ruling from the plan author, 2026-07-26 (supervisor-relayed, binding)
+
+Arrived after the null result was reported, based on the plan author's own re-measurement. It supersedes the "0 of 46 clear the floor" framing — the conclusion is stronger than the near-miss number suggested.
+
+### 1. The null result is structural, not a threshold accident
+
+Three measured facts, to be recorded verbatim as evidence in Q05/Q06:
+
+- The 0.595 near-miss for `"mockup tailscale"` is the tag `tailscale` — **a word already present in the query**. Expanding with it would yield zero information gain. The floor is therefore NOT the binding constraint: whole-query embedding returns the query's own most prominent word as its nearest neighbour. Lowering the floor would admit no-ops plus noise, not one genuine rescue.
+- Term granularity would not solve it either, measured separately: `"mockup"` alone clears the floor with `mockups` at **0.6693** — a morphological variant, not a synonym.
+- `excalidraw` does not appear among the nearest neighbours of `"mockup"` at all (top5: `mockups`, `ui-storybook`, `mocking`, `template`, `example`). Tags are embedded slug-only (R06), so `excalidraw` carries no context connecting it to mockups.
+
+**Conclusion to record:** tag-vector expansion cannot close the R12 gap **in principle** — not because of the floor, not because of granularity, but because the two terms are not neighbours in tag-slug space. That case is solved by CONCEPT embedding, which sees the running text. The null result confirms the architecture decision retroactively rather than calling it into question.
+
+### 2. AC-2 requires a committed regression test — not a review judgement call
+
+Ruled mandatory, removed from reviewer discretion. Rationale from the plan author: AC-2 is exactly the property forced by the F06 correction (expansion runs only when the lexical arm is not the ranking owner). Without a regression test, the next refactor silently reintroduces a network call per query and nobody notices — the results stay the same and only the bill grows.
+
+Required shape: with a **confident** lexical arm, `_expand_query_tags` must NOT be called. Implement as a spy/monkeypatch that RAISES on call.
+
+Disclosing the gap instead of silently patching it was explicitly endorsed.
