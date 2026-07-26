@@ -135,6 +135,30 @@ R43 — **Fusionsregel im Regime-Vergleich** (MRR), `hybrid_v1c.json` / `hybrid_
 
 Bedingte Übergabe = der lexikale Arm besitzt das Ranking nur bei klarer Top-1-Marge, sonst besitzt es der semantische Arm; der jeweils andere wird hinten angehängt, nie davor. Beide *Misch*-Verfahren verschlechtern gegenüber dem besseren Einzelarm, weil ein uninformativer Arm Rauschränge gleichberechtigt einbringt.
 
+R44 — **Shipped-Architektur, gemessen über das echte CLI** (`eval/remeasure.py`, n=48 = queries_v2 + queries_real, live Katalog[^r44]):
+
+| Satz | n | R@1 | R@5 | R@10 | MRR | Zero-Hit | Latenz p50 | Latenz max |
+|------|---|-----|-----|------|-----|----------|-----------|-----------|
+| combined | 48 | 0.271 | 0.688 | 0.833 | 0.452 | 0.167 | 0.621 s | 0.766 s |
+| queries_v2.json | 40 | 0.250 | 0.700 | 0.825 | 0.438 | 0.175 | 0.620 s | 0.660 s |
+| queries_real.json | 8 | 0.375 | 0.625 | 0.875 | 0.515 | 0.125 | 0.624 s | 0.667 s |
+| `K` Substring (Pre-Plan, R42) | 48 | 0.021 | — | 0.021 | 0.021 | 0.979 | — | — |
+
+Alle vier Gate-Kriterien aus okf-cli-uagv bestanden beim ersten Lauf, ohne jede Nachjustierung von `SEMANTIC_MARGIN_RATIO`: Zero-Hit 0.167 ≤ 0.30, MRR 0.452 ≥ 0.35, `queries_real.json`-Zero-Hit 0.125 ≤ 0.25, Latenz p50 0.621 s ≤ 2.0 s. Rohdaten: `eval/shipped_v2.json`.
+
+[^r44]: Der Katalog hielt zum Messzeitpunkt **2443 Konzepte**, nicht die 2437 aus dem Plan — er wuchs seit R42/R43 (dort gegen 2437 gemessen) organisch um 6. Kein Bug: `concept_emb` deckt 2443/2443 (100 %) ab. Ein späterer Leser, der R44 direkt gegen R42/R43 hält, sähe sonst eine unerklärte Korpusgrößen-Differenz und hielte sie fälschlich für einen Fehler (siehe LL-pending-02, bean okf-cli-cskz).
+
+R45 — **Fixture-Gate nach dem Architektur-Wechsel** (`cli/eval/runner.py` + `gate.py`): baseline `cli/eval/results/baseline-f0714b2.json` vs `architecture-d6f6175.json`, Verdict **`GATE: PASS`**.
+
+| Größe | baseline | architecture-d6f6175 | Delta |
+|-------|----------|-----------------------|-------|
+| zero_hit_rate_paraphrase (gegatet: muss fallen) | 1.000 | 0.500 | −0.500 |
+| s1-literal rank (gegatet: darf nicht regressieren) | 1 | 1 | ±0 |
+| mrr | 0.812 | 0.800 | −0.012 |
+| mean_score_ratio (ungegatet, 0..100-Skala) | 0.396 | 0.845 | +0.449 |
+
+`mean_score_ratio` bewegt sich durch die Score-Skala des neuen Fusionsergebnisses — erwartet und bewusst ungegatet, kein Regressionssignal. Fixture-Fenster gebracht mit `fixtures.py --seed` → `build_tagvec.py --produce` (4/4 embedded) → `runner.py`/`gate.py` → `fixtures.py --teardown` → dangling-Vektor-Cleanup → `build-index`; Katalog danach nachweislich clean (0 `_okfeval-*`-Dateien, 0 `concept_emb`-Zeilen mit diesem Präfix, `concept_emb` zurück bei 2443).
+
 ## R — Vorgänger-Artefakte
 
 | ID | Ort | Inhalt |

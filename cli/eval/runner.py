@@ -192,6 +192,12 @@ def run(catalogue_root, golden_path):
     eight metrics (bean okf-cli-o7z2 AC1/SC-002). Returns the result blob:
     {catalogue_rev, per_row:[...], metrics:{...}}."""
     root = os.path.abspath(os.path.expanduser(catalogue_root))
+    # The lexical arm is index-backed since D14; without a build here the
+    # runner would score the substring fallback and report it as the shipped
+    # behaviour. Local, no network, ~ms on a fixture catalogue.
+    subprocess.run(
+        ["python3", CLI_PATH, "--root", root, "build-index"],
+        check=True, capture_output=True, text=True)
     with open(golden_path, encoding="utf-8") as f:
         golden = json.load(f)
 
