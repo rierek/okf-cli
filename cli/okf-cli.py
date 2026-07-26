@@ -647,6 +647,123 @@ def _format_contrib(contrib):
     return "; ".join(parts) if parts else "(none)"
 
 
+# ── Lexical index (D14/D15) ──────────────────────────────────────────────
+# FTS5 + BM25 is the lexical arm of the measured target architecture
+# (DESIGN.md). The index is a PERSISTENT but OPTIONAL artefact: when it is
+# absent or unusable, find falls back to the substring scan with one stderr
+# note — never a hard fail (D15). Field weights title 3 / tags 2 / body 1 are
+# the same ratios the substring scorer used, so the comparison isolates the
+# retrieval model, not the weighting (eval/fts_arm.py:52-55).
+#
+# Query-side tokenization vs. index-side tokenization (I01, T04 review
+# 2026-07-26): two layers apply in sequence, deliberately, not by accident.
+#   1. Python tokenize() (word-splitting, lowercasing, underscore as a
+#      separator) decides QUERY TERM BOUNDARIES before a term is quoted into
+#      an FTS5 MATCH expression (Task 6: `'"{}"*'.format(t)`).
+#   2. SQLite's own configured tokenizer (porter unicode61 remove_diacritics
+#      2) is applied a SECOND time by FTS5 itself, both to the indexed
+#      title/tags/body text at build time AND to each quoted term inside a
+#      MATCH expression at query time — so diacritic-folding/stemming stays
+#      symmetric on both sides even though Python's tokenize() alone does
+#      not fold (ä stays ä at that layer).
+# Verified empirically, not inferred: a query for the raw string "café"
+# (unfolded) run as `docs MATCH '"café"*'` DOES match an indexed document
+# containing "cafe"/"café_menü", and an unfolded `'"qualitätsmanagement"*'`
+# DOES match the porter-stemmed indexed token, because FTS5 tokenizes quoted
+# MATCH terms with the table's own tokenizer before comparing. Underscore
+# splitting is likewise consistent between the two layers: unicode61 itself
+# splits "build_tagvec" into "build"/"tagvec" (checked via fts5vocab), the
+# same split tokenize() already performs — so there is no parity gap on
+# that dimension either. Net effect: the FTS5 arm never needs Python-level
+# folding: SQLite closes that gap on every MATCH.
+# ───────────────────────────────────────────────────────────────────────
+FTS_DIRNAME = ".fts"
+FTS_FILENAME = "fts.sqlite"
+# unicode61 folds diacritics (a German catalogue needs ä/ö/ü to match a/o/u);
+# porter stems English morphology. Measured best variant: porter + prefix
+# (R32).
+FTS_TOKENIZER = "porter unicode61 remove_diacritics 2"
+FTS_SCHEMA = (
+    "CREATE VIRTUAL TABLE docs USING fts5("
+    "path UNINDEXED, ctype UNINDEXED, title, tags, body, tokenize='{}')"
+).format(FTS_TOKENIZER)
+FTS_META_SCHEMA = "CREATE TABLE IF NOT EXISTS fts_meta(k TEXT PRIMARY KEY, v TEXT)"
+# bm25() weight per column, in declaration order: path, ctype, title, tags, body.
+FTS_BM25_WEIGHTS = "0.0, 0.0, 3.0, 2.0, 1.0"
+
+
+def _fts_db_path(root):
+    return os.path.join(root, FTS_DIRNAME, FTS_FILENAME)
+
+
+def build_fts_index(root, db_path=None):
+    """(Re)build the FTS5 lexical index from the catalogue. Returns
+    (n_concepts, db_path). Local I/O only — no network, stdlib sqlite3.
+    Builds into a .tmp sibling and os.replace()s it, so an interrupted build
+    never leaves a half-written index in place of a working one."""
+    db_path = db_path or _fts_db_path(root)
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    tmp = db_path + ".tmp"
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    conn = sqlite3.connect(tmp)
+    n = 0
+    newest = 0.0
+    try:
+        conn.execute(FTS_SCHEMA)
+        conn.execute(FTS_META_SCHEMA)
+        for b in list_bundles(root):
+            bp = os.path.join(root, b)
+            for cid, ap in iter_concepts(bp):
+                raw = read_file(ap)
+                fm, body = split_frontmatter(raw)
+                title = _dequote(fm.get("title", "")) or cid
+                conn.execute(
+                    "INSERT INTO docs(path, ctype, title, tags, body)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    ("{}/{}".format(b, cid), fm.get("type", ""), title,
+                     " ".join(extract_tags(raw)), body))
+                n += 1
+                mt = os.path.getmtime(ap)
+                if mt > newest:
+                    newest = mt
+        conn.executemany(
+            "INSERT OR REPLACE INTO fts_meta(k, v) VALUES (?, ?)",
+            [("n_concepts", str(n)), ("newest_mtime", repr(newest))])
+        conn.commit()
+    finally:
+        conn.close()
+    os.replace(tmp, db_path)
+    return n, db_path
+
+
+def _fts_index_stale(root, conn):
+    """True when the catalogue gained/lost concepts or any concept file is
+    newer than the newest one seen at build time. stat()-only — it never
+    reads a concept body, which is exactly what makes it cheaper than the
+    full scan it replaces. An unreadable/missing meta table counts as stale."""
+    try:
+        meta = dict(conn.execute("SELECT k, v FROM fts_meta").fetchall())
+        n_idx = int(meta["n_concepts"])
+        newest_idx = float(meta["newest_mtime"])
+    except (sqlite3.DatabaseError, KeyError, ValueError, TypeError):
+        return True
+    n = 0
+    newest = 0.0
+    for b in list_bundles(root):
+        for _cid, ap in iter_concepts(os.path.join(root, b)):
+            n += 1
+            mt = os.path.getmtime(ap)
+            if mt > newest:
+                newest = mt
+    return n != n_idx or newest > newest_idx
+
+
+def cmd_build_index(root, args):
+    n, db = build_fts_index(root)
+    print("indexed {} concept(s) -> {}".format(n, db))
+
+
 # 8c (D04) — semantic backstop. Fires only as a fallback (zero/weak keyword
 # hits), reads .tagvec's concept_emb table (title+body scope, cli/embeddings/
 # build_tagvec.py) via stdlib sqlite3, and embeds the query with a LOCAL
@@ -2261,6 +2378,9 @@ def main():
     prn.add_argument("new", help="destination path (same or different bundle)")
     prn.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
     prn.add_argument("--force", action="store_true", help="overwrite an existing destination")
+    sub.add_parser("build-index",
+                   help="(re)build the FTS5 lexical search index at "
+                        "<root>/.fts/fts.sqlite (local only, no network)")
     px = sub.add_parser("reindex", help="(re)generate marker-bounded index.md listings")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
     px.add_argument("--init", action="store_true",
@@ -2325,6 +2445,7 @@ def main():
      "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
      "refs": cmd_refs,
      "rewrite-path": cmd_rewrite_path, "rename": cmd_rename,
+     "build-index": cmd_build_index,
      "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
      "remove-tags": cmd_remove_tags,
      "normalize-tags": cmd_normalize_tags,

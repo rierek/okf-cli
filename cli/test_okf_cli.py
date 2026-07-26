@@ -4,7 +4,12 @@
 Run: python3 -m unittest test_okf_cli -v
 """
 import importlib.util
+import json
 import os
+import shutil
+import sqlite3
+import struct
+import tempfile
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1721,6 +1726,71 @@ class TokenizeUnicode(unittest.TestCase):
         must survive as one token too, same as an umlaut word does."""
         self.assertEqual(okf.tokenize("知識管理 system"),
                          ["知識管理", "system"])
+
+
+class FtsIndexBuild(unittest.TestCase):
+    """D15 — the lexical index is a persistent artefact under <root>/.fts/."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: Serve Excalidraw drafts\n"
+                    "description: d\ntags: [excalidraw, tailscale]\n---\n"
+                    "Render the drawing to PNG and expose it over the tunnel.\n")
+        with open(os.path.join(self.root, "b", "two.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Konzept\ntitle: Qualitätsmanagement\n"
+                    "description: d\ntags: [qm]\n---\nProzesse und Audits.\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_build_creates_the_artefact_and_counts_concepts(self):
+        n, db = okf.build_fts_index(self.root)
+        self.assertEqual(n, 2)
+        self.assertTrue(os.path.isfile(db))
+        self.assertEqual(db, os.path.join(self.root, ".fts", "fts.sqlite"))
+
+    def test_index_holds_path_type_and_tags(self):
+        okf.build_fts_index(self.root)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        rows = dict(conn.execute("SELECT path, ctype FROM docs").fetchall())
+        conn.close()
+        self.assertEqual(rows, {"b/one": "Runbook", "b/two": "Konzept"})
+
+    def test_rebuild_is_idempotent(self):
+        okf.build_fts_index(self.root)
+        n, _db = okf.build_fts_index(self.root)
+        self.assertEqual(n, 2)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        total = conn.execute("SELECT COUNT(*) FROM docs").fetchone()[0]
+        conn.close()
+        self.assertEqual(total, 2)
+
+    def test_fresh_index_is_not_stale(self):
+        okf.build_fts_index(self.root)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            self.assertFalse(okf._fts_index_stale(self.root, conn))
+        finally:
+            conn.close()
+
+    def test_new_concept_makes_the_index_stale(self):
+        okf.build_fts_index(self.root)
+        with open(os.path.join(self.root, "b", "three.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Konzept\ntitle: Three\ndescription: d\n"
+                    "tags: []\n---\nbody\n")
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            self.assertTrue(okf._fts_index_stale(self.root, conn))
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

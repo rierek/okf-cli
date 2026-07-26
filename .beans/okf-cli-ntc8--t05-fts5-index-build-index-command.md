@@ -42,14 +42,14 @@ _Requirements: PLAN.md Task 5 · DECISIONS D14, D15 · TASKS.md T13 · REFERENCE
 
 ## Steps
 
-- [ ] Add the five module-level test imports (deliberate departure from the file's local-import style — see the plan)
-- [ ] Write the failing `FtsIndexBuild` tests
-- [ ] Run them, confirm they fail for the stated reason
-- [ ] Add the lexical-index section: constants, `_fts_db_path`, `build_fts_index`, `_fts_index_stale`, `cmd_build_index`
-- [ ] Register the `build-index` subparser and its dispatch entry (`cli/okf-cli.py:2321-2328`)
-- [ ] Tests pass; suite still 19F/2E
-- [ ] Build the live index; check whether the catalogue's `.gitignore` needs a `.fts/` line — report it, do NOT commit in that repo
-- [ ] Commit `feat(cli): add fts5 lexical index + build-index`
+- [x] Add the five module-level test imports (deliberate departure from the file's local-import style — see the plan)
+- [x] Write the failing `FtsIndexBuild` tests
+- [x] Run them, confirm they fail for the stated reason
+- [x] Add the lexical-index section: constants, `_fts_db_path`, `build_fts_index`, `_fts_index_stale`, `cmd_build_index`
+- [x] Register the `build-index` subparser and its dispatch entry (`cli/okf-cli.py:2321-2328`)
+- [x] Tests pass; suite still 19F/2E
+- [x] Build the live index; check whether the catalogue's `.gitignore` needs a `.fts/` line — report it, do NOT commit in that repo
+- [x] Commit `feat(cli): add fts5 lexical index + build-index`
 
 ## Recommended Skills
 
