@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T08:56:42Z
+updated_at: 2026-07-26T09:12:29Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -91,6 +91,8 @@ Commits: `7c47039` feat(cli): add --expand-tags query expansion (cli/okf-cli.py,
 Root cause, measured directly (not inferred): across the 48-query set, 46 queries had an unconfident lexical arm, so expansion was attempted 46 times. On **0 of 46** did any registered tag's cosine similarity clear the configured floor (`floor=0.6`, an unmodified plan constant — never retuned per the hard rule). The closest miss was the query `"mockup tailscale"` → tag `tailscale` at cosine 0.595, 0.005 short of the floor; mean top-1 cosine across all 46 attempts was 0.472. Re-verified live and end-to-end (see Smoke): the real CLI subprocess against the live catalogue for that exact query shows the rescue attempted (no `note: query expanded` line — extra=[]) and control correctly falling through to the semantic arm, which then owns the ranking as designed.
 
 QUESTIONS.md: Q05 → 🟢 (measured: no, expansion at the current floor solves 0 additional cases on this set; concept_emb stays the primary semantic lever, not tag expansion). Q06 → 🟢 (answered by construction: whole-query embedding + shared cache, confirmed no extra network cost).
+
+**Superseded by the plan author's re-measurement (see "Fix round" below): the null result is structural, not a floor accident.** The 0.595 near-miss (`tailscale`) is a word already IN the query — expanding with it is a zero-information no-op, so the floor was never the binding constraint. Term granularity doesn't rescue it either: `mockup` alone clears the floor, but only with `mockups` (0.6693), a morphological variant, not a synonym. And `excalidraw` is not even among `mockup`'s nearest tag neighbours (top5: mockups/ui-storybook/mocking/template/example; rank 105 of 650) — tags are embedded slug-only (R06), carrying no context that connects `excalidraw` to "mockup". Tag-vector expansion cannot close the R12 gap in principle; that is CONCEPT embedding's job, because it sees the running text. QUESTIONS.md Q05 was rewritten to record this stronger conclusion verbatim.
 
 ## Test-Output
 
@@ -180,6 +182,36 @@ provenance: semantic (cosine=0.56)
 ```
 No `note: query expanded` line (extra=[] — the near-miss did not clear the floor), control correctly falls through to the semantic arm, which owns the ranking as designed. `git -C ~/Obsidian/Knowledge-Catalogue status --short` before and after both smoke runs and the full measurement run: empty both times — the live catalogue (a foreign git repo) was left exactly as found; `find` and expansion are read-only by construction (no index build, no writes).
 
+**3. Literal command that produced `shipped_expand.json` (I01).** PLAN.md's original Step 6 example (`--find-arg --expand-tags`, space-separated) is rejected by argparse — an `append`-action value starting with `--` looks like another option, so argparse raises `expected one argument`. Only the `=` form works. The exact command actually run:
+```
+python3 docs/okf-retrieval-architecture/eval/remeasure.py \
+  --root ~/Obsidian/Knowledge-Catalogue \
+  --queries queries_v2.json queries_real.json --out shipped_expand.json \
+  --find-arg=--expand-tags
+```
+(PLAN.md itself is now corrected by the plan author in `ccc128f`; not touched by me.)
+
+**4. Counting-stub proof that the flag actually fired, not silently swallowed (I01 addendum).** A silently dropped flag and an honest null result are indistinguishable from `shipped_expand.json`/`shipped_v2.json` alone — both would be bit-identical. Instrumented both the expansion helper and the actual network call directly, in-process, no subprocess involved:
+
+Part A — the real 48-query set, counting wrapper around `_expand_query_tags` and around `_embed_query_voyage` (the function that makes the live Voyage call):
+```
+Part A (live 48-query set):
+  unconfident queries (rescue attempted manually): 46
+  _expand_query_tags call count: 46
+  _embed_query_voyage call count (actual network calls): 46
+  PASS: mechanism fired on every unconfident query, one embed call each
+```
+46 == 46 == 46: the rescue path ran on every query where it was eligible to run, and cost exactly one embedding call each (Q06's shared-cache property holds under live measurement, not just in the mocked unit test). This is what makes "0 of 46 cleared the floor" a measured negative result rather than a silently-skipped one.
+
+Part B — a synthetic fixture where a tag DOES clear the floor (same seeding convention as the committed `ExpandQueryTags` tests, but run through the real `cmd_find` end-to-end), proving the mechanism is not dead code when a rescue candidate does exist:
+```
+Part B (synthetic fixture, tag clears the floor):
+  stdout: [..., 'path: b/one', ...]
+  stderr: ['note: lexical index absent — falling back to substring scan; ...', 'note: query expanded with tag(s): excalidraw', 'note: semantic arm skipped ...']
+  PASS: expansion fired, terms widened, concept found via the widened term, mechanism confirmed end-to-end
+```
+`git -C ~/Obsidian/Knowledge-Catalogue status --short` before/after this proof run: empty (read-only, in-process, no writes).
+
 ## Deviations/ERRATA
 
 None against PLAN.md Task 11's literal code and tests — `_load_tag_vectors()`, `_expand_query_tags()`, `_query_vector()`/`_QUERY_VEC_CACHE`, the `cmd_find` rescue wiring, the `--expand-tags` flag registration, and the `remeasure.py` `--find-arg` passthrough are verbatim from the plan. One process note, not a code deviation: `_QUERY_VEC_CACHE = {}` already existed at cli/okf-cli.py (forward-declared by T10/Task 7 specifically for this task, per its own comment) — Step 3 therefore added `_query_vector()` next to the existing dict rather than declaring the dict itself, which is the same net result the plan describes (`_query_vector` reads/writes the module-level `_QUERY_VEC_CACHE`) via a slightly different diff shape than "add `_QUERY_VEC_CACHE` / `_query_vector`" might suggest read literally.
@@ -212,3 +244,44 @@ Ruled mandatory, removed from reviewer discretion. Rationale from the plan autho
 Required shape: with a **confident** lexical arm, `_expand_query_tags` must NOT be called. Implement as a spy/monkeypatch that RAISES on call.
 
 Disclosing the gap instead of silently patching it was explicitly endorsed.
+
+
+
+## Fix round — CHANGES_REQUIRED, closed (2026-07-26)
+
+Reviewer verdict: implementation matched PLAN.md verbatim, AC-4/AC-5, both mutation probes, both baselines and the live cosines were all independently reproduced — nothing previously claimed failed re-verification. Five items came back (two, B02's original form and part of I01, were plan-author matters and explicitly out of my scope until PLAN.md was itself corrected in `ccc128f`; both are addressed below once they entered scope).
+
+**B01 (blocking, plan-author-ruled, not a review judgement call).** The rescue gate (AC-2) had no committed regression test — the reviewer confirmed the gap was worse than disclosed: inverting `not lexical_owned_provisionally` → `lexical_owned_provisionally` left the entire 257-test suite green at 19F/2E. Added `test_confident_lexical_arm_skips_expansion_entirely` (`cli/test_okf_cli.py`, `ExpandQueryTags`): a single-hit fixture (confident by construction, nothing to be ambiguous against), `--expand-tags` on, `_expand_query_tags` monkeypatched to a spy that **raises** on any call.
+
+RED (gate inverted by hand): `AssertionError: _expand_query_tags must not be called when the lexical arm is already confident`, raised from inside `cmd_find` — confirmed at both class level (1 test) and full-suite level (`Ran 258 tests ... FAILED (failures=20, errors=2)`, i.e. the inversion now moves the suite off 19F/2E, closing exactly the gap the reviewer found).
+GREEN after revert: `OK` (5 tests in `ExpandQueryTags`). Revert proof: `md5 cli/okf-cli.py` before mutation = after revert = `f1376401d173e6d09d75bff9184f2254`; `git diff --stat cli/okf-cli.py` before mutation = after revert = unchanged (no diff-stat delta from the inversion-and-revert round-trip).
+
+**B02 (plan-corrected in `ccc128f`, then implemented literally).** `--expand-tags` reruns the lexical arm a second time within one `find` over the SAME `.fts` index; `_fts_ranking` printed its degradation note unconditionally, so the rescue rerun doubled the note with the expansion note sandwiched in between (PF-4 violation — exactly one note per degraded arm, per invocation, not per call). Implemented the plan's literal fix: `_fts_ranking(..., notify=True)` and `_rank_lexically(..., notify=True)` both gain the parameter (deliberately a call-site argument, not a hidden already-warned module flag — hidden state leaks between tests and, in long-running processes, between invocations); the `cmd_find` rescue rerun passes `notify=False`. All three notes (absent/stale/unusable) in `_fts_ranking` are now guarded by it.
+
+Added `test_rescue_rerun_does_not_double_the_degradation_note` (`cli/test_okf_cli.py`, `ExpandQueryTags`): fixture with no `.fts` index, a seeded `.tagvec` whose tag trivially clears the floor, zero initial lexical hits — reproduces exactly the combination the reviewer used. Asserts exactly one `"lexical index absent"` stderr line.
+
+RED (reverted the rescue-rerun call site back to no `notify=False`, i.e. pre-fix behaviour):
+```
+AssertionError: 2 != 1 : ['note: lexical index absent — falling back to substring scan; run `okf-cli build-index` for BM25 ranking', 'note: query expanded with tag(s): widget', 'note: lexical index absent — falling back to substring scan; run `okf-cli build-index` for BM25 ranking', 'note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only']
+```
+Reproduces the reviewer's finding exactly (the "absent" note twice, with the expansion note sandwiched between). Reverted to the fix. `md5 cli/okf-cli.py` before mutation = after revert = `c8724adc5f500e243866ee85d0f28c6a`; `git diff --stat cli/okf-cli.py` before mutation = after revert = `35 insertions(+), 10 deletions(-)` unchanged in both directions. GREEN after revert: `OK` (6 tests in `ExpandQueryTags`).
+
+Commit: `6dcc4e5` fix(cli): B01/B02 - expand-tags gate test, one note (`cli/okf-cli.py`, `cli/test_okf_cli.py`).
+
+Full suite after this round, both env directions:
+```
+$ python3 -m unittest discover -s cli -p "test_*.py"
+Ran 259 tests in 17.742s
+FAILED (failures=19, errors=2)
+
+$ env -u VOYAGE_API_KEY python3 -m unittest discover -s cli -p "test_*.py"
+Ran 259 tests in 14.135s
+FAILED (failures=19, errors=2)
+```
+259 = 257 previous + 2 new tests (B01 + B02); failures/errors unchanged at 19/2.
+
+**Q05/Q06 rewrite.** QUESTIONS.md Q05 rewritten with the plan author's re-measurement — independently reproduced live against the catalogue before writing it down: `_expand_query_tags` on `"mockup tailscale"` returns `tailscale` at cosine `0.5949842216641149` (a word already in the query, zero information gain if expanded); `_expand_query_tags` on `"mockup"` alone returns top5 `[mockups 0.6693351622222837, ui-storybook 0.5832, mocking 0.5763, template 0.5731, example 0.5708]`, with `excalidraw` absent from that list entirely at rank 105 of 650 (cosine 0.4937); `excalidraw`'s rank for `"mockup tailscale"` is 156. All three numbers match the coordinator's relayed figures exactly. Conclusion recorded verbatim: tag-vector expansion cannot close the R12 gap in principle (not floor, not granularity — the terms are not neighbours in tag-slug space); that gap is CONCEPT embedding's job. Q06 unchanged (already answered by construction; not contested).
+
+**I01 addendum — literal command + counting proof.** Added to the bean's Smoke section: (a) the exact literal `remeasure.py` invocation that produced `shipped_expand.json` (`--find-arg=--expand-tags`, the `=` form — the space-separated form in PLAN.md's original Step 6 example is rejected by argparse, `expected one argument`, since an `append`-action value starting with `--` looks like another option); (b) a counting-stub proof, run in-process (not subprocess), that the mechanism actually fired rather than being silently swallowed: on the live 48-query set, `_expand_query_tags` was called exactly 46 times (matching the 46 lexically-unconfident queries) and the underlying `_embed_query_voyage` network call fired exactly 46 times too (one per attempt, confirming Q06's shared-cache claim held under live measurement, not just the mocked unit test); a second, synthetic-fixture run (tag deliberately clears the floor) proves the mechanism is not dead code end-to-end — `note: query expanded with tag(s): excalidraw` prints, the widened term set is used, and the concept is found via it. This is what makes "0 of 46 cleared the floor" (and now, "the gap is structural") a measured result rather than an unverified one. `git -C ~/Obsidian/Knowledge-Catalogue status --short` empty before/after every run in this fix round.
+
+Leaf stays `completed` per the standing convention (PF-2/PF-5) — this is an inline fix round within the same bean, not a re-open requiring a fresh implementer cycle.
