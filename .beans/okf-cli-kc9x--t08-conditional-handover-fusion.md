@@ -1,11 +1,11 @@
 ---
 # okf-cli-kc9x
 title: T08 Conditional handover fusion
-status: todo
+status: in-progress
 type: task
 priority: critical
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T06:48:46Z
+updated_at: 2026-07-26T07:15:15Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-8j7l
@@ -133,3 +133,27 @@ final signatures — no further renaming needed. Live vectors are proven reachab
 counter-probe (`concept_emb`, 2443/2443, voyage-3-large, dim 1024). `VOYAGE_API_KEY` is live
 and functional; rotation is scheduled after T09, so do not print it and abort on any 401/403
 instead of retrying. Baseline entering T08: 233 tests, exactly 19 failures / 2 errors.
+
+
+
+## PRELUDE 2026-07-26 — carried over from the T07 re-review
+
+**Awareness item (latent, do NOT fix here — filed as `okf-cli-3520`).** `concept_emb` can hold
+more than one row per concept path: the `PRIMARY KEY` is `key` (content+path hash), not
+`path`, and the producer never deletes the superseded row when a concept's content changes.
+Anything that sizes a candidate window by path count is then undersized — the same failure
+class as T07's blocker B01, different trigger. `fuse_conditional` reads the same vector list
+and inherits the assumption.
+
+Measured right now: 2443 rows, 2443 distinct paths, i.e. **0 duplicates** — the table was
+filled in one pass by T03, so nothing manifests today. Do not build a workaround into the
+fusion; just do not ASSUME one-row-per-path in a way that would silently drop candidates. If
+your design depends on that assumption, say so explicitly in the bean so `okf-cli-3520` knows
+what it has to protect.
+
+**T07 final state you inherit:** commits `91e2604` + `be08f8c`, APPROVED after one fix round.
+The `cmd_find` shim is now CORRECT (it over-fetches `limit + len(exclude)`, filters, then
+slices — verified equivalent to the pre-T07 contract on 7 of 8 constructed edge cases, the 8th
+being the duplicate-row case above). It is still your duty to DELETE it (`SC-SHIM`) — a
+correct shim is still the wrong place for dedup under conditional handover.
+Baseline entering T08: **234 tests, exactly 19 failures / 2 errors**.
