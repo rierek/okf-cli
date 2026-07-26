@@ -15,6 +15,9 @@ _COMMANDS = {
     "refs":  (["path"], True),
     "rename": (["old", "new"], False),
     "tags":  (["query"], False),
+    "build-index": ([], False),
+    "prime": ([], False),
+    "info":  ([], False),
 }
 # optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
@@ -76,8 +79,20 @@ def _register(server):
     @server.tool()
     def okf_find(root: str, query: str, limit: int = 10, type: str = "",
                  tag: str = "", scope: str = "") -> list:
-        """Ranked keyword search across a catalogue/repo root, composable
-        with exact-match type/tag filters and a bundle/subdir scope."""
+        """Ranked search across a catalogue/repo root, composable with
+        exact-match type/tag filters and a bundle/subdir scope.
+
+        Two arms produce results: a lexical FTS5/BM25 arm and a semantic
+        embedding arm. Exactly one of them owns the ranking per query — the
+        lexical arm when its top hit has a clear margin, otherwise the
+        semantic one — and the other arm's hits are appended behind, never in
+        front. A semantic-arm result line carries `provenance: semantic
+        (cosine=…)`; a line with no such marker came from the lexical arm.
+
+        Degradations are announced on stderr and never fail the call: a
+        missing or stale lexical index falls back to a substring scan (fix it
+        with okf_build_index), and an unavailable embedding backend leaves
+        lexical results only."""
         return run_okf(root, "find", {
             "query": query, "limit": limit, "type": type, "tag": tag,
             "scope": scope,
@@ -133,6 +148,28 @@ def _register(server):
         candidate tag against the tag universe. Write/admin tag verbs
         (merge-tags, normalize-tags, --register) stay CLI-only by intent."""
         return run_okf(root, "tags", {"query": query, "limit": limit})
+
+    @server.tool()
+    def okf_build_index(root: str) -> str:
+        """(Re)build the FTS5 lexical index at <root>/.fts/fts.sqlite. Local
+        only, no network, no change to catalogue content. Run this when
+        okf_find reports the lexical index as absent or stale — that note
+        names this command, and this tool is how you act on it."""
+        return run_okf(root, "build-index", {})
+
+    @server.tool()
+    def okf_prime(root: str) -> str:
+        """One-shot onboarding for a fresh session: the catalogue's CLAUDE.md
+        guide plus its TOC. Start here before searching a catalogue you have
+        not worked with in this session."""
+        return run_okf(root, "prime", {})
+
+    @server.tool()
+    def okf_info(root: str) -> str:
+        """The catalogue's schema docs (TYPES.md + PROPERTIES.md): the valid
+        `type` values and the frontmatter properties a concept must carry.
+        Read this before writing into a catalogue."""
+        return run_okf(root, "info", {})
 
     return server
 

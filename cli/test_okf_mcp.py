@@ -166,5 +166,35 @@ class McpTagsBoundary(McpBoundaryTestBase):
         self.assertIn("alpha", out)
 
 
+class McpAgentRemedyBoundary(McpBoundaryTestBase):
+    """The remedy find prescribes must be executable by the audience it
+    addresses (okf-cli-4ws6)."""
+
+    def test_build_index_reaches_the_cli_and_writes_the_index(self):
+        out = mcp.run_okf(self.root, "build-index", {})
+        self.assertTrue(os.path.exists(
+            os.path.join(self.root, ".fts", "fts.sqlite")))
+        self.assertIn("indexed", out)
+
+    def test_prime_reaches_the_cli(self):
+        self.assertTrue(mcp.run_okf(self.root, "prime", {}).strip())
+
+    def test_info_reaches_the_cli(self):
+        self.assertTrue(mcp.run_okf(self.root, "info", {}).strip())
+
+
+class McpSurfaceParity(unittest.TestCase):
+    """Every whitelisted MCP command is a real CLI command. Catches a typo or
+    a command renamed on one side only — the drift class of okf-cli-4ws6."""
+
+    def test_whitelist_only_names_real_cli_commands(self):
+        spec = importlib.util.spec_from_file_location(
+            "okf_cli", os.path.join(_HERE, "okf-cli.py"))
+        okf = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(okf)
+        unknown = sorted(set(mcp._COMMANDS) - set(okf.COMMAND_DISPATCH))
+        self.assertEqual(unknown, [])
+
+
 if __name__ == "__main__":
     unittest.main()
