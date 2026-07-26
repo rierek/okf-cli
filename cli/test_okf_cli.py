@@ -2370,6 +2370,18 @@ class ZeroHitSuggestions(unittest.TestCase):
         self.assertIn("(no matches for: tailscael)", out)
         self.assertIn("tailscale", out)
 
+    def test_output_has_no_suggestion_line_when_no_tag_is_close(self):
+        """AC-2 — IF no tag is close enough THEN plain no-match line, no
+        suggestions. Integration-level counterpart to
+        test_unrelated_query_may_return_nothing (which only proves the
+        helper returns []); this proves cmd_find's zero-hit branch actually
+        stays silent end-to-end and does not regress into always printing a
+        (possibly empty) suggestion line."""
+        out = _run_find(self.root, "zzzzqqqq")
+        self.assertEqual(out, "(no matches for: zzzzqqqq)\n")
+        self.assertNotIn("nearest registered tags", out)
+        self.assertNotIn("try: okf-cli find", out)
+
 
 class ZeroHitSuggestionsPF4(unittest.TestCase):
     """PF-4 — a degradation path and a zero-hit can coincide (no .fts index,

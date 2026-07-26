@@ -28,9 +28,9 @@ The consumer of `find` is usually an agent over MCP, and an agent can reformulat
 
 #### Success Criteria
 
-- SC-01: `_zero_hit_suggestions(root, "tailscal")` contains `tailscale`.
+- SC-01: `_zero_hit_suggestions(root, "tailscael")` contains `tailscale`.
 - SC-02: `_zero_hit_suggestions(root, "zzzzqqqq")` returns `[]`.
-- SC-03: `find tailscal` prints `(no matches for: tailscal)` and names `tailscale`.
+- SC-03: `find tailscael` prints `(no matches for: tailscael)` and names `tailscale`.
 - SC-04: the fixture gate still prints `GATE: PASS` — `cli/eval/runner.py:64` only parses `score:`/`path:` lines, so the extra lines cannot confuse it. Verify, do not assume.
 - SC-05: `python3 -m unittest discover -s cli -p 'test_*.py'` stays at exactly 19 failures / 2 errors.
 
@@ -38,12 +38,12 @@ _Requirements: PLAN.md Task 10 · QUESTIONS Q13 · TASKS.md T07_
 
 ## Steps
 
-- [ ] Write the failing `ZeroHitSuggestions` tests
-- [ ] Run them, confirm they fail for the stated reason
-- [ ] Add `_zero_hit_suggestions()` using `difflib`; extend the zero-hit branch
-- [ ] Tests pass; suite still 19F/2E
-- [ ] Re-run the gate command from the measurement task, confirm `GATE: PASS`
-- [ ] Commit `feat(cli): suggest nearest tags on zero hit`
+- [x] Write the failing `ZeroHitSuggestions` tests
+- [x] Run them, confirm they fail for the stated reason
+- [x] Add `_zero_hit_suggestions()` using `difflib`; extend the zero-hit branch
+- [x] Tests pass; suite still 19F/2E
+- [x] Re-run the gate command from the measurement task, confirm `GATE: PASS`
+- [x] Commit `feat(cli): suggest nearest tags on zero hit`
 
 ## Recommended Skills
 
