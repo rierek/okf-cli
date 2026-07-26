@@ -1,11 +1,11 @@
 ---
 # okf-cli-2o39
 title: MCP drops stderr, so agents never see degradation notes
-status: todo
+status: completed
 type: bug
 priority: high
 created_at: 2026-07-26T15:09:51Z
-updated_at: 2026-07-26T16:43:26Z
+updated_at: 2026-07-26T16:52:00Z
 parent: okf-cli-iksi
 ---
 
@@ -91,3 +91,152 @@ _Requirements: R-01_
 
 - superpowers:test-driven-development
 - superpowers:systematic-debugging
+
+## Summary
+
+`run_okf` (`mcp/okf_mcp.py`) now prepends the CLI's stderr text to the returned
+stdout text for every command whose `supports_json` is false (D01). JSON-
+supporting commands are untouched: their stdout still feeds `json.loads`
+directly. The `okf_find` docstring's degradation sentence was corrected in
+the same commit (SC-04) — see Deviations/ERRATA below.
+
+Changed:
+- `mcp/okf_mcp.py`: `run_okf` gains `if proc.stderr: return proc.stderr + out`
+  right before the final `return out`, plus a docstring note explaining D01.
+  `okf_find`'s docstring degradation sentence rewritten to point at the
+  returned text instead of stderr.
+- `cli/test_okf_mcp.py`: two new test classes,
+  `McpFindDegradationNoteBoundary` (SC-01) and
+  `McpJsonCommandParsesDespiteStderrNote` (SC-02).
+
+Commit: `44720b6` — `fix(mcp): surface stderr degradation notes`.
+
+## Test-Output
+
+RED (SC-01, before the fix, `python3 -m unittest cli.test_okf_mcp.McpFindDegradationNoteBoundary -v`):
+
+```
+test_find_returns_absent_note_ahead_of_stdout (cli.test_okf_mcp.McpFindDegradationNoteBoundary.test_find_returns_absent_note_ahead_of_stdout) ... FAIL
+
+======================================================================
+FAIL: test_find_returns_absent_note_ahead_of_stdout (cli.test_okf_mcp.McpFindDegradationNoteBoundary.test_find_returns_absent_note_ahead_of_stdout)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/erik/Obsidian/tools/okf-tools/cli/test_okf_mcp.py", line 194, in test_find_returns_absent_note_ahead_of_stdout
+    self.assertIn("note: lexical index absent", out)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'note: lexical index absent' not found in '------\nscore: 4/6\ntitle: One\ntype: Runbook\npath: b/one\ndescription: first\nbody-snippet: # One…\n------\n'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.077s
+
+FAILED (failures=1)
+```
+
+GREEN (same test, after the fix):
+
+```
+test_find_returns_absent_note_ahead_of_stdout (cli.test_okf_mcp.McpFindDegradationNoteBoundary.test_find_returns_absent_note_ahead_of_stdout) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.077s
+
+OK
+```
+
+Full boundary suite (`python3 -m unittest cli.test_okf_mcp -v`), all 18 green
+(16 pre-existing + 2 new — SC-01 and SC-02):
+
+```
+Ran 18 tests in 1.245s
+
+OK
+```
+
+Full-gate command (`python3 -m unittest discover -s cli -p "test_*.py" 2>&1 | grep -E "^(Ran |OK|FAILED)"`):
+
+```
+Ran 281 tests in 18.114s
+FAILED (failures=19, errors=2)
+```
+
+281 = the baseline 279 plus the 2 new tests; failures=19/errors=2 is the
+unchanged pre-existing count named in the epic's baseline (all in the
+crosslink suites — `CheckCommand`, `FixCrosslinksCommand`, `RefMatrix`,
+`RenameConcept`, `ResolveCrosslinkTarget`, `RewriteCrosslinksInBody` — none
+of which touch `mcp/okf_mcp.py` or `run_okf`). Confirmed by listing the
+failing/erroring test names with `-v` and diffing against the epic's stated
+baseline scope; no new test appears among them. SC-03 met.
+
+## Smoke
+
+Manual end-to-end run against a real tmp catalogue (real subprocess to
+`cli/okf-cli.py`, no mocks), reproduced live:
+
+```
+=== find (degraded, no index) ===
+'note: lexical index absent — falling back to substring scan; run `okf-cli build-'
+=== find (index built, fresh) ===
+'note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical r'
+=== list --json ===
+<class 'list'> [{'title': 'One', 'type': 'Runbook', 'path': 'b/one', 'description': 'first'}]
+=== prime (no stderr expected) ===
+'------\n(missing: CLAUDE.md)\n------\nbundles:\n(for description'
+```
+
+The `find`/degraded case shows the note prepended (AC-01/AC-02); the
+`find`/index-built case shows a *different* degradation note still surfacing
+correctly once the lexical arm is healthy but the semantic arm is not; the
+`list --json` case shows the JSON path parses untouched (AC-03); the `prime`
+case shows no note is added when the CLI writes nothing to stderr (AC-04).
+
+## Deviations/ERRATA
+
+SC-04: the `okf_find` docstring said "Degradations are announced on stderr
+and never fail the call". That sentence was the defect this leaf fixes — it
+was true of the CLI in isolation but false of the shipped MCP tool's
+observable behaviour, since an MCP consumer never sees the wrapper's raw
+stderr, only the tool's return value. After the fix the note is no longer
+purely "on stderr" from the consumer's vantage point — it is folded into the
+returned text. Corrected in the same commit to: "Degradations never fail the
+call and are announced as a note prepended to the returned text (okf-cli-2o39,
+D01 — the CLI itself writes them to stderr, which run_okf folds into this
+tool's return value): ...". No other deviation from D01 or the task's scope
+boundary — only `mcp/okf_mcp.py` (`run_okf` + the `okf_find` docstring) and
+`cli/test_okf_mcp.py` were touched; `cli/okf-cli.py` was read for evidence
+(confirming which JSON-supporting commands can/cannot emit stderr on a clean
+exit) but not modified.
+
+One note on SC-02's test design: no JSON-supporting command in the current
+CLI both exits 0 and writes to stderr on a clean run (checked by reading the
+full bodies of `cmd_check`, `cmd_list`, `cmd_index`, `cmd_refs` — `cmd_list`'s
+only stderr write exits 1, `cmd_refs`'s only stderr write exits 2; neither is
+a clean-exit path). SC-02's own wording ("byte-identical... behaviour") is a
+guarantee about `run_okf`'s branching logic, not about a CLI behaviour that
+exists today, so `McpJsonCommandParsesDespiteStderrNote` stubs
+`subprocess.run` via `mock.patch.object(mcp, "subprocess", ...)` — patching
+only the `mcp` module's own name binding, not the real `subprocess` module
+(which `fastmcp` also imports) — rather than driving a real CLI code path
+that does not exist. This is a deliberate, scoped exception to this repo's
+usual "real subprocess, no mocks" boundary-test convention (see
+`cli/test_okf_mcp.py`'s file docstring); flagging it explicitly rather than
+letting it pass silently.
+
+## Notes for T(n+1)
+
+- The `okf_find` docstring correction (SC-04) is now current as of this
+  commit. If `run_okf`'s note-surfacing mechanism changes again, re-check
+  that sentence — this is exactly the LL-15 failure class (product-facing
+  prose whose truth condition is the code).
+- Out-of-scope finding, not fixed here (belongs in a separate bean if the PO
+  wants it tracked): `mcp/okf_mcp.py`'s `run_okf` prepends stderr **verbatim**
+  (no stripping/formatting), so if the CLI ever emits multiple stderr lines
+  for one non-JSON call, all of them land in the return value in CLI order,
+  with no separator guarantee beyond whatever the CLI itself already put
+  between them (each `print(..., file=sys.stderr)` call ends in `\n`). This
+  matches D01's literal instruction ("prepends whatever the CLI wrote to
+  stderr") and every acceptance criterion, so it is not a defect against this
+  leaf's spec — only naming it because a future consumer parsing the returned
+  text programmatically (rather than reading it) would need to know the note
+  is not delimited from stdout by anything more than the stderr text's own
+  trailing newline.
