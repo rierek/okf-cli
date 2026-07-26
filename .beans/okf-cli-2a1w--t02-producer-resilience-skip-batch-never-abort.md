@@ -1,11 +1,11 @@
 ---
 # okf-cli-2a1w
 title: 'T02 Producer resilience: skip batch, never abort'
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:32:42Z
+updated_at: 2026-07-26T05:08:52Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-pean
@@ -54,3 +54,35 @@ _Requirements: PLAN.md Task 2 · TASKS.md T10 · LESSONS-LEARNED LL-08 · REFERE
 ## Additional success criterion (global constraint, network)
 
 - SC-NET: no unit test added or touched by this task performs a real network call. Every embedding call under test is exercised through a faked `urlopen` or a patched module attribute. The producer's test module is network-free by construction and must stay that way.
+
+
+
+## PRELUDE 2026-07-26 — carried over from T01 review (ce-specs-reviewer on okf-cli-pean)
+
+Do this FIRST, as its own commit, before the T02 work proper.
+
+**I01 (low, non-blocking on T01, lands on your seam):** no end-to-end test exercises the
+"write rows before starting the next batch" / resumability property at the `main()` level.
+Only the pure `batches()` unit and the single-request `embed_bge_m3` payload are covered.
+The per-batch-persist property is today verified by code reading and a reviewer probe, not by
+a committed test.
+
+Location: `cli/embeddings/build_tagvec.py:349-364` (the two production blocks in `main()`),
+test file `cli/test_embeddings_tagvec.py`.
+
+Asked-for test: mock `_embed`/`embed_bge_m3` to raise on batch 2, then assert that batch 1's
+rows are already committed in the sqlite output. Reviewer's note: this belongs on T02 because
+resilience touches exactly this seam.
+
+**Verified facts from T01 you can build on** (reviewer-confirmed, not just implementer-claimed):
+- `write_rows(output, rows)` / `write_concept_rows(output, rows)` are called inside the
+  `for batch in batches(...)` loop and each commits via its own sqlite connection BEFORE the
+  next batch's `_embed()` call. An abort mid-run keeps all already-committed batches.
+- A batch failure today still raises and aborts the run — that is exactly T02's job to change
+  (catch per batch, skip, continue, never lose written batches).
+- `BATCH_LIMITS[model]` is the single touch point for adding a model or a size override.
+- `_embed(model, texts)` resolves `embed_bge_m3`/`embed_voyage` by module-global name at CALL
+  time, not at closure-creation time. Existing tests monkeypatch those names — preserve that
+  property if you change dispatch.
+
+Source: ce-specs-reviewer verdict on okf-cli-pean, 2026-07-26 (commits 2a07ee9, 3981bd8).
