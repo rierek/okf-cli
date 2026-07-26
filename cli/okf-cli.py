@@ -922,12 +922,15 @@ def _rank_lexically(root, query, terms, limit, type_filter=None,
     return hits, 100
 
 
-# 8c (D04) — semantic backstop. Fires only as a fallback (zero/weak keyword
-# hits), reads .tagvec's concept_emb table (title+body scope, cli/embeddings/
-# build_tagvec.py) via stdlib sqlite3, and embeds the query with a LOCAL
-# Ollama bge-m3 call — best-effort: any failure (cache absent, backend
-# unreachable) degrades to keyword-only with a one-line stderr note, never
-# raises, never blocks the keyword path (Global Constraints).
+# 8c (D04) — semantic arm (renamed from "semantic backstop" in T07/D12: on a
+# paraphrase query it OWNS the ranking, it does not just fill gaps). Fires
+# only as cmd_find's gate below decides (zero/weak/ambiguous keyword hits),
+# reads .tagvec's concept_emb table (title+body scope, cli/embeddings/
+# build_tagvec.py) via stdlib sqlite3, and embeds the query with a REMOTE
+# voyage-3-large call (Voyage AI HTTP API, D13) — best-effort: any failure
+# (cache absent, key missing, backend unreachable) degrades to keyword-only
+# with a one-line stderr note, never raises, never blocks the keyword path
+# (Global Constraints). bge-m3 is NOT a runtime fallback here (D16).
 # Post-review fix (F01, 2026-07-25): the original absolute score/max_score
 # ratio gate misclassified legitimate literal top-1 hits as "weak" — this
 # repo's OWN golden fixtures have literal min_score_ratio well below any
@@ -1123,12 +1126,22 @@ def cmd_find(root, args):
         # T07 dropped exclude_paths/max_score from _semantic_hit_dicts()
         # (dedup now belongs to fusion, per D12/D16) — Task 8 replaces this
         # whole gate+fuse block with fuse_conditional(). Until then, keep
-        # this call-site compatible by filtering exclude here instead: same
-        # observable behaviour, no fusion logic implemented early. See T07
-        # bean Deviations/ERRATA.
+        # this call-site compatible with a post-hoc filter (Fix round 1,
+        # B01): _semantic_hit_dicts() ranks by cosine and slices to the
+        # requested limit BEFORE we get a chance to exclude, so filtering
+        # AFTER a plain `limit`-sized fetch can silently starve the pool —
+        # an eligible, lower-ranked candidate never even enters the window
+        # because an excluded (keyword-owned) path took its slot. Over-fetch
+        # by len(exclude) so that even if every excluded path ranks inside
+        # the window, at least `limit` eligible candidates still remain
+        # after filtering (each excluded path can only consume one slot).
+        # See T07 bean Deviations/ERRATA #1 (corrected in Fix round 1).
         exclude = {h["path"] for h in hits}
-        semantic_hits = [h for h in _semantic_hit_dicts(root, args.query, args.limit)
-                          if h["path"] not in exclude]
+        semantic_hits = [
+            h for h in _semantic_hit_dicts(root, args.query,
+                                           args.limit + len(exclude))
+            if h["path"] not in exclude
+        ][: args.limit]
 
     # Fuse: the keyword top-1 (if any) is PINNED at rank 1 — this is an
     # absolute invariant, independent of the gate above, so "never replacing

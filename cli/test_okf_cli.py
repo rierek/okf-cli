@@ -1693,6 +1693,54 @@ class SemanticBackstop(unittest.TestCase):
         finally:
             okf._cosine = orig_cosine
 
+    def test_shim_backfills_when_excluded_paths_rank_inside_the_window(self):
+        """B01 (review round 1, blocking) — the cmd_find shim must exclude
+        keyword-owned paths BEFORE the semantic top-limit window is decided,
+        not after. Two keyword hits (a, b) both also rank at the very top of
+        the semantic candidates for the same query — a realistic overlap,
+        since a keyword-matching concept is usually also semantically close.
+        With args.limit=3 (1 pinned slot + 2 rest slots), a naive "fetch
+        exactly `limit` semantic candidates, then filter" starves the pool:
+        the top-3 semantic window is entirely eaten by the two excluded
+        paths plus one real candidate (x2), so a real, lower-ranked but
+        still-eligible candidate (x3, semantic score 92) never even enters
+        the pool and a much weaker keyword hit (b, lexical score 3/6) wins
+        its slot by default. Correct behaviour: exclude first, so both x2
+        and x3 surface and b — semantically and lexically the weakest
+        contender here — is displaced."""
+        self._w("b/a.md", "Zqxmargin A", ["zqxmargin"],
+                "no second query term appears here.\n")  # title3+tags2=5/6
+        self._w("b/b.md", "Zqxmargin B", [],
+                "no second query term appears here either.\n")  # title3=3/6
+        # margin (5-3)/5 = 0.4 < SEMANTIC_MARGIN_RATIO(0.5) -> ambiguous,
+        # gate fires; both a and b land in `exclude`.
+        self._w("b/x2.md", "X2 Concept", [], "irrelevant body two.\n")
+        self._w("b/x3.md", "X3 Concept", [], "irrelevant body three.\n")
+        self._make_tagvec([
+            ("k1", "b/a", [10.0, 0.0]),   # cosine 1.000 (rank 1, excluded)
+            ("k2", "b/b", [9.0, 1.0]),    # cosine 0.994 (rank 2, excluded)
+            ("k3", "b/x2", [8.0, 2.0]),   # cosine 0.970 (rank 3, eligible)
+            ("k4", "b/x3", [7.0, 3.0]),   # cosine 0.919 (rank 4, eligible)
+        ])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, _err = self._run("zqxmargin", limit=3)
+        paths = [line[len("path: "):] for line in out.splitlines()
+                 if line.startswith("path: ")]
+        self.assertIn("b/x2", paths)
+        self.assertIn(
+            "b/x3", paths,
+            "x3 must surface: it is the 3rd-best ELIGIBLE semantic "
+            "candidate, and excluding a/b before windowing (not after) "
+            "must not let a weaker keyword hit occupy its slot instead. "
+            "Got: {}".format(paths),
+        )
+        self.assertNotIn(
+            "b/b", paths,
+            "the weaker second keyword hit must be displaced by the "
+            "semantically stronger x3, not protected by a starved "
+            "semantic pool. Got: {}".format(paths),
+        )
+
 
 class VoyageQueryEmbedding(unittest.TestCase):
     """D13/D16 — the query path speaks voyage-3-large with input_type=query

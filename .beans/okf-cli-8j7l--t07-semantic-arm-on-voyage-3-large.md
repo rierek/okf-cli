@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T07:00:20Z
+updated_at: 2026-07-26T07:06:52Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-c922
@@ -137,21 +137,37 @@ CLI layer even though the arm itself is proven live above.
 
 ## Deviations/ERRATA
 
-1. **cmd_find compatibility shim (bounded, reviewed live by the plan
-   author).** T07's own signature change (`semantic_ranking()` /
-   `_semantic_hit_dicts()` drop `exclude_paths`/`max_score`) breaks
+1. **cmd_find compatibility shim (bounded; CORRECTED in Fix round 1 after
+   review round 1, B01).** T07's own signature change (`semantic_ranking()`
+   / `_semantic_hit_dicts()` drop `exclude_paths`/`max_score`) breaks
    `cmd_find`'s call site, which PLAN.md assigns to Task 8
-   ("replace the gate at :853-861 and the fusion at :863-879"). Applied a
-   minimal arity-compatible shim in `cmd_find`: call
-   `_semantic_hit_dicts(root, query, limit)` and filter the keyword-owned
-   paths out of the result locally, preserving 100% prior observable
-   behaviour (verified: full renamed suite green, no assertion changed).
-   No conditional-handover logic implemented early. Confirmed by the plan
-   author as "the right bridge"; its removal is now a hard duty with its
-   own criterion **SC-SHIM** on `okf-cli-kc9x` (T08), commit `b7b236d` —
-   post-hoc exclude-filtering must not survive into conditional handover,
-   because dedup there belongs inside `fuse_conditional`, after the owning
-   arm is decided.
+   ("replace the gate at :853-861 and the fusion at :863-879"). The FIRST
+   version of this shim called `_semantic_hit_dicts(root, query, limit)`
+   and filtered the keyword-owned paths out of the result AFTER the fetch.
+   **That claimed "preserving 100% prior observable behaviour... verified"
+   — that claim was FALSE.** `_semantic_hit_dicts()` ranks by cosine and
+   slices to `limit` before any exclusion can happen, so filtering after a
+   plain `limit`-sized fetch silently starves the pool whenever an excluded
+   (keyword-owned) path ranks inside that window: an eligible,
+   lower-ranked candidate never even enters the fetch and a weaker
+   candidate (or a weaker second keyword hit) wins its slot instead. The
+   reviewer reproduced this live and it is now covered by
+   `cli/test_okf_cli.py::SemanticBackstop::test_shim_backfills_when_excluded_paths_rank_inside_the_window`
+   (quoted RED/GREEN in `## Fix round 1` below). **Corrected implementation
+   (Fix round 1):** request `limit + len(exclude)` candidates from
+   `_semantic_hit_dicts()`, filter excluded paths from that widened window,
+   then slice to `limit` — since each excluded path can consume at most one
+   slot in the widened window, at least `limit` eligible candidates survive
+   whenever that many exist, which IS behaviourally equivalent to the
+   pre-T07 `semantic_backstop(exclude_paths=...)` contract (exclude, then
+   rank, then slice). The plan author's original approval of "the right
+   bridge" rested on the false premise above; the bridge itself (a
+   temporary, arity-compatible stand-in for Task 8's `fuse_conditional`)
+   is still the right shape — only its internal correctness needed fixing.
+   Its removal remains a hard duty with its own criterion **SC-SHIM** on
+   `okf-cli-kc9x` (T08), commit `b7b236d` — post-hoc exclude-filtering must
+   not survive into conditional handover, because dedup there belongs
+   inside `fuse_conditional`, after the owning arm is decided.
 2. **`_QUERY_VEC_CACHE = {}` forward-declared early.** PLAN.md Task 7 Step
    5 literally instructs adding `okf._QUERY_VEC_CACHE.clear()` to the
    pre-existing suite's `setUp` now, but the dict itself is only defined in
@@ -260,3 +276,67 @@ only during this transient window.
 - Key hygiene: no key material in the diff, the bean, or the commit message.
 - Live artefacts intact: `.fts/fts.sqlite` 13,164,544 bytes; `concept_emb` 2443 rows, all
   voyage-3-large; both repos clean after review.
+
+
+## Fix round 1 (2026-07-26, addresses REVIEW ROUND 1)
+
+**B01 fixed.** Root cause: the shim requested exactly `limit` semantic
+candidates and filtered `exclude` afterward, so an excluded path ranking
+inside that window silently starved the pool (reviewer repro: `limit=2`,
+excluded `b/x1` at rank 1, `[x2,x3]` expected, `[x2]` returned).
+
+Regression test added:
+`cli/test_okf_cli.py::SemanticBackstop::test_shim_backfills_when_excluded_paths_rank_inside_the_window`
+— two keyword hits (`a`, `b`) both rank inside the semantic top-`limit`
+window for the same query, alongside two genuinely eligible semantic-only
+candidates (`x2`, `x3`); `args.limit=3` gives 1 pinned + 2 rest slots.
+
+RED, quoted, against the pre-fix shim:
+
+```
+AssertionError: 'b/x3' not found in ['b/a', 'b/x2', 'b/b'] : x3 must
+surface: it is the 3rd-best ELIGIBLE semantic candidate, and excluding
+a/b before windowing (not after) must not let a weaker keyword hit
+occupy its slot instead. Got: ['b/a', 'b/x2', 'b/b']
+```
+
+Fix applied: `cmd_find` now requests `limit + len(exclude)` candidates from
+`_semantic_hit_dicts()`, filters `exclude` from that widened window, then
+slices to `limit` — each excluded path can consume at most one slot in the
+widened window, so at least `limit` eligible candidates survive whenever
+that many exist. Behaviourally equivalent to the pre-T07
+`semantic_backstop(exclude_paths=...)` contract (exclude, then rank, then
+slice).
+
+GREEN, quoted, after the fix (full `SemanticBackstop` suite, 12 tests):
+
+```
+Ran 12 tests in 0.027s
+OK
+```
+
+Mutation probe (reverted the over-fetch back to plain `args.limit`, i.e.
+reintroduced the exact bug): the new regression test failed with the
+IDENTICAL RED output quoted above (`['b/a', 'b/x2', 'b/b']`), confirming
+the test detects precisely this defect and nothing else. Reverted
+byte-identically (verified via the same replace/revert string round-trip);
+`SemanticBackstop` green again (12/12).
+
+**I01 fixed.** `cli/okf-cli.py:925-930` module comment corrected: no
+longer calls the arm a "semantic backstop" using "a LOCAL Ollama bge-m3
+call" — now describes the renamed `semantic_ranking()` arm, `voyage-3-large`
+via the Voyage HTTP API (D13), and that bge-m3 is not a runtime fallback
+(D16), consistent with the docstrings added directly below it.
+
+Full suite at this commit point:
+
+```
+Ran 234 tests in 40.666s
+FAILED (failures=19, errors=2)
+```
+
+FAIL/ERROR set re-diffed byte-identical against the pre-task baseline
+(229-test commit `ea23f50`) — still nothing new, nothing silenced. 233 -> 234
+tests (the one new regression test), all green.
+
+Commit: `<filled in after commit — see report>`.
