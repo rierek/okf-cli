@@ -2497,6 +2497,95 @@ class ExpandQueryTags(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_confident_lexical_arm_skips_expansion_entirely(self):
+        """AC-2 (F06-forced): expansion is a rescue path, not a blanket
+        cost. A single hit makes _keyword_top1_is_confident() True by
+        construction (nothing to be ambiguous against), so the flag being on
+        must never even call _expand_query_tags — spied with a raiser, not
+        just checked for a stderr note, so a future refactor that widens the
+        gate condition fails loudly instead of silently billing a network
+        call per query."""
+        root = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(root, "b"))
+            with open(os.path.join(root, "b", "one.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("---\ntype: Runbook\ntitle: Zzzznique concept\n"
+                        "description: d\ntags: [excalidraw]\n---\nbody\n")
+            with open(os.path.join(root, "b", "index.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("# B\n")
+
+            def _spy(*_a, **_kw):
+                raise AssertionError(
+                    "_expand_query_tags must not be called when the "
+                    "lexical arm is already confident")
+
+            orig = okf._expand_query_tags
+            okf._expand_query_tags = _spy
+            try:
+                out = _run_find(root, "zzzznique", expand_tags=True)
+            finally:
+                okf._expand_query_tags = orig
+            self.assertIn("path: b/one", out)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_rescue_rerun_does_not_double_the_degradation_note(self):
+        """B02/PF-4 — --expand-tags reruns the lexical arm a second time
+        within one `find`, over the SAME (missing) .fts index. Without
+        notify=False on the rescue rerun, `_fts_ranking`'s "index absent"
+        note would print twice, with the expansion note sandwiched between
+        them — a degradation note describes the invocation, not the
+        individual arm pass."""
+        root = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(root, "b"))
+            with open(os.path.join(root, "b", "one.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("---\ntype: Runbook\ntitle: One\ndescription: d\n"
+                        "tags: [widget]\n---\nbody\n")
+            with open(os.path.join(root, "b", "index.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("# B\n")
+
+            db = okf._tagvec_db_path(root)
+            os.makedirs(os.path.dirname(db), exist_ok=True)
+            conn = sqlite3.connect(db)
+            conn.execute("CREATE TABLE IF NOT EXISTS emb(key TEXT PRIMARY "
+                         "KEY, tag TEXT, model TEXT, dim INT, vec BLOB)")
+            conn.executemany(
+                "INSERT OR REPLACE INTO emb VALUES(?,?,?,?,?)",
+                [("k1", "widget", "voyage-3-large", 2,
+                  struct.pack("<2f", 1.0, 0.0))])
+            conn.commit()
+            conn.close()
+
+            import io
+            import contextlib
+            import types
+            orig = okf._embed_query_voyage
+            okf._embed_query_voyage = lambda _t: [1.0, 0.0]
+            try:
+                args = types.SimpleNamespace(
+                    query="gizmo", limit=10, type=None, tag=None,
+                    scope=None, breakdown=False, expand_tags=True)
+                out_buf, err_buf = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out_buf), \
+                     contextlib.redirect_stderr(err_buf):
+                    okf.cmd_find(root, args)
+            finally:
+                okf._embed_query_voyage = orig
+
+            err_lines = [l for l in err_buf.getvalue().splitlines() if l]
+            absent_notes = [l for l in err_lines
+                            if "lexical index absent" in l]
+            self.assertEqual(len(absent_notes), 1, err_lines)
+            self.assertIn("note: query expanded with tag(s): widget",
+                          err_buf.getvalue())
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

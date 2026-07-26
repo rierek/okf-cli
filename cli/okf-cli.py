@@ -765,12 +765,19 @@ def cmd_build_index(root, args):
 
 
 def _fts_ranking(root, query, limit, type_filter=None, tag_filter=None,
-                 scope=None):
+                 scope=None, notify=True):
     """[(path, positive_score), ...] best first, or None when the index is
     unusable (absent or corrupt) — None is the caller's signal to degrade to
     the substring scan (D15). bm25() is lower-is-better, so it is negated.
     Filters run inside SQL against the UNINDEXED ctype/path columns and the
-    indexed tags column, so filtering never re-reads a concept file."""
+    indexed tags column, so filtering never re-reads a concept file.
+
+    `notify` exists because a degradation note describes the INVOCATION, not
+    the call: --expand-tags reruns this arm over the widened term set within
+    the same `find`, and an unconditional print would emit the same note
+    twice (PF-4 violation — exactly one note per degraded arm). The rescue
+    rerun passes notify=False; it is a second look at the same index and has
+    nothing new to report."""
     db = _fts_db_path(root)
     if not os.path.isfile(db):
         # D15 requires a note for EVERY degradation, absent included — the
@@ -778,8 +785,10 @@ def _fts_ranking(root, query, limit, type_filter=None, tag_filter=None,
         # is the failure mode where "running fine" and "running on the weaker
         # arm" look identical from the outside. It goes to stderr, so stdout
         # stays byte-identical to the pre-plan output.
-        print("note: lexical index absent — falling back to substring scan; "
-              "run `okf-cli build-index` for BM25 ranking", file=sys.stderr)
+        if notify:
+            print("note: lexical index absent — falling back to substring "
+                  "scan; run `okf-cli build-index` for BM25 ranking",
+                  file=sys.stderr)
         return None
     terms = tokenize(query)
     if not terms:
@@ -818,14 +827,15 @@ def _fts_ranking(root, query, limit, type_filter=None, tag_filter=None,
             # at exactly one stderr note without changing what
             # _fts_index_stale() itself reports when called directly.
             rows = conn.execute(sql, params).fetchall()
-            if _fts_index_stale(root, conn):
+            if notify and _fts_index_stale(root, conn):
                 print("note: lexical index is stale (catalogue changed since "
                       "build) — run `okf-cli build-index`", file=sys.stderr)
         finally:
             conn.close()
     except sqlite3.DatabaseError:
-        print("note: lexical index unusable — falling back to substring scan",
-              file=sys.stderr)
+        if notify:
+            print("note: lexical index unusable — falling back to substring "
+                  "scan", file=sys.stderr)
         return None
     return [(p, -r) for p, r in rows]
 
@@ -900,14 +910,15 @@ def _substring_ranking(root, query, terms, limit, type_filter=None,
 
 
 def _rank_lexically(root, query, terms, limit, type_filter=None,
-                    tag_filter=None, scope=None):
+                    tag_filter=None, scope=None, notify=True):
     """(hits, max_score) — the FTS arm when the index is usable, otherwise the
     substring scan (D15). The two arms report on different scales, so the
     scale is returned with the result instead of being recomputed by the
     caller: 0..100 for BM25 (relative to this run's own top hit), and
     6*len(terms) for the substring fallback, which keeps that path
     byte-identical to pre-plan output."""
-    ranked = _fts_ranking(root, query, limit, type_filter, tag_filter, scope)
+    ranked = _fts_ranking(root, query, limit, type_filter, tag_filter, scope,
+                          notify=notify)
     if ranked is None:
         return (_substring_ranking(root, query, terms, limit, type_filter,
                                    tag_filter, scope),
@@ -1216,9 +1227,13 @@ def cmd_find(root, args):
             print("note: query expanded with tag(s): {}".format(
                 ", ".join(extra)), file=sys.stderr)
             terms = terms + [t for t in extra if t not in terms]
+            # notify=False: this is the SAME index, looked at a second time
+            # within one invocation. Repeating its degradation note here
+            # would print it twice with the expansion note in between —
+            # PF-4 says exactly one note per degraded arm, per invocation.
             hits, max_score = _rank_lexically(
                 root, " ".join(terms), terms, args.limit,
-                type_filter, tag_filter, target)
+                type_filter, tag_filter, target, notify=False)
             lexical_owned_provisionally = _keyword_top1_is_confident(hits)
 
     semantic_hits = []
