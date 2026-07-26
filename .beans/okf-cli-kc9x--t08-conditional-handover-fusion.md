@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: critical
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T05:02:09Z
+updated_at: 2026-07-26T06:42:59Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-8j7l
@@ -72,3 +72,25 @@ Interpretation: SEMANTIC_MARGIN_RATIO = 1.5 is a MEASURED constant
 `okf-cli find "mockup tailscale"` does not return the target concept, that is a finding,
 not a calibration task. Stop, report to the supervisor with the observed ranking, and wait.
 Touching the ratio to make the probe pass is an explicit protocol violation.
+
+
+## Inherited obligation from T07 (okf-cli-8j7l) — remove the compatibility shim
+
+T07 changed `semantic_ranking()` / `_semantic_hit_dicts()` signatures (dropping
+`exclude_paths` / `max_score`) while this task owns the `cmd_find` call site. To keep the
+tree green in between, T07 applied a **minimal arity-compatible shim** in `cmd_find` that
+filters `exclude` locally after the call. It implements no conditional-handover logic.
+
+**This task MUST delete that shim** when it rewires `cmd_find`. Under conditional handover
+deduplication happens in `fuse_conditional`, so post-call exclusion is not merely redundant —
+it would remove semantic hits before the fusion can decide which arm owns them, silently
+re-introducing the defect D12 exists to fix.
+
+- [ ] Locate the shim in `cmd_find` (marked in T07's Deviations/ERRATA section of okf-cli-8j7l)
+- [ ] Delete it; `fuse_conditional` handles dedup
+- [ ] Confirm no caller passes `exclude_paths` any more
+
+### Additional success criterion
+
+- SC-SHIM: the T07 compatibility shim no longer exists in `cmd_find`; `grep` for it returns
+  nothing, and no code path filters semantic hits before `fuse_conditional` runs.
