@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T05:02:09Z
+updated_at: 2026-07-26T06:35:19Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-kc9x
@@ -69,3 +69,28 @@ Interpretation: the gate criteria (zero-hit <= 0.30, MRR >= 0.35, real-query zer
 p50 latency <= 2.0 s) are pass/fail, not negotiable. If any one of them fails, do NOT retune,
 re-run selectively, or relax a threshold. Stop, attach the full remeasure JSON, and report to
 the supervisor.
+
+
+
+## PRELUDE 2026-07-26 — mandatory footnote for the R44 line (plan author)
+
+When you write the R44 measurement line, add a footnote recording that the live catalogue held
+**2443 concepts at measurement time, not the 2437 named in the plan** — it grew by 6 between
+the original measurement and realization.
+
+This is NOT an error and needs no re-run: `concept_emb` covers 2443 of 2443, i.e. 100% of the
+current catalogue. But **R42 and R43 were measured against 2437**, so a later reader comparing
+R44 to them will see a corpus-size difference and, without the footnote, take it for a bug.
+Name it explicitly in the R44 line rather than only in a bean.
+
+Verified state entering the measurement (checked independently by both the supervisor and the
+plan author, not implementer-claimed):
+- `concept_emb`: 2443 rows, 2443 distinct paths, every vector exactly 4096 bytes
+  (1024 float32, no truncation), single model group `voyage-3-large`.
+- `emb` (TAG scope): unchanged at 752 bge-m3 + 650 voyage — exactly the R09 values, so the tag
+  layer is untouched as AC2/SC-02 require. Do not conflate `emb` with `concept_emb` (D16).
+- `~/Obsidian/Knowledge-Catalogue` working tree clean; artefacts `.tagvec/` and `.fts/` are
+  both gitignored there. Never commit in that repo.
+
+Related known-drift entry: `LL-pending-02` in the parent bean (success criteria should quote
+counts from a live foreign repo as ">= N as of <date>", not as a fixed number).
