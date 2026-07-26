@@ -1,11 +1,11 @@
 ---
 # okf-cli-80nb
 title: T05 Conformance gate for help coverage
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-26T13:03:25Z
-updated_at: 2026-07-26T13:57:33Z
+updated_at: 2026-07-26T14:01:07Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-8rwy
@@ -37,12 +37,12 @@ The durable half of `okf-cli-6zhw`: after this, an undocumented command or optio
 
 ## Steps
 
-- [ ] Write the `CommandHelpConformance` tests
-- [ ] Run them; check the failure list against SC-01 exactly
-- [ ] Give the eight arguments the help text from the plan
-- [ ] Re-run the gate, then the full suite
-- [ ] Mutation self-test with md5 before/after (SC-03)
-- [ ] Commit `feat(cli): conformance gate for help coverage`
+- [x] Write the `CommandHelpConformance` tests
+- [x] Run them; check the failure list against SC-01 exactly
+- [x] Give the eight arguments the help text from the plan
+- [x] Re-run the gate, then the full suite
+- [x] Mutation self-test with md5 before/after (SC-03)
+- [x] Commit `feat(cli): conformance gate for help coverage` (`7dade90`)
 
 ## Recommended Skills
 
@@ -57,3 +57,82 @@ The durable half of `okf-cli-6zhw`: after this, an undocumented command or optio
 3. **Step 5 (mutation self-test) is the point of the whole task.** A gate that has not been seen failing is not evidence (LL-01, LL-07). Drop the `help=` from one argument, watch the gate fail with the exact assertion, revert, re-run green, and record the md5 before and after to prove the revert was byte-identical.
 4. The 50-character subject cap applies to EVERY commit, the bean-close meta commit included. No `commit-msg` hook exists in `.git/hooks/`; nothing catches an overrun.
 5. For any before/after proof, snapshot with `git show <rev>:<path> > /tmp/<x>.py` and diff. Do not use `git stash`.
+
+
+## Summary
+
+`CommandHelpConformance` (3 tests) appended to `cli/test_okf_cli.py`, unchanged from the plan's Step 1 text. Step 2's RED run caught exactly the eight entries SC-01 predicts, verbatim and in the predicted order — no reconciliation against B06 was needed. The eight arguments named in Requirement 4 (`index bundle`, `find query`, `read path`, `toc path`, `visualize bundle`, `refs --json`, `rewrite-path old`, `rewrite-path new`) each gained the literal `help=` text from the plan's Step 3.
+
+## Test-Output
+
+Step 2 — RED, observed list matches SC-01 exactly:
+
+```
+$ rm -rf cli/__pycache__ && python3 -m unittest cli.test_okf_cli.CommandHelpConformance -v
+test_every_command_is_grouped_and_dispatchable ... ok
+test_every_option_and_positional_has_help ... FAIL
+test_every_subcommand_has_a_summary ... ok
+
+AssertionError: Lists differ: ['find query', 'index bundle', 'read path', 'refs json', 'rewrite-path old', 'rewrite-path new', 'toc path', 'visualize bundle'] != []
+FAILED (failures=1)
+```
+
+Step 4 — GREEN after adding the eight `help=` strings:
+
+```
+$ rm -rf cli/__pycache__ && python3 -m unittest cli.test_okf_cli.CommandHelpConformance -v
+test_every_command_is_grouped_and_dispatchable ... ok
+test_every_option_and_positional_has_help ... ok
+test_every_subcommand_has_a_summary ... ok
+
+Ran 3 tests in 0.007s
+OK
+```
+
+SC-04 — full suite:
+
+```
+$ python3 -m unittest discover -s cli -p "test_*.py" 2>&1 | grep -E "^(Ran |OK|FAILED)"
+Ran 275 tests in 18.101s
+FAILED (failures=19, errors=2)
+```
+
+275 = 272 baseline (post-T04) + 3 new `CommandHelpConformance` tests. `failures=19, errors=2` unchanged — no new failure, none silenced.
+
+SC-03 — mutation self-test (dropped `help=` from `read`'s `path`, `pr.add_argument("path")`):
+
+```
+$ md5 cli/okf-cli.py
+MD5 (cli/okf-cli.py) = 9147b341e630be011f15ff8965b022e1
+
+[edit: drop help= from read path]
+
+$ md5 cli/okf-cli.py
+MD5 (cli/okf-cli.py) = 012b40b7e93dec8d62a70ff5798274c7
+
+$ rm -rf cli/__pycache__ && python3 -m unittest cli.test_okf_cli.CommandHelpConformance -v
+test_every_option_and_positional_has_help ... FAIL
+AssertionError: Lists differ: ['read path'] != []
+FAILED (failures=1)
+
+[revert]
+
+$ md5 cli/okf-cli.py
+MD5 (cli/okf-cli.py) = 9147b341e630be011f15ff8965b022e1
+
+$ rm -rf cli/__pycache__ && python3 -m unittest cli.test_okf_cli.CommandHelpConformance -v
+Ran 3 tests in 0.006s
+OK
+
+$ git status --short
+ M cli/okf-cli.py
+ M cli/test_okf_cli.py
+```
+
+md5 before and after the mutation-and-revert cycle is identical (`9147b341e630be011f15ff8965b022e1`); `git status --short` after the revert shows only the two files carrying the actual fix (registration help strings + the new test class), nothing left over from the mutation.
+
+Commit: `feat(cli): conformance gate for help coverage` (`7dade90`, 45 characters).
+
+## Deviations
+
+None. Implemented `CommandHelpConformance` byte-for-byte from the plan's Step 1, the eight `help=` strings byte-for-byte from Step 3, and executed Steps 2, 4, 5 exactly as specified. No scope beyond the eight registrations named in Requirement 4 and the one new test class.
