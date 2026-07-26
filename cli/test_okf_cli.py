@@ -2424,5 +2424,79 @@ class ZeroHitSuggestionsPF4(unittest.TestCase):
         self.assertIn("try: okf-cli find \"tailscale\"", stdout)
 
 
+class ExpandQueryTags(unittest.TestCase):
+    """T05/Q05 — the tag vectors are already populated and clean (R09); this
+    asks whether they can pull a synonym into the lexical query."""
+
+    def setUp(self):
+        okf._QUERY_VEC_CACHE.clear()
+
+    def _seed(self, root, rows):
+        db = okf._tagvec_db_path(root)
+        os.makedirs(os.path.dirname(db), exist_ok=True)
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE IF NOT EXISTS emb(key TEXT PRIMARY KEY, "
+                     "tag TEXT, model TEXT, dim INT, vec BLOB)")
+        conn.executemany("INSERT OR REPLACE INTO emb VALUES(?,?,?,?,?)", rows)
+        conn.commit()
+        conn.close()
+
+    def test_returns_nearest_tag_above_the_floor(self):
+        root = tempfile.mkdtemp()
+        try:
+            self._seed(root, [
+                ("k1", "excalidraw", "voyage-3-large", 2,
+                 struct.pack("<2f", 1.0, 0.0)),
+                ("k2", "invoicing", "voyage-3-large", 2,
+                 struct.pack("<2f", 0.0, 1.0)),
+            ])
+            orig = okf._embed_query_voyage
+            okf._embed_query_voyage = lambda _t: [1.0, 0.0]
+            try:
+                got = okf._expand_query_tags(root, "mockup")
+            finally:
+                okf._embed_query_voyage = orig
+            self.assertEqual(got, ["excalidraw"])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_returns_empty_without_a_cache(self):
+        root = tempfile.mkdtemp()
+        try:
+            self.assertEqual(okf._expand_query_tags(root, "mockup"), [])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_returns_empty_when_nothing_clears_the_floor(self):
+        root = tempfile.mkdtemp()
+        try:
+            self._seed(root, [("k1", "invoicing", "voyage-3-large", 2,
+                               struct.pack("<2f", 0.0, 1.0))])
+            orig = okf._embed_query_voyage
+            okf._embed_query_voyage = lambda _t: [1.0, 0.0]
+            try:
+                self.assertEqual(okf._expand_query_tags(root, "mockup"), [])
+            finally:
+                okf._embed_query_voyage = orig
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_find_without_the_flag_does_not_expand(self):
+        root = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(root, "b"))
+            with open(os.path.join(root, "b", "one.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("---\ntype: Runbook\ntitle: One\ndescription: d\n"
+                        "tags: [excalidraw]\n---\nbody\n")
+            with open(os.path.join(root, "b", "index.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("# B\n")
+            out = _run_find(root, "mockup")
+            self.assertIn("(no matches for: mockup)", out)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

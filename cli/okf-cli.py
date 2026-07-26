@@ -989,13 +989,18 @@ def _load_concept_vectors(db_path, model):
             for path, dim, vec_blob in rows]
 
 
-# Forward-declared for Task 11 (_query_vector()), which wires this cache
-# into semantic_ranking()/_expand_query_tags(). semantic_ranking() here in
-# Task 7 still calls _embed_query_voyage() directly and does not read this
-# dict — it exists now only so the pre-existing semantic suite's
-# setUp-time okf._QUERY_VEC_CACHE.clear() (PLAN.md Task 7 Step 5) has an
-# attribute to clear before Task 11 lands (see Deviations/ERRATA, T07 bean).
+# One CLI invocation answers one query, and both the semantic arm and (when
+# enabled) tag expansion embed the SAME string. Cache it so --expand-tags
+# costs zero extra network calls rather than doubling them.
 _QUERY_VEC_CACHE = {}
+
+
+def _query_vector(text):
+    """Cached _embed_query_voyage(). Raises exactly what it raises, so every
+    caller keeps its own degradation behaviour."""
+    if text not in _QUERY_VEC_CACHE:
+        _QUERY_VEC_CACHE[text] = _embed_query_voyage(text)
+    return _QUERY_VEC_CACHE[text]
 
 
 def _embed_query_voyage(text):
@@ -1034,6 +1039,48 @@ def _cosine(a, b):
     return dot / (na * nb)
 
 
+def _load_tag_vectors(db_path, model):
+    """[(tag, [float, ...]), ...] from the `emb` table, or None when the cache
+    or the model's rows are absent — mirrors _load_concept_vectors()."""
+    if not os.path.isfile(db_path):
+        return None
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT tag, dim, vec FROM emb WHERE model = ?", (model,)
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return None
+    if not rows:
+        return None
+    return [(tag, list(struct.unpack("<{}f".format(dim), blob)))
+            for tag, dim, blob in rows]
+
+
+def _expand_query_tags(root, query, top_k=3, floor=0.6):
+    """Registered tag slugs semantically near the query (Q05). Reuses the
+    query vector the semantic arm needs anyway, which is what makes Q06 moot:
+    a query term that is not a registered tag never needs its own embedding
+    call. Returns [] on any degradation — expansion is an enhancement, never a
+    precondition. The floor exists because a nearest neighbour is always
+    returned otherwise; unlike the concept case (R34, no separable floor),
+    tag slugs are short, clean labels where a cutoff is defensible — that is
+    exactly what Step 6 measures."""
+    vectors = _load_tag_vectors(_tagvec_db_path(root), SEMANTIC_MODEL)
+    if not vectors:
+        return []
+    try:
+        qvec = _query_vector(query)
+    except Exception:
+        return []
+    ranked = sorted(((_cosine(qvec, v), tag) for tag, v in vectors),
+                    key=lambda x: -x[0])
+    return [tag for score, tag in ranked[:top_k] if score >= floor]
+
+
 def _keyword_top1_is_confident(hits):
     """True when the lexical arm may OWN the ranking: it has hits and either a
     single one (nothing to be ambiguous against) or a top-1 leading the
@@ -1069,7 +1116,7 @@ def semantic_ranking(root, query, limit):
               "absent) — lexical results only", file=sys.stderr)
         return []
     try:
-        qvec = _embed_query_voyage(query)
+        qvec = _query_vector(query)
     except Exception as exc:
         print("note: semantic arm skipped (embedding backend unavailable: {})"
               " — lexical results only".format(exc), file=sys.stderr)
@@ -1157,6 +1204,23 @@ def cmd_find(root, args):
     # then OWN the ranking), or when a confident lexical list is too short to
     # fill --limit (it then fills the tail, exactly as measured).
     lexical_owned_provisionally = _keyword_top1_is_confident(hits)
+
+    # T05/Q05 (experimental, off by default): when the unexpanded lexical arm
+    # is not confident, widen the query with semantically near registered tags
+    # and give the lexical arm a second chance. Deliberately NOT run when the
+    # lexical arm is already confident — that query needs no rescue, and the
+    # call would be pure cost (same rule the semantic arm follows below).
+    if getattr(args, "expand_tags", False) and not lexical_owned_provisionally:
+        extra = _expand_query_tags(root, args.query)
+        if extra:
+            print("note: query expanded with tag(s): {}".format(
+                ", ".join(extra)), file=sys.stderr)
+            terms = terms + [t for t in extra if t not in terms]
+            hits, max_score = _rank_lexically(
+                root, " ".join(terms), terms, args.limit,
+                type_filter, tag_filter, target)
+            lexical_owned_provisionally = _keyword_top1_is_confident(hits)
+
     semantic_hits = []
     if not lexical_owned_provisionally or len(hits) < args.limit:
         semantic_hits = _semantic_hit_dicts(root, args.query, args.limit)
@@ -2524,6 +2588,10 @@ def main():
     pf.add_argument("--breakdown", action="store_true",
                     help="print per-hit contributing field(s)/term(s); "
                          "output is byte-identical to today without this flag")
+    pf.add_argument("--expand-tags", action="store_true",
+                    help="expand the query with semantically near registered "
+                         "tags before lexical scoring (experimental, off by "
+                         "default until measured)")
     pr = sub.add_parser("read")
     pr.add_argument("path")
     pp = sub.add_parser("prime", help="one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")
