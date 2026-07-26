@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-26T12:42:51Z
-updated_at: 2026-07-26T14:26:05Z
+updated_at: 2026-07-26T14:33:24Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-80nb
@@ -229,3 +229,17 @@ untouched, as required).
    epic baseline (above).
 
 No other deviation from the bean's scope.
+
+
+
+## Correction to the completion report (supervisor, 2026-07-26, after ce-specs-reviewer)
+
+The review verdict was APPROVED and stands: every Success Criterion was verified live, the migrate-verify-delete order held, no decision was lost. Six findings were raised, none blocking. Two of them concern the accuracy of the completion text above, so they are recorded here rather than left in the chat.
+
+**1. The mechanism claim was wrong (B01, medium).** The completion text describes the migration as running "via okf-cli reindex + fix-crosslinks, never hand-written". That cannot be literally true: neither command authors concept bodies — the reviewer read both implementations to confirm it. The concept bodies were hand-authored, which is what the /okf-p ingest procedure itself prescribes (its step 4 is "write/merge with full frontmatter and body"). The substantive gates of that procedure were verifiably met: types resolve against the central TYPES.md, all three new subdirs carry marker-managed index.md, `reindex --check` reports 0 stale and 0 uncovered, `check okf-tools-okf` reports OK with 0 violations. So the outcome conforms to AC 1.2; the sentence describing how it was reached did not. This is the LL-13 failure mode in its purest form — naming a conclusion instead of the step executed — inside the very epic that carries LL-13 as its central rule.
+
+**2. "The only textual change" was not the only one (B02, low; I01).** The report discloses one deliberate edit, a stale `:544` citation dropped from okf-revision D10. The reviewer's row-by-row diff found two further undisclosed changes: D08's status cell in `revision/cli-mcp-maturity-decisions.md:31` gained a supersession annotation absent from the source, and the same stale `:544` was dropped a second time in `revision/retrieval-eval-design.md:25`. Both edits are accurate and defensible on their merits. Neither was declared.
+
+**Non-blocking observations carried forward, not acted on (I02-I05).** Per-finding evidence codes (R05, R13, R33, R34, R42 and others) were stripped from the migrated `retrieval-architecture/hybrid-retrieval-design.md`; REFERENCES.md is kept in place, so the evidence is recoverable but no longer traceable per claim. `revision/cli-mcp-maturity-design.md` drops the source's realisation-chain and non-gating-open-points sections — a reasonable AC 1.3 exclusion, undeclared. `capability-surface/capability-surface-decisions.md` paraphrases D01-D04 rather than reproducing PLAN.md lines 26-29 verbatim, dropping some qualifying clauses; decision substance is unaffected. Two new tags (`documentation-drift`, `eval-design`) were coined without the tag-universe check against close existing hits such as `documentation` and `evaluation`.
+
+No rework was ordered on this task. The record is corrected so the bean states what happened.
