@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T12:05:11Z
+updated_at: 2026-07-26T12:12:26Z
 parent: okf-cli-wuiv
 ---
 
@@ -313,3 +313,6 @@ US-03 · `find "größe"` treats the umlaut word as one token; the Unicode-aware
 
 US-05 · Every result line names the arm that produced it (`provenance: lexical` / `provenance: semantic (cosine=…)`), and the handover to the semantic arm is announced on stderr · a
 US-06 · Zero-hit queries offer the nearest registered tags instead of silent emptiness · r: "US-06 > rejected" — verdict given without further prose; the observation behind it is that `find "tailscael"` and `find "zzzzqqqq"` both return ten semantic results at cosine 0.40-0.46 instead of the `(no matches …)` line plus suggestion → okf-cli-snxj
+
+US-04 · `build-index` builds the persistent FTS5 index on demand and the `lexical index is stale` note disappears on the next query · a
+US-08 · Against a catalogue that never had an index, `find` still returns results and names both degradations on stderr (`lexical index absent — falling back to substring scan`, `semantic arm skipped …`), each exactly once · a
