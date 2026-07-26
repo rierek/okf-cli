@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T09:32:12Z
+updated_at: 2026-07-26T09:35:44Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -212,3 +212,22 @@ KC repo left clean:
 - Unactioned observation to carry forward or triage: `.fts`/`.tagvec` in the
   live KC catalogue report as stale on every `find` call (pre-existing,
   confirmed not introduced by this task, out of scope to fix here).
+
+
+## Ruling from the plan author, 2026-07-26 (supervisor-relayed, binding)
+
+### 1. `shipped_v2.json` regeneration — accepted, but R44 is now stale
+
+Verified by the plan author himself: `81a0368` regenerated the file and moved `combined.mrr` from **0.451901 to 0.450860** (latency moved too, expected). `zero_hit` and recall stayed bit-identical. All four gate criteria still hold — no gate break.
+
+Consequence, assigned to **T13**, not to a T12 fix round: R44 in `REFERENCES.md` now cites a number absent from its own raw-data file, and the variance note reads inverted — it names 0.45086 as the deviating re-run while the committed file now says exactly that. **0.45086 is independently reproduced twice** (T09 reviewer, then T12); **0.4519 was the outlier.** R44 to be recast: 0.4509 as the headline number because twice-reproduced, 0.4519 mentioned as the one-off first measurement, cause named as the index-state-dependent near-tie, plus the statement that zero-hit and recall are stable so the core claim is untouched. Pure text work, no new measurement run.
+
+### 2. The fusion-gating case — characterise it, do not fix it
+
+A wrong lexical top-1 with a clear margin keeps the semantic arm from ever firing, although it would have placed the target at **rank 40, cosine 0.46**. This is **not a defect**: it is a priced-in cost of the measured rule. R43 measured exactly this rule and it won in the worst case. It affects **1 of 48** queries. Lowering the threshold on the strength of a single query would be precisely the overfitting this project has avoided three times.
+
+To be recorded in `taxonomy.md` as a **characterised limit of the rule**, with rank and cosine, pointing at `okf-cli-uumj` — where the related question already sits: whether the binary ownership decision is too absolute in both directions. Both belong in a future **measured** round, not this one.
+
+### 3. `catalogue-gap` = 0 of 8 belongs up front
+
+The plan author's assessment: this is the strongest substantive finding of T12. It answers Q10 completely and moves the next lever unambiguously to **retrieval design rather than authoring** — contrary to what the older R12 finding might have suggested. It must lead in `taxonomy.md`, not sit in the footnotes.
