@@ -5,8 +5,12 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-07-26T12:22:36Z
-updated_at: 2026-07-26T12:22:36Z
+updated_at: 2026-07-26T13:03:39Z
 parent: okf-cli-5uog
+blocked_by:
+    - okf-cli-lbh1
+    - okf-cli-2ljd
+    - okf-cli-8rwy
 ---
 
 ## Origin
