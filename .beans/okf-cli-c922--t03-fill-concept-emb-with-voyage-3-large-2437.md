@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:32:25Z
+updated_at: 2026-07-26T05:00:54Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-2a1w
@@ -48,3 +48,14 @@ _Requirements: PLAN.md Task 3 · DECISIONS D13, D11 · TASKS.md T14 · REFERENCE
 ## Recommended Skills
 
 - none (operational run)
+
+
+
+## PO approval 2026-07-26 (supervisor, realization session)
+
+Verbatim (PO, chat): "Jetzt freigeben" — in response to: fill concept_emb for 2437
+concepts via voyage-3-large, real API call, ~$0.71.
+
+Interpretation: the full run is authorised. Execute without asking again. No dry run
+required. Still applies: never commit inside ~/Obsidian/Knowledge-Catalogue (separate repo);
+report any intended catalogue change to the PO instead.

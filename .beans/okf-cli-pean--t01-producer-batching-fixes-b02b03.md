@@ -1,11 +1,11 @@
 ---
 # okf-cli-pean
 title: T01 Producer batching (fixes B02/B03)
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:32:42Z
+updated_at: 2026-07-26T05:00:54Z
 parent: okf-cli-cskz
 ---
 
