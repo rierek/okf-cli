@@ -2601,5 +2601,33 @@ class ParserExtraction(unittest.TestCase):
         self.assertIn("path", dests)
 
 
+class CommandDirectory(unittest.TestCase):
+    """Every command carries a summary, at exactly one authored place."""
+
+    def test_find_index_read_are_no_longer_invisible(self):
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        for name in ("find", "index", "read"):
+            self.assertTrue((parsers[name].description or "").strip(),
+                            "{} has no summary".format(name))
+
+    def test_the_summary_reaches_both_help_levels(self):
+        ap = okf.build_parser()
+        parsers = okf.subcommand_parsers(ap)
+        summary = parsers["read"].description
+        self.assertIn(summary, parsers["read"].format_help())
+        self.assertIn("find", ap.format_help())
+
+    def test_every_command_declares_a_group(self):
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        self.assertEqual(set(okf.COMMAND_GROUPS), set(parsers))
+
+    def test_find_help_explains_both_score_scales(self):
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        text = parsers["find"].format_help()
+        self.assertIn("100", text)
+        self.assertIn("6 * number of terms", text)
+        self.assertIn("provenance", text)
+
+
 if __name__ == "__main__":
     unittest.main()

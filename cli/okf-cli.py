@@ -2607,25 +2607,68 @@ def parser_actions(parser):
             if not isinstance(a, argparse._HelpAction)]
 
 
+_GROUP_ORDER = ("navigation", "search", "tags", "maintenance")
+
+# command name -> group; filled by _sub() at registration time, so it can
+# never disagree with the parser it describes.
+COMMAND_GROUPS = {}
+
+
+def _sub(sub, name, group, summary, **kwargs):
+    """Register one subcommand. The summary is authored exactly once, here,
+    and reaches both help levels: argparse prints it in the top-level command
+    directory (help=) and at the top of `okf-cli.py <command> --help`
+    (description=). The group feeds the rendered overview in the epilog.
+
+    A command cannot ship undocumented: summary and group are required
+    positionals, and CommandHelpConformance asserts the rest."""
+    if group not in _GROUP_ORDER:
+        raise ValueError("unknown command group: {}".format(group))
+    COMMAND_GROUPS[name] = group
+    return sub.add_parser(name, help=summary, description=summary, **kwargs)
+
+
+_FIND_EPILOG = """\
+score lines:
+  The two arms report on different scales, and `score: a/b` names the scale
+  in use, not a confidence:
+    a/100        the FTS5/BM25 lexical arm (relative to this run's own top
+                 hit) and the semantic arm (round(100 * cosine)).
+    a/(6 * n)    the substring fallback used when no FTS index is available:
+                 per query term 3 for a title hit, 2 for a tag hit, 1 for a
+                 body hit, capped at one per field per term — so the maximum
+                 is 6 * number of terms.
+  `provenance:` names the arm that produced the line; on a semantic hit it
+  also prints the cosine. Degradations (index absent or stale, embedding
+  backend unavailable) are announced on stderr, one note per degraded arm.
+"""
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="catalogue root (default: auto-detect from cwd; "
                     "hard-fails if none found)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pi = sub.add_parser("index")
+    pi = _sub(sub, "index", "navigation",
+              "catalogue TOC (bundles, descriptions, concept counts), or one "
+              "bundle's index.md")
     pi.add_argument("bundle", nargs="?")
     pi.add_argument("--full", action="store_true",
                     help="add per-bundle types+tags used (catalogue TOC), or print the "
                          "structured bundle summary instead of the raw index.md (with a bundle arg)")
     pi.add_argument("--json", action="store_true", help="machine-readable output")
-    pls = sub.add_parser("list", help="list concepts filtered by frontmatter type and/or tag")
+    pls = _sub(sub, "list", "navigation",
+               "list concepts filtered by frontmatter type and/or tag")
     pls.add_argument("--type", help="filter by frontmatter `type` (exact match)")
     pls.add_argument("--tag", help="filter by tag (exact match)")
     pls.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
     pls.add_argument("--json", action="store_true", help="machine-readable output")
-    pf = sub.add_parser("find")
+    pf = _sub(sub, "find", "search",
+              "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
+              formatter_class=argparse.RawDescriptionHelpFormatter,
+              epilog=_FIND_EPILOG)
     pf.add_argument("query")
     pf.add_argument("--limit", type=int, default=10)
     pf.add_argument("--type", help="filter by frontmatter `type` (exact match)")
@@ -2639,39 +2682,46 @@ def build_parser():
                     help="expand the query with semantically near registered "
                          "tags before lexical scoring (experimental, off by "
                          "default until measured)")
-    pr = sub.add_parser("read")
+    pr = _sub(sub, "read", "navigation", "print one concept page")
     pr.add_argument("path")
-    pp = sub.add_parser("prime", help="one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")
+    pp = _sub(sub, "prime", "navigation",
+              "one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")
     pp.add_argument("--full", action="store_true",
                      help="print full per-bundle blocks (description+directories+types+tags) "
                           "instead of the default compact name+count listing")
-    sub.add_parser("info", help="print catalogue schema docs (TYPES.md + PROPERTIES.md)")
-    pt = sub.add_parser("toc", help="print a concept's headings (default: h2 only)")
+    _sub(sub, "info", "navigation",
+         "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
+    pt = _sub(sub, "toc", "navigation",
+              "print a concept's headings (default: h2 only)")
     pt.add_argument("path")
     pt.add_argument("--level", type=int, default=2,
                     help="heading level to list (default 2 = h2); 0 = full indented tree")
-    pv = sub.add_parser("visualize", help="write a self-contained viz.html graph for a bundle")
+    pv = _sub(sub, "visualize", "navigation",
+              "write a self-contained viz.html graph for a bundle")
     pv.add_argument("bundle")
     pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
-    prf = sub.add_parser("refs", help="list inbound markdown references to a file")
+    prf = _sub(sub, "refs", "search",
+               "list inbound markdown references to a file")
     prf.add_argument("path", help="target file (abs, or relative to --root)")
     prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide")
     prf.add_argument("--json", action="store_true")
-    prw = sub.add_parser("rewrite-path", help="literal path-string rewrite across text files")
+    prw = _sub(sub, "rewrite-path", "maintenance",
+               "literal path-string rewrite across text files")
     prw.add_argument("old")
     prw.add_argument("new")
     prw.add_argument("--scan-root", help="dir to scan (default: --root)")
     prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
-    prn = sub.add_parser("rename",
-                         help="move a concept + rewrite every inbound/outbound link + reindex (dry-run default)")
+    prn = _sub(sub, "rename", "maintenance",
+               "move a concept + rewrite every inbound/outbound link + reindex (dry-run default)")
     prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)")
     prn.add_argument("new", help="destination path (same or different bundle)")
     prn.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
     prn.add_argument("--force", action="store_true", help="overwrite an existing destination")
-    sub.add_parser("build-index",
-                   help="(re)build the FTS5 lexical search index at "
-                        "<root>/.fts/fts.sqlite (local only, no network)")
-    px = sub.add_parser("reindex", help="(re)generate marker-bounded index.md listings")
+    _sub(sub, "build-index", "search",
+         "(re)build the FTS5 lexical search index at "
+         "<root>/.fts/fts.sqlite (local only, no network)")
+    px = _sub(sub, "reindex", "maintenance",
+              "(re)generate marker-bounded index.md listings")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
     px.add_argument("--init", action="store_true",
                     help="recursively migrate marker-less flat index.md in the subtree to "
@@ -2680,11 +2730,13 @@ def build_parser():
                     help="dry-run: with --init preview conversions; else report stale + uncovered. No writes")
     px.add_argument("--force", action="store_true",
                     help="with --init, also flatten a pure multi-section listing (prose/tables still refuse)")
-    pl = sub.add_parser("log", help="render git history for the catalogue or a bundle as a SPEC §7 changelog")
+    pl = _sub(sub, "log", "navigation",
+              "render git history for the catalogue or a bundle as a SPEC §7 changelog")
     pl.add_argument("bundle", nargs="?", help="bundle to scope to (default: whole catalogue)")
     pl.add_argument("--since", help="git --since filter, e.g. '3 months ago'")
     pl.add_argument("--write", action="store_true", help="materialize into <scope>/log.md instead of stdout")
-    pg = sub.add_parser("tags", help="list all tags with usage counts, or fuzzy-search candidate tags")
+    pg = _sub(sub, "tags", "tags",
+              "list all tags with usage counts, or fuzzy-search candidate tags")
     pg.add_argument("query", nargs="*",
                     help="candidate tag(s) to fuzzy-search against the tag universe; omit for full audit dump")
     pg.add_argument("--limit", type=int, default=8, help="max matches per candidate (default 8)")
@@ -2694,35 +2746,36 @@ def build_parser():
                     help="add tag(s) to the TAGS.md registry (closed-vocabulary allow-list)")
     pg.add_argument("--validate", nargs="+", metavar="TAG",
                     help="check tag(s) against TAGS.md; exit 1 if any are unregistered")
-    pmt = sub.add_parser("merge-tags",
-                         help="merge/rename one or more tags into a target tag across concept frontmatter")
+    pmt = _sub(sub, "merge-tags", "tags",
+               "merge/rename one or more tags into a target tag across concept frontmatter")
     pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows")
     pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name")
     pmt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
     pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
-    prt = sub.add_parser("remove-tags",
-                         help="remove one or more tags from concept frontmatter (no merge target)")
+    prt = _sub(sub, "remove-tags", "tags",
+               "remove one or more tags from concept frontmatter (no merge target)")
     prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft")
     prt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
     prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
-    pnt = sub.add_parser("normalize-tags",
-                         help="convert inline `tags: [...]` fields to YAML block-list form (local convention)")
+    pnt = _sub(sub, "normalize-tags", "tags",
+               "convert inline `tags: [...]` fields to YAML block-list form (local convention)")
     pnt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
     pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
-    pc = sub.add_parser("check", help="conformance scan: §9 hard rules + local invariants")
+    pc = _sub(sub, "check", "maintenance",
+              "conformance scan: §9 hard rules + local invariants")
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
     pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)")
-    pfx = sub.add_parser("fix-crosslinks",
-                         help="rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
+    pfx = _sub(sub, "fix-crosslinks", "maintenance",
+               "rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
     pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
-    pfxt = sub.add_parser("fix-xml-tags",
-                          help="wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
+    pfxt = _sub(sub, "fix-xml-tags", "maintenance",
+                "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
     pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
     return ap
