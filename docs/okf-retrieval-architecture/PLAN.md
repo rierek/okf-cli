@@ -915,6 +915,13 @@ def _fts_ranking(root, query, limit, type_filter=None, tag_filter=None,
     indexed tags column, so filtering never re-reads a concept file."""
     db = _fts_db_path(root)
     if not os.path.isfile(db):
+        # D15 requires a note for EVERY degradation, absent included — the
+        # semantic arm does the same for its missing cache. Silent degradation
+        # is the failure mode where "running fine" and "running on the weaker
+        # arm" look identical from the outside. It goes to stderr, so stdout
+        # stays byte-identical to the pre-plan output.
+        print("note: lexical index absent — falling back to substring scan; "
+              "run `okf-cli build-index` for BM25 ranking", file=sys.stderr)
         return None
     terms = tokenize(query)
     if not terms:
