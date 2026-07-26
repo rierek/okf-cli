@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: critical
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T07:36:13Z
+updated_at: 2026-07-26T07:43:21Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-8j7l
@@ -317,3 +317,58 @@ not three deletions. The deletion (`test_shim_backfills_...`) is correct — its
 shim, was removed under `SC-SHIM`, and `fuse_conditional` is in place with no exclude-filter
 remaining. The two rewrites are covered by D12: the old absolute-pin assertion is precisely
 what D12 abolishes.
+
+
+
+## REVIEW ROUND 1 — CHANGES_REQUIRED 2026-07-26 (ce-specs-reviewer)
+
+**B01 (critical) — PROVEN to be T08's regression, by bisection.** The reviewer checked out
+pre-T08 code (`git worktree add -d <tmp> 4f258d3^`, i.e. `3aeed9e`) and ran
+`RunnerAgainstRealCatalogueTest.test_runner_scores_literal_s1_top1` with `VOYAGE_API_KEY` set:
+**OK**. Same test, current tree, same key: **FAIL, `AssertionError: inf != 1`**. Worktree
+removed, main tree unaffected. Measured both ways from the current tree:
+`env -u VOYAGE_API_KEY ...` -> 243 tests, 19F/2E; with key present -> 243 tests, **20F/2E**.
+The "outside my file scope" framing does not hold — this chain's standing rule is that the gate
+belongs to whoever breaks it.
+
+**B02 (high) — the mitigation claim does not survive checking, in EITHER version.** The
+implementer's guess ("T09 builds the index before scoring") was wrong, and the plan author's
+correction ("T09/4 embeds the seeded fixtures") also does not reach this test:
+- T09's file list (`PLAN.md:1569-1571`) does not include `cli/test_eval_runner.py`.
+- T09 Step 3 (`PLAN.md:1698-1712`) builds only the FTS/lexical index inside `runner.run()`; it
+  does not embed the fresh S1/S4 fixtures into `concept_emb`.
+- The step that DOES embed them (`build_tagvec.py --target concepts --produce`,
+  `PLAN.md:1729-1731`) exists only inside T09 Step 4's standalone shell fixture-gate script — a
+  different code path from `RunnerAgainstRealCatalogueTest.setUp()`, which calls only
+  `fixtures.seed()` + `runner.run()` with no embedding step.
+So the failing unittest under `python3 -m unittest discover` is untouched by T09 as scoped.
+Escalated to the plan author; decision pending between (a) accept 20F/2E as the true baseline
+with a tracked bug for the fixture-embedding gap, or (b) fix in T08 scope (park the key for
+this one test, or embed S1/S4 in `RunnerAgainstRealCatalogueTest.setUp`).
+
+**B03 (medium).** The bean headlines 19F/2E and mentions 20F/2E only inside Deviations prose,
+framed as pre-existing. Reverse it: the true measured figure with the key set is the headline;
+the network-free variant is the footnote.
+
+**I01 (high, coverage) — matches the plan author's independent finding.** No `cmd_find`-level
+test covers "lexical arm has real, nonzero, AMBIGUOUS hits AND semantic hits present ->
+semantic owns, lexical hits appended behind, in order". Pre-T08 this was implicitly exercised
+(in its buggy pin-protected form) by `test_near_threshold_literal_top1_survives_unrelated_semantic`;
+the T08 rewrite moved that fixture to the CONFIDENT case (correct per D12) and left the hard
+case uncovered. The two existing `SemanticBackstop` rescue tests use queries with ZERO keyword
+hits, not an ambiguous nonzero pair. The reviewer verified by live probe that the property
+DOES hold today (lexical pair 5 vs 4, ratio 1.25 -> order `['b/c' semantic, 'b/a', 'b/b']`,
+one correct note) — so it is a coverage gap, not a defect, but it is the gap that let B01 pass
+unnoticed until the key was set.
+
+**Verified clean (no action):** SC-SHIM satisfied (`exclude_paths` survives only in a docstring
+at `:1064`, no functional path). `SEMANTIC_MARGIN_RATIO = 0.5` at `cli/okf-cli.py:943` matches
+`MARGIN = 0.5` and `top1 >= (1+MARGIN)*top2` at `eval/hybrid_eval.py:32,151`. Reverting to
+`2*top2` fails only `test_margin_band_matches_the_measured_rule` (8 others green) —
+independently reproduced. An independent probe swapping `primary`/`secondary` in
+`fuse_conditional` failed 7 of 9 `FuseConditional` tests, reverted byte-identically. Ownership
+semantics confirmed (intra-lexical margin only, owning arm first, no cross-arm comparison), no
+double-noting when handover and degradation coincide. Test churn confirmed as 1 correct
+deletion + 2 D12-covered rewrites, no orphaned invariant. Conventions clean (44 and 34 chars,
+no `Co-Authored-By`, no new imports). No key material in either commit. Live `.fts` index
+intact at 13,164,544 bytes, catalogue clean.
