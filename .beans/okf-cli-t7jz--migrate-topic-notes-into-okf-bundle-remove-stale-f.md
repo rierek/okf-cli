@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-26T12:42:51Z
-updated_at: 2026-07-26T13:11:07Z
+updated_at: 2026-07-26T13:13:28Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-80nb
@@ -33,7 +33,11 @@ KM-cell audit (2026-07-26, ce-project-init audit mode, scope B-KM-1) found the b
 
 ## Acceptance block added 2026-07-26 (Gate B)
 
-The bean was authored by the KM-cell audit in prose form and then placed inside this epic by the PO. Operationalization verification flagged the missing leaf format; the prose above stays as the source record, this section is the checkable form of it. No scope was changed here beyond the folder already added in the scope extension.
+The bean was authored by the KM-cell audit in prose form and then placed inside this epic by the PO. Operationalization verification flagged the missing leaf format; the prose above stays as the source record, this section is the checkable form of it.
+
+**Correction 2026-07-26, same day.** An earlier draft of this section claimed the third source folder had "already been added in the scope extension". It had not: that `--body-append` failed silently and never reached this bean, so the folder first appears here. The claim is retracted rather than deleted (LL-13 — the sentence whose function is to end scrutiny is the one to scrutinise). The scope extension it referred to, now stated properly:
+
+**Third source folder, added by the PO's own reasoning (2026-07-26).** The PO placed this bean inside the epic because the topic folders go stale as the follow-up lands. The same reasoning covers the folder that follow-up created, `docs/okf-cli-capability-surface/`. Note what that folder holds today: only `PLAN.md`. Its durable content is therefore not the file but four passages inside it — decisions D01-D04 (argparse as single source of truth, both layouts from one source, the strand split, the MCP surface bound) and finding B10 (the `6 * number of terms` score formula has been stale since the FTS arm shipped). The task scaffolding around them does not migrate, per AC3. If the epic later grows its own DECISIONS/DESIGN files, they migrate on the same rule.
 
 ### Requirement 1: Durable knowledge lives in the bundle, not in think-folders
 
@@ -41,7 +45,7 @@ The bean was authored by the KM-cell audit in prose form and then placed inside 
 
 #### Acceptance Criteria
 
-1. THE bundle `docs/okf-tools-okf/` SHALL contain the durable knowledge of `docs/okf-retrieval-architecture/`, `docs/okf-revision/` and `docs/okf-cli-capability-surface/` as typed concepts.
+1. THE bundle `docs/okf-tools-okf/` SHALL contain, as typed concepts, the durable knowledge of `docs/okf-retrieval-architecture/`, `docs/okf-revision/` and — as passages inside `PLAN.md`, not as whole files — decisions D01-D04 and finding B10 of `docs/okf-cli-capability-surface/`.
 2. THE migration SHALL run through `/okf-p ingest` only — never by hand-writing `.md` into the bundle (`docs/CLAUDE.md`, bundle zone rules).
 3. THE migrated set SHALL comprise decisions and architecture facts only. Task-tracking scaffolding, step-by-step implementation code and eval scripts SHALL remain in their current location.
 4. WHEN a topic folder's migrated files are removed, THE folder SHALL be kept IF non-migrated content remains in it (e.g. `eval/` scripts and fixtures), and removed otherwise.
