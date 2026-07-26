@@ -7,7 +7,7 @@ priority: high
 tags:
     - rejected
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T12:23:32Z
+updated_at: 2026-07-26T12:25:45Z
 parent: okf-cli-wuiv
 ---
 
@@ -319,3 +319,5 @@ US-08 · Against a catalogue that never had an index, `find` still returns resul
 
 US-07 · A `--expand-tags` flag exists, is documented, ships off by default, and changes nothing when passed · r: "US-07: rejected" — not about the expansion behaviour, which was as specified, but about what `--help` tells a user about the CLI's capabilities: `--limit` undocumented, `find` absent from the command listing, no `<command> --help` pointer, listing unsorted, plus the systemic request for a self-documenting help system → okf-cli-3suc (bug), okf-cli-6zhw (feature), follow-up epic okf-cli-5uog
 US-09 · The producer writes each batch before starting the next, retries then halves then skips a failing batch, and left the live catalogue at full coverage (2443/2443 voyage-3-large rows) · a
+
+NB · The MCP wrapper exposes 10 of the CLI's 21 commands; `build-index` is among the missing, so an agent following the degradation note it receives cannot act on it. Also missing: `prime`, the documented agent-onboarding command. `okf_find`'s docstring still describes the pre-feature keyword search. Raised by the PO during round 4 → okf-cli-4ws6 (bug, under okf-cli-5uog)
