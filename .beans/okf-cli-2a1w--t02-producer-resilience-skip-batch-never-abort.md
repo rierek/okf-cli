@@ -1,13 +1,11 @@
 ---
 # okf-cli-2a1w
 title: 'T02 Producer resilience: skip batch, never abort'
-status: in-progress
+status: completed
 type: task
 priority: high
-tags:
-    - to-review
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T05:15:25Z
+updated_at: 2026-07-26T05:16:17Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-pean
@@ -231,3 +229,23 @@ unchanged both times — no new failure introduced by this task.
 - `BATCH_LIMITS["voyage-3-large"] = (128, 90000)` (Task 1/T01, unchanged)
   is the batch shape T03's run will actually use; `embed_resilient` does
   not change batch *sizing*, only what happens when a batch fails.
+
+
+
+## Supervisor correction 2026-07-26 — bean lifecycle
+
+The implementer left this leaf `in-progress` and tagged it `to-review`, citing a "D11 loop"
+rule that implementers never set `completed`. That is the wrong rule for a leaf. Canonical
+close rule (OKF playbook `lean-stack-okf/autonome-agent-kette`, single source):
+
+- The task agent sets `completed` ITSELF in step 2, as soon as its own full gate is green.
+  `completed` here means "gate green", NOT "reviewed by someone else" — the external review
+  is step 3 and comes AFTER the flip. Waiting would make the implementer step non-autonomous.
+- `to-review` is the CONTAINER tag (epic/milestone/feature) and is set by the supervisor, not
+  on task leaves.
+- If a later ce-specs-reviewer returns CHANGES_REQUIRED, the supervisor flips this bean back to
+  `in-progress` and the fix happens in THIS bean, not a new one.
+
+Corrected by the supervisor: status `in-progress` -> `completed`, tag `to-review` removed.
+Gate evidence accepted: 197 tests, 19 failures / 2 errors at both commit points, unchanged
+from the 192-test baseline.
