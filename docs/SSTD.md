@@ -11,7 +11,17 @@
 | **git** | Code-/Change-Verlauf | `git log` / `git diff` | dieses Repo |
 | **SSTD.md** | Continuity/Entry-Point (dieses File) | Read | `docs/SSTD.md` |
 
-## Entry-Point (Stand 2026-07-26, Realisierung abgeschlossen — PO-Merge-Gate offen)
+## Entry-Point (Stand 2026-07-26, Plan-Phase abgeschlossen — Realisierung startbereit)
+
+- **Epos `okf-cli-5uog`** („Follow-up Retrieval architecture 2026-07-26") ist geplant, operationalisiert und startbereit. Einstieg für die Realisierung: `beans list --ready` → **`okf-cli-z0tt` (T01)** ist der einzige freie Leaf des Epos. Kette: `z0tt → lbh1 → 2ljd → 8rwy → 80nb`, dazu `g0gi` (T06, MCP) parallel ab T01.
+- **Plan:** `docs/okf-cli-capability-surface/PLAN.md` — `ce-plan-reviewer` 2 Runden GRÜN (Runde 2 mit ausgeführter Gegenprobe der argparse-Mechanik), PO-accepted. `ce-verify-operationalization` 3 Runden bis `APPROVED`. Der Plan trägt den literalen Code, die literalen Kommandos und die erwartete Ausgabe je Schritt.
+- **Herkunft:** PO-Review von `okf-cli-cskz` am 2026-07-26 — 7 Stories accepted, 2 rejected (US-06, US-07). Strang A (Hilfe-System + MCP-Reichweite) ist dieses Epos; die drei Ursprungs-beans `okf-cli-3suc`/`6zhw`/`4ws6` bleiben als Abnahme-Records stehen und sind auf ihre umsetzenden Leaves blockiert.
+- **Strang B liegt bewusst daneben:** `okf-cli-a4as` (unter dem Milestone, `high`) — Mess-Mandat für die Erreichbarkeit des Zero-Hit-Zweigs, **ohne** Schwellwert. `okf-cli-snxj` ist darauf blockiert. Kernpunkt für jeden, der dort einsteigt: R34 („kein absoluter Cosine-Floor möglich") wurde ausschließlich an Queries **mit** Ziel gemessen und beantwortet die Frage nach Queries **ohne** Ziel nicht — der Negativ-Query-Satz existiert noch nicht.
+- **Testbaseline (live gemessen 2026-07-26):** `python3 -m unittest discover -s cli -p "test_*.py"` → `Ran 259 tests`, exakt 19 failures / 2 errors, alle pre-existing in den Crosslink-Suiten.
+- **Offen für den PO nach Abschluss:** welche der verbleibenden acht CLI-Kommandos auf die MCP-Fläche gehören (D04 begrenzt bewusst auf `build-index`/`prime`/`info`).
+- Vorheriger Stand (Feature `okf-cli-cskz`, weiterhin gültig):
+
+## Vorheriger Entry-Point (2026-07-26, Realisierung abgeschlossen — PO-Merge-Gate offen)
 
 - **Feature `okf-cli-cskz`** („Retrieval architecture: FTS5 arm + conditional handover") unter Milestone `okf-cli-wuiv` **shipped** — alle 13 Task-Leaves `completed` (T01-T13, siehe `beans list --parent okf-cli-cskz`). Nächster Schritt ist NICHT ein weiterer Leaf, sondern das **PO-Gate**: Review des Features + Merge nach `main`.
 - **Gemessene Architektur:** `docs/okf-retrieval-architecture/DESIGN.md` — FTS5/BM25-Arm + `voyage-3-large`-Dokument-Embedding, fusioniert durch **bedingte Übergabe** statt Score-Mischung. Shipped-Zahlen (Task 9, reconciled R44, `eval/shipped_v2.json`, n=48, 2443 Konzepte): MRR 0.4509 (combined), Zero-Hit 0.167, p50 0.628 s — alle vier Gate-Kriterien aus `okf-cli-uagv` bestanden.
