@@ -5,9 +5,9 @@ status: todo
 type: feature
 priority: high
 tags:
-    - to-review
+    - rejected
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T12:23:05Z
+updated_at: 2026-07-26T12:23:32Z
 parent: okf-cli-wuiv
 ---
 
