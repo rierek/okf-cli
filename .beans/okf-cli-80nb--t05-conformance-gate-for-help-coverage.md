@@ -1,11 +1,11 @@
 ---
 # okf-cli-80nb
 title: T05 Conformance gate for help coverage
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-26T13:03:25Z
-updated_at: 2026-07-26T13:03:39Z
+updated_at: 2026-07-26T13:57:33Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-8rwy
@@ -47,3 +47,13 @@ The durable half of `okf-cli-6zhw`: after this, an undocumented command or optio
 ## Recommended Skills
 
 - superpowers:test-driven-development
+
+
+
+## Prelude from the T01-T04 reviews (2026-07-26, non-blocking)
+
+1. **The plan can contradict itself. When it does, adapt the text to the test, never the test to the test-passing shape.** T03 hit this and resolved it correctly. Your Task 5 is the inverse risk: it ships a GATE, so the temptation is to make the gate agree with the code. Do not. The plan's `CommandHelpConformance` is authored text — ship it unchanged, then fix what it catches.
+2. **Step 2 is a load-bearing measurement, not a formality.** The plan predicts the gate catches exactly eight entries and prints the literal expected list, in a specific order (commands sorted, actions in registration order). If your observed list differs from the plan's by even one entry, stop and reconcile against finding B06 before changing any code — a longer list means the plan's inventory was incomplete and the extra arguments need help text authored here. Report the observed list verbatim either way. Note that Task 4 reordered the registrations alphabetically, which affects the order commands appear in that list but not the actions within a command.
+3. **Step 5 (mutation self-test) is the point of the whole task.** A gate that has not been seen failing is not evidence (LL-01, LL-07). Drop the `help=` from one argument, watch the gate fail with the exact assertion, revert, re-run green, and record the md5 before and after to prove the revert was byte-identical.
+4. The 50-character subject cap applies to EVERY commit, the bean-close meta commit included. No `commit-msg` hook exists in `.git/hooks/`; nothing catches an overrun.
+5. For any before/after proof, snapshot with `git show <rev>:<path> > /tmp/<x>.py` and diff. Do not use `git stash`.
