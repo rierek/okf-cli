@@ -1,11 +1,11 @@
 ---
 # okf-cli-g0gi
 title: T06 Reach build-index, prime and info over MCP
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-26T13:03:25Z
-updated_at: 2026-07-26T14:05:44Z
+updated_at: 2026-07-26T14:11:10Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-z0tt
@@ -36,11 +36,11 @@ Plan: `docs/okf-cli-capability-surface/PLAN.md` → **Task 6**. Independent of T
 
 ## Steps
 
-- [ ] Write the failing `McpAgentRemedyBoundary` + `McpSurfaceParity` tests
-- [ ] Run them, confirm `ValueError: unsupported okf command: build-index`
-- [ ] Add the three `_COMMANDS` entries and the three tool wrappers
-- [ ] Rewrite `okf_find`'s docstring
-- [ ] Full suite; commit `fix(mcp): expose build-index, prime, info`
+- [x] Write the failing `McpAgentRemedyBoundary` + `McpSurfaceParity` tests
+- [x] Run them, confirm `ValueError: unsupported okf command: build-index`
+- [x] Add the three `_COMMANDS` entries and the three tool wrappers
+- [x] Rewrite `okf_find`'s docstring (corrected one claim against the code, see Deviations)
+- [x] Full suite; commit `fix(mcp): expose build-index, prime, info` (826fcbf)
 
 ## Recommended Skills
 
@@ -59,3 +59,59 @@ Plan: `docs/okf-cli-capability-surface/PLAN.md` → **Task 6**. Independent of T
 3. **Task 5's gate has a known hole and it is already filed** as bug `okf-cli-x60r` (top-level parser options escape `CommandHelpConformance`). Do not fix it here and do not treat it as your finding — it is out of your scope.
 4. The 50-character subject cap applies to EVERY commit, the bean-close meta commit included. No `commit-msg` hook exists in `.git/hooks/`; nothing catches an overrun.
 5. For any before/after proof, snapshot with `git show <rev>:<path> > /tmp/<x>.py` and diff. Do not use `git stash`.
+
+
+
+## Summary
+
+`_COMMANDS` in `mcp/okf_mcp.py:7-20` gained three entries — `build-index`, `prime`, `info`, all `([], False)` since none takes a positional or supports `--json`. `_register()` (`mcp/okf_mcp.py:152-173`, after the change) gained the three tool wrappers `okf_build_index`, `okf_prime`, `okf_info`, added byte-for-byte from the plan's Step 4. `okf_find`'s docstring at `mcp/okf_mcp.py:80-92` was replaced (Step 5), with one correction against the plan's literal text — see Deviations. `cli/test_okf_mcp.py` gained `McpAgentRemedyBoundary` (3 tests) and `McpSurfaceParity` (1 test), both byte-for-byte from the plan's Step 1.
+
+## Test-Output
+
+Step 2 — RED, observed failures match the plan's prediction literally:
+
+```
+$ rm -rf cli/__pycache__ mcp/__pycache__
+$ python3 -m unittest cli.test_okf_mcp.McpAgentRemedyBoundary -v
+test_build_index_reaches_the_cli_and_writes_the_index ... ERROR
+test_info_reaches_the_cli ... ERROR
+test_prime_reaches_the_cli ... ERROR
+
+ValueError: unsupported okf command: build-index
+ValueError: unsupported okf command: info
+ValueError: unsupported okf command: prime
+
+FAILED (errors=3)
+```
+
+Step 6 — GREEN, module suite:
+
+```
+$ rm -rf cli/__pycache__ mcp/__pycache__
+$ python3 -m unittest cli.test_okf_mcp -v 2>&1 | tail -5
+Ran 16 tests in 1.334s
+
+OK
+```
+
+SC-04 — full suite:
+
+```
+$ python3 -m unittest discover -s cli -p "test_*.py" 2>&1 | grep -E "^(Ran |OK|FAILED)"
+Ran 279 tests in 18.597s
+FAILED (failures=19, errors=2)
+```
+
+279 = 275 baseline (post-T05) + 4 new tests (3 `McpAgentRemedyBoundary` + 1 `McpSurfaceParity`). 19 failures / 2 errors unchanged from baseline — no new failure, none silenced.
+
+Smoke test of the real remedy loop, against a disposable temp catalogue (never the live one): `find` on an absent index prints on stderr `note: lexical index absent -- falling back to substring scan; run okf-cli build-index for BM25 ranking`; `mcp.run_okf(root, "build-index", {})` then created `<tmp>/.fts/fts.sqlite` and returned `indexed 1 concept(s) -> <tmp>/.fts/fts.sqlite`. The note-and-remedy loop the requirement targets is closed and reachable end to end through the MCP wrapper.
+
+Live-catalogue non-interference check: `~/Obsidian/Knowledge-Catalogue/.fts/fts.sqlite` mtime was `2026-07-26 16:08:26` both before and after the full suite run and the smoke test (a concurrent, unrelated process had already written it earlier in the session — confirmed by `ps aux` showing a separate long-running supervisor process, and by `grep -rn Knowledge-Catalogue cli/ mcp/` finding no test that operates on that literal path, only one config-string assertion in `test_okf_cli.py` that never touches disk there). `git -C ~/Obsidian/Knowledge-Catalogue status --short` printed nothing; that repo received no write from this task.
+
+Commit: `fix(mcp): expose build-index, prime, info` (826fcbf, 41 characters).
+
+## Deviations
+
+One correction against the plan's literal Step 5 text, made because the task instructions required verifying the new `okf_find` docstring against the code before shipping it (the epic already caught one stale claim of this kind, B10). The plan's sentence "Every result line names its origin as `provenance: lexical` or `provenance: semantic (cosine=...)`" is not true of `cmd_find`'s print loop (`cli/okf-cli.py:1221-1238`): every hit dict carries an internal `provenance` field (`_hydrate_hit`, `cli/okf-cli.py:809-825`), but the loop only ever prints a `provenance:` output line `if h.get("provenance") == "semantic"` (`:1229-1230`) — a lexical hit never gets a printed provenance line at all. Shipping the plan's sentence unchanged would have put a false claim into the contract an MCP consumer relies on. Replaced with: "A semantic-arm result line carries `provenance: semantic (cosine=...)`; a line with no such marker came from the lexical arm." — true of the code as it stands, and it still lets a consumer distinguish the two arms per result line, which is what the requirement (AC3) asks for.
+
+No other deviation. D04's boundary (`build-index`, `prime`, `info`, nothing further) was kept exactly; no fourth command was added. `cli/okf-cli.py` was not touched.
