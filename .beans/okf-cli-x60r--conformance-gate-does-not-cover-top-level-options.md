@@ -5,8 +5,8 @@ status: todo
 type: bug
 priority: low
 created_at: 2026-07-26T14:05:28Z
-updated_at: 2026-07-26T14:05:28Z
-parent: okf-cli-wuiv
+updated_at: 2026-07-26T16:40:32Z
+parent: okf-cli-iksi
 ---
 
 ## Finding

@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: high
 created_at: 2026-07-26T15:09:51Z
-updated_at: 2026-07-26T15:09:51Z
+updated_at: 2026-07-26T16:40:30Z
 parent: okf-cli-iksi
 ---
 
@@ -50,3 +50,15 @@ The same query through `okf_find` in the same minute returned ranked hits and no
 Where the notes should surface is not obvious and should not be decided by the implementer alone. Candidates: prepend them to the returned text, return a structured payload separating results from notes, or expose them only on the tools whose output is degraded. Whichever is chosen has to keep `--json` commands parseable — `run_okf` currently feeds stdout straight into `json.loads`, so anything mixed into stdout breaks them.
 
 Note also that `check` is already special-cased (exit 1 is data, not a crash); a fix must not disturb that path.
+
+
+
+## D01 — Design decision by the PO, 2026-07-26
+
+The notes are prepended to the text result. The `--json` path stays untouched.
+
+Concretely: for commands whose `supports_json` flag is false, `run_okf` prepends whatever the CLI wrote to stderr to the stdout text it returns. For commands that do support JSON, nothing changes — `run_okf` feeds their stdout straight into `json.loads`, and mixing anything in would break every consumer of those tools.
+
+Rejected alternatives, with the reason: a structured `{results, notes}` payload for every tool was rejected as a breaking change for every existing MCP consumer and for the JSON paths. Wiring the notes only into `okf_find` was rejected because the rule would stop being uniform — any tool that can degrade should report it the same way.
+
+Two constraints the fix must respect: `check` is special-cased today (exit 1 is data, not a crash) and that path must keep working; and the `--json` commands must remain parseable, which is the reason for the split above.
