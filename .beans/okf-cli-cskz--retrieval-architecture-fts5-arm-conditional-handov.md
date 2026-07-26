@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T05:17:19Z
+updated_at: 2026-07-26T05:18:32Z
 parent: okf-cli-wuiv
 ---
 
@@ -155,3 +155,34 @@ blocking modal, and keep working on everything that does not depend on the answe
   needs the PO/plan author, not this session; (2) until then, every ce-implementer dispatch
   prompt from this chain states the lifecycle explicitly: "set status `completed` yourself
   once your full gate is green; do NOT tag the leaf `to-review`".
+
+
+
+## PF-2 — supervisor ruling (plan author) 2026-07-26: bean lifecycle for this feature
+
+Ratifies the resolution of the rule collision recorded as LL-pending-03. The plan author read
+both sources and confirms the playbook wins. NOT a fresh PO decision — it rests on the PO
+decision of 2026-07-25 (bean `LES-bjc8`) already cited inside the playbook.
+
+Authority: `lean-stack-okf/autonome-agent-kette`, section "Close-Regel (kanonisch — hier,
+nicht anderswo)". `~/.claude/agents/ce-implementer.md:22,42` is simply STALE — not a
+deliberately more conservative rule.
+
+**Binding for every leaf of okf-cli-cskz:**
+
+- Leaf (`task` / `bug`) -> the task agent sets `completed` ITSELF once its own full gate is
+  green. `completed` means "gate green", not "reviewed by someone else". Waiting on a
+  reviewer would cost the leaf its autonomy and force a foreign sync per task.
+- Leaf is NEVER tagged `to-review`. That tag belongs to containers only.
+- Container (`okf-cli-cskz`, and the milestone above it) -> NEVER `completed` by any agent.
+  When all 13 leaves are through: tag `to-review`, then the PO decides accepted/rejected.
+- `CHANGES_REQUIRED` on an already-`completed` leaf -> supervisor flips it back to
+  `in-progress` and the fix happens in the SAME bean, never a new one.
+
+**Standing instruction:** this lifecycle goes verbatim into EVERY ce-implementer dispatch
+prompt of this chain — and stays there even after the agent definition is fixed, because a
+subagent reads its dispatch prompt reliably and a file it never opens not at all.
+
+The agent definition itself is owned by the plan author, not this session: it lives in
+`~/.claude/agents/`, is global user config affecting all projects, and needs Erik's approval.
+Not touched from here.
