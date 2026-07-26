@@ -2629,5 +2629,24 @@ class CommandDirectory(unittest.TestCase):
         self.assertIn("provenance", text)
 
 
+class FindOptionHelp(unittest.TestCase):
+    """find's options describe themselves, and truthfully."""
+
+    def _find_action(self, dest):
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        for act in okf.parser_actions(parsers["find"]):
+            if act.dest == dest:
+                return act
+        self.fail("find has no action with dest {!r}".format(dest))
+
+    def test_limit_carries_help_text(self):
+        self.assertIn("default 10", self._find_action("limit").help or "")
+
+    def test_expand_tags_no_longer_promises_a_pending_measurement(self):
+        help_text = self._find_action("expand_tags").help or ""
+        self.assertNotIn("until measured", help_text)
+        self.assertIn("measured", help_text)
+
+
 if __name__ == "__main__":
     unittest.main()

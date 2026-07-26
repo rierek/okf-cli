@@ -2670,7 +2670,8 @@ def build_parser():
               formatter_class=argparse.RawDescriptionHelpFormatter,
               epilog=_FIND_EPILOG)
     pf.add_argument("query")
-    pf.add_argument("--limit", type=int, default=10)
+    pf.add_argument("--limit", type=int, default=10,
+                    help="max results to print (default 10)")
     pf.add_argument("--type", help="filter by frontmatter `type` (exact match)")
     pf.add_argument("--tag", help="filter by tag (exact match)")
     pf.add_argument("--scope", metavar="TARGET",
@@ -2680,8 +2681,10 @@ def build_parser():
                          "output is byte-identical to today without this flag")
     pf.add_argument("--expand-tags", action="store_true",
                     help="expand the query with semantically near registered "
-                         "tags before lexical scoring (experimental, off by "
-                         "default until measured)")
+                         "tags before lexical scoring; measured against the "
+                         "full catalogue and found ineffective for the "
+                         "vocabulary-mismatch class it was built for, so it "
+                         "stays off by default (Q05/D17)")
     pr = _sub(sub, "read", "navigation", "print one concept page")
     pr.add_argument("path")
     pp = _sub(sub, "prime", "navigation",
