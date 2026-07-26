@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T05:09:29Z
+updated_at: 2026-07-26T05:17:19Z
 parent: okf-cli-wuiv
 ---
 
@@ -138,3 +138,20 @@ blocking modal, and keep working on everything that does not depend on the answe
   success criterion was unmeetable while its intent was met.
   *Forward-guard:* success criteria that quote a count from a separate, live repo should state
   the count as ">= N as of <date>" or name the invariant instead of the number.
+
+
+
+- **LL-pending-03 — stale rule in the registered agent definition (B, medium).** The T02
+  implementer left its leaf `in-progress` + tag `to-review` and cited "D11 loop". It was
+  obeying its own definition: `~/.claude/agents/ce-implementer.md:42` says "bean auf
+  `to-review` taggen (kein `completed` durch den Implementierer)". That contradicts the
+  canonical close rule in the OKF playbook `lean-stack-okf/autonome-agent-kette`, which
+  declares itself the single source and records a PO decision of 2026-07-25 (bean `LES-bjc8`)
+  resolving exactly this duplication: the LEAF agent sets `completed` itself once its own gate
+  is green; `to-review` is the CONTAINER tag. The agent definition was never brought in line.
+  Every implementer dispatched from this chain will repeat it.
+  *Forward-guard (two parts):* (1) fix `~/.claude/agents/ce-implementer.md` lines 22 and 42 to
+  point at the playbook instead of restating a contradicting rule — outside this repo, so it
+  needs the PO/plan author, not this session; (2) until then, every ce-implementer dispatch
+  prompt from this chain states the lifecycle explicitly: "set status `completed` yourself
+  once your full gate is green; do NOT tag the leaf `to-review`".
