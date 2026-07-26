@@ -1,11 +1,11 @@
 ---
 # okf-cli-lbh1
 title: T02 Register commands through _sub with summary and group
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-26T13:02:44Z
-updated_at: 2026-07-26T13:03:39Z
+updated_at: 2026-07-26T13:32:19Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-z0tt
@@ -58,3 +58,9 @@ This is where the reported defect dies structurally: a command cannot be registe
 ## Recommended Skills
 
 - superpowers:test-driven-development
+
+
+
+## Prelude from the T01 review (2026-07-26, non-blocking I01)
+
+For any before/after proof in this epic, snapshot with `git show <rev>:<path> > /tmp/<x>.py` and diff against the working tree. Do not use `git stash` (as PLAN.md Task 1 Step 5 prescribed): the stash is a shared-tree operation, and this repo has seen concurrent unrelated activity. The reviewer used the snapshot method to re-establish T01's byte-identical help output and it was strictly safer. No action needed on T01 itself, which was APPROVED.
