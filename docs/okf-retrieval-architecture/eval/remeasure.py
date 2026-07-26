@@ -39,12 +39,19 @@ def ranked_paths(root, query, limit, extra=()):
 def measure(root, rows, limit, extra=()):
     """The query files use the keys "query", "target", "source" — verified in
     queries_v2.json and queries_real.json. `target` is the concept path."""
-    ranks, times = [], []
+    ranks, times, detail = [], [], []
     for row in rows:
         paths, elapsed = ranked_paths(root, row["query"], limit, extra)
         times.append(elapsed)
         target = row["target"]
-        ranks.append(paths.index(target) + 1 if target in paths else None)
+        rank = paths.index(target) + 1 if target in paths else None
+        ranks.append(rank)
+        detail.append({
+            "query": row["query"],
+            "expected_path": target,
+            "rank": rank,
+            "top3": paths[:3],
+        })
     n = len(ranks) or 1
     hit = [r for r in ranks if r is not None]
     return {
@@ -56,6 +63,7 @@ def measure(root, rows, limit, extra=()):
         "zero_hit": (len(ranks) - len(hit)) / n,
         "latency_p50": sorted(times)[len(times) // 2] if times else 0.0,
         "latency_max": max(times) if times else 0.0,
+        "rows": detail,
     }
 
 
