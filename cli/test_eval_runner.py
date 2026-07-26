@@ -17,9 +17,12 @@ Three tiers:
 
 Run: python3 -m unittest cli.test_eval_runner -v
 """
+import contextlib
 import importlib.util
 import json
 import os
+import shutil
+import tempfile
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -155,6 +158,73 @@ class AggregateMetricsPureUnitTest(unittest.TestCase):
         self.assertEqual(metrics["metadata_hit_rate"], 2.0 / 3.0)
 
 
+@contextlib.contextmanager
+def _park_fts_index(root):
+    """Temporarily move `<root>/.fts/fts.sqlite` aside (if present) so a
+    caller inside the `with` block sees an absent index, then restore it on
+    EVERY exit path — clean return, `return`, or an exception raised inside
+    the block. This is a generator-based context manager specifically
+    BECAUSE unittest does not call tearDown() when setUp() itself raises
+    (verified live by the T06 reviewer): a plain rename-then-later-restore
+    pair inside setUp() has no guarantee of running its restore half if the
+    code between them raises. A `with`-block's `finally` (inside this very
+    generator) is not subject to that gap — it runs via normal Python
+    exception propagation regardless of what unittest does with setUp/
+    tearDown. Tested in isolation against a disposable temp directory
+    (ParkFtsIndexTest below), never against the live catalogue."""
+    db = os.path.join(root, ".fts", "fts.sqlite")
+    parked = db + ".parked-by-test-eval-runner"
+    was_present = os.path.isfile(db)
+    if was_present:
+        os.rename(db, parked)
+    try:
+        yield
+    finally:
+        if was_present:
+            os.rename(parked, db)
+
+
+class ParkFtsIndexTest(unittest.TestCase):
+    """I01 (T06 review, 2026-07-26) — the parking helper used by
+    RunnerAgainstRealCatalogueTest must restore the index on every exit
+    path, including an exception inside the `with` body (the exact failure
+    mode the reviewer identified: a `runner.run()` exception used to strand
+    the live artefact under a `.parked-by-test-eval-runner` name). Exercised
+    against a throwaway temp directory so this never touches the live
+    catalogue."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, ".fts"))
+        self.db = os.path.join(self.root, ".fts", "fts.sqlite")
+        with open(self.db, "wb") as f:
+            f.write(b"fake index bytes")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_index_is_absent_inside_the_with_block(self):
+        with _park_fts_index(self.root):
+            self.assertFalse(os.path.isfile(self.db))
+
+    def test_restores_the_index_after_a_clean_exit(self):
+        with _park_fts_index(self.root):
+            pass
+        self.assertTrue(os.path.isfile(self.db))
+
+    def test_restores_the_index_when_the_body_raises(self):
+        with self.assertRaises(RuntimeError):
+            with _park_fts_index(self.root):
+                raise RuntimeError("simulated runner.run() failure")
+        self.assertTrue(os.path.isfile(self.db))
+
+    def test_absent_index_is_a_silent_no_op(self):
+        os.remove(self.db)
+        with _park_fts_index(self.root):
+            self.assertFalse(os.path.isfile(self.db))
+        self.assertFalse(os.path.isfile(self.db))
+
+
 class RunnerAgainstRealCatalogueTest(unittest.TestCase):
     """Integration — real catalogue, real subprocess boundary (SC-003)."""
 
@@ -171,22 +241,16 @@ class RunnerAgainstRealCatalogueTest(unittest.TestCase):
         # A stale index still degrades to ITSELF, not to the file tree (D15)
         # — it never re-reads files it does not know about — so a brand-new
         # fixture concept is invisible to the FTS arm no matter how "stale"
-        # is handled. Renaming the index out of the way for this test makes
-        # find() degrade cleanly to the substring scan, which always reads
-        # the fixtures fresh; restored byte-identically in tearDown either
-        # way. This test predates T06's FTS arm and never assumed one could
-        # exist at this root.
-        self._fts_db = os.path.join(CATALOGUE_ROOT, ".fts", "fts.sqlite")
-        self._fts_db_parked = self._fts_db + ".parked-by-test-eval-runner"
-        self._fts_db_was_present = os.path.isfile(self._fts_db)
-        if self._fts_db_was_present:
-            os.rename(self._fts_db, self._fts_db_parked)
-        self.result = runner.run(CATALOGUE_ROOT, GOLDEN_PATH)
+        # is handled. _park_fts_index() moves the index out of the way for
+        # exactly the span of the runner.run() call and restores it on every
+        # exit path, including an exception raised inside runner.run() —
+        # see _park_fts_index's docstring for why this must be a context
+        # manager rather than a rename-in-setUp/restore-in-tearDown pair.
+        with _park_fts_index(CATALOGUE_ROOT):
+            self.result = runner.run(CATALOGUE_ROOT, GOLDEN_PATH)
 
     def tearDown(self):
         fixtures.teardown(CATALOGUE_ROOT)
-        if self._fts_db_was_present:
-            os.rename(self._fts_db_parked, self._fts_db)
 
     def _row(self, row_id):
         for r in self.result["per_row"]:
