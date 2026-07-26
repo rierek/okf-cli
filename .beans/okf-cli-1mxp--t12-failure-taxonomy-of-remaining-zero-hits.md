@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T09:35:44Z
+updated_at: 2026-07-26T09:45:37Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -70,9 +70,19 @@ Extended `docs/okf-retrieval-architecture/eval/remeasure.py`'s `measure()` to
 also emit a `"rows"` key (query, expected_path, rank, top3) alongside the
 existing aggregate metrics, then re-ran it against the live catalogue
 (`~/Obsidian/Knowledge-Catalogue`, read-only) to regenerate `shipped_v2.json`.
-Aggregate metrics matched the prior `shipped_v2.json` bit-for-bit per file
-(recall@1/5/10, mrr, zero_hit), confirming the same shipped mechanism ran —
-no drift, no accidental behaviour change from the code edit.
+Aggregate metrics matched the prior `shipped_v2.json` bit-for-bit **per
+constituent query file** (`queries_v2.json` and `queries_real.json`
+individually: recall@1/5/10, mrr, zero_hit all unchanged). **`combined.mrr`
+did drift**: 0.451901 → 0.450860 (the `combined` block re-runs every query
+against the CLI a second time, so it is not a pure re-aggregation of the two
+per-file numbers — a query near a lexical/semantic tie can land on the other
+side of it between runs). `combined.zero_hit` and recall stayed identical, so
+the core claim (same mechanism, same outcome set) is unaffected, but the mrr
+point estimate itself moved and is disclosed here rather than only in the
+per-file comparison. Per the plan author's ruling (bean, commit `e152b23`):
+0.450860 is now twice-reproduced (T09 reviewer's independent check, then this
+re-run) and 0.4519 was the outlier; `REFERENCES.md` R44 recast to reflect
+that is assigned to T13, not fixed here.
 
 8 of 48 queries are zero-hit at the shipped default (`--limit 10`): 7 of 40
 in `queries_v2.json`, 1 of 8 in `queries_real.json`, matching the bean's
@@ -231,3 +241,56 @@ To be recorded in `taxonomy.md` as a **characterised limit of the rule**, with r
 ### 3. `catalogue-gap` = 0 of 8 belongs up front
 
 The plan author's assessment: this is the strongest substantive finding of T12. It answers Q10 completely and moves the next lever unambiguously to **retrieval design rather than authoring** — contrary to what the older R12 finding might have suggested. It must lead in `taxonomy.md`, not sit in the footnotes.
+
+
+## Fix round — CHANGES_REQUIRED response, 2026-07-26 (text-only, no re-measurement)
+
+Reviewer verdict: everything measured held (5/8 rank/cosine claims
+independently reproduced, gating mechanism verified mechanically at
+`_keyword_top1_is_confident` 100 vs 65, `catalogue-gap=0` spot-checked, both
+baseline directions and KC hygiene confirmed). Findings were about framing
+and disclosure in the shipped artefact, not about any wrong number. Per the
+coordinator's instruction and the plan author's ruling (commit `e152b23`,
+read first): no measurement re-run, no threshold touched, no JSON
+regenerated. All four points addressed as text-only edits:
+
+- **B02** (`eval/taxonomy.md`, fusion-gating row): extended the note to state
+  explicitly that this is a *characterised limit of the shipped fusion rule,
+  not a defect* — R43 measured this exact margin rule and it won in the worst
+  case, it affects 1/48 queries, and tuning on one query would be the
+  overfitting this project has already avoided three times. Added the
+  `_keyword_top1_is_confident` 100-vs-65 mechanism detail and a pointer to
+  `okf-cli-uumj`, where the related "is the binary ownership decision too
+  absolute" question already sits — both belong in a future *measured* round.
+- **B03** (`eval/taxonomy.md`, header/lead): added a lead paragraph stating
+  `catalogue-gap = 0/8 (0%)` up front as the strongest substantive finding —
+  it answers Q10 completely and moves the next lever unambiguously to
+  retrieval design, not authoring.
+- **I01** (this bean's Summary, aggregate-metrics claim): corrected "matched
+  ... bit-for-bit per file" to explicitly scope that claim to the two
+  *constituent* query files only, and disclosed the `combined.mrr` drift
+  (0.451901 → 0.450860) that the original wording implied did not exist.
+  `combined.zero_hit`/recall are unchanged, so the taxonomy's own conclusions
+  are unaffected — but the sentence that read as complete verification did
+  not say so, which is exactly what got flagged.
+- **I02** (`eval/taxonomy.md`, header sha): now cites two shas, labelled —
+  `cdd7a0b` as the logic baseline (the `find`/fusion code being measured,
+  unchanged by this task) and `81a0368` as the artefact commit (the `rows`
+  key extension plus the file itself).
+
+Not touched: `docs/okf-retrieval-architecture/REFERENCES.md` R44 — assigned
+to T13 per the plan author's ruling, left alone.
+
+Baseline re-confirmed after the text edits, both env directions:
+
+    $ python3 -m unittest discover -s cli -p "test_*.py"
+    Ran 259 tests in 17.149s
+    FAILED (failures=19, errors=2)
+
+    $ env -u VOYAGE_API_KEY python3 -m unittest discover -s cli -p "test_*.py"
+    Ran 259 tests in 13.869s
+    FAILED (failures=19, errors=2)
+
+Unchanged, as expected for text-only edits. Leaf stays `completed` per the
+standing convention (PF-2/PF-5) — this is an inline fix round within the same
+bean, not a re-open requiring a fresh implementer cycle.
