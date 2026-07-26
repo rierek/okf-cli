@@ -4,8 +4,10 @@ title: 'Retrieval architecture: FTS5 arm + conditional handover'
 status: todo
 type: feature
 priority: high
+tags:
+    - to-review
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T07:02:02Z
+updated_at: 2026-07-26T10:04:34Z
 parent: okf-cli-wuiv
 ---
 
