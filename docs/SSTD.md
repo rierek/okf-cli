@@ -18,6 +18,7 @@
 - **Messgrundlage liegt im Repo:** `docs/okf-retrieval-architecture/eval/` — `shipped_v2.json` (Rohdaten je Query), `taxonomy.md` (Fehlschlag-Klassifikation der 8 residualen Zero-Hits: 6 `ranking`, 2 `synonymy`, 0 `catalogue-gap`), `queries_v2.json`/`queries_real.json` (die 48-Query-Messgrundlage).
 - **Was NICHT scharf ist:** `--expand-tags` (Tag-Vektor-Query-Expansion) bleibt flag-gated aus — gemessen wirkungslos für die R12-Klasse (Q05, D17); kein Threshold-Retuning vorgenommen.
 - **Merge-Gate:** die einzige noch offene Entscheidung ist die PO's — Review + Merge von `okf-cli-cskz` nach `main`. Kein paralleler Owner mehr auf irgendeiner offenen Frage dieses Features.
+- **Methoden-Erkenntnisse liegen im zentralen Katalog, nicht im Projekt-Bundle** — `okf-cli --root ~/Obsidian/Knowledge-Catalogue find "retrieval arme"` bzw. `find "score mischung"`: 4 Konzepte in `agent-memory` (Vollkorpus-Arme statt scoped Demo · Ground-Truth-Queries + Leak-Prüfung · Arm-Namespacing über die model-Spalte · Embedding-Last auf zweiten Ollama-Host) und 2 in `ai-wiki` (Score-Misch-Antipattern · Cosine ist Rang-, kein Konfidenzsignal). Projekt-spezifische Zahlen bleiben in `docs/okf-retrieval-architecture/`.
 - Vorheriger Stand (Milestone-Review, weiterhin gültig):
 
 ## Vorheriger Entry-Point (2026-07-26, PO-Review + Grilling abgeschlossen)
