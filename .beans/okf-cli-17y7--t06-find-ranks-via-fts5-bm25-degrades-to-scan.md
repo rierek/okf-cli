@@ -1,11 +1,11 @@
 ---
 # okf-cli-17y7
 title: T06 find ranks via FTS5 BM25, degrades to scan
-status: completed
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T06:12:55Z
+updated_at: 2026-07-26T06:21:26Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-ntc8
@@ -368,3 +368,35 @@ $ python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "tailscale" 
   root cause) is worth checking again once the semantic arm adds its own
   degradation note — same risk shape if two "something is wrong" checks can
   both fire off the same underlying failure.
+
+
+
+## REVIEW ROUND 1 — APPROVED with one finding, fixed inline 2026-07-26
+
+Verdict was APPROVED (no blocking findings). Full evidence: all three D15 cases live-probed
+(absent / corrupt / unreadable -> exactly ONE stderr note each, exit 0), plus combinations
+(absent+tag filter, unreadable+--breakdown, stale-but-not-corrupt) each with exactly one note;
+SC-04 stdout byte-identical against `git show 7a0557f:cli/okf-cli.py`; BM25 weights proven
+APPLIED by an independent mutation (title==body flips the ranking test red); the double-note
+fix reproduced by reverting to the plan's literal ordering (`2 != 1`); the 21-line
+FAIL/ERROR name list byte-identical to the pre-task baseline (`diff` exit 0, nothing silenced).
+
+**I01 (medium) — being fixed now rather than deferred.**
+`RunnerAgainstRealCatalogueTest.setUp` (`cli/test_eval_runner.py:169-186`) renames the LIVE
+`~/Obsidian/Knowledge-Catalogue/.fts/fts.sqlite` aside and then calls `runner.run(...)`
+without `try/finally`. unittest does NOT run `tearDown` when `setUp` raises (reviewer verified
+live), so any exception inside `runner.run()` — subprocess, JSON, disk I/O — strands a 13.2 MB
+live artefact of a SEPARATE repo as `.fts.sqlite.parked-by-test-eval-runner` and silently
+breaks `find` on the live catalogue until someone restores it by hand.
+
+Also corrected: the bean's phrase "restored byte-identically, verified by size match" is
+imprecise. `os.rename` never copies bytes, so byte-identity is structural, not something the
+size check verifies. The real exposure was never content corruption — it is exception-safety
+of the parking window.
+
+The park itself is NOT scope creep: the reviewer reverted `cli/test_eval_runner.py` to the
+pre-park version and `test_runner_scores_literal_s1_top1` fails (`rank inf != 1`), so the
+change is substantively required by the FTS arm's stale-preference behaviour.
+
+**Why this is not deferred:** the full suite runs at every gate point, and seven leaves remain.
+The parking window would open dozens more times before anyone came back to it.
