@@ -1,11 +1,11 @@
 ---
 # okf-cli-1mxp
 title: T12 Failure taxonomy of remaining zero-hits
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:32:25Z
+updated_at: 2026-07-26T09:17:39Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -45,3 +45,20 @@ _Requirements: PLAN.md Task 12 · QUESTIONS Q03, Q10 · TASKS.md T03 · REFERENC
 ## Recommended Skills
 
 - none (analysis)
+
+
+## Prelude from the T10/T11 reviews (2026-07-26, supervisor)
+
+T10 (`okf-cli-snxj`) and T11 (`okf-cli-ftri`) are closed and approved. Six things carry into the taxonomy work:
+
+1. **Baseline moved.** The suite is now **259 tests**, still exactly **19 failures / 2 errors** — all pre-existing in the crosslink suites.
+2. **The failure set is flag-independent.** Expansion changed zero outcomes: `shipped_expand.json` is identical to `shipped_v2.json` on every per-file metric. Build the taxonomy from either file; `--expand-tags` does not move a single one of the 8 residual zero-hits.
+3. **Per-query diagnostics were not persisted.** T11 measured top-tag cosines per query in-process and did not write them out. If the taxonomy wants a synonymy-closeness split, those numbers must be regenerated.
+4. **One taxonomy class is already established and must not be re-derived as an open question.** For the R12 family, tag-vector expansion cannot close the gap *in principle* — not because of the floor, not because of granularity, but because the terms are not neighbours in tag-slug space (tags are embedded slug-only, R06). Concept embedding, which sees the running text, is what solves that class. Measured evidence: `"mockup tailscale"` → `tailscale` at 0.595 (a word already in the query, so zero information gain); `"mockup"` → `mockups` at 0.6693 (morphological variant, not a synonym); `excalidraw` at rank 105/650 for `"mockup"`, absent from any plausible neighbourhood. See Q05/Q06 in QUESTIONS.md.
+5. **Do not conflate zero-hits with squeeze-outs.** `okf-cli-uumj` tracks a different failure: there the target IS a hit and is merely truncated out of the result window under handover. Those cases are not in the zero-hit set and belong to a separate taxonomy branch, if they are mentioned at all. Affected concepts recorded there: tailscale-subnet-routing, data-ui-convention, replikations-playbook, ai-operating-system, immich.
+6. **A bound on the suggestion feature exists.** `_zero_hit_suggestions()` reaches typos and synonyms ONLY; truncated or partially typed terms never arrive there, because both lexical procedures catch any prefix first by construction.
+
+Two standing quality rules from this chain:
+
+- **PF-5:** a sentence whose function is to end review is the sentence that gets checked. Claims of the form "verified" / "behaviour-identical" / "reverted byte-identically" must name the command and quote its observed output, or not be written.
+- **Prove the mechanism fired before comparing outputs.** A silently swallowed flag produces bit-identical output to an honest null result — from the artefact alone the two are indistinguishable. Count the calls first (a counting stub), then compare.
