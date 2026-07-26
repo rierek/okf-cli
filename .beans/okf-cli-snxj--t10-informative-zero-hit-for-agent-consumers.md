@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T08:30:10Z
+updated_at: 2026-07-26T08:37:28Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -150,3 +150,32 @@ None against the shipped Task 10 code — `_zero_hit_suggestions()` and the `cmd
 **Feature-bounding finding (plan-author-mandated note, carries forward into T13 documentation):** `_zero_hit_suggestions()` reaches typos and synonyms ONLY. A truncated or partially-typed query term can never reach this branch by construction — both the substring-scan lexical arm and the FTS5 arm (`"term"*` prefix query) match any prefix of a registered tag before the zero-hit branch is ever entered, so `_zero_hit_suggestions` never gets a chance to run for a truncation. Only a query whose edit-distance from the target is NOT a pure-prefix relationship (typo, transposition, synonym) can produce a genuine zero-hit that this feature then rescues. A reader who does not know this will wonder why suggestions stay silent on a half-typed query — this is that answer.
 
 T11 (`okf-cli-ftri`, `--expand-tags`) reads `all_tags(root)`, `tokenize()`, `difflib` and `_query_vector`/`_expand_query_tags` per PLAN.md Task 11 — none of those interfaces were touched by this task; `_zero_hit_suggestions()` is a new, independent helper that does not intersect T11's expansion path. The zero-hit branch in `cmd_find` (now ending in `return` after printing suggestions) is unchanged in control flow otherwise — T11 modifies the CONFIDENT-lexical-arm gate and `semantic_ranking()`, both upstream of where this branch fires, so no interface collision expected.
+
+
+## Review round 1 — CHANGES_REQUIRED, fixed inline (2026-07-26)
+
+Reviewer found three findings against the bean text/tests (code, mutation probe, PF-4 discipline and feature-bounding note all independently re-verified as correct):
+
+- **B01 (blocking).** SC-01/SC-03 in the Acceptance Criteria block still said `"tailscal"` (the pre-correction fixture query), which is literally false against shipped behaviour (`find "tailscal"` returns a real hit, score 2/6, not `(no matches ...)`). Fixed: both now read `"tailscael"`, matching PLAN.md post-`0d20b07` and the actual tests.
+- **I01 (hygiene).** `## Steps` checkboxes were all unticked despite `status: completed`. Ticked all six to `- [x]`.
+- **I02.** AC-2 ("IF no tag is close enough THEN plain no-match line, no suggestions") was only exercised at function level. Added `test_output_has_no_suggestion_line_when_no_tag_is_close` (`cli/test_okf_cli.py`, `ZeroHitSuggestions` class) — asserts `_run_find(root, "zzzzqqqq")` output is exactly `"(no matches for: zzzzqqqq)\n"`, no `nearest registered tags` / `try:` lines.
+
+RED proof (mutated `cmd_find`'s zero-hit branch to drop the `if near:` guard, i.e. print the suggestion lines unconditionally):
+```
+AssertionError: '(no matches for: zzzzqqqq)\nnearest registered tags: \ntry: okf-cli find ""\n' != '(no matches for: zzzzqqqq)\n'
+```
+Reverted byte-identically (`md5 cli/okf-cli.py` unchanged: `f45b0ddecaeb1e992a6d4d32c243262e` before and after). GREEN afterward:
+```
+$ python3 -m unittest cli.test_okf_cli.ZeroHitSuggestions cli.test_okf_cli.ZeroHitSuggestionsPF4 -v
+... 5 tests ... OK
+```
+
+Full suite after this round, both env directions:
+```
+VOYAGE_API_KEY set:     Ran 253 tests in 17.070s — FAILED (failures=19, errors=2)
+env -u VOYAGE_API_KEY:  Ran 253 tests in 13.694s — FAILED (failures=19, errors=2)
+```
+
+Commit: `6d0c91e` fix(cli): T10 review findings B01/I01/I02 (`.beans/okf-cli-snxj--*.md`, `cli/test_okf_cli.py`).
+
+Leaf stays `completed` per PF-2 — this was an inline fix within the same bean, not a re-open to `in-progress` (no code defect was found; the shipped `_zero_hit_suggestions()`/`cmd_find` branch was already correct and re-verified unchanged).
