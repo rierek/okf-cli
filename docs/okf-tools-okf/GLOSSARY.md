@@ -14,6 +14,8 @@ timestamp: 2026-07-18T00:00:00Z
 | Term | Definition | Source concept |
 |------|------------|----------------|
 | semantic backstop | Retrieval fallback that engages only when keyword search returns weak or zero results; never displaces a confident keyword top hit. | P8/8c, bean `okf-cli-8uaf` |
-| document-embedding | Embedding a whole concept (title+body) as one vector — the current default; dilutes distinctive terms in a long body into a single averaged point. | Q03, bean `okf-cli-wuiv` |
-| chunk-embedding | Embedding a concept as several smaller units (title, per-paragraph body chunks) instead of one whole-document vector, to avoid document-embedding's dilution. | Q03, bean `okf-cli-wuiv` |
+| document-embedding | Embedding a whole concept (title+body) as one vector per concept — the shipped unit. | Q03, bean `okf-cli-wuiv` |
+| chunk-embedding | Embedding a concept as several smaller units (one per h2/h3 section) instead of one whole-document vector, scored per concept by the best-matching chunk. | Q03, bean `okf-cli-wuiv` |
 | tag-vector expansion | Using already-populated tag-level embeddings to find synonymous tags for a query term, without touching concept-level embeddings. | Q03, bean `okf-cli-wuiv` |
+| conditional handover | Fusion rule that decides per query which arm owns the ranking instead of merging both result lists — the lexical arm owns it only when its top-1 leads the runner-up clearly, otherwise the semantic arm owns it and lexical hits are appended behind. | R43, bean `okf-cli-cskz` |
+| vocabulary leak | Share of an evaluation query's terms that appear verbatim in its target document — the quality measure of a ground-truth set, since a high share favours lexical retrieval and distorts any lexical-versus-semantic comparison. | R33/R41, bean `okf-cli-cskz` |
