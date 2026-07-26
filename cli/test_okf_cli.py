@@ -2678,5 +2678,31 @@ class GroupedOverview(unittest.TestCase):
         self.assertNotIn("okf-cli.py merge-tags", okf.__doc__)
 
 
+class CommandHelpConformance(unittest.TestCase):
+    """An undocumented command or option is unmergeable, not merely
+    noticeable (D02). This is the gate the 2026-07-26 PO review asked for."""
+
+    def setUp(self):
+        self.ap = okf.build_parser()
+        self.parsers = okf.subcommand_parsers(self.ap)
+
+    def test_every_subcommand_has_a_summary(self):
+        missing = sorted(n for n, p in self.parsers.items()
+                         if not (p.description or "").strip())
+        self.assertEqual(missing, [])
+
+    def test_every_option_and_positional_has_help(self):
+        missing = []
+        for name, parser in sorted(self.parsers.items()):
+            for act in okf.parser_actions(parser):
+                if not (act.help or "").strip():
+                    missing.append("{} {}".format(name, act.dest))
+        self.assertEqual(missing, [])
+
+    def test_every_command_is_grouped_and_dispatchable(self):
+        self.assertEqual(set(okf.COMMAND_GROUPS), set(self.parsers))
+        self.assertEqual(set(okf.COMMAND_DISPATCH), set(self.parsers))
+
+
 if __name__ == "__main__":
     unittest.main()

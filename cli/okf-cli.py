@@ -2650,7 +2650,7 @@ def build_parser():
               "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
               formatter_class=argparse.RawDescriptionHelpFormatter,
               epilog=_FIND_EPILOG)
-    pf.add_argument("query")
+    pf.add_argument("query", help="search terms; quote multi-word queries")
     pf.add_argument("--limit", type=int, default=10,
                     help="max results to print (default 10)")
     pf.add_argument("--type", help="filter by frontmatter `type` (exact match)")
@@ -2677,7 +2677,8 @@ def build_parser():
     pi = _sub(sub, "index", "navigation",
               "catalogue TOC (bundles, descriptions, concept counts), or one "
               "bundle's index.md")
-    pi.add_argument("bundle", nargs="?")
+    pi.add_argument("bundle", nargs="?",
+                    help="bundle to print (default: the whole catalogue TOC)")
     pi.add_argument("--full", action="store_true",
                     help="add per-bundle types+tags used (catalogue TOC), or print the "
                          "structured bundle summary instead of the raw index.md (with a bundle arg)")
@@ -2714,12 +2715,13 @@ def build_parser():
                      help="print full per-bundle blocks (description+directories+types+tags) "
                           "instead of the default compact name+count listing")
     pr = _sub(sub, "read", "navigation", "print one concept page")
-    pr.add_argument("path")
+    pr.add_argument("path", help="<bundle>/<concept-id> of the page to print")
     prf = _sub(sub, "refs", "search",
                "list inbound markdown references to a file")
     prf.add_argument("path", help="target file (abs, or relative to --root)")
     prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide")
-    prf.add_argument("--json", action="store_true")
+    prf.add_argument("--json", action="store_true",
+                     help="machine-readable output")
     px = _sub(sub, "reindex", "maintenance",
               "(re)generate marker-bounded index.md listings")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
@@ -2744,8 +2746,8 @@ def build_parser():
     prn.add_argument("--force", action="store_true", help="overwrite an existing destination")
     prw = _sub(sub, "rewrite-path", "maintenance",
                "literal path-string rewrite across text files")
-    prw.add_argument("old")
-    prw.add_argument("new")
+    prw.add_argument("old", help="literal path string to replace")
+    prw.add_argument("new", help="replacement path string")
     prw.add_argument("--scan-root", help="dir to scan (default: --root)")
     prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
     pg = _sub(sub, "tags", "tags",
@@ -2761,12 +2763,12 @@ def build_parser():
                     help="check tag(s) against TAGS.md; exit 1 if any are unregistered")
     pt = _sub(sub, "toc", "navigation",
               "print a concept's headings (default: h2 only)")
-    pt.add_argument("path")
+    pt.add_argument("path", help="<bundle>/<concept-id> to list headings for")
     pt.add_argument("--level", type=int, default=2,
                     help="heading level to list (default 2 = h2); 0 = full indented tree")
     pv = _sub(sub, "visualize", "navigation",
               "write a self-contained viz.html graph for a bundle")
-    pv.add_argument("bundle")
+    pv.add_argument("bundle", help="bundle to render the graph for")
     pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
     ap.epilog = render_command_overview(sub)
     return ap
