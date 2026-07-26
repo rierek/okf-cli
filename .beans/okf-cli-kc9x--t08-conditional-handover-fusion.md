@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: critical
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T06:42:59Z
+updated_at: 2026-07-26T06:48:46Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-8j7l
@@ -94,3 +94,42 @@ re-introducing the defect D12 exists to fix.
 
 - SC-SHIM: the T07 compatibility shim no longer exists in `cmd_find`; `grep` for it returns
   nothing, and no code path filters semantic hits before `fuse_conditional` runs.
+
+
+
+## PRELUDE 2026-07-26 — two rulings from the plan author, read before implementing
+
+**(1) SC-06 says "appears", NOT "rank 1". Do not optimise toward rank 1.**
+
+Independently re-run by the plan author against the live catalogue, matching T07's numbers
+exactly: the R12 target `dev-wiki/testsystem-vite-tailscale/serve-excalidraw-drafts` comes back
+at **rank 3, cosine 0.5484**; a second real query "service home-lab photos" returns
+`home-lab-wiki/services/immich` at rank 1.
+
+The five hits span **0.5569 down to 0.5407** — the top two are generic tailscale concepts. That
+narrow band is **R34 in the field: cosine is a RANK signal, not a confidence signal.** SC-06 is
+worded "appears" precisely because of it. If your smoke run has the target anywhere in the
+result set, the criterion is met — rank 3 included. Resist tuning toward rank 1.
+
+This sharpens rather than softens the standing HARD STOP recorded earlier in this bean: if
+`find "mockup tailscale"` does NOT return the target at all, stop and report — and never move
+`SEMANTIC_MARGIN_RATIO` to make a number look better. The ratio is measured
+(`eval/hybrid_eval.py:151`), not a tuning knob.
+
+**(2) SC-SHIM is binding — the `cmd_find` shim MUST be deleted here.**
+
+T07 (`91e2604`) added a minimal arity-compatible shim in `cmd_find` as a deliberate bridge
+across the T07/T08 signature change. Removing it is your duty, criterion `SC-SHIM` (pinned in
+commit `b7b236d`).
+
+Reason, so it is not treated as cosmetic: under conditional handover the dedup happens INSIDE
+`fuse_conditional`. A post-hoc exclude-filter would strip semantic hits BEFORE the fusion can
+decide which arm owns the ranking — reinstating exactly the defect D12 exists to prevent
+(normalised BM25 at ranks 2-10 sits near 0.9 while a good cosine sits near 0.6, R36, so the
+lexical arm ranks good semantic hits away).
+
+**Verified ground entering T08:** `semantic_ranking()` and `_semantic_hit_dicts()` are on their
+final signatures — no further renaming needed. Live vectors are proven reachable for the SC-06
+counter-probe (`concept_emb`, 2443/2443, voyage-3-large, dim 1024). `VOYAGE_API_KEY` is live
+and functional; rotation is scheduled after T09, so do not print it and abort on any 401/403
+instead of retrying. Baseline entering T08: 233 tests, exactly 19 failures / 2 errors.
