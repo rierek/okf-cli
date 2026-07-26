@@ -42,6 +42,7 @@ import os
 import sqlite3
 import struct
 import sys
+import time
 import urllib.request
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -215,6 +216,33 @@ def batches(items, max_items, max_chars):
         yield cur
 
 
+def embed_resilient(fn, texts, label, sleep=time.sleep):
+    """Vectors for `texts`, or None when the batch is unrecoverable.
+
+    LL-08: an unguarded arm died on a single plain HTTP 400 and threw away
+    ~550 already-embedded concepts. The guarded run logged 4 retries and
+    completed 2437/2437 (R31). Strategy: retry with exponential backoff, then
+    progressively halve every text (a 400 on these endpoints is usually an
+    over-long input), then give up on THIS batch only and report it — the run
+    continues, and the missing rows simply reappear in the next delta plan.
+
+    `sleep` is injected so tests exercise the retry ladder without waiting."""
+    delay = 2
+    for attempt in range(3):
+        try:
+            return fn(texts)
+        except Exception as exc:
+            print("    retry {} ({} texts) {}: {}".format(
+                attempt + 1, len(texts), label, exc), flush=True)
+            sleep(delay)
+            delay *= 2
+            if attempt >= 1:
+                texts = [t[: max(len(t) // 2, 500)] for t in texts]
+    print("    SKIPPED {} — {} text(s) left unembedded".format(label, len(texts)),
+          flush=True)
+    return None
+
+
 def write_concept_rows(db_path, rows):
     """rows: iterable of (key, path, model, dim, vec_bytes)."""
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
@@ -353,7 +381,12 @@ def main(argv=None):
                 for batch in batches(
                         [(tag, text, key) for tag, text, key in delta],
                         max_items, max_chars):
-                    vectors = _embed(model, [t for _tag, t, _key in batch])
+                    vectors = embed_resilient(
+                        lambda ts, m=model: _embed(m, ts),
+                        [t for _tag, t, _key in batch],
+                        "{} tags {}..".format(model, batch[0][0]))
+                    if vectors is None:
+                        continue
                     rows = [
                         (key, tag, model, MODELS[model]["dim"], pack_vec(vec))
                         for (tag, _text, key), vec in zip(batch, vectors)
@@ -374,7 +407,12 @@ def main(argv=None):
                 max_items, max_chars = BATCH_LIMITS[model]
                 written = 0
                 for batch in batches(cdelta, max_items, max_chars):
-                    vectors = _embed(model, [t for _path, t, _key in batch])
+                    vectors = embed_resilient(
+                        lambda ts, m=model: _embed(m, ts),
+                        [t for _path, t, _key in batch],
+                        "{} concepts {}..".format(model, batch[0][0]))
+                    if vectors is None:
+                        continue
                     rows = [
                         (key, path, model, MODELS[model]["dim"], pack_vec(vec))
                         for (path, _text, key), vec in zip(batch, vectors)

@@ -289,11 +289,21 @@ class MainPersistsBatchBeforeNextEmbed(unittest.TestCase):
         self.output = os.path.join(self.tmp_out, "tag_vectors.sqlite")
         self._orig_bge = bt.embed_bge_m3
         self._orig_limit = bt.BATCH_LIMITS["bge-m3"]
+        self._orig_resilient = bt.embed_resilient
         bt.BATCH_LIMITS["bge-m3"] = (1, 90000)  # force one concept per batch
+        # main() now routes through embed_resilient (T02); its default sleep
+        # is the real time.sleep, bound at def-time. Wrap it here so this
+        # end-to-end test stays wall-clock-free regardless of how many of
+        # embed_resilient's internal retries the flaky callable burns.
+        real_resilient = self._orig_resilient
+        bt.embed_resilient = (
+            lambda fn, texts, label, sleep=None:
+            real_resilient(fn, texts, label, sleep=lambda _s: None))
 
     def tearDown(self):
         bt.embed_bge_m3 = self._orig_bge
         bt.BATCH_LIMITS["bge-m3"] = self._orig_limit
+        bt.embed_resilient = self._orig_resilient
         shutil.rmtree(self.root, ignore_errors=True)
         shutil.rmtree(self.tmp_out, ignore_errors=True)
 
@@ -302,19 +312,16 @@ class MainPersistsBatchBeforeNextEmbed(unittest.TestCase):
 
         def _flaky(texts):
             calls["n"] += 1
-            if calls["n"] == 2:
-                raise RuntimeError("HTTP 400")
-            return [[0.1, 0.2] for _ in texts]
+            if calls["n"] == 1:
+                return [[0.1, 0.2] for _ in texts]
+            raise RuntimeError("HTTP 400")  # batch 2 never recovers
 
         bt.embed_bge_m3 = _flaky
 
-        try:
-            bt.main(["--root", self.root, "--output", self.output,
-                     "--model", "bge-m3", "--target", "concepts", "--produce"])
-        except RuntimeError:
-            pass  # today (pre-T02) this raises and aborts; T02 changes that
-            # to skip-and-continue. Either way batch 1 must already be
-            # committed — that is the property under test.
+        # Post-T02: embed_resilient exhausts retries on batch 2, returns
+        # None, main() skips it and continues — no exception propagates.
+        bt.main(["--root", self.root, "--output", self.output,
+                 "--model", "bge-m3", "--target", "concepts", "--produce"])
 
         conn = sqlite3.connect(self.output)
         try:
@@ -381,6 +388,49 @@ class BgeBatchPayload(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["input"], ["a", "b", "c"])
         self.assertEqual(vecs, [[0.1], [0.2], [0.3]])
+
+
+class EmbedResilient(unittest.TestCase):
+    """T10/LL-08 — a single HTTP failure must not throw away a 2437-concept
+    pass. Retry with backoff, then halve the inputs (a 400 on these endpoints
+    is usually an over-long text), then skip with a log line."""
+
+    def test_returns_vectors_when_first_attempt_succeeds(self):
+        got = bt.embed_resilient(lambda ts: [[1.0]] * len(ts), ["a", "b"],
+                                 "batch-1", sleep=lambda _s: None)
+        self.assertEqual(got, [[1.0], [1.0]])
+
+    def test_retries_then_succeeds(self):
+        state = {"n": 0}
+
+        def _flaky(texts):
+            state["n"] += 1
+            if state["n"] < 2:
+                raise RuntimeError("HTTP 400")
+            return [[2.0]] * len(texts)
+
+        got = bt.embed_resilient(_flaky, ["a"], "batch-1", sleep=lambda _s: None)
+        self.assertEqual(got, [[2.0]])
+        self.assertEqual(state["n"], 2)
+
+    def test_halves_texts_before_the_last_attempt(self):
+        seen = []
+
+        def _record(texts):
+            seen.append([len(t) for t in texts])
+            raise RuntimeError("HTTP 400")
+
+        bt.embed_resilient(_record, ["x" * 4000], "batch-1", sleep=lambda _s: None)
+        self.assertEqual(seen[0], [4000])
+        self.assertLess(seen[-1][0], 4000)
+
+    def test_returns_none_after_exhausting_attempts(self):
+        def _always_fails(texts):
+            raise RuntimeError("HTTP 500")
+
+        got = bt.embed_resilient(_always_fails, ["a"], "batch-1",
+                                 sleep=lambda _s: None)
+        self.assertIsNone(got)
 
 
 if __name__ == "__main__":
