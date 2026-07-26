@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T12:12:26Z
+updated_at: 2026-07-26T12:23:05Z
 parent: okf-cli-wuiv
 ---
 
@@ -316,3 +316,6 @@ US-06 · Zero-hit queries offer the nearest registered tags instead of silent em
 
 US-04 · `build-index` builds the persistent FTS5 index on demand and the `lexical index is stale` note disappears on the next query · a
 US-08 · Against a catalogue that never had an index, `find` still returns results and names both degradations on stderr (`lexical index absent — falling back to substring scan`, `semantic arm skipped …`), each exactly once · a
+
+US-07 · A `--expand-tags` flag exists, is documented, ships off by default, and changes nothing when passed · r: "US-07: rejected" — not about the expansion behaviour, which was as specified, but about what `--help` tells a user about the CLI's capabilities: `--limit` undocumented, `find` absent from the command listing, no `<command> --help` pointer, listing unsorted, plus the systemic request for a self-documenting help system → okf-cli-3suc (bug), okf-cli-6zhw (feature), follow-up epic okf-cli-5uog
+US-09 · The producer writes each batch before starting the next, retries then halves then skips a failing batch, and left the live catalogue at full coverage (2443/2443 voyage-3-large rows) · a
