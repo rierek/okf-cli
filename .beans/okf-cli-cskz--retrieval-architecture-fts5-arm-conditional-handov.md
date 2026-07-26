@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T11:55:30Z
+updated_at: 2026-07-26T12:05:11Z
 parent: okf-cli-wuiv
 ---
 
@@ -310,3 +310,6 @@ it. That is the bar.
 US-01 · `find "mockup tailscale"` surfaces `serve-excalidraw-drafts` (rank 3, `provenance: semantic`, cosine 0.55) although the word "mockup" appears nowhere in it — the R12 counter-probe that previously returned nothing · a
 US-02 · `find "konvention"` matches inflected forms ("Konventionen") via the stemming, prefix-matching lexical arm instead of requiring an exact substring · a
 US-03 · `find "größe"` treats the umlaut word as one token; the Unicode-aware tokenizer no longer splits at the diacritic · a
+
+US-05 · Every result line names the arm that produced it (`provenance: lexical` / `provenance: semantic (cosine=…)`), and the handover to the semantic arm is announced on stderr · a
+US-06 · Zero-hit queries offer the nearest registered tags instead of silent emptiness · r: "US-06 > rejected" — verdict given without further prose; the observation behind it is that `find "tailscael"` and `find "zzzzqqqq"` both return ten semantic results at cosine 0.40-0.46 instead of the `(no matches …)` line plus suggestion → okf-cli-snxj
