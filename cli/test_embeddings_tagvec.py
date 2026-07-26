@@ -11,6 +11,7 @@ Run: python3 -m unittest cli.test_embeddings_tagvec -v
 """
 import hashlib
 import importlib.util
+import json
 import os
 import shutil
 import sqlite3
@@ -271,6 +272,65 @@ class MainConceptsTarget(unittest.TestCase):
                       "--model", "bge-m3", "--target", "concepts"])
         self.assertEqual(rc, 0)
         self.assertEqual(self.calls, [])
+
+
+class Batches(unittest.TestCase):
+    """T11 — a 2437-concept run must be cut into API-sized pieces, by item
+    count AND by payload size (Voyage caps a request by token budget, not by
+    document count)."""
+
+    def test_splits_by_item_count(self):
+        items = [("p{}".format(i), "text", "k{}".format(i)) for i in range(5)]
+        got = list(bt.batches(items, max_items=2, max_chars=10 ** 6))
+        self.assertEqual([len(b) for b in got], [2, 2, 1])
+
+    def test_splits_by_char_budget(self):
+        items = [("p{}".format(i), "x" * 40, "k{}".format(i)) for i in range(4)]
+        got = list(bt.batches(items, max_items=100, max_chars=100))
+        self.assertEqual([len(b) for b in got], [2, 2])
+
+    def test_single_oversized_item_is_not_dropped(self):
+        items = [("p0", "x" * 500, "k0")]
+        got = list(bt.batches(items, max_items=100, max_chars=100))
+        self.assertEqual(len(got), 1)
+        self.assertEqual(len(got[0]), 1)
+
+    def test_empty_input_yields_nothing(self):
+        self.assertEqual(list(bt.batches([], max_items=10, max_chars=100)), [])
+
+
+class BgeBatchPayload(unittest.TestCase):
+    """B03 — /api/embed accepts a list; one call per text was measured 10-35x
+    slower (LL-09). Network is faked: this test must never touch Ollama."""
+
+    def test_sends_all_texts_in_one_request(self):
+        calls = []
+
+        class _Resp:
+            def __enter__(self_inner):
+                return self_inner
+
+            def __exit__(self_inner, *a):
+                return False
+
+            def read(self_inner):
+                return json.dumps(
+                    {"embeddings": [[0.1], [0.2], [0.3]]}).encode("utf-8")
+
+        def _fake_urlopen(req, timeout=None):
+            calls.append(json.loads(req.data.decode("utf-8")))
+            return _Resp()
+
+        orig = bt.urllib.request.urlopen
+        bt.urllib.request.urlopen = _fake_urlopen
+        try:
+            vecs = bt.embed_bge_m3(["a", "b", "c"])
+        finally:
+            bt.urllib.request.urlopen = orig
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["input"], ["a", "b", "c"])
+        self.assertEqual(vecs, [[0.1], [0.2], [0.3]])
 
 
 if __name__ == "__main__":

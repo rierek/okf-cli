@@ -60,6 +60,15 @@ MODELS = {
     },
 }
 
+# T11 (LL-09) — batch limits per model: (max items per request, max payload
+# chars per request). Voyage caps a request by token budget, so the char
+# budget is the binding one there; Ollama has no documented list cap, but a
+# smaller batch keeps a single failure cheap to retry.
+BATCH_LIMITS = {
+    "bge-m3": (32, 90000),
+    "voyage-3-large": (128, 90000),
+}
+
 SCHEMA = "CREATE TABLE IF NOT EXISTS emb(key TEXT PRIMARY KEY, tag TEXT, model TEXT, dim INT, vec BLOB)"
 
 # P8/8c (okf-cli-8uaf) — separate table, NOT touching `emb`'s tags-only
@@ -190,6 +199,22 @@ def plan_concept_delta(root, model, db_path, path_prefix=None, limit=None):
     return out
 
 
+def batches(items, max_items, max_chars):
+    """Cut `items` — (identity, text, key) triples — into request-sized
+    pieces, bounded by BOTH item count and total text length. A single item
+    that alone exceeds max_chars is still yielded (truncation is the embed
+    layer's job, dropping it would leave a concept unfindable)."""
+    cur, chars = [], 0
+    for item in items:
+        if cur and (len(cur) >= max_items or chars + len(item[1]) > max_chars):
+            yield cur
+            cur, chars = [], 0
+        cur.append(item)
+        chars += len(item[1])
+    if cur:
+        yield cur
+
+
 def write_concept_rows(db_path, rows):
     """rows: iterable of (key, path, model, dim, vec_bytes)."""
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
@@ -206,18 +231,17 @@ def write_concept_rows(db_path, rows):
 
 
 def embed_bge_m3(texts):
-    """Local Ollama bge-m3 embed call. NETWORK — only reached under --produce."""
-    vectors = []
-    for t in texts:
-        req = urllib.request.Request(
-            MODELS["bge-m3"]["endpoint"],
-            data=json.dumps({"model": "bge-m3", "input": t}).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-        vectors.append(body["embeddings"][0])
-    return vectors
+    """Local Ollama bge-m3 embed call. NETWORK — only reached under --produce.
+    /api/embed takes a LIST; the former one-call-per-text loop measured 10-35x
+    slower on the same hardware (LL-09)."""
+    req = urllib.request.Request(
+        MODELS["bge-m3"]["endpoint"],
+        data=json.dumps({"model": "bge-m3", "input": list(texts)}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=300) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+    return body["embeddings"]
 
 
 def embed_voyage(texts):
@@ -324,14 +348,20 @@ def main(argv=None):
                 model, len(delta), len(tags) - len(delta)))
 
             if args.produce and delta:
-                texts = [text for _tag, text, _key in delta]
-                vectors = _embed(model, texts)
-                rows = [
-                    (key, tag, model, MODELS[model]["dim"], pack_vec(vec))
-                    for (tag, _text, key), vec in zip(delta, vectors)
-                ]
-                write_rows(output, rows)
-                print("{}: wrote {} row(s) to {}".format(model, len(rows), output))
+                max_items, max_chars = BATCH_LIMITS[model]
+                written = 0
+                for batch in batches(
+                        [(tag, text, key) for tag, text, key in delta],
+                        max_items, max_chars):
+                    vectors = _embed(model, [t for _tag, t, _key in batch])
+                    rows = [
+                        (key, tag, model, MODELS[model]["dim"], pack_vec(vec))
+                        for (tag, _text, key), vec in zip(batch, vectors)
+                    ]
+                    write_rows(output, rows)
+                    written += len(rows)
+                    print("{}: wrote {}/{} tag row(s)".format(
+                        model, written, len(delta)), flush=True)
 
         if do_concepts:
             cdelta = plan_concept_delta(
@@ -341,14 +371,18 @@ def main(argv=None):
             print("{}: {} concept(s) need title+body embedding".format(model, len(cdelta)))
 
             if args.produce and cdelta:
-                texts = [text for _path, text, _key in cdelta]
-                vectors = _embed(model, texts)
-                rows = [
-                    (key, path, model, MODELS[model]["dim"], pack_vec(vec))
-                    for (path, _text, key), vec in zip(cdelta, vectors)
-                ]
-                write_concept_rows(output, rows)
-                print("{}: wrote {} concept row(s) to {}".format(model, len(rows), output))
+                max_items, max_chars = BATCH_LIMITS[model]
+                written = 0
+                for batch in batches(cdelta, max_items, max_chars):
+                    vectors = _embed(model, [t for _path, t, _key in batch])
+                    rows = [
+                        (key, path, model, MODELS[model]["dim"], pack_vec(vec))
+                        for (path, _text, key), vec in zip(batch, vectors)
+                    ]
+                    write_concept_rows(output, rows)
+                    written += len(rows)
+                    print("{}: wrote {}/{} concept row(s)".format(
+                        model, written, len(cdelta)), flush=True)
 
     if not args.produce and total_delta:
         print("(dry-run — no network calls, no writes. Re-run with --produce to embed.)")
