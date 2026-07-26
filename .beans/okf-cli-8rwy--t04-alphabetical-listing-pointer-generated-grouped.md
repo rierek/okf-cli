@@ -1,11 +1,11 @@
 ---
 # okf-cli-8rwy
 title: T04 Alphabetical listing, pointer, generated grouped overview
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-07-26T13:03:25Z
-updated_at: 2026-07-26T13:03:39Z
+updated_at: 2026-07-26T13:48:21Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-2ljd
@@ -57,3 +57,11 @@ Both help layouts come from the same registrations, so neither can go stale. The
 ## Recommended Skills
 
 - superpowers:test-driven-development
+
+
+
+## Prelude from the T01-T03 reviews (2026-07-26, non-blocking)
+
+1. **The plan can contradict itself. When it does, adapt the text to the test, never the test to the text.** T03 hit this: PLAN.md Task 3's literal replacement string starts a sentence with capital `Measured`, while the plan's own test asserts the case-sensitive substring `"measured"`. The implementer joined the clauses with a semicolon, kept every other word, and left the test untouched — the reviewer diffed the shipped test against the plan and found zero differences. That is the correct resolution. Weakening a plan-authored test to accept plan-authored text is a blocking defect. Your Task 4 has the same shape: `test_module_docstring_no_longer_lists_commands_by_hand` asserts on the docstring you rewrite.
+2. The 50-character subject cap applies to EVERY commit, the bean-close meta commit included. There is no `commit-msg` hook in `.git/hooks/`, so nothing catches an overrun. Count before committing.
+3. For any before/after proof, snapshot with `git show <rev>:<path> > /tmp/<x>.py` and diff. Do not use `git stash` — shared-tree operation, this repo sees concurrent activity.
