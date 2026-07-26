@@ -4,8 +4,10 @@ title: Follow-up capability surface 2026-07-26
 status: todo
 type: epic
 priority: normal
+tags:
+    - to-review
 created_at: 2026-07-26T15:09:34Z
-updated_at: 2026-07-26T16:56:28Z
+updated_at: 2026-07-26T17:07:10Z
 parent: okf-cli-wuiv
 ---
 
@@ -59,3 +61,47 @@ structural and was verified independently by the reviewer, by reading cmd_check,
 cmd_index and cmd_refs in full: no JSON-supporting CLI command today exits 0 while writing
 to stderr, so the path cannot be driven for real. If the CLI ever grows a JSON command
 that can degrade on a clean exit, replace the stub with a real subprocess-driven fixture.
+
+
+## Epic closure record, 2026-07-26 — ready for the PO gate
+
+Both leaves are `completed`, each after its own green full gate and each independently
+`APPROVED` by ce-specs-reviewer with a fresh mutation probe of its own (the reviewers did
+not rely on the implementers' test runs). Tag `to-review` set. The epic itself is NOT
+`completed` — that is the PO's call at the gate, together with the merge decision.
+
+**R-01 — okf-cli-2o39 (high), commits `44720b6` + `bfd6f5e`.** `run_okf`
+(mcp/okf_mcp.py:82-83) now prepends whatever the CLI wrote to stderr to the returned text,
+for commands whose `supports_json` flag is false. JSON-supporting commands return before
+that branch is reached, so their return values are byte-identical to before — verified by
+control-flow reading and by a mutation that moves the branch above the early return, which
+reddens the JSON test with a `JSONDecodeError`. The `check` special case (exit 1 is data)
+and the RuntimeError path for other non-zero exits are untouched. Per SC-04 the `okf_find`
+docstring, which had promised "announced on stderr", now describes the channel the MCP
+consumer actually reads.
+
+**R-02 — okf-cli-x60r (low), commits `8267fdb` + `807b3c8`.** `CommandHelpConformance`
+gained a separate method `test_top_level_option_has_help` (cli/test_okf_cli.py:2719-2726);
+the three pre-existing assertions are byte-for-byte unchanged. Stripping `--root` of its
+help text now turns the suite red with `AssertionError: Lists differ: ['root'] != []`,
+naming the offender; the whitespace-only case behaves identically. No option beyond
+`--root` was found undocumented, so `cli/okf-cli.py` was not modified at all
+(md5 unchanged at `9147b341e630be011f15ff8965b022e1`).
+
+**Evidence.** Full suite, run by the supervisor after both leaves landed:
+`python3 -m unittest discover -s cli -p "test_*.py"` gives `Ran 282 tests` with exactly
+`failures=19, errors=2`. The arithmetic reconciles: 279 baseline + 2 (R-01) + 1 (R-02).
+The 19F/2E were confirmed by name in the reviews to be the pre-existing crosslink-suite
+failures, none of them touching the files this epic changed. Working tree clean.
+
+**One further non-blocking finding, from the okf-cli-x60r review.** `parser_actions()`
+(cli/okf-cli.py:2569-2573) still filters only `argparse._HelpAction`; the new top-level
+coverage required an extra `_SubParsersAction` exclusion local to the test rather than in
+the shared helper. Assessed as no real impact: `_SubParsersAction` is only ever produced by
+`add_subparsers()` and never by `add_argument()`, so no genuine option can hide behind the
+exclusion, and a future reuse of the unfiltered helper on the top-level parser would fail
+loudly on `cmd` rather than pass silently.
+
+**Lessons recorded:** LL-18 (a channel claim is true only where its reader stands) and
+LL-19 (widening a gate re-opens the exemption list tuned for the narrower collection) in
+docs/LESSONS-LEARNED.md.
