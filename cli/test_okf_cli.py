@@ -2587,5 +2587,19 @@ class ExpandQueryTags(unittest.TestCase):
             shutil.rmtree(root, ignore_errors=True)
 
 
+class ParserExtraction(unittest.TestCase):
+    """build_parser() renders the surface without executing a command."""
+
+    def test_every_registered_command_is_dispatchable(self):
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        self.assertEqual(set(parsers), set(okf.COMMAND_DISPATCH))
+
+    def test_parser_actions_skips_the_auto_help_action(self):
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        dests = [a.dest for a in okf.parser_actions(parsers["read"])]
+        self.assertNotIn("help", dests)
+        self.assertIn("path", dests)
+
+
 if __name__ == "__main__":
     unittest.main()

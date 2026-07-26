@@ -2575,7 +2575,39 @@ def cmd_rename(root, args):
     print("staged for commit — run `okf-cli.py check` before committing.")
 
 
-def main():
+COMMAND_DISPATCH = {
+    "prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
+    "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
+    "refs": cmd_refs,
+    "rewrite-path": cmd_rewrite_path, "rename": cmd_rename,
+    "build-index": cmd_build_index,
+    "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags,
+    "merge-tags": cmd_merge_tags,
+    "remove-tags": cmd_remove_tags,
+    "normalize-tags": cmd_normalize_tags,
+    "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks,
+    "fix-xml-tags": cmd_fix_xml_tags,
+}
+
+
+def subcommand_parsers(ap):
+    """{name: parser} for a built parser's subcommands. argparse exposes the
+    individual subparsers only through the subparsers action, so the private
+    attribute access is contained here rather than spread across tests."""
+    for action in ap._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices
+    return {}
+
+
+def parser_actions(parser):
+    """Every argparse action of a parser except the auto-added -h/--help.
+    Same contained-private-access rationale as subcommand_parsers()."""
+    return [a for a in parser._actions
+            if not isinstance(a, argparse._HelpAction)]
+
+
+def build_parser():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="catalogue root (default: auto-detect from cwd; "
@@ -2693,22 +2725,17 @@ def main():
                           help="wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
     pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
-    args = ap.parse_args()
+    return ap
+
+
+def main():
+    args = build_parser().parse_args()
     root = catalogue_root(args.root)
     if root is None:
         sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
     if not os.path.isdir(root):
         sys.exit("ERROR: root not found: {} (pass --root <path>)".format(root))
-    {"prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
-     "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
-     "refs": cmd_refs,
-     "rewrite-path": cmd_rewrite_path, "rename": cmd_rename,
-     "build-index": cmd_build_index,
-     "reindex": cmd_reindex, "log": cmd_log, "tags": cmd_tags, "merge-tags": cmd_merge_tags,
-     "remove-tags": cmd_remove_tags,
-     "normalize-tags": cmd_normalize_tags,
-     "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks,
-     "fix-xml-tags": cmd_fix_xml_tags}[args.cmd](root, args)
+    COMMAND_DISPATCH[args.cmd](root, args)
 
 
 if __name__ == "__main__":
