@@ -12,8 +12,10 @@ Run: python3 -m unittest cli.test_okf_mcp -v
 import importlib.util
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location(
@@ -181,6 +183,45 @@ class McpAgentRemedyBoundary(McpBoundaryTestBase):
 
     def test_info_reaches_the_cli(self):
         self.assertTrue(mcp.run_okf(self.root, "info", {}).strip())
+
+
+class McpFindDegradationNoteBoundary(McpBoundaryTestBase):
+    """SC-01 (okf-cli-2o39, D01): a degradation note the CLI writes to stderr
+    on a non-JSON command must reach the MCP caller, prepended to stdout.
+    The fresh catalogue from setUp has no .fts/fts.sqlite yet, so `find`
+    degrades to the substring scan and prints the "absent" note."""
+
+    def test_find_returns_absent_note_ahead_of_stdout(self):
+        out = mcp.run_okf(self.root, "find", {"query": "one"})
+        self.assertIn("note: lexical index absent", out)
+        self.assertIn("path: b/one", out)
+        self.assertLess(out.index("note:"), out.index("path: b/one"))
+
+
+class McpJsonCommandParsesDespiteStderrNote(unittest.TestCase):
+    """SC-02 (okf-cli-2o39, AC-03): a JSON-supporting command's return value
+    must stay byte-identical (still json.loads-able, nothing from stderr
+    mixed in) even when the CLI writes a note to stderr during that same
+    call. No JSON-supporting command in the current CLI both exits 0 and
+    writes to stderr (checked: cmd_check/cmd_list/cmd_index/cmd_refs emit
+    nothing to stderr on a clean exit), so this pins the wrapper's own
+    contract directly via a stubbed subprocess.run rather than relying on a
+    real CLI code path that does not exist today — the guarantee must hold
+    regardless of whether the CLI ever grows one."""
+
+    def test_json_command_return_value_ignores_stderr_note(self):
+        stub = subprocess.CompletedProcess(
+            args=["python3", "okf-cli.py"], returncode=0,
+            stdout='[{"title": "One"}]\n',
+            stderr="note: some future degradation\n")
+        # Patch the `mcp` module's OWN `subprocess` name binding, not the
+        # real subprocess module (which fastmcp/other code also imports) —
+        # keeps the stub scoped to this call.
+        fake_subprocess = mock.Mock()
+        fake_subprocess.run.return_value = stub
+        with mock.patch.object(mcp, "subprocess", fake_subprocess):
+            out = mcp.run_okf("/root", "list", {"type": "Runbook"})
+        self.assertEqual(out, [{"title": "One"}])
 
 
 class McpSurfaceParity(unittest.TestCase):

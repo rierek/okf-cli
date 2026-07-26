@@ -64,7 +64,14 @@ OKF_CLI = os.environ.get("OKF_CLI",
 def run_okf(root, command, params):
     """Invoke okf-cli.py, return parsed JSON for --json commands else raw text.
     Note: check exits 1 on violations — that is data, not a crash, so exit code
-    is only treated as an error for non-check commands."""
+    is only treated as an error for non-check commands.
+
+    D01 (okf-cli-2o39): the CLI announces degradation (stale/absent lexical
+    index, unavailable embedding backend, ...) on stderr, never on stdout.
+    For non-JSON commands that stderr text is prepended to the returned
+    stdout text, so an MCP consumer actually sees it. JSON-supporting
+    commands are left untouched — their stdout feeds json.loads() directly,
+    and mixing stderr in would break every consumer of those tools."""
     argv = build_argv(root, command, params)
     proc = subprocess.run(["python3", OKF_CLI] + argv, capture_output=True, text=True)
     if proc.returncode != 0 and command != "check":
@@ -72,6 +79,8 @@ def run_okf(root, command, params):
     out = proc.stdout
     if _COMMANDS[command][1]:  # supports_json
         return json.loads(out) if out.strip() else {}
+    if proc.stderr:
+        return proc.stderr + out
     return out
 
 
@@ -89,10 +98,12 @@ def _register(server):
         front. A semantic-arm result line carries `provenance: semantic
         (cosine=…)`; a line with no such marker came from the lexical arm.
 
-        Degradations are announced on stderr and never fail the call: a
-        missing or stale lexical index falls back to a substring scan (fix it
-        with okf_build_index), and an unavailable embedding backend leaves
-        lexical results only."""
+        Degradations never fail the call and are announced as a note
+        prepended to the returned text (okf-cli-2o39, D01 — the CLI itself
+        writes them to stderr, which run_okf folds into this tool's return
+        value): a missing or stale lexical index falls back to a substring
+        scan (fix it with okf_build_index), and an unavailable embedding
+        backend leaves lexical results only."""
         return run_okf(root, "find", {
             "query": query, "limit": limit, "type": type, "tag": tag,
             "scope": scope,
