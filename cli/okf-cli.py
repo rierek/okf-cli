@@ -5,44 +5,9 @@ Catalogue-aware fork inspired by Cole Medin's single-bundle okf-cli.py.
 A *catalogue* is a directory whose immediate subdirectories (not starting with
 '.' or '_') are OKF *bundles*. Standard library only — no install required.
 
-Commands:
-    okf-cli.py prime [--full]              one-shot agent onboarding: CLAUDE.md guide + catalogue TOC
-                                            (start here in a new session)
-    okf-cli.py index [bundle] [--full]     catalogue TOC (bundle/description/concepts/directories),
-                                            or one bundle's index; --full adds types+tags per bundle
-    okf-cli.py list [--type <T>] [--tag <T>] [--scope <target>]
-                                            list concepts filtered by frontmatter type and/or tag (exact match,
-                                            AND-combined), structured per-hit block (title/type/path/description)
-    okf-cli.py find "<query>"              ranked keyword search across all bundles; structured per-hit block
-                                            (score/title/type/path/description/body-snippet). score shown as
-                                            achieved/max ("4/6") — 3 title-hit + 2 tag-hit + 1 body-hit per term,
-                                            capped at 1 per field per term, max = 6 * number of terms
-    okf-cli.py read <bundle>/<concept-id>  print one concept page
-    okf-cli.py info                        print catalogue schema docs (TYPES.md + PROPERTIES.md)
-    okf-cli.py reindex <target> [--init] [--check]  (re)generate index.md listings
-    okf-cli.py log [bundle] [--since] [--write]  render git history as a SPEC §7 changelog
-    okf-cli.py tags [--singletons]          full tag audit dump (tag + usage count), or singleton-only
-    okf-cli.py tags <tag1> <tag2> …        fuzzy-search each candidate against the tag universe
-    okf-cli.py tags --register <tag> …      add tag(s) to the TAGS.md closed-vocabulary registry
-    okf-cli.py tags --validate <tag> …      exit 1 if any tag is unregistered (agent pre-write gate)
-    okf-cli.py merge-tags <tag1> [<tag2> …] --into <tag> [--scope <target>] [--apply]
-                                            merge/rename tags across concept frontmatter (dry-run default)
-    okf-cli.py remove-tags <tag1> [<tag2> …] [--scope <target>] [--apply]
-                                            remove tags from concept frontmatter, no merge target (dry-run default)
-    okf-cli.py normalize-tags [--scope <target>] [--apply]
-                                            convert inline `tags: [...]` to YAML block-list (local convention,
-                                            dry-run default)
-    okf-cli.py check [target] [--strict] [--json] [--types <path>]  conformance scan (§9 + local
-                                            invariants); honors .okf.toml types_source / --types for TYPES.md
-    okf-cli.py fix-crosslinks [target] [--check]   rewrite links to catalogue-root-absolute form
-    okf-cli.py fix-xml-tags [target] [--check]     wrap `<tag>`/`<tag>.<tag2>` placeholders in inline
-                                            code so Obsidian doesn't misparse them as XML/HTML
-    okf-cli.py refs <path> [--scan-root <dir>] [--json]  inbound markdown references to a file
-    okf-cli.py rewrite-path <old> <new> [--scan-root <dir>] [--check]  literal path-string rewrite
-                                            across text files (non-md too); dry-run with --check
-    okf-cli.py rename <old> <new> [--apply] [--force]  move a concept and rewrite every inbound link
-                                            (repo-wide) + the file's own outbound links on a bundle
-                                            change, then reindex affected bundles; dry-run default
+Run `okf-cli.py --help` for the command directory (flat + grouped by purpose),
+and `okf-cli.py <command> --help` for one command's options. Both are generated
+from the parser — this file documents no command list by hand.
 
 Run from the catalogue root, or pass --root <path>.
 """
@@ -57,6 +22,7 @@ import sqlite3
 import struct
 import subprocess
 import sys
+import textwrap
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -2628,6 +2594,27 @@ def _sub(sub, name, group, summary, **kwargs):
     return sub.add_parser(name, help=summary, description=summary, **kwargs)
 
 
+def render_command_overview(sub):
+    """The purpose-grouped command directory, rendered from the registered
+    parsers (D02/D03). argparse's own listing above it is flat and
+    alphabetical; this block answers "what can this CLI do" by purpose. Both
+    come from the same registrations, so neither can drift from the other."""
+    lines = ["commands by purpose:"]
+    for group in _GROUP_ORDER:
+        names = sorted(n for n, g in COMMAND_GROUPS.items() if g == group)
+        if not names:
+            continue
+        lines.append("  {}:".format(group))
+        for name in names:
+            lines.append(textwrap.fill(
+                sub.choices[name].description, width=96,
+                initial_indent="    {:<16} ".format(name),
+                subsequent_indent=" " * 21))
+    lines.append("")
+    lines.append("run `okf-cli.py <command> --help` for one command's options.")
+    return "\n".join(lines)
+
+
 _FIND_EPILOG = """\
 score lines:
   The two arms report on different scales, and `score: a/b` names the scale
@@ -2650,21 +2637,15 @@ def build_parser():
     ap.add_argument("--root", help="catalogue root (default: auto-detect from cwd; "
                     "hard-fails if none found)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pi = _sub(sub, "index", "navigation",
-              "catalogue TOC (bundles, descriptions, concept counts), or one "
-              "bundle's index.md")
-    pi.add_argument("bundle", nargs="?")
-    pi.add_argument("--full", action="store_true",
-                    help="add per-bundle types+tags used (catalogue TOC), or print the "
-                         "structured bundle summary instead of the raw index.md (with a bundle arg)")
-    pi.add_argument("--json", action="store_true", help="machine-readable output")
-    pls = _sub(sub, "list", "navigation",
-               "list concepts filtered by frontmatter type and/or tag")
-    pls.add_argument("--type", help="filter by frontmatter `type` (exact match)")
-    pls.add_argument("--tag", help="filter by tag (exact match)")
-    pls.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
-    pls.add_argument("--json", action="store_true", help="machine-readable output")
+    _sub(sub, "build-index", "search",
+         "(re)build the FTS5 lexical search index at "
+         "<root>/.fts/fts.sqlite (local only, no network)")
+    pc = _sub(sub, "check", "maintenance",
+              "conformance scan: §9 hard rules + local invariants")
+    pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
+    pc.add_argument("--json", action="store_true", help="machine-readable output")
+    pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)")
     pf = _sub(sub, "find", "search",
               "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
               formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -2685,44 +2666,60 @@ def build_parser():
                          "full catalogue and found ineffective for the "
                          "vocabulary-mismatch class it was built for, so it "
                          "stays off by default (Q05/D17)")
-    pr = _sub(sub, "read", "navigation", "print one concept page")
-    pr.add_argument("path")
+    pfx = _sub(sub, "fix-crosslinks", "maintenance",
+               "rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
+    pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
+    pfxt = _sub(sub, "fix-xml-tags", "maintenance",
+                "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
+    pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
+    pi = _sub(sub, "index", "navigation",
+              "catalogue TOC (bundles, descriptions, concept counts), or one "
+              "bundle's index.md")
+    pi.add_argument("bundle", nargs="?")
+    pi.add_argument("--full", action="store_true",
+                    help="add per-bundle types+tags used (catalogue TOC), or print the "
+                         "structured bundle summary instead of the raw index.md (with a bundle arg)")
+    pi.add_argument("--json", action="store_true", help="machine-readable output")
+    _sub(sub, "info", "navigation",
+         "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
+    pls = _sub(sub, "list", "navigation",
+               "list concepts filtered by frontmatter type and/or tag")
+    pls.add_argument("--type", help="filter by frontmatter `type` (exact match)")
+    pls.add_argument("--tag", help="filter by tag (exact match)")
+    pls.add_argument("--scope", metavar="TARGET",
+                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+    pls.add_argument("--json", action="store_true", help="machine-readable output")
+    pl = _sub(sub, "log", "navigation",
+              "render git history for the catalogue or a bundle as a SPEC §7 changelog")
+    pl.add_argument("bundle", nargs="?", help="bundle to scope to (default: whole catalogue)")
+    pl.add_argument("--since", help="git --since filter, e.g. '3 months ago'")
+    pl.add_argument("--write", action="store_true", help="materialize into <scope>/log.md instead of stdout")
+    pmt = _sub(sub, "merge-tags", "tags",
+               "merge/rename one or more tags into a target tag across concept frontmatter")
+    pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows")
+    pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name")
+    pmt.add_argument("--scope", metavar="TARGET",
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+    pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    pnt = _sub(sub, "normalize-tags", "tags",
+               "convert inline `tags: [...]` fields to YAML block-list form (local convention)")
+    pnt.add_argument("--scope", metavar="TARGET",
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+    pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pp = _sub(sub, "prime", "navigation",
               "one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")
     pp.add_argument("--full", action="store_true",
                      help="print full per-bundle blocks (description+directories+types+tags) "
                           "instead of the default compact name+count listing")
-    _sub(sub, "info", "navigation",
-         "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
-    pt = _sub(sub, "toc", "navigation",
-              "print a concept's headings (default: h2 only)")
-    pt.add_argument("path")
-    pt.add_argument("--level", type=int, default=2,
-                    help="heading level to list (default 2 = h2); 0 = full indented tree")
-    pv = _sub(sub, "visualize", "navigation",
-              "write a self-contained viz.html graph for a bundle")
-    pv.add_argument("bundle")
-    pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
+    pr = _sub(sub, "read", "navigation", "print one concept page")
+    pr.add_argument("path")
     prf = _sub(sub, "refs", "search",
                "list inbound markdown references to a file")
     prf.add_argument("path", help="target file (abs, or relative to --root)")
     prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide")
     prf.add_argument("--json", action="store_true")
-    prw = _sub(sub, "rewrite-path", "maintenance",
-               "literal path-string rewrite across text files")
-    prw.add_argument("old")
-    prw.add_argument("new")
-    prw.add_argument("--scan-root", help="dir to scan (default: --root)")
-    prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
-    prn = _sub(sub, "rename", "maintenance",
-               "move a concept + rewrite every inbound/outbound link + reindex (dry-run default)")
-    prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)")
-    prn.add_argument("new", help="destination path (same or different bundle)")
-    prn.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
-    prn.add_argument("--force", action="store_true", help="overwrite an existing destination")
-    _sub(sub, "build-index", "search",
-         "(re)build the FTS5 lexical search index at "
-         "<root>/.fts/fts.sqlite (local only, no network)")
     px = _sub(sub, "reindex", "maintenance",
               "(re)generate marker-bounded index.md listings")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
@@ -2733,11 +2730,24 @@ def build_parser():
                     help="dry-run: with --init preview conversions; else report stale + uncovered. No writes")
     px.add_argument("--force", action="store_true",
                     help="with --init, also flatten a pure multi-section listing (prose/tables still refuse)")
-    pl = _sub(sub, "log", "navigation",
-              "render git history for the catalogue or a bundle as a SPEC §7 changelog")
-    pl.add_argument("bundle", nargs="?", help="bundle to scope to (default: whole catalogue)")
-    pl.add_argument("--since", help="git --since filter, e.g. '3 months ago'")
-    pl.add_argument("--write", action="store_true", help="materialize into <scope>/log.md instead of stdout")
+    prt = _sub(sub, "remove-tags", "tags",
+               "remove one or more tags from concept frontmatter (no merge target)")
+    prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft")
+    prt.add_argument("--scope", metavar="TARGET",
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+    prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    prn = _sub(sub, "rename", "maintenance",
+               "move a concept + rewrite every inbound/outbound link + reindex (dry-run default)")
+    prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)")
+    prn.add_argument("new", help="destination path (same or different bundle)")
+    prn.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
+    prn.add_argument("--force", action="store_true", help="overwrite an existing destination")
+    prw = _sub(sub, "rewrite-path", "maintenance",
+               "literal path-string rewrite across text files")
+    prw.add_argument("old")
+    prw.add_argument("new")
+    prw.add_argument("--scan-root", help="dir to scan (default: --root)")
+    prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
     pg = _sub(sub, "tags", "tags",
               "list all tags with usage counts, or fuzzy-search candidate tags")
     pg.add_argument("query", nargs="*",
@@ -2749,38 +2759,16 @@ def build_parser():
                     help="add tag(s) to the TAGS.md registry (closed-vocabulary allow-list)")
     pg.add_argument("--validate", nargs="+", metavar="TAG",
                     help="check tag(s) against TAGS.md; exit 1 if any are unregistered")
-    pmt = _sub(sub, "merge-tags", "tags",
-               "merge/rename one or more tags into a target tag across concept frontmatter")
-    pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows")
-    pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name")
-    pmt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
-    pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
-    prt = _sub(sub, "remove-tags", "tags",
-               "remove one or more tags from concept frontmatter (no merge target)")
-    prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft")
-    prt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
-    prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
-    pnt = _sub(sub, "normalize-tags", "tags",
-               "convert inline `tags: [...]` fields to YAML block-list form (local convention)")
-    pnt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
-    pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
-    pc = _sub(sub, "check", "maintenance",
-              "conformance scan: §9 hard rules + local invariants")
-    pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
-    pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
-    pc.add_argument("--json", action="store_true", help="machine-readable output")
-    pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)")
-    pfx = _sub(sub, "fix-crosslinks", "maintenance",
-               "rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
-    pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
-    pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
-    pfxt = _sub(sub, "fix-xml-tags", "maintenance",
-                "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
-    pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
-    pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
+    pt = _sub(sub, "toc", "navigation",
+              "print a concept's headings (default: h2 only)")
+    pt.add_argument("path")
+    pt.add_argument("--level", type=int, default=2,
+                    help="heading level to list (default 2 = h2); 0 = full indented tree")
+    pv = _sub(sub, "visualize", "navigation",
+              "write a self-contained viz.html graph for a bundle")
+    pv.add_argument("bundle")
+    pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
+    ap.epilog = render_command_overview(sub)
     return ap
 
 

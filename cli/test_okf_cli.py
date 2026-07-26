@@ -6,6 +6,7 @@ Run: python3 -m unittest test_okf_cli -v
 import importlib.util
 import json
 import os
+import re
 import shutil
 import sqlite3
 import struct
@@ -2646,6 +2647,35 @@ class FindOptionHelp(unittest.TestCase):
         help_text = self._find_action("expand_tags").help or ""
         self.assertNotIn("until measured", help_text)
         self.assertIn("measured", help_text)
+
+
+class CommandDirectoryOrder(unittest.TestCase):
+
+    def test_commands_are_listed_alphabetically(self):
+        names = list(okf.subcommand_parsers(okf.build_parser()))
+        self.assertEqual(names, sorted(names))
+
+    def test_top_level_help_points_at_per_command_help(self):
+        self.assertIn("<command> --help", okf.build_parser().format_help())
+
+
+class GroupedOverview(unittest.TestCase):
+
+    def test_overview_names_every_group_that_has_commands(self):
+        text = okf.build_parser().format_help()
+        self.assertIn("commands by purpose:", text)
+        for group in okf._GROUP_ORDER:
+            self.assertIn("  {}:".format(group), text)
+
+    def test_overview_covers_every_command(self):
+        text = okf.build_parser().format_help()
+        overview = text.split("commands by purpose:", 1)[1]
+        for name in okf.COMMAND_GROUPS:
+            self.assertRegex(overview, r"\n\s+{}\s".format(re.escape(name)))
+
+    def test_module_docstring_no_longer_lists_commands_by_hand(self):
+        self.assertNotIn("okf-cli.py find", okf.__doc__)
+        self.assertNotIn("okf-cli.py merge-tags", okf.__doc__)
 
 
 if __name__ == "__main__":
