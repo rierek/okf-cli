@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-07-26T12:25:37Z
-updated_at: 2026-07-26T13:03:40Z
+updated_at: 2026-07-26T14:34:11Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-g0gi
@@ -43,3 +43,23 @@ Minimum: add `build-index` to `_COMMANDS` with a tool wrapper, so the remedy the
 ## Deliberately NOT decided here
 
 Which of the remaining ten commands belong on the MCP surface at all. That is a design decision for the PO — `visualize`, `log` and `info` are read-only and harmless; `merge-tags`, `remove-tags`, `normalize-tags`, `rewrite-path`, `rename` and the two `fix-*` commands mutate the catalogue, and putting them in an agent's hands is a question about blast radius, not about completeness. The PO asked for this to be raised as a defect, not for the wider surface to be settled.
+
+
+
+## Resolved by epic okf-cli-5uog (2026-07-26) — awaiting PO acceptance
+
+Left on `todo` deliberately: acceptance record, closing it is the PO's call at the review gate.
+
+Fixed by leaf `okf-cli-g0gi` (T06), commit `826fcbf`, reviewed APPROVED with independent re-verification.
+
+| Finding | Resolution |
+|---|---|
+| B07 — `find` tells an agent to run `okf-cli build-index`, which the agent cannot reach | `build-index` whitelisted, tool `okf_build_index` added |
+| B08 — `prime` ("start here in a new session") missing from the agent interface | `prime` whitelisted, tool `okf_prime` added |
+| B09 — `okf_find`'s docstring still described the pre-feature keyword search | Docstring rewritten: two arms, conditional handover, provenance, stderr degradations |
+
+Scope held to D04 exactly — `build-index`, `prime`, `info`, nothing else. Which of the remaining eight CLI commands belong on the agent surface stays open for the PO; `visualize` writes `viz.html` into the catalogue and the tag/fix/rewrite commands mutate catalogue content, so none of them is the read-only addition it appears to be.
+
+**One correction made against the plan, worth the PO's eye.** PLAN.md dictated a docstring sentence claiming every result line names its origin as `provenance: lexical` or `provenance: semantic`. That is false of the code: `cmd_find`'s print loop (`cli/okf-cli.py:1229-1230`) emits the `provenance:` line only for semantic hits — lexical hits carry the field internally and never print it. The implementer caught it and shipped a true sentence instead; the reviewer confirmed it at the code. Shipping the plan's text verbatim would have written a promise into the agent interface that the tool does not keep — the same defect class as B10, which this epic fixed in the CLI's own help.
+
+A regression guard came with it: `McpSurfaceParity` derives from `COMMAND_DISPATCH`, so a command whitelisted on the MCP side but renamed or removed on the CLI side now fails the suite.

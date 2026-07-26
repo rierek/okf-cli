@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: normal
 created_at: 2026-07-26T12:22:54Z
-updated_at: 2026-07-26T13:03:40Z
+updated_at: 2026-07-26T14:33:59Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-z0tt
@@ -37,3 +37,21 @@ Open design questions for whoever picks this up, deliberately not decided here:
 ## Constraint
 
 Standard library only, no install — the CLI's defining constraint (see the module docstring). Any solution using an external CLI framework is out.
+
+
+
+## Resolved by epic okf-cli-5uog (2026-07-26) — awaiting PO acceptance
+
+Left on `todo` deliberately: acceptance record, closing it is the PO's call at the review gate.
+
+The three design questions this bean raised were answered by the PO as D02/D03 and are now in code:
+
+| Question | Answer (decision) | Realised by | Commit |
+|---|---|---|---|
+| One source of truth for the command surface? | D02 — argparse is it; the hand-written docstring block is gone | okf-cli-z0tt, okf-cli-lbh1, okf-cli-8rwy | 67f7b3e, 4f6ac34, ecd2058 |
+| Flat listing or grouped by purpose? | D03 — both, from one source; neither is authored twice | okf-cli-8rwy (T04) | ecd2058 |
+| How does this stop recurring? | A conformance gate, so an undocumented command fails the suite | okf-cli-80nb (T05) | 7dade90 |
+
+The gate has been seen failing before it was trusted: dropping a `help=` from one argument makes `CommandHelpConformance` report `AssertionError: ['read path'] != []`, and the reviewer independently reproduced this for four separate invariants.
+
+**One limit the PO should know about.** The gate covers the 21 subcommands and their arguments, not the top-level parser's own options — an undocumented top-level option would pass. No live defect (`--root` is documented), and PLAN.md did not ask for that coverage. Filed as bug `okf-cli-x60r` with the mutation evidence, unscheduled, for the PO to prioritise.

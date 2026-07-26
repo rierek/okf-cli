@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-07-26T12:22:36Z
-updated_at: 2026-07-26T13:03:39Z
+updated_at: 2026-07-26T14:33:49Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-lbh1
@@ -45,3 +45,21 @@ Run against the shipped CLI on 2026-07-26:
 ## Scope note
 
 This bean covers the concrete, verifiable gaps above. The systemic request — a capability inventory and a self-documenting help system — is tracked separately as a feature, because it is a design task rather than a defect.
+
+
+
+## Resolved by epic okf-cli-5uog (2026-07-26) — awaiting PO acceptance
+
+Left on `todo` deliberately: this is an acceptance record, and closing it is the PO's call at the review gate, not the implementing agent's.
+
+Findings and the leaf that fixed each, all reviewed APPROVED by `ce-specs-reviewer` with independent re-verification:
+
+| Finding | Fixed by | Commit |
+|---|---|---|
+| B01 — `find`, `index`, `read` invisible in the command directory | okf-cli-lbh1 (T02) | 4f6ac34 |
+| B02 — `--limit` renders with an empty description | okf-cli-2ljd (T03) | ea18873 |
+| B03 — no pointer to `<command> --help` | okf-cli-8rwy (T04) | ecd2058 |
+| B04 — listing follows registration order, not alphabetical | okf-cli-8rwy (T04) | ecd2058 |
+| B05 — `--expand-tags` promises a measurement that already happened | okf-cli-2ljd (T03) | ea18873 |
+
+What to look at: `python3 cli/okf-cli.py --help` now lists all 21 commands alphabetically, each with a summary, followed by a purpose-grouped overview rendered from the same registrations, followed by the `<command> --help` pointer.
