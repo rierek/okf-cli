@@ -1688,5 +1688,40 @@ class SemanticBackstop(unittest.TestCase):
             okf._cosine = orig_cosine
 
 
+class TokenizeUnicode(unittest.TestCase):
+    """B01 — the catalogue is German. Splitting on [^a-z0-9]+ tore every
+    umlaut word in two ('qualitätsmanagement' -> 'qualit', 'tsmanagement'),
+    which silently changed what the lexical arm searches for. The measured
+    FTS arm tokenized on word characters (eval/fts_arm.py:56); the shipped
+    one must match it or it is not the arm that was measured."""
+
+    def test_umlaut_word_stays_one_token(self):
+        self.assertEqual(okf.tokenize("Qualitätsmanagement"),
+                         ["qualitätsmanagement"])
+
+    def test_sharp_s_stays_one_token(self):
+        self.assertEqual(okf.tokenize("Straßenbahn"), ["straßenbahn"])
+
+    def test_punctuation_still_separates(self):
+        self.assertEqual(okf.tokenize("mockup, tailscale!"),
+                         ["mockup", "tailscale"])
+
+    def test_underscore_still_separates(self):
+        self.assertEqual(okf.tokenize("build_tagvec"), ["build", "tagvec"])
+
+    def test_digits_survive(self):
+        self.assertEqual(okf.tokenize("bge-m3 2437"), ["bge", "m3", "2437"])
+
+    def test_mixed_case_lowercased(self):
+        self.assertEqual(okf.tokenize("MixedCASE Wort"),
+                         ["mixedcase", "wort"])
+
+    def test_non_latin_script_stays_whole(self):
+        """\\w is Unicode-aware, not just Latin-with-umlauts — a CJK term
+        must survive as one token too, same as an umlaut word does."""
+        self.assertEqual(okf.tokenize("知識管理 system"),
+                         ["知識管理", "system"])
+
+
 if __name__ == "__main__":
     unittest.main()

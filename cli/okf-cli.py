@@ -596,7 +596,10 @@ def cmd_index(root, args):
 
 
 def tokenize(s):
-    return [t for t in re.split(r"[^a-z0-9]+", s.lower()) if t]
+    """Lowercased word tokens. `\\w` is Unicode-aware in Python 3, so umlauts
+    and ß stay inside their token (B01); `_` is kept as a separator, matching
+    the previous behaviour for identifiers like build_tagvec."""
+    return [t for t in re.split(r"[\W_]+", s.lower(), flags=re.UNICODE) if t]
 
 
 def cmd_list(root, args):
