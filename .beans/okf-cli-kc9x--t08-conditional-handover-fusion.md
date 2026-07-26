@@ -1,11 +1,11 @@
 ---
 # okf-cli-kc9x
 title: T08 Conditional handover fusion
-status: in-progress
+status: completed
 type: task
 priority: critical
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T07:15:15Z
+updated_at: 2026-07-26T07:32:06Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-8j7l
@@ -157,3 +157,119 @@ slices — verified equivalent to the pre-T07 contract on 7 of 8 constructed edg
 being the duplicate-row case above). It is still your duty to DELETE it (`SC-SHIM`) — a
 correct shim is still the wrong place for dedup under conditional handover.
 Baseline entering T08: **234 tests, exactly 19 failures / 2 errors**.
+
+## Summary
+
+Implemented conditional handover fusion (D12/T12) per PLAN.md Task 8, literally:
+- `_keyword_top1_is_confident(hits)` rewritten to the measured rule `top1 >= (1 + SEMANTIC_MARGIN_RATIO) * top2` (i.e. 1.5x), handling `len(hits)==0` and `len(hits)==1` itself.
+- `SEMANTIC_NOISE_RATIO` deleted (constant + all runtime references); a doc comment records why, no runtime trace remains.
+- `fuse_conditional(lexical_hits, semantic_hits, limit) -> (hits, lexical_owned)` added: the owning arm's list first in its own order, the other arm's remainder appended behind, deduplicated by path keeping the owner's entry, truncated to `limit`. Ownership decided from intra-lexical margin only — never a cross-arm score comparison (bean PRELUDE property, preserved).
+- `cmd_find`'s old gate+pin+interleave block replaced with the plan's literal gate (`fuse_conditional` called unconditionally; semantic runs when lexical is not confidently owning OR the confident list is shorter than `--limit`) plus the "semantic arm owns this ranking" stderr note.
+- T07's `cmd_find` compatibility shim (post-hoc `exclude`-filter with over-fetch backfill) is deleted — SC-SHIM. `grep -n "exclude_paths\|exclude ="` on `cli/okf-cli.py` now returns only a docstring mention (`semantic_ranking` no longer takes `exclude_paths`), no functional code path.
+
+## Test-Output
+
+RED (Step 1/2, `env -u VOYAGE_API_KEY python3 -m unittest cli.test_okf_cli.FuseConditional cli.test_okf_cli.NoiseRatioIsGone -v`), before any implementation, quoted verbatim (tail):
+
+```
+ERROR: test_margin_band_matches_the_measured_rule (cli.test_okf_cli.FuseConditional.test_margin_band_matches_the_measured_rule)
+The measured rule is top1 >= 1.5*top2 (eval/hybrid_eval.py:151).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File ".../cli/test_okf_cli.py", line 1543, in test_margin_band_matches_the_measured_rule
+    out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+AttributeError: module 'okf_cli' has no attribute 'fuse_conditional'
+
+======================================================================
+FAIL: test_constant_removed (cli.test_okf_cli.NoiseRatioIsGone.test_constant_removed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File ".../cli/test_okf_cli.py", line 1559, in test_constant_removed
+    self.assertFalse(hasattr(okf, "SEMANTIC_NOISE_RATIO"))
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.002s
+
+FAILED (failures=1, errors=9)
+```
+
+GREEN, commit-point full suite (`env -u VOYAGE_API_KEY python3 -m unittest discover -s cli -p 'test_*.py'`), executed AFTER implementation and AFTER the mutation-probe revert below:
+
+```
+Ran 243 tests in 16.052s
+FAILED (failures=19, errors=2)
+```
+
+The 19F/2E is byte-identical in test-name terms to the pre-T08 baseline (`git stash` diff-checked): same 19 FAIL + 2 ERROR, all in the crosslink suites (`CheckCommand`, `FixCrosslinksCommand`, `RefMatrix`, `RenameConcept`, `ResolveCrosslinkTarget`, `RewriteCrosslinksInBody`) — none of them touched by this task. Count moved 234 -> 243 tests (+10 new `FuseConditional`/`NoiseRatioIsGone` tests, -1 removed `test_shim_backfills_when_excluded_paths_rank_inside_the_window`, net +9).
+
+Mutation probe (LL-01-style, on the ownership rule itself): edited `_keyword_top1_is_confident`'s return line from `top1 >= (1 + SEMANTIC_MARGIN_RATIO) * top2` to `top1 >= 2 * top2` (the pre-plan arithmetic), ran `FuseConditional` alone:
+
+```
+test_margin_band_matches_the_measured_rule ... FAIL
+  AssertionError: False is not true
+Ran 9 tests in 0.001s
+FAILED (failures=1)
+```
+
+The one test built specifically to pin the 1.5x/2x disagreement band caught the mutation; the other 8 (which don't sit in that band) stayed green, as expected. Reverted the single line via `Edit` back to the literal string `return top1 >= (1 + SEMANTIC_MARGIN_RATIO) * top2`; `git diff cli/okf-cli.py` after the revert shows that exact line as the only occurrence of `top1 >=`, i.e. no residual mutation. Re-ran the full commit-point suite: 19F/2E again (quoted above).
+
+## Smoke
+
+Live counter-probe (SC-06), `VOYAGE_API_KEY` presence-checked only (`[ -n "$VOYAGE_API_KEY" ] && echo set`, printed `set`, never the value), run as `python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "mockup tailscale" --limit 5`, verbatim:
+
+```
+note: semantic arm owns this ranking (lexical top-1 lacked a clear margin)
+------
+score: 56/100
+title: Tailscale
+type: Service
+path: home-lab-wiki/services/tailscale
+...
+provenance: semantic (cosine=0.56)
+------
+score: 56/100
+title: Tailscale — Claude-Kontext
+type: Reference
+path: home-lab-wiki/context/services/tailscale
+...
+provenance: semantic (cosine=0.56)
+------
+score: 55/100
+title: Excalidraw-Entwürfe bereitstellen (PNG + Direkt-Öffnen)
+type: SOP
+path: dev-wiki/testsystem-vite-tailscale/serve-excalidraw-drafts
+description: Ein gerendertes Excalidraw-Diagramm dem Nutzer auf einem anderen Tailnet-Gerät zeigen — als PNG-Vorschau UND als editierbare .excalidraw-Datei, über tailscale serve.
+...
+provenance: semantic (cosine=0.55)
+------
+score: 54/100
+title: Tailscale einrichten
+...
+------
+score: 54/100
+title: Portal Remote Review via tailscale serve
+...
+------
+```
+
+Target `dev-wiki/testsystem-vite-tailscale/serve-excalidraw-drafts` appears at rank 3, cosine 0.55, `provenance: semantic` — matches the PRELUDE's independently re-run figure (rank 3, cosine 0.5484) within rounding. SC-06 is "appears", not "rank 1" — met, no tuning applied to reach this. `~/Obsidian/Knowledge-Catalogue` left clean: `.fts/fts.sqlite` present and untouched after the manual reproduction runs below (verified `git status --short` empty in that repo both before and after this session; no commits made there).
+
+## Deviations/ERRATA
+
+1. **Three pre-existing `cli/test_okf_cli.py` tests updated, one deleted — all in-scope, all because the pre-T08 fixtures/assertions encode invariants D12 explicitly removes.** Per plan Step 5 ("check whether it asserts firing behaviour... or a different invariant"):
+   - `test_near_threshold_literal_top1_survives_unrelated_semantic` renamed to `test_confident_literal_top1_survives_unrelated_semantic_scale` and its rival fixture's body edited so the lexical top-1 is CONFIDENT under the new 1.5x rule (was deliberately ambiguous under the old rule, relying on the now-deleted absolute pin to still win). The underlying property it protects — a lexical top-1 must never be reordered by an unrelated semantic candidate's inflated raw score, because fusion never compares cross-arm scores — still holds and is still asserted.
+   - `test_find_without_index_prints_exactly_one_stderr_note` renamed to `test_find_without_index_prints_exactly_one_note_per_degraded_arm`, now expects 2 stderr lines instead of 1. Cause: SC-05 requires the semantic arm to fire whenever a confident lexical list is shorter than `--limit`, even a single-hit list — the old gate never invoked semantic in that case, so only the lexical-degradation note fired. Both arms are degraded in this fixture (no `.fts`, no `.tagvec`), so two independent PF-4 notes are now correct, not a violation of it (PF-4 is per-branch, not per-command).
+   - `test_shim_backfills_when_excluded_paths_rank_inside_the_window` **deleted** (not adapted): it pinned the T07 shim's over-fetch-by-`len(exclude)` backfill guarantee, which SC-SHIM requires removing outright. `fuse_conditional` does not pre-filter or over-fetch by design (D12) — the scenario's premise (a starved semantic window) does not exist in the new architecture, and its score pair (5 vs 3) is additionally CONFIDENT under the measured rule, unlike under the pre-plan rule it was tuned against. No replacement test — the invariant is gone by design, not narrowed to something else.
+
+2. **Ambient `VOYAGE_API_KEY` turns one unrelated integration test into a live-network test — not a T08 defect, but a live finding for T09.** `cli/test_eval_runner.py::RunnerAgainstRealCatalogueTest.test_runner_scores_literal_s1_top1` fails (`row["rank"] == inf`) when `VOYAGE_API_KEY` is exported in the shell, passes when it is not. Root cause, verified by direct reproduction: the S1/S4 golden fixtures (`cli/eval/fixtures.py`) are lexically near-identical by construction (score 5 vs 4, ratio 1.25) — genuinely ambiguous under both the old 2x rule AND the new 1.5x rule. Under the OLD architecture this didn't matter (the absolute pin always kept the lexical top-1 at rank 1 regardless of ambiguity). Under conditional handover, an ambiguous lexical arm hands the ranking to semantic; the eval runner's `FIND_LIMIT=50` then gets filled entirely by 50 real, unrelated `concept_emb` candidates (the fresh fixture is never embedded), squeezing the correct lexical hit out of the window entirely. This is exactly the kind of trade-off D12 accepts at the architecture level (milestone success measure tolerates up to 25% real-query zero-hit), but it makes an integration test's outcome depend on ambient environment state, which contradicts "tests network-free." I did **not** touch `cli/eval/fixtures.py`, `cli/eval/runner.py`, or `cli/test_eval_runner.py` to fix this — those files are outside Task 8's stated scope (`cli/okf-cli.py` + `cli/test_okf_cli.py` only), and Task 9's own file list already includes `cli/eval/runner.py:190-217 "(build the index before scoring)"`, which is plausibly the intended remedy (real FTS BM25 scoring, not the flat substring scan, may resolve the S1/S4 margin differently). All commit-point suite runs in this bean were executed with `env -u VOYAGE_API_KEY` for this reason; SC-07's 19F/2E is verified network-free.
+
+3. **No deviation from the plan's literal code.** `_keyword_top1_is_confident` and `fuse_conditional` are copied verbatim from PLAN.md Task 8 Step 3; the `cmd_find` gate/fusion block is copied verbatim from Step 4. `SEMANTIC_MARGIN_RATIO` was never touched (HARD STOP respected) except transiently during the mutation probe, reverted within the same tool call sequence before any commit.
+
+## Notes for T09 (okf-cli-uagv)
+
+- Baseline entering T09: **243 tests, exactly 19 failures / 2 errors**, verified with `VOYAGE_API_KEY` unset. All 19F/2E are pre-existing crosslink-suite failures, unrelated to retrieval.
+- Deviation #2 above is directly relevant to T09's `cli/eval/runner.py` changes ("build the index before scoring"): consider whether the re-measurement path should also pin/unset `VOYAGE_API_KEY` for determinism, or explicitly accept that a live key changes which arm owns ambiguous fixture queries. Building the FTS index before scoring may independently change the S1/S4 margin (BM25 vs. flat substring scoring) — worth checking whether `test_runner_scores_literal_s1_top1` passes cleanly once T09's index-build lands, with the key set.
+- `fuse_conditional`'s dedup performance is O(n) over both arms combined per query — no changes needed for T09's re-measurement to see accurate numbers, since Task 9 measures the shipped CLI via subprocess (`_run_cli`), not a re-implementation.
+- Live smoke confirms the "mockup tailscale" / R12 query surfaces the target at rank 3 (cosine 0.55) exactly as the PRELUDE predicted — T09's re-measurement should see this reflected in the aggregate MRR/zero-hit numbers for the real-query set.
+- `okf-cli-3520` (latent `concept_emb` duplicate-row awareness item, filed by T07) is unaffected by this task — `fuse_conditional` dedups by `path` at the hit-dict level, after `_semantic_hit_dicts` has already flattened `concept_emb` rows; it inherits the same one-row-per-path assumption `semantic_ranking`/`_load_concept_vectors` already carry, nothing new introduced here.
