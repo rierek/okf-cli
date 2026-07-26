@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-25T23:32:42Z
+updated_at: 2026-07-26T05:04:52Z
 parent: okf-cli-wuiv
 ---
 
@@ -60,3 +60,35 @@ Two numbering schemes meet here, deliberately:
 - **Footer `TASKS.md Txx`** = the pre-existing think-collection numbering in `docs/okf-retrieval-architecture/TASKS.md`, which predates the plan.
 
 They do not line up, and that is intended: e.g. bean "T01 Producer batching" implements `TASKS.md` T11, and bean "T12 Failure taxonomy" implements `TASKS.md` T03. Follow the bean title for order, the footer for provenance.
+
+
+
+## PF-1 — PO ruling 2026-07-26: serial execution, no worktree
+
+Question raised: run chain B (48qk...) in an isolated git worktree so it can proceed while
+chain A is mid-task?
+
+**Ruling: (a) serial, NO worktree.** Verbatim rationale from the PO:
+
+1. The parallelism would be nominal. This is ONE session; dispatching two ce-implementers
+   back-to-back or in two worktrees changes little — the critical path runs
+   T07 -> T08 -> T09 -> T13, and chain B is not the bottleneck in it.
+2. The price is disproportionate. `.beans/` is this repo's work-state authority. Two branches
+   both writing bean status produce merge conflicts in exactly the files that define progress —
+   more expensive than the time saved, and the kind of state damage that is not cleanly undone.
+3. Repo convention (tools/CLAUDE.md, docs/CLAUDE.md): worktree isolation exists for PARALLEL
+   AGENTS, not so a single agent can dodge a test-baseline collision. main-direct is expressly
+   allowed here.
+4. The 19F/2E baseline exists to catch cross-module regressions. Isolating it away defeats its
+   purpose.
+
+**Clarification that resolves the open part of the question:** chain B waits on **T01 only**,
+not on all of chain A. As soon as `okf-cli-pean` is green and committed, the tree is clean and
+`okf-cli-48qk` starts immediately — `okf-cli-c922` (the long production run) does NOT block
+chain B.
+
+**Test cadence for every leaf (supersedes nothing, adds precision):** while working INSIDE a
+task, module-scoped runs are fine and encouraged for fast cycles —
+`python3 -m unittest cli.test_embeddings_tagvec` or `python3 -m unittest cli.test_okf_cli`.
+The full `python3 -m unittest discover -s cli -p 'test_*.py'` run belongs at the COMMIT POINT,
+where the tree is clean anyway, and must show exactly 19 failures / 2 errors.
