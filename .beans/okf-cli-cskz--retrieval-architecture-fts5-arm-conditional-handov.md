@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T06:00:37Z
+updated_at: 2026-07-26T07:02:02Z
 parent: okf-cli-wuiv
 ---
 
@@ -261,3 +261,43 @@ instances in a single day, each one where silence was indistinguishable from suc
   everything.
 
 Applies to every remaining leaf, not just T06.
+
+
+
+## PF-5 — supervisor ruling (plan author) 2026-07-26: claims that end scrutiny must be scrutinised
+
+**A claim of the form "behaviour-preserving, verified" is the one that must be checked, not the
+one that may be skipped — because its function is to end further checking.**
+
+Origin: T07 (`okf-cli-8j7l`) shipped a `cmd_find` shim whose ERRATA read "preserving 100%
+prior observable behaviour... verified". The plan author read that sentence and approved the
+shim ("right bridge") without looking at the five lines that were directly available. The
+reviewer then reproduced a real behaviour change live: the shim ranks and slices semantic
+candidates to `limit` BEFORE excluding already-lexical paths, so excluded paths consume slots
+in the window and lower-ranked candidates are silently dropped. Verified against
+`git 91e2604^`: the predecessor `semantic_backstop` excluded INSIDE the `sorted()` generator
+(line 1037, `if path not in exclude_paths`), i.e. before the `[:limit]` cut. The shim filters
+an already-cut list.
+
+Ruling: fix the shim (exclude before ranking/slicing, plus a regression test for the overlap
+case) AND correct the ERRATA to the true statement — not delete it. Explicitly rejected as a
+shortcut: "T08 removes the shim anyway". T08 has not landed, can come back for rework, and
+until then wrong behaviour would sit on `main` documented as verified-correct — the worse
+variety of wrong.
+
+**Pattern, third occurrence in this chain — this is the one to carry into LESSONS-LEARNED:**
+each time the substance was roughly right and the *justification* did not hold.
+1. T02: a mutation probe recorded in the bean could not be reproduced by the reviewer.
+2. T06: "restored byte-identically, verified by size match" — `os.rename` never copies bytes,
+   so the size check verified nothing about the actual risk (exception-safety).
+3. T07: "preserving 100% prior observable behaviour... verified" — it did not preserve it.
+*Forward-guard:* reviewers must treat any "verified"/"equivalent"/"no behaviour change" phrase
+in a bean as a REVIEW TARGET, re-deriving the property from the pre-change code rather than
+reading the sentence. Implementers must state what was actually executed, not the conclusion
+drawn from it.
+
+**Counter-example of the standard wanted (same task, same agent):** SC-NET was proven by a
+socket-level guard patching `socket.socket.connect` to raise on any non-localhost address,
+across the full 233-test run, under three environment conditions (valid key, invalid key, no
+key) — zero real `connect()` calls in all three. That proves a negative instead of asserting
+it. That is the bar.
