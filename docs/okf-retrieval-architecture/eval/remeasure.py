@@ -23,12 +23,12 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 CLI = os.path.join(REPO, "cli", "okf-cli.py")
 
 
-def ranked_paths(root, query, limit):
+def ranked_paths(root, query, limit, extra=()):
     """Ordered result paths of one `okf-cli find`, plus its wall time."""
     t0 = time.time()
     proc = subprocess.run(
         [sys.executable, CLI, "--root", root, "find", query,
-         "--limit", str(limit)],
+         "--limit", str(limit), *extra],
         capture_output=True, text=True)
     elapsed = time.time() - t0
     paths = [line[len("path: "):] for line in proc.stdout.splitlines()
@@ -36,12 +36,12 @@ def ranked_paths(root, query, limit):
     return paths, elapsed
 
 
-def measure(root, rows, limit):
+def measure(root, rows, limit, extra=()):
     """The query files use the keys "query", "target", "source" — verified in
     queries_v2.json and queries_real.json. `target` is the concept path."""
     ranks, times = [], []
     for row in rows:
-        paths, elapsed = ranked_paths(root, row["query"], limit)
+        paths, elapsed = ranked_paths(root, row["query"], limit, extra)
         times.append(elapsed)
         target = row["target"]
         ranks.append(paths.index(target) + 1 if target in paths else None)
@@ -65,6 +65,9 @@ def main():
     ap.add_argument("--queries", nargs="+", required=True)
     ap.add_argument("--limit", type=int, default=10)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--find-arg", action="append", default=[], dest="find_args",
+                    help="extra argument passed through to `okf-cli find`; "
+                         "repeatable")
     args = ap.parse_args()
 
     root = os.path.abspath(os.path.expanduser(args.root))
@@ -74,9 +77,10 @@ def main():
         path = qf if os.path.isabs(qf) else os.path.join(HERE, qf)
         with open(path, encoding="utf-8") as f:
             rows = json.load(f)
-        result[os.path.basename(path)] = measure(root, rows, args.limit)
+        result[os.path.basename(path)] = measure(root, rows, args.limit,
+                                                  args.find_args)
         combined.extend(rows)
-    result["combined"] = measure(root, combined, args.limit)
+    result["combined"] = measure(root, combined, args.limit, args.find_args)
 
     print(json.dumps(result, indent=2))
     if args.out:
