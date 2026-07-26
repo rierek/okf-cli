@@ -4,7 +4,7 @@
 
 **Goal:** Make `okf-cli` tell the truth about what it can do — to a human at `--help` and to an agent over MCP — and make an undocumented command unmergeable rather than merely noticeable.
 
-**Architecture:** The argparse parser becomes the single source of truth for the command surface. Every subcommand is registered through one helper that takes its one-line summary and its purpose group; that one authored string reaches both help levels (`help=` in the top-level directory, `description=` at the top of `<command> --help`), and the grouped overview in the epilog is *rendered* from the registered parsers instead of hand-maintained in the module docstring. A conformance test asserts the invariants (every command has a summary, every option has help, every command is grouped and dispatchable), which converts the whole defect class from "notice it in a review" to "cannot merge it". The MCP surface stays a deliberately selective whitelist, but gains the three commands an agent cannot work without.
+**Architecture:** The argparse parser becomes the single source of truth for the command surface. Every subcommand is registered through one helper that takes its one-line summary and its purpose group; that one authored string reaches both help levels (`help=` in the top-level directory, `description=` at the top of `<command> --help`), and the grouped overview in the epilog is *rendered* from the registered parsers instead of hand-maintained in the module docstring. The one piece of genuine detail in the deleted docstring block — `find`'s scoring explanation — is not dropped: it moves into `find`'s own epilog, corrected on the way, so `<command> --help` gets richer rather than poorer (Task 2 Step 4b). Everything else in that block is a one-liner already carried by the summaries. A conformance test asserts the invariants (every command has a summary, every option has help, every command is grouped and dispatchable), which converts the whole defect class from "notice it in a review" to "cannot merge it". The MCP surface stays a deliberately selective whitelist, but gains the three commands an agent cannot work without.
 
 **Tech Stack:** Python 3 standard library only (`argparse`, `textwrap`). `unittest`. No install, no external CLI framework — the CLI's defining constraint (module docstring, `cli/okf-cli.py:1-6`).
 
@@ -23,10 +23,10 @@
 
 | Dxx | Decision | Source |
 |-----|----------|--------|
-| D01 | Strang A (this plan) and Strang B (zero-hit reachability) are separated. Strang B ships only a **measurement mandate** as a bean, no fix plan, because its fix depends on a number nobody has measured | PO 2026-07-26, this session |
-| D02 | **argparse is the single source of truth** for the capability surface. The hand-written `Commands:` prose block in the module docstring is replaced by a rendered overview; the example prose moves into the individual subparsers, so `<command> --help` gets richer rather than poorer. A conformance test enforces the invariants | PO 2026-07-26, closes 6zhw design question 1+2 |
+| D01 | Strang A (this plan) and Strang B (zero-hit reachability) are separated. Strang B gets a **measurement mandate** as its own bean, no fix plan, because its fix depends on a number nobody has measured. That bean does **not exist yet** — creating it is a pending action of the operationalization step, not of this plan; `okf-cli-snxj` still carries its original T10 content plus the PO reject | PO 2026-07-26, this session |
+| D02 | **argparse is the single source of truth** for the capability surface. The hand-written `Commands:` prose block in the module docstring is replaced by a rendered overview; `find`'s scoring detail — the only non-one-liner in that block — moves into `find`'s own epilog rather than being deleted. A conformance test enforces the invariants | PO 2026-07-26, closes 6zhw design question 1+2 |
 | D03 | **Both layouts, one source.** argparse's own listing stays flat and alphabetical (the PO's literal review request); a purpose-grouped overview is additionally rendered into the epilog. Two views cannot drift because both are generated | PO 2026-07-26, closes 6zhw design question 3 |
-| D04 | MCP gains **`build-index`, `prime`, `info`** and nothing else. All three leave catalogue content untouched (`build-index` writes only its own `.fts` artefact, locally, without network). The wider surface question — which of the remaining eight commands belong in an agent's hands — stays explicitly open | PO 2026-07-26, bounds 4ws6 |
+| D04 | MCP gains **`build-index`, `prime`, `info`** and nothing else. All three leave catalogue content untouched (`build-index` writes only its own `.fts` artefact, locally, without network). The wider surface question — which of the remaining eight commands belong in an agent's hands — stays explicitly open | PO 2026-07-26. The PO was offered three bundles (defect minimum only / these three / all non-mutating incl. `visualize`+`log`) and chose this one; `info` is therefore PO-selected, not plan-author bundling, even though the review itself named only `build-index` and `prime` |
 
 ## Findings this plan fixes (all reproduced live at plan time, not taken from the beans)
 
@@ -34,19 +34,37 @@
 |------|----------|---------|----------|
 | B01 | medium | `find`, `index` and `read` have no description line in the top-level command directory, because their `add_parser()` calls omit `help=` and argparse lists only subparsers that carry one. The primary command of the retrieval feature is invisible in its own CLI's directory | `cli/okf-cli.py:2584` (index), `:2596` (find), `:2610` (read) |
 | B02 | low | `--limit LIMIT` renders with an empty description column while every sibling option of `find` has one | `cli/okf-cli.py:2598` |
-| B03 | low | Neither the top-level help nor any subcommand help tells the reader that per-command detail exists at `<command> --help` | `cli/okf-cli.py:2579-2581` (no `epilog`) |
+| B03 | low | Neither the top-level help nor any subcommand help tells the reader that per-command detail exists at `<command> --help` | `cli/okf-cli.py:2579-2580` (no `epilog`) |
 | B04 | low | The command listing follows registration order (`index, list, find, read, prime, info, toc, visualize, …`), not alphabetical | `cli/okf-cli.py:2584-2692` |
 | B05 | medium | `--expand-tags` advertises itself as "experimental, off by default **until measured**". It was measured (T11, bean `okf-cli-ftri`), the result was negative for structural reasons, and the flag stays off — the help text promises a pending decision that has been made (Q05, D17) | `cli/okf-cli.py:2606-2609` |
 | B06 | medium | Nine positionals/options across six subcommands carry no help at all: `index bundle` `:2585`, `find query` `:2597`, `find --limit` `:2598`, `read path` `:2611`, `toc path` `:2618`, `visualize bundle` `:2622`, `refs --json` `:2627`, `rewrite-path old` `:2629`, `rewrite-path new` `:2630` | `cli/okf-cli.py` as listed |
 | B07 | high | An agent over MCP is told `note: lexical index is stale (catalogue changed since build) — run 'okf-cli build-index'` and cannot follow it: `build-index` is not on the MCP surface. Reproduced live against `~/Obsidian/Knowledge-Catalogue` at plan time — the stale note printed, and `mcp/okf_mcp.py:7-17` whitelists 10 of the CLI's 21 commands, `build-index` not among them | `mcp/okf_mcp.py:7-17` |
 | B08 | medium | `prime` — documented as "one-shot agent onboarding … start here in a new session" — is missing from the agent interface | `mcp/okf_mcp.py:7-17` |
-| B09 | medium | `okf_find`'s MCP docstring still describes the pre-feature keyword search ("Ranked keyword search across a catalogue/repo root…"). An MCP consumer cannot learn from it that results may come from either of two arms, that `provenance:` lines exist, or that degradation notes appear on stderr | `mcp/okf_mcp.py:76-81` |
+| B09 | medium | `okf_find`'s MCP docstring still describes the pre-feature keyword search ("Ranked keyword search across a catalogue/repo root…"). An MCP consumer cannot learn from it that results may come from either of two arms, that `provenance:` lines exist, or that degradation notes appear on stderr | `mcp/okf_mcp.py:79-80` |
+| B10 | medium | The docstring block being deleted documents `find`'s score as `achieved/max ("4/6") — 3 title-hit + 2 tag-hit + 1 body-hit per term … max = 6 * number of terms`. That is only true of the **substring fallback**. Since the FTS arm shipped, `_rank_lexically()` returns a 0..100 scale relative to the run's own top hit, and semantic hits are `round(100 * cosine)` — which is why a live query prints `score: 46/100`. The prose to be carried into `find`'s epilog therefore has to be corrected, not copied | `cli/okf-cli.py:16-19` (stale prose) vs `:912-928` (`_rank_lexically`), `:1140-1152` (`_semantic_hit_dicts`) |
+
+### Live evidence for B07-B09 (LL-13: the command, not the conclusion)
+
+```
+$ python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "zzzzqqqq" --limit 3
+note: lexical index is stale (catalogue changed since build) — run `okf-cli build-index`
+note: semantic arm owns this ranking (lexical top-1 lacked a clear margin)
+------
+score: 46/100
+title: QMunity
+type: Concept
+path: qm-wiki/documented-information/basics/qmunity
+...
+provenance: semantic (cosine=0.46)
+```
+
+The first stderr line is the instruction an MCP consumer receives and cannot execute (B07). The whitelist it would need is `mcp/okf_mcp.py:7-17` — ten entries: `find, read, toc, index, list, check, reindex, refs, rename, tags`, against the CLI's 21 subcommands; neither `build-index` (B07) nor `prime` (B08) is among them. `okf_find`'s docstring at `mcp/okf_mcp.py:79-80` reads `"""Ranked keyword search across a catalogue/repo root, composable with exact-match type/tag filters and a bundle/subdir scope."""` — no arm, no provenance, no degradation (B09). The same transcript is also the live proof for the `score: …/100` scale in B10.
 
 ## File structure
 
 | File | Responsibility | Change |
 |------|----------------|--------|
-| `cli/okf-cli.py` | The CLI. Gains `build_parser()`, `_sub()`, `COMMAND_GROUPS`, `_GROUP_ORDER`, `render_command_overview()`, `subcommand_parsers()`, `parser_actions()`, `COMMAND_DISPATCH`; `main()` shrinks to parse + dispatch; the module docstring loses its hand-written command block | Modify `:1-52` (docstring), `:49-62` (imports), `:2578-2712` (parser + main) |
+| `cli/okf-cli.py` | The CLI. Gains `build_parser()`, `_sub()`, `COMMAND_GROUPS`, `_GROUP_ORDER`, `render_command_overview()`, `subcommand_parsers()`, `parser_actions()`, `COMMAND_DISPATCH`; `main()` shrinks to parse + dispatch; the module docstring loses its hand-written command block | Modify `:8-45` (docstring command block), `:49-62` (imports), `:2578-2712` (parser + main) |
 | `cli/test_okf_cli.py` | Tests for the CLI, loaded via `importlib` (`:15-18`) | Append classes `ParserExtraction`, `CommandDirectory`, `FindOptionHelp`, `CommandDirectoryOrder`, `GroupedOverview`, `CommandHelpConformance` |
 | `mcp/okf_mcp.py` | Thin subprocess wrapper. Gains three whitelist entries and three tool wrappers; `okf_find`'s docstring is rewritten | Modify `:7-17` (`_COMMANDS`), `:76-81` (`okf_find` docstring), append tools in `_register()` |
 | `cli/test_okf_mcp.py` | Integration tests at the MCP → subprocess boundary | Append classes `McpAgentRemedyBoundary`, `McpSurfaceParity` |
@@ -58,7 +76,7 @@ No new files. The plan deliberately does not split `cli/okf-cli.py` — it is a 
 | Task | Serves | Why |
 |------|--------|-----|
 | 1 | `okf-cli-6zhw` | Extraction is the precondition for testing help output at all |
-| 2 | `okf-cli-6zhw` + `okf-cli-3suc` (B01) | The registration helper is where the three missing summaries land |
+| 2 | `okf-cli-6zhw` + `okf-cli-3suc` (B01, B10) | The registration helper is where the three missing summaries land, and where `find`'s corrected scoring prose gets a home |
 | 3 | `okf-cli-3suc` (B02, B05) | The two remaining option-text defects |
 | 4 | `okf-cli-3suc` (B03, B04) + `okf-cli-6zhw` (D03) | Sorting, pointer and the generated grouped overview are one rendering change |
 | 5 | `okf-cli-6zhw` (B06) | The conformance gate and the nine arguments it catches |
@@ -229,6 +247,13 @@ class CommandDirectory(unittest.TestCase):
     def test_every_command_declares_a_group(self):
         parsers = okf.subcommand_parsers(okf.build_parser())
         self.assertEqual(set(okf.COMMAND_GROUPS), set(parsers))
+
+    def test_find_help_explains_both_score_scales(self):
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        text = parsers["find"].format_help()
+        self.assertIn("100", text)
+        self.assertIn("6 * number of terms", text)
+        self.assertIn("provenance", text)
 ```
 
 - [ ] **Step 2: Run it, confirm it fails for the stated reason**
@@ -238,7 +263,7 @@ rm -rf cli/__pycache__
 python3 -m unittest cli.test_okf_cli.CommandDirectory -v
 ```
 
-Expected: `test_find_index_read_are_no_longer_invisible` fails with `find has no summary`, and `test_every_command_declares_a_group` fails with `AttributeError: … COMMAND_GROUPS`.
+Expected: `test_find_index_read_are_no_longer_invisible` fails with `find has no summary`; `test_every_command_declares_a_group` fails with `AttributeError: … COMMAND_GROUPS`; `test_find_help_explains_both_score_scales` fails with `'6 * number of terms' not found in …`.
 
 - [ ] **Step 3: Add the registration helper**
 
@@ -275,8 +300,9 @@ Replace each `sub.add_parser(...)` call in `build_parser()` with the `_sub()` fo
               "catalogue TOC (bundles, descriptions, concept counts), or one "
               "bundle's index.md")
     pf = _sub(sub, "find", "search",
-              "hybrid ranked search: a lexical FTS5/BM25 arm and a semantic "
-              "embedding arm, one of them owning the ranking per query")
+              "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
+              formatter_class=argparse.RawDescriptionHelpFormatter,
+              epilog=_FIND_EPILOG)
     pr = _sub(sub, "read", "navigation", "print one concept page")
 ```
 
@@ -307,6 +333,29 @@ Example of a conversion that keeps existing text (do the same for the rest):
          "(local only, no network)")
 ```
 
+`find` is the one command whose summary alone loses information (B10, D02), so it keeps a verbatim epilog — which is why its registration passes `RawDescriptionHelpFormatter` and why its summary is kept to a single line: that formatter prints the description verbatim too, and a 140-character summary would render as one unwrapped line.
+
+- [ ] **Step 4b: Carry `find`'s scoring detail into its epilog — corrected**
+
+The deleted docstring block claims `score … max = 6 * number of terms` for every `find` result. That has been wrong since the FTS arm shipped: `_rank_lexically()` (`cli/okf-cli.py:912-928`) returns a 0..100 scale relative to the run's own top hit and only falls back to `6 * len(terms)` when no FTS index is usable, and `_semantic_hit_dicts()` (`:1140-1152`) scores semantic hits as `round(100 * cosine)`. Copying the old prose forward would carry a stale claim into the new help. Insert above `def build_parser():`:
+
+```python
+_FIND_EPILOG = """\
+score lines:
+  The two arms report on different scales, and `score: a/b` names the scale
+  in use, not a confidence:
+    a/100        the FTS5/BM25 lexical arm (relative to this run's own top
+                 hit) and the semantic arm (round(100 * cosine)).
+    a/(6 * n)    the substring fallback used when no FTS index is available:
+                 per query term 3 for a title hit, 2 for a tag hit, 1 for a
+                 body hit, capped at one per field per term — so the maximum
+                 is 6 * number of terms.
+  `provenance:` names the arm that produced the line; on a semantic hit it
+  also prints the cosine. Degradations (index absent or stale, embedding
+  backend unavailable) are announced on stderr, one note per degraded arm.
+"""
+```
+
 - [ ] **Step 5: Run the tests**
 
 ```bash
@@ -315,7 +364,7 @@ python3 -m unittest cli.test_okf_cli.CommandDirectory cli.test_okf_cli.ParserExt
 python3 -m unittest discover -s cli -p "test_*.py" 2>&1 | tail -3
 ```
 
-Expected: 5 tests OK; suite `Ran 264 tests`, exactly `failures=19, errors=2`.
+Expected: 6 tests OK; suite `Ran 265 tests`, exactly `failures=19, errors=2`.
 
 - [ ] **Step 6: Look at the result with your own eyes**
 
@@ -404,7 +453,7 @@ python3 -m unittest cli.test_okf_cli.FindOptionHelp -v
 python3 -m unittest discover -s cli -p "test_*.py" 2>&1 | tail -3
 ```
 
-Expected: 2 tests OK; suite `Ran 266 tests`, exactly `failures=19, errors=2`.
+Expected: 2 tests OK; suite `Ran 267 tests`, exactly `failures=19, errors=2`.
 
 - [ ] **Step 5: Commit**
 
@@ -512,11 +561,11 @@ Then, immediately before `return ap`:
     ap.epilog = render_command_overview(sub)
 ```
 
-The top-level parser already uses `RawDescriptionHelpFormatter` (`cli/okf-cli.py:2580-2581`), so the epilog is printed verbatim — which is why `render_command_overview()` wraps its own lines.
+The top-level parser already uses `RawDescriptionHelpFormatter` (`cli/okf-cli.py:2579-2580`), so the epilog is printed verbatim — which is why `render_command_overview()` wraps its own lines.
 
 - [ ] **Step 6: Shrink the module docstring**
 
-Replace the `Commands:` block (`cli/okf-cli.py:8-50`, from the line `Commands:` up to and including the `rename` entry) with:
+Replace the `Commands:` block — `cli/okf-cli.py:8-45`, i.e. from the line `Commands:` (`:8`) up to and including the `rename` entry's last continuation line `change, then reindex affected bundles; dry-run default` (`:45`) — with:
 
 ```
 Run `okf-cli.py --help` for the command directory (flat + grouped by purpose),
@@ -524,7 +573,7 @@ and `okf-cli.py <command> --help` for one command's options. Both are generated
 from the parser — this file documents no command list by hand.
 ```
 
-Keep the first paragraph (`:2-6`, purpose + catalogue definition + stdlib constraint) and the closing `Run from the catalogue root, or pass --root <path>.` line unchanged.
+Keep the first paragraph (`:2-6`, purpose + catalogue definition + stdlib constraint) unchanged, and keep the blank line `:46`, the closing `Run from the catalogue root, or pass --root <path>.` (`:47`) and the docstring terminator `"""` (`:48`) exactly where they are — the replacement range ends at `:45` and must not swallow them.
 
 - [ ] **Step 7: Run the tests**
 
@@ -534,7 +583,7 @@ python3 -m unittest cli.test_okf_cli.CommandDirectoryOrder cli.test_okf_cli.Grou
 python3 -m unittest discover -s cli -p "test_*.py" 2>&1 | tail -3
 ```
 
-Expected: 5 tests OK; suite `Ran 271 tests`, exactly `failures=19, errors=2`.
+Expected: 5 tests OK; suite `Ran 272 tests`, exactly `failures=19, errors=2`.
 
 - [ ] **Step 8: Read the help as a user would**
 
@@ -606,11 +655,11 @@ python3 -m unittest cli.test_okf_cli.CommandHelpConformance -v
 Expected: `test_every_option_and_positional_has_help` fails with a list of nine entries — `['find limit', ...]` will already be gone (Task 3), so the list should read exactly:
 
 ```
-['find query', 'index bundle', 'read path', 'refs json', 'rewrite-path new',
- 'rewrite-path old', 'toc path', 'visualize bundle']
+['find query', 'index bundle', 'read path', 'refs json', 'rewrite-path old',
+ 'rewrite-path new', 'toc path', 'visualize bundle']
 ```
 
-That is eight, because `find --limit` was fixed in Task 3. If the list differs, stop and reconcile against B06 before changing anything — a longer list means the plan's inventory was incomplete and the extra entries need their own help text written here.
+That is eight, because `find --limit` was fixed in Task 3. The list is built by iterating commands in sorted order and their actions in **registration** order, which is why `rewrite-path old` precedes `rewrite-path new` (`cli/okf-cli.py:2629-2630`) — not alphabetical within a command. If the list differs, stop and reconcile against B06 before changing anything — a longer list means the plan's inventory was incomplete and the extra entries need their own help text written here.
 
 - [ ] **Step 3: Give the eight arguments help text**
 
@@ -635,7 +684,7 @@ python3 -m unittest cli.test_okf_cli.CommandHelpConformance -v
 python3 -m unittest discover -s cli -p "test_*.py" 2>&1 | tail -3
 ```
 
-Expected: 3 tests OK; suite `Ran 274 tests`, exactly `failures=19, errors=2`.
+Expected: 3 tests OK; suite `Ran 275 tests`, exactly `failures=19, errors=2`.
 
 - [ ] **Step 5: Prove the gate actually bites (mutation self-test)**
 
@@ -666,7 +715,7 @@ git commit -m "feat(cli): conformance gate for help coverage"
 ### Task 6: Reach `build-index`, `prime` and `info` over MCP
 
 **Files:**
-- Modify: `mcp/okf_mcp.py:7-17` (`_COMMANDS`), `:76-81` (`okf_find` docstring), `_register()` (three new tools)
+- Modify: `mcp/okf_mcp.py:7-17` (`_COMMANDS`), `:79-80` (`okf_find` docstring), `_register()` (three new tools)
 - Test: `cli/test_okf_mcp.py` (append)
 
 **Interfaces:**
@@ -763,7 +812,7 @@ Append inside `_register()`, before `return server`:
 
 - [ ] **Step 5: Rewrite `okf_find`'s docstring (B09)**
 
-Replace the docstring at `mcp/okf_mcp.py:78-79`:
+Replace the docstring at `mcp/okf_mcp.py:79-80`:
 
 ```python
         """Ranked search across a catalogue/repo root, composable with
@@ -790,7 +839,7 @@ python3 -m unittest cli.test_okf_mcp -v 2>&1 | tail -5
 python3 -m unittest discover -s cli -p "test_*.py" 2>&1 | tail -3
 ```
 
-Expected: the MCP module's tests all pass; suite `Ran 278 tests`, exactly `failures=19, errors=2`.
+Expected: the MCP module's tests all pass; suite `Ran 279 tests`, exactly `failures=19, errors=2`.
 
 - [ ] **Step 7: Commit**
 
@@ -803,7 +852,7 @@ git commit -m "fix(mcp): expose build-index, prime, info"
 
 ## Out of scope, deliberately
 
-**Strang B — the unreachable zero-hit branch (`okf-cli-snxj`).** The PO decided on 2026-07-26 that this plan does not carry a fix for it. What ships instead is a measurement mandate as its own bean, because the fix depends on a number nobody has measured, and this chain has thrown away three retrieval intuitions that turned out to be wrong when measured (chunking, the absolute cosine floor, "lexical is the biggest lever"). A threshold chosen by a plan author would be exactly the overfitting that was avoided three times.
+**Strang B — the unreachable zero-hit branch (`okf-cli-snxj`).** The PO decided on 2026-07-26 that this plan does not carry a fix for it. What ships instead is a measurement mandate as its own bean — which does not exist yet and is created at operationalization, not by this plan — because the fix depends on a number nobody has measured, and this chain has thrown away three retrieval intuitions that turned out to be wrong when measured (chunking, the absolute cosine floor, "lexical is the biggest lever"). A threshold chosen by a plan author would be exactly the overfitting that was avoided three times.
 
 One correction the measurement bean must carry, found while grounding this plan: **R34 is not the answer to this question.** R34 rejected an absolute cosine floor (Q12/T06, status 🔴) on the evidence that correct rank-1 targets and best false hits overlap completely — but that was measured exclusively on queries that *have* a target in the catalogue. The population in `okf-cli-snxj` is the opposite one: queries with no target at all. Its top-1 cosine distribution has never been measured, because all 48 evaluation queries have targets. The one live data point (nonsense query tops out at 0.46, minimum correct target sits at 0.494 per R34) suggests separation may exist, at n=1. The counter-evidence in the same dataset is just as concrete: the two `synonymy` zero-hits in `eval/taxonomy.md` sit at cosine 0.40 and 0.35, so a floor around 0.47 would destroy precisely the cases the feature exists to rescue. That asymmetry is why the bean must measure *both* candidate mechanisms — a suppressing floor, and a confidence bar that keeps the results but adds the suggestion line — against the same data, and recommend rather than ship.
 
@@ -817,4 +866,4 @@ One correction the measurement bean must carry, found while grounding this plan:
 
 **Type consistency.** `build_parser()`, `subcommand_parsers()`, `parser_actions()` and `COMMAND_DISPATCH` are defined in Task 1 and used under those exact names in Tasks 2-6. `_sub(sub, name, group, summary, **kwargs)`, `COMMAND_GROUPS` and `_GROUP_ORDER` are defined in Task 2 and used under those names in Tasks 4 and 5. `render_command_overview(sub)` is defined and called in Task 4 only. The test classes referenced across tasks (`ParserExtraction`, `CommandDirectory`, `FindOptionHelp`, `CommandDirectoryOrder`, `GroupedOverview`, `CommandHelpConformance`, `McpAgentRemedyBoundary`, `McpSurfaceParity`) are each defined exactly once.
 
-**Test-count arithmetic.** 259 baseline + 2 (T1) + 3 (T2) + 2 (T3) + 5 (T4) + 3 (T5) + 4 (T6) = 278. The per-task expectations above use these running totals; if a count is off by more than the tests you wrote, something else changed and you investigate before continuing.
+**Test-count arithmetic.** 259 baseline + 2 (T1) + 4 (T2) + 2 (T3) + 5 (T4) + 3 (T5) + 4 (T6) = 279. The per-task expectations above use these running totals; if a count is off by more than the tests you wrote, something else changed and you investigate before continuing.
