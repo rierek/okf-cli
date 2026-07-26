@@ -1,11 +1,11 @@
 ---
 # okf-cli-ntc8
 title: T05 FTS5 index + build-index command
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-25T23:25:11Z
+updated_at: 2026-07-26T05:41:35Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-48qk
@@ -54,3 +54,47 @@ _Requirements: PLAN.md Task 5 · DECISIONS D14, D15 · TASKS.md T13 · REFERENCE
 ## Recommended Skills
 
 - `superpowers:test-driven-development`
+
+
+
+## PRELUDE 2026-07-26 — carried over from the T04 review (ce-specs-reviewer on okf-cli-48qk)
+
+Handle these BEFORE the T05 work proper; the first one is substantive for your task.
+
+**I01 (low, but it lands exactly on your seam).** The shipped `tokenize()` is NOT fully
+equivalent to the measured tokenizer, and T04's bean summary slightly overstates parity
+("matches the FTS arm tokenization measured in eval/fts_arm.py:56").
+
+- Shipped: `re.split(r"[\W_]+", s.lower())` at `cli/okf-cli.py:598-602` — splits on underscore.
+- Measured: `[^\wäöüÄÖÜß]+` at `docs/okf-retrieval-architecture/eval/fts_arm.py:56` — does NOT
+  split on underscore. Note the `äöüÄÖÜß` clause there is INERT: `\w` already covers those
+  characters under Python 3, so the measured regex reduces to plain `\W+`.
+- Verified divergence: `tokenize("build_tagvec")` -> `['build','tagvec']` vs measured
+  `['build_tagvec']`; same for `café_menü`. Across German words, ß, digits, CJK and accented
+  non-German Latin the two agree — underscore is the only disagreement dimension.
+- Why it does not invalidate D14: the reviewer checked all three measured query sets
+  (`queries_generated.json`, `queries_v2.json`, `queries_real.json`, 98 queries) and none
+  contains an underscore, so R43's 0.437 is unaffected. Underscore-splitting is also mandated
+  by T04's own AC2/SC-02 and matches the previous behaviour for identifiers.
+
+**What you must do with it:** decide and document explicitly how the QUERY side tokenizes
+relative to what goes into the FTS index, instead of leaving parity implied. Keep in mind the
+layering already noted by T04: the Python-level `tokenize()` does NOT fold (ä stays ä), while
+FTS5's own `unicode61` tokenizer inside SQLite folds (ä -> a, per REFERENCES R41). Two layers,
+different rules — be deliberate about which one you are in at each call site.
+
+**I02 (low, cosmetic, optional).** `flags=re.UNICODE` at `cli/okf-cli.py:601` is a no-op in
+Python 3 (proven: dropping it left all 7 `TokenizeUnicode` tests green). Not wrong, just
+misleading about why the fix works. If you touch that line anyway, drop the flag or fix the
+docstring; do not make a separate commit for it.
+
+**I03 (cosmetic).** T04's bean still shows its 5 step checkboxes unticked despite
+`status: completed`. Bookkeeping only, mentioned so the pattern is not repeated: tick your own
+boxes as you go.
+
+**Verified context you can build on:** `tokenize()` has exactly two callers,
+`cli/okf-cli.py:772` (`_semantic_hit_dicts`) and `cli/okf-cli.py:792` (`cmd_find`), both
+introduced by this plan — no pre-existing caller relies on the old ASCII-only splitting.
+Baseline entering T05: 204 tests, 19 failures / 2 errors.
+
+Source: ce-specs-reviewer APPROVED verdict on okf-cli-48qk, 2026-07-26 (commits 4ee120d, b721cf4).
