@@ -1,11 +1,11 @@
 ---
 # okf-cli-kc9x
 title: T08 Conditional handover fusion
-status: completed
+status: in-progress
 type: task
 priority: critical
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T07:32:06Z
+updated_at: 2026-07-26T07:36:13Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-8j7l
@@ -273,3 +273,47 @@ Target `dev-wiki/testsystem-vite-tailscale/serve-excalidraw-drafts` appears at r
 - `fuse_conditional`'s dedup performance is O(n) over both arms combined per query — no changes needed for T09's re-measurement to see accurate numbers, since Task 9 measures the shipped CLI via subprocess (`_run_cli`), not a re-implementation.
 - Live smoke confirms the "mockup tailscale" / R12 query surfaces the target at rank 3 (cosine 0.55) exactly as the PRELUDE predicted — T09's re-measurement should see this reflected in the aggregate MRR/zero-hit numbers for the real-query set.
 - `okf-cli-3520` (latent `concept_emb` duplicate-row awareness item, filed by T07) is unaffected by this task — `fuse_conditional` dedups by `path` at the hit-dict level, after `_semantic_hit_dicts` has already flattened `concept_emb` rows; it inherits the same one-row-per-path assumption `semantic_ranking`/`_load_concept_vectors` already carry, nothing new introduced here.
+
+
+
+## SUPERVISOR / PLAN AUTHOR RULING 2026-07-26 — two items before T08 may close
+
+Status flipped back to `in-progress`. T09 does NOT start until both are done.
+
+**(1) The reported baseline is the favourable one. Correct it.**
+243 tests / 19F/2E was measured under `env -u VOYAGE_API_KEY` — which switches off exactly the
+arm T08 built. The TRUE baseline is **20 failures / 2 errors with the key set**. Record that
+number in the bean, plus a note that removing the key yields 19F/2E and why. Reporting the
+lower number because a path was disabled is the same shape this chain has already ruled against
+three times: green under a condition where the code does not run.
+
+**(2) The hard case is untested at `cmd_find` level. Add the integration test.**
+The rewritten pin test moved its fixture from lexically AMBIGUOUS (5 vs 4) to CONFIDENT
+(5 vs 3), so the difficult path is no longer exercised end-to-end. Required test: lexically
+ambiguous AND semantic candidates present ->
+- the semantic arm owns the ranking (correct per D12), AND
+- **the lexical top-1 is still PRESENT in the result, appended behind.**
+That second property is what decides whether ownership is tolerable in production, and it is
+the one nothing currently pins.
+
+**Ownership of the key-set failure: T09, but not for the implementer's reason.**
+He guessed "T09 builds the index before scoring". Wrong step. The resolution is plan step
+**T09/4, which embeds the seeded fixtures between seed and scoring** — that is why the failure
+disappears there. His diagnosis of the mechanism was right (ambiguous S1/S4 fixtures -> semantic
+ownership -> `FIND_LIMIT=50` window fills with real `concept_emb` candidates -> the correct
+lexical hit is squeezed out), his attribution of the fix was not.
+
+**The deeper finding behind it is NOT a test artefact** (plan author, 2026-07-26): a concept
+that exists in the file tree but has NO `concept_emb` row can be pushed out of the result
+entirely under handover, because lexical hits are appended behind and then truncated at
+`--limit`. R43 measured the rule on a FULLY embedded catalogue; a live store does not stay in
+that state. For the newest notes, handover is therefore WORSE than the old pin rule — and it
+fails SILENTLY. Filed as **`okf-cli-uumj`** (visibility for stale `concept_emb`, analogous to
+D15 for `.fts`). Not part of this chain. The question "should an unembedded lexical hit get a
+guaranteed slot" will be MEASURED once T09 produces numbers, not argued.
+
+**Test-deletion concern: cleared after checking.** It is two rewrites and one real deletion,
+not three deletions. The deletion (`test_shim_backfills_...`) is correct — its subject, the
+shim, was removed under `SC-SHIM`, and `fuse_conditional` is in place with no exclude-filter
+remaining. The two rewrites are covered by D12: the old absolute-pin assertion is precisely
+what D12 abolishes.
