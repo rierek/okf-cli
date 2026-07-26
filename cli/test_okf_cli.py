@@ -2333,5 +2333,84 @@ class FtsIndexStaleDegrades(unittest.TestCase):
             conn.close()
 
 
+class ZeroHitSuggestions(unittest.TestCase):
+    """T07/Q13 — a zero hit should hand the caller something to reformulate
+    with, not just '(no matches)'."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: One\ndescription: d\n"
+                    "tags: [excalidraw, tailscale]\n---\nbody\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_near_miss_term_suggests_the_registered_tag(self):
+        # A TYPO, not a truncation. "tailscal" is a substring of the tag
+        # "tailscale", and the substring scan matches against the raw
+        # frontmatter tag string — so it scores a real hit and the zero-hit
+        # branch never runs. Truncations can never reach this feature at
+        # all: substring match and FTS prefix match both catch them by
+        # construction. Only typos and synonyms get here.
+        got = okf._zero_hit_suggestions(self.root, "tailscael")
+        self.assertIn("tailscale", got)
+
+    def test_unrelated_query_may_return_nothing(self):
+        got = okf._zero_hit_suggestions(self.root, "zzzzqqqq")
+        self.assertEqual(got, [])
+
+    def test_output_names_the_suggestions(self):
+        out = _run_find(self.root, "tailscael")
+        self.assertIn("(no matches for: tailscael)", out)
+        self.assertIn("tailscale", out)
+
+
+class ZeroHitSuggestionsPF4(unittest.TestCase):
+    """PF-4 — a degradation path and a zero-hit can coincide (no .fts index,
+    no .tagvec cache, and a query with no lexical or semantic hits). The
+    zero-hit branch must not add a stderr note of its own: exactly one note
+    per degraded arm, never a third for the zero-hit message itself."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: One\ndescription: d\n"
+                    "tags: [excalidraw, tailscale]\n---\nbody\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_exactly_one_note_per_degraded_arm_no_third_for_zero_hit(self):
+        import io
+        import contextlib
+        import types
+        args = types.SimpleNamespace(
+            query="tailscael", limit=10, type=None, tag=None, scope=None,
+            breakdown=False,
+        )
+        out_buf, err_buf = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+            okf.cmd_find(self.root, args)
+        err_lines = [l for l in err_buf.getvalue().splitlines() if l]
+        self.assertEqual(len(err_lines), 2, err_lines)
+        self.assertIn("lexical index absent", err_lines[0])
+        self.assertIn("semantic arm skipped", err_lines[1])
+        stdout = out_buf.getvalue()
+        self.assertIn("(no matches for: tailscael)", stdout)
+        self.assertIn("nearest registered tags: tailscale", stdout)
+        self.assertIn("try: okf-cli find \"tailscale\"", stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

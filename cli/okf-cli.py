@@ -1121,6 +1121,21 @@ def fuse_conditional(lexical_hits, semantic_hits, limit):
     return out[:limit], lexical_owned
 
 
+def _zero_hit_suggestions(root, query, limit=5):
+    """Registered tag slugs closest to the query's terms — the reformulation
+    hint a zero hit hands back (Q13). difflib only: no network, no vectors, so
+    this works on the fully degraded path too."""
+    tags = sorted(all_tags(root))
+    if not tags:
+        return []
+    out = []
+    for term in tokenize(query):
+        for cand in difflib.get_close_matches(term, tags, n=limit, cutoff=0.7):
+            if cand not in out:
+                out.append(cand)
+    return out[:limit]
+
+
 def cmd_find(root, args):
     terms = tokenize(args.query)
     if not terms:
@@ -1153,6 +1168,10 @@ def cmd_find(root, args):
 
     if not all_hits:
         print("(no matches for: {})".format(args.query))
+        near = _zero_hit_suggestions(root, args.query)
+        if near:
+            print("nearest registered tags: {}".format(", ".join(near)))
+            print("try: okf-cli find \"{}\"".format(" ".join(near[:2])))
         return
     for h in all_hits[: args.limit]:
         print("------")
