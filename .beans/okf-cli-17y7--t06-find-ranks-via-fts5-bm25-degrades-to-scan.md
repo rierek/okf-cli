@@ -1,11 +1,11 @@
 ---
 # okf-cli-17y7
 title: T06 find ranks via FTS5 BM25, degrades to scan
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T05:55:53Z
+updated_at: 2026-07-26T06:12:55Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-ntc8
@@ -44,16 +44,16 @@ _Requirements: PLAN.md Task 6 · DECISIONS D14, D15 · TASKS.md T13 · REFERENCE
 
 ## Steps
 
-- [ ] Define the module-level `_run_find(root, query, **kw)` test helper (new — mirrors the per-class pattern at `cli/test_okf_cli.py:1376-1387`)
-- [ ] Write the failing `FtsRanking` and `FindDegradesWithoutIndex` tests
-- [ ] Run them, confirm they fail for the stated reason
-- [ ] Add `_fts_ranking()` and `_hydrate_hit()`
-- [ ] Extract today's scan verbatim into `_substring_ranking()`
-- [ ] Add `_rank_lexically()` returning `(hits, max_score)`; call it from `cmd_find`
-- [ ] Add the `--breakdown` branch for FTS hits
-- [ ] Tests pass; suite still 19F/2E
-- [ ] Verify on the live catalogue (literal query + timing)
-- [ ] Commit `feat(cli): rank lexically via fts5 bm25`, with the score-scale note in the body
+- [x] Define the module-level `_run_find(root, query, **kw)` test helper (new — mirrors the per-class pattern at `cli/test_okf_cli.py:1376-1387`)
+- [x] Write the failing `FtsRanking` and `FindDegradesWithoutIndex` tests (plus adversarial extras: absent-note count, unreadable-index D15 case, BM25-weights-applied)
+- [x] Run them, confirm they fail for the stated reason
+- [x] Add `_fts_ranking()` and `_hydrate_hit()`
+- [x] Extract today's scan verbatim into `_substring_ranking()`
+- [x] Add `_rank_lexically()` returning `(hits, max_score)`; call it from `cmd_find`
+- [x] Add the `--breakdown` branch for FTS hits
+- [x] Tests pass; suite still 19F/2E (225 tests total)
+- [x] Verify on the live catalogue (literal query + timing)
+- [x] Commit `feat(cli): rank lexically via fts5 bm25` (3c3c026), with the score-scale note in the body
 
 ## Recommended Skills
 
@@ -111,3 +111,260 @@ stderr note and a normal exit, never an exception.
 - Baseline entering T06: 209 tests, 19 failures / 2 errors.
 
 Source: ce-specs-reviewer APPROVED verdict on okf-cli-ntc8, 2026-07-26 (commits 67a8bbb, a678008).
+
+
+## Summary
+
+Ships T13 part 2 (PLAN.md Task 6): `cmd_find`'s lexical arm now ranks via FTS5
+BM25 (title 3 / tags 2 / body 1, prefix matching) when the persistent
+`<root>/.fts/fts.sqlite` index exists and is usable, and degrades to the
+pre-existing substring scan — extracted verbatim into `_substring_ranking()`
+— when it does not. `--type`/`--tag`/`--scope` narrow inside the SQL query
+(no file re-reads); `--tag` matches whole tags only. FTS hits report on a
+0..100 scale (`round(100 * s / top_s)`); the substring fallback keeps its
+`6 * len(terms)` scale, `contrib` breakdown, and scoring byte-identical
+(frozen eval baseline). `--breakdown` on an FTS hit now states no
+field-level breakdown is available instead of KeyError-ing on a missing
+`contrib`. `FTS_BM25_WEIGHTS` (defined since T05, consumed nowhere) is now
+the weight vector actually passed into `bm25()` — proven, not assumed, by a
+dedicated adversarial test (see Test-Output).
+
+PRELUDE (own commit, `0d5f717`, before Task 6 proper): I01/I02 gap-closing
+regression tests carried over from the T05 review — FTS_TOKENIZER
+(porter+unicode61+diacritics) and `_fts_index_stale`'s except-branch were
+previously correct-but-unproven.
+
+D15 degradation (the substantive part of this task, per PRELUDE): all three
+failure modes — index absent, index present but garbage bytes, index
+present but unreadable (permission denied) — degrade to the substring scan
+with **exactly one** stderr note and a normal (non-raising) exit. Verified
+by dedicated tests per case, not inferred from the corrupt-file case alone.
+
+## Test-Output
+
+**PRELUDE (I01/I02) — RED via mutation, not via TDD-red** (the guarded
+behaviour already existed and was correct; these are regression locks, so
+"RED" means "the test catches an induced regression," proven then
+reverted):
+
+```
+$ mutate FTS_TOKENIZER -> "unicode61" (drops porter+diacritics)
+FAIL: test_porter_stem_bridges_study_query_to_studies_token
+AssertionError: Lists differ: [] != ['b/one']
+$ git checkout -- cli/okf-cli.py   # byte-identical revert
+OK (3 tests)
+
+$ mutate _fts_index_stale except clause -> drop sqlite3.DatabaseError
+ERROR: test_garbage_byte_file_reports_stale_without_raising
+  sqlite3.DatabaseError: file is not a database
+ERROR: test_schemaless_db_reports_stale_without_raising
+  sqlite3.OperationalError: no such table: fts_meta
+$ git checkout -- cli/okf-cli.py   # byte-identical revert
+OK (3 tests)
+```
+
+**Task 6 — true RED first** (`_fts_ranking` did not exist yet):
+
+```
+$ python3 -m unittest cli.test_okf_cli.FtsRanking cli.test_okf_cli.FindDegradesWithoutIndex cli.test_okf_cli.FtsBm25WeightsApplied -v
+ERROR: test_type_filter_narrows ... AttributeError: module 'okf_cli' has no attribute '_fts_ranking'
+ERROR: test_unreadable_index_degrades_to_none_with_one_note ... AttributeError: ...
+ERROR: test_title_weight_outranks_denser_body_match ... AttributeError: ...
+FAIL: test_find_without_index_prints_exactly_one_stderr_note ... AssertionError: 0 != 1
+Ran 12 tests in 0.020s
+FAILED (failures=1, errors=10)
+```
+
+GREEN after Steps 3-5:
+
+```
+$ python3 -m unittest cli.test_okf_cli.FtsRanking cli.test_okf_cli.FindDegradesWithoutIndex cli.test_okf_cli.FtsBm25WeightsApplied cli.test_okf_cli.FtsTokenizerRegression cli.test_okf_cli.FtsIndexStaleDegrades -v
+Ran 16 tests in 0.026s
+OK
+```
+
+**Mutation probe 1 — FTS_BM25_WEIGHTS actually consumed** (bean's second
+substantive point: "defined is not applied"):
+
+```
+$ mutate: sql = "SELECT path, bm25(docs) AS r FROM docs WHERE docs MATCH ?"  # weights dropped
+FAIL: test_title_weight_outranks_denser_body_match
+AssertionError: 'b/bodyhit' != 'b/titlehit'
+$ revert via Edit (byte-identical)
+OK (2 tests)
+```
+
+Fixture note: the crossover (3 body occurrences) was measured, not guessed
+— at 1-3 reps unweighted bm25 already favours the denser body match while
+weighted (title=3/body=1) still favours the single title hit; above ~4
+reps even the weighted score flips. `test_unweighted_bm25_would_rank_body_first`
+is a control probe against raw `bm25(docs)` confirming the fixture's
+premise so the main test cannot be a fluke of this specific corpus.
+
+**Mutation probe 2 — double-stderr-note bug found by adversarial testing,
+not in the original plan.** `_fts_index_stale()`'s own except-branch
+swallows `sqlite3.DatabaseError` and reports "stale" (T05 AC7, correct and
+locked). Calling it BEFORE the real query (as the plan's literal Step 3
+code did) meant a corrupt/garbage index printed the "stale" note first
+(from `_fts_index_stale`'s defensive True) and then the "unusable" note
+(from `_fts_ranking`'s own except) — two notes for one degradation event,
+violating "exactly one stderr note":
+
+```
+$ revert the reorder (stale-check before execute, matching original plan literal code)
+FAIL: test_corrupt_index_prints_exactly_one_stderr_note
+AssertionError: 2 != 1
+$ re-apply the fix (execute first, then stale-check) via Edit (byte-identical)
+OK
+```
+
+Fix: run the real query first (raises DatabaseError on a corrupt file,
+caught once by the existing except); check staleness only after a
+successful query. `_fts_index_stale()` itself is untouched — its own
+contract (I02, locked) is unaffected.
+
+**Full-suite gate, before -> after:**
+
+```
+before (T04/T05 baseline): 209 tests, 19 failures / 2 errors
+after PRELUDE commit (0d5f717): 212 tests, 19 failures / 2 errors
+after Task 6 commit (3c3c026): 225 tests, 19 failures / 2 errors
+```
+
+Command: `python3 -m unittest discover -s cli -p 'test_*.py'`
+
+## Smoke
+
+Live catalogue: `~/Obsidian/Knowledge-Catalogue` (2443 concepts,
+`.fts/fts.sqlite` present, 13.2 MB).
+
+Literal query, FTS-ranked (0..100 scale, confirms weights + prefix
+matching against real data):
+
+```
+$ python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "data-ui konvention namensschema" --limit 5
+score: 100/100  title: Data-UI-Pflicht in Storybook und Live-Code
+score: 94/100   title: Baustein data-ui Konvention
+score: 81/100   title: Baustein Hover-Label und Indicator
+...
+```
+
+Timing (SC-05, "not slower than before" — the 2581-file scan is gone, only
+`limit` files are hydrated):
+
+```
+$ time python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "tailscale" --limit 5 >/dev/null
+0.07s user 0.02s system 98% cpu 0.091 total
+```
+
+Live degradation (index parked, restored byte-identically after — verified
+via `ls -la` size match, 13164544 bytes before/after):
+
+```
+$ mv .fts/fts.sqlite .fts/fts.sqlite.smoketest-park
+$ python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "tailscale" --limit 3
+note: lexical index absent — falling back to substring scan; run `okf-cli build-index` for BM25 ranking
+score: 4/6  title: Portal Remote Review via tailscale serve
+... (6*len(terms) scale, substring scan working)
+exit: 0
+$ mv .fts/fts.sqlite.smoketest-park .fts/fts.sqlite   # restored
+```
+
+`--breakdown` on an FTS hit (AC7):
+
+```
+$ python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "tailscale" --limit 2 --breakdown
+contrib: bm25 (fts5 index; field-level breakdown not available)
+```
+
+`--tag tail` does not match `tailscale` on the live corpus (AC4):
+
+```
+$ python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "tailscale" --tag tail --limit 3
+(no matches for: tailscale)
+```
+
+## Deviations/ERRATA
+
+1. **Plan-code fix landed upstream, not by me (no deviation on my part).**
+   The plan's original `_fts_ranking()` (PLAN.md Step 3, pre-`daac681`)
+   printed no stderr note for the absent-index case, contradicting D15
+   ("absent/stale -> degradation with an stderr note"). Raised via
+   `herdr pane run w2B:pG "FRAGE okf-cli-17y7: ..."` before implementing;
+   the plan author fixed PLAN.md directly (commit `daac681`) and instructed
+   me to follow the corrected plan as-is. Implemented as corrected.
+
+2. **Double-stderr-note bug, fixed in my own new code (real deviation from
+   the plan's literal Step 3 code, not from D15).** Found by my own
+   adversarial test for the corrupt-index case (mandated by the PRELUDE:
+   "each must degrade with exactly ONE stderr note"). The plan's literal
+   code checked `_fts_index_stale()` before running the real query; a
+   corrupt/garbage index file makes `_fts_index_stale()`'s own except-branch
+   fire (by design, T05 AC7/I02) and report "stale" BEFORE the real query
+   raises `DatabaseError` and prints "unusable" — two notes for one
+   degradation. Reordered: run the query first, check staleness only after
+   a successful query. Mutation-probed both directions (see Test-Output).
+   `_fts_index_stale()` itself is unchanged.
+
+3. **`test_eval_runner.py::RunnerAgainstRealCatalogueTest` updated (file
+   outside this task's stated `Test:` scope, fixed anyway to hold the
+   19F/2E gate).** This pre-existing integration test seeds fixture
+   concepts directly into the live catalogue and immediately expects them
+   findable at rank 1. Once FTS ranking prefers the live catalogue's real,
+   persistent `.fts/fts.sqlite` (built in an earlier task), a
+   freshly-seeded fixture concept that postdates that index build is
+   invisible to the FTS arm — not a bug, an inherent property of "stale
+   index still returns results FROM the index" (D15/AC5). This is not
+   something any correct T06 implementation could avoid without either
+   rebuilding the index on every `find` call (defeats the performance goal)
+   or ignoring the index entirely for the live root. Fix: the test now
+   parks `.fts/fts.sqlite` out of the way for its own duration and restores
+   it byte-identically in `tearDown` regardless of pass/fail, so `find`
+   degrades cleanly to the substring scan (which always reads fixtures
+   fresh) for this specific integration test. The live index itself was
+   verified restored (byte-for-byte size match) after every manual smoke
+   test that touched it.
+
+4. **Extra tests beyond the plan's literal Step 1 list, per the PRELUDE's
+   explicit demand for three D15 cases and a real weights-applied proof.**
+   The plan's literal `FtsRanking`/`FindDegradesWithoutIndex` classes cover
+   absent and corrupt but not the third D15 case (unreadable/permission-
+   denied), and contain no test that would fail if `FTS_BM25_WEIGHTS`
+   stopped being passed. Added: `test_unreadable_index_degrades_to_none_with_one_note`,
+   `test_absent_index_prints_exactly_one_stderr_note`,
+   `test_corrupt_index_prints_exactly_one_stderr_note`,
+   `test_find_without_index_prints_exactly_one_stderr_note`, and the whole
+   `FtsBm25WeightsApplied` class. All requested explicitly in this task's
+   dispatch prompt, not scope creep.
+
+## Notes for T07
+
+- `_rank_lexically(root, query, terms, limit, type_filter, tag_filter, scope) -> (hits, max_score)`
+  is the entry point Task 7/8 (semantic arm, conditional handover fusion)
+  will call to get the lexical side of the fusion decision. `hits` are
+  dicts with `score`/`path`/`title`/`type`/`desc`/`snip`/`provenance`
+  (`"lexical"`), optionally `contrib` (substring path only) or `cosine`
+  (semantic path, not yet produced). `max_score` is `100` on the FTS path,
+  `6 * len(terms)` on the substring path — T07/T08's fusion math needs to
+  read this return value rather than assume a fixed scale, since the two
+  lexical sub-arms are NOT on the same scale as each other, let alone as
+  the semantic arm.
+- The existing `cmd_find` semantic-backstop block (bge-m3, `_keyword_top1_is_confident`,
+  `_semantic_hit_dicts`) is UNTOUCHED and still runs after `_rank_lexically`
+  — it only reads `hits[0]["score"]`/`hits` length, which stayed compatible.
+  Tasks 7/8 replace this block per the plan; it is not yet gone.
+- `_hydrate_hit()` only reads a concept file for paths that actually ranked
+  — reuse it rather than re-implementing hydration for semantic hits if the
+  shape fits (it already accepts an optional `cosine` kwarg).
+- The `--breakdown` on FTS hits prints a fixed "field-level breakdown not
+  available" message; if T07/T08 introduce a semantic contrib-equivalent,
+  that branch ordering (`semantic` -> `contrib` in dict -> fallback bm25
+  message) is the pattern to extend, not replace.
+- Live catalogue currently has `.fts/fts.sqlite` (2443 concepts) but NO
+  `.tagvec` cache yet ("semantic backstop skipped (.tagvec cache/concept
+  embeddings absent)" fires on every live smoke run) — T07/T08 will need to
+  build that artefact before any live semantic verification is possible.
+- The double-stderr-note class of bug (two degradation paths firing for one
+  root cause) is worth checking again once the semantic arm adds its own
+  degradation note — same risk shape if two "something is wrong" checks can
+  both fire off the same underlying failure.
