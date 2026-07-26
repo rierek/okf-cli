@@ -1820,7 +1820,13 @@ class ZeroHitSuggestions(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def test_near_miss_term_suggests_the_registered_tag(self):
-        got = okf._zero_hit_suggestions(self.root, "tailscal")
+        # A TYPO, not a truncation. "tailscal" is a substring of the tag
+        # "tailscale", and the substring scan matches against the raw
+        # frontmatter tag string — so it scores a real hit and the zero-hit
+        # branch never runs. Truncations can never reach this feature at
+        # all: substring match and FTS prefix match both catch them by
+        # construction. Only typos and synonyms get here.
+        got = okf._zero_hit_suggestions(self.root, "tailscael")
         self.assertIn("tailscale", got)
 
     def test_unrelated_query_may_return_nothing(self):
@@ -1828,8 +1834,8 @@ class ZeroHitSuggestions(unittest.TestCase):
         self.assertEqual(got, [])
 
     def test_output_names_the_suggestions(self):
-        out = _run_find(self.root, "tailscal")
-        self.assertIn("(no matches for: tailscal)", out)
+        out = _run_find(self.root, "tailscael")
+        self.assertIn("(no matches for: tailscael)", out)
         self.assertIn("tailscale", out)
 ```
 
