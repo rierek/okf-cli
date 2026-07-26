@@ -1,11 +1,11 @@
 ---
 # okf-cli-17y7
 title: T06 find ranks via FTS5 BM25, degrades to scan
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T06:21:26Z
+updated_at: 2026-07-26T06:25:17Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-ntc8
@@ -257,8 +257,10 @@ $ time python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "tailsc
 0.07s user 0.02s system 98% cpu 0.091 total
 ```
 
-Live degradation (index parked, restored byte-identically after — verified
-via `ls -la` size match, 13164544 bytes before/after):
+Live degradation (index parked via `mv`, restored via `mv` back —
+`os.rename`/`mv` never copies bytes, so this is a structural move, not a
+byte-copy-and-compare; `ls -la` size match after the fact is a sanity
+check that the same file came back, not proof of content integrity):
 
 ```
 $ mv .fts/fts.sqlite .fts/fts.sqlite.smoketest-park
@@ -321,9 +323,20 @@ $ python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find "tailscale" 
    parks `.fts/fts.sqlite` out of the way for its own duration and restores
    it byte-identically in `tearDown` regardless of pass/fail, so `find`
    degrades cleanly to the substring scan (which always reads fixtures
-   fresh) for this specific integration test. The live index itself was
-   verified restored (byte-for-byte size match) after every manual smoke
-   test that touched it.
+   fresh) for this specific integration test. **Correction (T06 review
+   round 1, I01):** the original wording here — "restored byte-identically,
+   verified by size match" — was imprecise on two counts.
+   `os.rename`/`mv` never copies bytes at all, so "byte-identical" is a
+   structural property of a rename, not something a size check verifies;
+   and the size match after manual smoke tests said nothing about whether
+   the parking window was exception-safe. It was not: `setUp` renamed the
+   index and called `runner.run()` with no `try/finally`, and unittest
+   never calls `tearDown` when `setUp` itself raises, so any exception
+   inside `runner.run()` would have stranded the live artefact under a
+   `.parked-by-test-eval-runner` name with no automatic recovery. Fixed in
+   Fix round 1 below: `_park_fts_index()` is now a context manager with its
+   own `try/finally`, tested in isolation (including a forced-exception
+   case) against a throwaway temp directory, never the live path.
 
 4. **Extra tests beyond the plan's literal Step 1 list, per the PRELUDE's
    explicit demand for three D15 cases and a real weights-applied proof.**
@@ -400,3 +413,94 @@ change is substantively required by the FTS arm's stale-preference behaviour.
 
 **Why this is not deferred:** the full suite runs at every gate point, and seven leaves remain.
 The parking window would open dozens more times before anyone came back to it.
+
+
+## Fix round 1
+
+**I01 (T06 review, 2026-07-26) — `RunnerAgainstRealCatalogueTest.setUp` had
+no exception-safety around the live `.fts/fts.sqlite` parking window.**
+
+Root cause: `setUp` renamed the live index aside, then called
+`runner.run(...)` with no `try/finally`. unittest does not call `tearDown`
+when `setUp` itself raises, so any exception inside `runner.run()`
+(subprocess failure, JSON error, disk I/O) would have permanently stranded
+a 13.2 MB artefact of a SEPARATE repo under a `.parked-by-test-eval-runner`
+name, silently breaking `find` on the live catalogue until a human noticed
+and restored it by hand.
+
+Fix: extracted the parking logic into `_park_fts_index(root)`, a
+`@contextlib.contextmanager` with its own internal `try/finally`. A
+generator-based context manager's `finally` runs on every exit from the
+`with` block — clean return or an exception propagating through it —
+independent of whatever unittest does with `setUp`/`tearDown`. Wired into
+`RunnerAgainstRealCatalogueTest.setUp` as
+`with _park_fts_index(CATALOGUE_ROOT): self.result = runner.run(...)`.
+Tested in isolation (`ParkFtsIndexTest`) against a disposable temp
+directory, never the live catalogue — per the review's own suggested
+restructuring.
+
+**RED** (mutated `_park_fts_index` back to the pre-fix pattern — rename,
+bare `yield`, rename-back with no `try`/`finally` — to prove the new test
+actually catches the exact failure mode the reviewer described):
+
+```
+$ python3 -m unittest cli.test_eval_runner.ParkFtsIndexTest -v
+test_absent_index_is_a_silent_no_op ... ok
+test_index_is_absent_inside_the_with_block ... ok
+test_restores_the_index_after_a_clean_exit ... ok
+test_restores_the_index_when_the_body_raises ... FAIL
+
+======================================================================
+FAIL: test_restores_the_index_when_the_body_raises
+----------------------------------------------------------------------
+AssertionError: False is not true
+
+Ran 4 tests in 0.002s
+FAILED (failures=1)
+```
+
+**GREEN** (`try`/`finally` restored via targeted `Edit`, byte-identical to
+the fix):
+
+```
+$ python3 -m unittest cli.test_eval_runner.ParkFtsIndexTest -v
+test_absent_index_is_a_silent_no_op ... ok
+test_index_is_absent_inside_the_with_block ... ok
+test_restores_the_index_after_a_clean_exit ... ok
+test_restores_the_index_when_the_body_raises ... ok
+
+Ran 4 tests in 0.002s
+OK
+```
+
+**Live integration re-verified** (real `RunnerAgainstRealCatalogueTest`
+class against `~/Obsidian/Knowledge-Catalogue`, real `.fts/fts.sqlite`):
+
+```
+$ python3 -m unittest cli.test_eval_runner -v
+Ran 14 tests in 12.453s
+OK
+```
+
+Live index confirmed present and unchanged after: `ls -la
+~/Obsidian/Knowledge-Catalogue/.fts/` -> `13164544` bytes (identical to the
+size recorded before this fix round and before the original T06 commit).
+
+**Full-suite gate:**
+
+```
+$ python3 -m unittest discover -s cli -p 'test_*.py'
+Ran 229 tests in 13.561s
+FAILED (failures=19, errors=2)
+```
+
+225 (T06 close) + 4 new `ParkFtsIndexTest` tests = 229. 19F/2E unchanged —
+no new failure, none silenced (same FAIL/ERROR name list as before).
+
+**Correction to the T06 close entry:** the original `## Deviations/ERRATA`
+wording "restored byte-identically, verified by size match" was imprecise
+on two counts — `os.rename`/`mv` never copies bytes at all (byte-identity
+is structural, not something a size check "verifies"), and the size match
+said nothing about exception-safety, which was the actual gap. Both
+instances of that wording (Smoke section, Deviations entry 3) have been
+rewritten in place above to state what was actually true.
