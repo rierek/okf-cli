@@ -1,11 +1,11 @@
 ---
 # okf-cli-snxj
 title: T10 Informative zero-hit for agent consumers
-status: completed
+status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T08:37:28Z
+updated_at: 2026-07-26T12:06:09Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -179,3 +179,42 @@ env -u VOYAGE_API_KEY:  Ran 253 tests in 13.694s — FAILED (failures=19, errors
 Commit: `6d0c91e` fix(cli): T10 review findings B01/I01/I02 (`.beans/okf-cli-snxj--*.md`, `cli/test_okf_cli.py`).
 
 Leaf stays `completed` per PF-2 — this was an inline fix within the same bean, not a re-open to `in-progress` (no code defect was found; the shipped `_zero_hit_suggestions()`/`cmd_find` branch was already correct and re-verified unchanged).
+
+
+## Review 2026-07-26 — PO reject (US-06)
+
+**PO verdict, verbatim:** "US-06 > rejected"
+
+No further prose was given. What was demonstrated live in the review session, run by the PO in his own shell and reproduced by the supervisor:
+
+```
+$ okf-cli find "tailscael" --limit 5
+note: semantic arm owns this ranking (lexical top-1 lacked a clear margin)
+score: 46/100  title: Tailscale — Claude-Kontext  provenance: semantic (cosine=0.46)
+... 4 more semantic results ...
+
+$ okf-cli find "zzzzqqqq"
+note: semantic arm owns this ranking (lexical top-1 lacked a clear margin)
+score: 46/100  title: QMunity  provenance: semantic (cosine=0.46)
+... 9 more semantic results, all qm-wiki noise at cosine 0.40-0.46 ...
+```
+
+Expected per AC: `(no matches for: tailscael)` plus `nearest registered tags: tailscale`. Observed: ten semantic results and no suggestion line. Same for a query of pure nonsense.
+
+### Finding
+
+**Severity: high.** The zero-hit branch this task shipped is **unreachable in the live catalogue** — not merely rarely reached. `cmd_find` only enters it when the result list is empty, and against a populated `concept_emb` the result list is never empty: the semantic arm sorts all 2443 candidates and cuts to `limit` with **no absolute cosine floor** (this is R05b in `REFERENCES.md`, a property recorded before this feature began). Whatever exists is returned, so zero hits cannot occur.
+
+**Location.** Not in `_zero_hit_suggestions()`, which works as specified. The reachability of its call site is the defect: `cli/okf-cli.py`, the zero-hit branch in `cmd_find`, gated on an empty result list that the semantic arm guarantees will never be empty.
+
+**Why the tests did not catch it.** Every test of this branch — unit and integration alike — used fixtures without a `.tagvec`, or with the semantic arm neutralised. Under those conditions the branch is reachable and behaves exactly as asserted. The tests are correct about what they test; nothing verified that the branch is reachable in production. This is the mirror image of LL-14: there the question was whether a mechanism ran, here whether it *can* run.
+
+### Fix recipe — NOT bounded, do not fix inline
+
+The obvious repair is an absolute cosine floor for the semantic arm, below which a candidate is not a hit at all. That is a **threshold decision with ranking impact across the whole feature**, not a local fix: it would change what every query returns, not just zero-hit queries. It therefore belongs in a **measured** round with the plan author deciding the value, in the same class as `SEMANTIC_MARGIN_RATIO` and the expansion floor — all three have been explicitly protected from ad-hoc tuning throughout this chain.
+
+A second option worth measuring alongside it rather than assuming: keep returning weak semantic hits, but ALSO print the suggestion line when the best semantic score falls below a confidence bar — treating "nothing convincing" rather than "nothing at all" as the trigger. That preserves the current recall while making the failure legible.
+
+Related, already tracked, and plausibly the same underlying question: `okf-cli-uumj` asks whether the binary ownership decision is too absolute in both directions.
+
+**Source:** PO review session 2026-07-26, live against `~/Obsidian/Knowledge-Catalogue`.
