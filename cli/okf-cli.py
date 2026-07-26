@@ -940,17 +940,18 @@ def _rank_lexically(root, query, terms, limit, type_filter=None,
 # actual retrieval confidence. Replaced with a margin gate: fire the
 # backstop on zero hits OR when the keyword top-1 has no clear lead over
 # the runner-up (ambiguous ranking) — never on an absolute ratio.
-SEMANTIC_MARGIN_RATIO = 0.5  # top-1 must lead the runner-up by at least this
-                              # fraction of its own score to count as
-                              # "confident" (top1 >= (1+ratio) * top2)
-SEMANTIC_NOISE_RATIO = 0.25   # P12 re-measure finding: below this
-                              # score/max_score the keyword top-1 is noise
-                              # (stray body-word matches), regardless of its
-                              # margin over the runner-up — the backstop must
-                              # fire or paraphrase queries never get rescued
-                              # against a real catalogue (8c EARS, S3).
-                              # Strictly below every legitimate literal
-                              # golden ratio (S2 floor is 0.25, S1 0.30).
+SEMANTIC_MARGIN_RATIO = 0.5  # top1 >= (1 + ratio) * top2, i.e. top1 must
+                              # lead the runner-up by at least 1.5x to count
+                              # as "confident" enough for the lexical arm to
+                              # OWN the ranking (D12). Measured value —
+                              # eval/hybrid_eval.py:151 — not a tuning knob.
+# SEMANTIC_NOISE_RATIO removed (T08/D12): it was a crutch for the old
+# pin+blend rule, forcing the backstop to fire against a noisy substring
+# top-1 regardless of margin. Under conditional handover a noisy lexical
+# arm simply does not own the ranking (its top-1 has no clear margin, or
+# there IS no meaningful runner-up comparison at all when hits are sparse
+# noise), so the absolute floor is redundant — R43 measured the rule
+# without it. Do not resurrect it as a second, competing gate.
 # D13 — voyage-3-large is the productive semantic model: MRR 0.452 vs 0.150
 # for bge-m3 on the unbiased query set, zero-hit 0.167 vs 0.646 (R42). That is
 # the difference between usable and not, not a tuning gap. The accepted price
@@ -1034,17 +1035,24 @@ def _cosine(a, b):
 
 
 def _keyword_top1_is_confident(hits):
-    """Post-review (F01) margin gate — replaces the old absolute-ratio
-    check. True when the keyword top-1 clearly leads the runner-up (no
-    ambiguity to resolve semantically); False when there's no runner-up to
-    compare (a single hit is trusted as-is) is NOT covered here — callers
-    treat `len(hits) <= 1` as its own case. Only meaningful for
-    `len(hits) >= 2`."""
+    """True when the lexical arm may OWN the ranking: it has hits and either a
+    single one (nothing to be ambiguous against) or a top-1 leading the
+    runner-up by the measured margin.
+
+    The comparison is `top1 >= (1 + SEMANTIC_MARGIN_RATIO) * top2`, i.e.
+    top1 >= 1.5x top2 — copied from the rule that actually produced R43's
+    0.437 (eval/hybrid_eval.py:151). The pre-plan code computed
+    `(top1-top2)/top1 >= SEMANTIC_MARGIN_RATIO`, which is top1 >= 2x top2: a
+    stricter bar that hands over to the semantic arm LESS often than what was
+    measured. Do not "simplify" it back."""
+    if not hits:
+        return False
+    if len(hits) == 1:
+        return True
     top1, top2 = hits[0]["score"], hits[1]["score"]
     if top1 <= 0:
         return False
-    margin = (top1 - top2) / top1
-    return margin >= SEMANTIC_MARGIN_RATIO
+    return top1 >= (1 + SEMANTIC_MARGIN_RATIO) * top2
 
 
 def semantic_ranking(root, query, limit):
@@ -1087,6 +1095,32 @@ def _semantic_hit_dicts(root, query, limit):
     return out
 
 
+def fuse_conditional(lexical_hits, semantic_hits, limit):
+    """(fused_hits, lexical_owned) — conditional HANDOVER, not blending (D12).
+
+    Measured on the unbiased query set: blending a lexical list that is pure
+    noise on paraphrases (zero-hit 1.000) into a working semantic list costs
+    more than it adds, whether by score interleaving (MRR 0.029) or by RRF
+    (0.201). On literal queries the lexical arm is the better one. So decide
+    per query WHICH arm owns the ranking instead of averaging them: worst case
+    0.437 across both regimes (R43).
+
+    The owning arm's list comes first in its own order; the other arm is
+    appended behind it, never in front. Duplicates keep the owning arm's entry
+    (and therefore its provenance), so a concept both arms found is not
+    reported twice."""
+    lexical_owned = _keyword_top1_is_confident(lexical_hits)
+    primary = lexical_hits if lexical_owned else semantic_hits
+    secondary = semantic_hits if lexical_owned else lexical_hits
+    out, seen = [], set()
+    for hit in list(primary) + list(secondary):
+        if hit["path"] in seen:
+            continue
+        seen.add(hit["path"])
+        out.append(hit)
+    return out[:limit], lexical_owned
+
+
 def cmd_find(root, args):
     terms = tokenize(args.query)
     if not terms:
@@ -1103,63 +1137,19 @@ def cmd_find(root, args):
     hits, max_score = _rank_lexically(root, args.query, terms, args.limit,
                                       type_filter, tag_filter, target)
 
-    # 8c: semantic backstop gate (post-review F01) — fire on zero keyword
-    # hits, or when there IS a keyword ranking but it's ambiguous (top-1 has
-    # no clear margin over the runner-up). A single keyword hit has no
-    # runner-up to be ambiguous against, so it is trusted as-is (no fire) —
-    # this also means the backstop only ever spends a network call when it
-    # can plausibly add value, not on every merely-partial literal match.
-    # P12 re-measure finding (8c EARS, S3 rescue): a real catalogue almost
-    # never yields ZERO hits for a paraphrase query — it yields NOISE (stray
-    # body-word matches, e.g. 3/24), which can carry a deceptively clear
-    # margin over an even weaker runner-up. An absolute noise floor
-    # (SEMANTIC_NOISE_RATIO) therefore fires the backstop regardless of
-    # margin or hit count; the rank-1 pin below keeps the keyword top-1 in
-    # place either way.
+    # The semantic arm costs a network call, so run it only when it can
+    # change the answer: whenever the lexical arm is not confident (it will
+    # then OWN the ranking), or when a confident lexical list is too short to
+    # fill --limit (it then fills the tail, exactly as measured).
+    lexical_owned_provisionally = _keyword_top1_is_confident(hits)
     semantic_hits = []
-    fire_backstop = (
-        not hits
-        or hits[0]["score"] < SEMANTIC_NOISE_RATIO * max_score
-        or (len(hits) >= 2 and not _keyword_top1_is_confident(hits))
-    )
-    if fire_backstop:
-        # T07 dropped exclude_paths/max_score from _semantic_hit_dicts()
-        # (dedup now belongs to fusion, per D12/D16) — Task 8 replaces this
-        # whole gate+fuse block with fuse_conditional(). Until then, keep
-        # this call-site compatible with a post-hoc filter (Fix round 1,
-        # B01): _semantic_hit_dicts() ranks by cosine and slices to the
-        # requested limit BEFORE we get a chance to exclude, so filtering
-        # AFTER a plain `limit`-sized fetch can silently starve the pool —
-        # an eligible, lower-ranked candidate never even enters the window
-        # because an excluded (keyword-owned) path took its slot. Over-fetch
-        # by len(exclude) so that even if every excluded path ranks inside
-        # the window, at least `limit` eligible candidates still remain
-        # after filtering (each excluded path can only consume one slot).
-        # See T07 bean Deviations/ERRATA #1 (corrected in Fix round 1).
-        exclude = {h["path"] for h in hits}
-        semantic_hits = [
-            h for h in _semantic_hit_dicts(root, args.query,
-                                           args.limit + len(exclude))
-            if h["path"] not in exclude
-        ][: args.limit]
+    if not lexical_owned_provisionally or len(hits) < args.limit:
+        semantic_hits = _semantic_hit_dicts(root, args.query, args.limit)
 
-    # Fuse: the keyword top-1 (if any) is PINNED at rank 1 — this is an
-    # absolute invariant, independent of the gate above, so "never replacing
-    # a strong keyword top-hit" (EARS) holds even if the gate is ever mistuned
-    # or a semantic candidate's converted score would otherwise outrank it
-    # (post-review F01 repro: an unrelated concept at cosine ~0.7 converts to
-    # a HIGHER raw score than a legitimate partial-match literal top-1).
-    # Everything else — the remaining keyword hits plus all semantic hits —
-    # is interleaved by score from rank 2 down (both scales are comparable,
-    # 0..max_score; stable sort keeps keyword-before-semantic on exact ties,
-    # per PLAN's "appended/interleaved" fusion rule).
-    if hits:
-        pinned_top1 = hits[0]
-        rest = hits[1:] + semantic_hits
-        rest.sort(key=lambda h: -h["score"])
-        all_hits = [pinned_top1] + rest
-    else:
-        all_hits = semantic_hits
+    all_hits, lexical_owned = fuse_conditional(hits, semantic_hits, args.limit)
+    if not lexical_owned and semantic_hits:
+        print("note: semantic arm owns this ranking (lexical top-1 lacked a "
+              "clear margin)", file=sys.stderr)
 
     if not all_hits:
         print("(no matches for: {})".format(args.query))

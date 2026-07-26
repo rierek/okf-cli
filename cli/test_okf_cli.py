@@ -1476,6 +1476,89 @@ class FindScoreBreakdown(unittest.TestCase):
         )
 
 
+def _h(path, score, provenance):
+    return {"path": path, "score": score, "provenance": provenance,
+            "title": path, "type": "", "desc": "", "snip": ""}
+
+
+class FuseConditional(unittest.TestCase):
+    """D12/R43 — decide WHICH arm owns the ranking; never blend two
+    incomparable scales. Measured: worst case 0.437 MRR vs 0.201 for RRF and
+    0.029 for the pin+blend rule shipped before this plan."""
+
+    def test_confident_lexical_owns_the_ranking(self):
+        lex = [_h("a", 100, "lexical"), _h("b", 40, "lexical")]
+        sem = [_h("c", 90, "semantic")]
+        out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertTrue(lex_owned)
+        self.assertEqual([h["path"] for h in out], ["a", "b", "c"])
+
+    def test_ambiguous_lexical_hands_the_ranking_to_semantic(self):
+        lex = [_h("a", 100, "lexical"), _h("b", 95, "lexical")]
+        sem = [_h("c", 60, "semantic")]
+        out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertFalse(lex_owned)
+        self.assertEqual([h["path"] for h in out], ["c", "a", "b"])
+
+    def test_single_lexical_hit_is_treated_as_confident(self):
+        lex = [_h("a", 100, "lexical")]
+        sem = [_h("c", 90, "semantic")]
+        out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertTrue(lex_owned)
+        self.assertEqual([h["path"] for h in out], ["a", "c"])
+
+    def test_empty_lexical_hands_over(self):
+        out, lex_owned = okf.fuse_conditional([], [_h("c", 60, "semantic")], 10)
+        self.assertFalse(lex_owned)
+        self.assertEqual([h["path"] for h in out], ["c"])
+
+    def test_duplicate_paths_keep_the_owning_arms_entry(self):
+        lex = [_h("a", 100, "lexical"), _h("b", 95, "lexical")]
+        sem = [_h("b", 70, "semantic"), _h("c", 60, "semantic")]
+        out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertFalse(lex_owned)
+        self.assertEqual([h["path"] for h in out], ["b", "c", "a"])
+        self.assertEqual(out[0]["provenance"], "semantic")
+
+    def test_limit_is_respected(self):
+        lex = [_h("a", 100, "lexical")]
+        sem = [_h("c", 90, "semantic"), _h("d", 80, "semantic")]
+        out, _lex_owned = okf.fuse_conditional(lex, sem, 2)
+        self.assertEqual([h["path"] for h in out], ["a", "c"])
+
+    def test_semantic_never_precedes_a_confident_lexical_top1(self):
+        lex = [_h("a", 30, "lexical"), _h("b", 5, "lexical")]
+        sem = [_h("c", 99, "semantic")]
+        out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertTrue(lex_owned)
+        self.assertEqual(out[0]["path"], "a")
+
+    def test_margin_band_matches_the_measured_rule(self):
+        """The measured rule is top1 >= 1.5*top2 (eval/hybrid_eval.py:151).
+        The pre-plan arithmetic was top1 >= 2*top2. 100 vs 60 sits inside the
+        band where the two disagree: the measured rule says the lexical arm
+        is confident, the old one says it is not. Pin the measured one."""
+        lex = [_h("a", 100, "lexical"), _h("b", 60, "lexical")]
+        sem = [_h("c", 90, "semantic")]
+        out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertTrue(lex_owned)
+        self.assertEqual([h["path"] for h in out], ["a", "b", "c"])
+
+    def test_just_below_the_band_hands_over(self):
+        lex = [_h("a", 100, "lexical"), _h("b", 68, "lexical")]
+        sem = [_h("c", 90, "semantic")]
+        _out, lex_owned = okf.fuse_conditional(lex, sem, 10)
+        self.assertFalse(lex_owned)
+
+
+class NoiseRatioIsGone(unittest.TestCase):
+    """The absolute noise floor was a crutch for the blend rule; conditional
+    handover subsumes it. Leaving it in place would mean two competing gates."""
+
+    def test_constant_removed(self):
+        self.assertFalse(hasattr(okf, "SEMANTIC_NOISE_RATIO"))
+
+
 class SemanticBackstop(unittest.TestCase):
     """P8/8c (okf-cli-8uaf, D04) — find's semantic pass is a best-effort
     backstop: fires only on zero/weak keyword hits, degrades gracefully on
@@ -1617,26 +1700,30 @@ class SemanticBackstop(unittest.TestCase):
         self.assertIn("path: b/wanted", out)
         self.assertIn("provenance: semantic", out)
 
-    def test_near_threshold_literal_top1_survives_unrelated_semantic(self):
-        """F01 (post-review, blocking) — a legitimate partial-title-match
-        literal top-1 at a REAL repo ratio (~0.417, matching S1's actual
-        golden min_score_ratio=0.30 / S2's 0.25) must never be displaced,
-        even when: (a) the margin over the keyword runner-up is small
-        enough to fire the backstop, and (b) an UNRELATED semantic
-        candidate's cosine (~0.7, ordinary model background noise for
-        unrelated text) converts to a raw score HIGHER than the literal
-        top-1's own score. Reviewer repro: unrelated cosine=0.7 -> score
-        8/12, literal top-1 = 5/12 -> old code let 8/12 outrank 5/12."""
+    def test_confident_literal_top1_survives_unrelated_semantic_scale(self):
+        """T08/D12 update of the former F01 regression (pre-plan absolute
+        pin, removed by this task). fuse_conditional decides ownership from
+        the intra-lexical top1/top2 margin ONLY — it never compares a
+        lexical raw score against a semantic-converted one (bean PRELUDE,
+        reviewer-confirmed property). This still has to hold even when an
+        UNRELATED semantic candidate's cosine (~0.7, ordinary model
+        background noise) converts to a raw score HIGHER than the lexical
+        top-1's own score: top1=5 (title 3 + tags 2), runner-up=3
+        (title-only match, no shared body term) -> 5 >= 1.5*3 (4.5), so the
+        lexical arm IS confident under the measured rule and owns the
+        ranking; its own order [top1, rival] must come first regardless of
+        the semantic arm's inflated raw number (70/100 from cosine 0.7)."""
         self._w("b/top1.md", "Zqxmargin One", ["zqxmargin"],
                 "no second query term appears here.\n")
         # top1: "zqxmargin" hits title(3)+tags(2)=5; "raretermxyz" hits
-        # nothing -> score 5/12 (ratio 0.417, matches S1's real ratio).
+        # nothing -> score 5/12.
         self._w("b/rival.md", "Rival Zqxmargin Concept", [],
-                "zqxmargin body only, a close competing score.\n")
-        # rival: "zqxmargin" hits title(3)+body(1)=4/12 -> margin vs top1
-        # (5-4)/5 = 0.2 < SEMANTIC_MARGIN_RATIO(0.5) -> gate DOES fire
-        # (genuinely ambiguous keyword ranking), which is the scenario the
-        # pin must still protect against.
+                "a competing concept with no shared body terms.\n")
+        # rival: "zqxmargin" hits title(3) only -> score 3/12. Margin
+        # 5 >= 1.5*3 -> CONFIDENT (unlike the pre-T08 fixture, which used a
+        # body-matching rival at 4/12 to land in the ambiguous band on
+        # purpose; that scenario now hands over by design and is covered by
+        # FuseConditional's own band tests, not here).
         self._w("b/unrelated.md", "Totally Unrelated Concept", [],
                 "nothing to do with the query at all.\n")
         self._make_tagvec([("k1", "b/unrelated", [0.0, 1.0])])
@@ -1644,8 +1731,8 @@ class SemanticBackstop(unittest.TestCase):
         okf._cosine = lambda a, b: 0.7  # reviewer's exact repro value
         out, _err = self._run("zqxmargin raretermxyz")
         lines = out.splitlines()
-        self.assertEqual(lines[4], "path: b/top1")  # literal Top-1, pinned
-        self.assertIn("path: b/unrelated", out)  # still surfaced, not rank 1
+        self.assertEqual(lines[4], "path: b/top1")  # confident lexical top-1
+        self.assertIn("path: b/unrelated", out)  # still surfaced, appended
         self.assertNotEqual(lines[4], "path: b/unrelated")
 
     def test_semantic_rescue_ranks_nearer_concept_first(self):
@@ -1693,53 +1780,16 @@ class SemanticBackstop(unittest.TestCase):
         finally:
             okf._cosine = orig_cosine
 
-    def test_shim_backfills_when_excluded_paths_rank_inside_the_window(self):
-        """B01 (review round 1, blocking) — the cmd_find shim must exclude
-        keyword-owned paths BEFORE the semantic top-limit window is decided,
-        not after. Two keyword hits (a, b) both also rank at the very top of
-        the semantic candidates for the same query — a realistic overlap,
-        since a keyword-matching concept is usually also semantically close.
-        With args.limit=3 (1 pinned slot + 2 rest slots), a naive "fetch
-        exactly `limit` semantic candidates, then filter" starves the pool:
-        the top-3 semantic window is entirely eaten by the two excluded
-        paths plus one real candidate (x2), so a real, lower-ranked but
-        still-eligible candidate (x3, semantic score 92) never even enters
-        the pool and a much weaker keyword hit (b, lexical score 3/6) wins
-        its slot by default. Correct behaviour: exclude first, so both x2
-        and x3 surface and b — semantically and lexically the weakest
-        contender here — is displaced."""
-        self._w("b/a.md", "Zqxmargin A", ["zqxmargin"],
-                "no second query term appears here.\n")  # title3+tags2=5/6
-        self._w("b/b.md", "Zqxmargin B", [],
-                "no second query term appears here either.\n")  # title3=3/6
-        # margin (5-3)/5 = 0.4 < SEMANTIC_MARGIN_RATIO(0.5) -> ambiguous,
-        # gate fires; both a and b land in `exclude`.
-        self._w("b/x2.md", "X2 Concept", [], "irrelevant body two.\n")
-        self._w("b/x3.md", "X3 Concept", [], "irrelevant body three.\n")
-        self._make_tagvec([
-            ("k1", "b/a", [10.0, 0.0]),   # cosine 1.000 (rank 1, excluded)
-            ("k2", "b/b", [9.0, 1.0]),    # cosine 0.994 (rank 2, excluded)
-            ("k3", "b/x2", [8.0, 2.0]),   # cosine 0.970 (rank 3, eligible)
-            ("k4", "b/x3", [7.0, 3.0]),   # cosine 0.919 (rank 4, eligible)
-        ])
-        okf._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, _err = self._run("zqxmargin", limit=3)
-        paths = [line[len("path: "):] for line in out.splitlines()
-                 if line.startswith("path: ")]
-        self.assertIn("b/x2", paths)
-        self.assertIn(
-            "b/x3", paths,
-            "x3 must surface: it is the 3rd-best ELIGIBLE semantic "
-            "candidate, and excluding a/b before windowing (not after) "
-            "must not let a weaker keyword hit occupy its slot instead. "
-            "Got: {}".format(paths),
-        )
-        self.assertNotIn(
-            "b/b", paths,
-            "the weaker second keyword hit must be displaced by the "
-            "semantically stronger x3, not protected by a starved "
-            "semantic pool. Got: {}".format(paths),
-        )
+    # test_shim_backfills_when_excluded_paths_rank_inside_the_window removed
+    # (T08/SC-SHIM): it pinned the T07 cmd_find shim's over-fetch-by-
+    # len(exclude) backfill behaviour, which existed only to protect a
+    # post-hoc exclude filter. fuse_conditional does not pre-filter or
+    # over-fetch — dedup happens after both arms return, per D12 — so the
+    # scenario's premise (a starved semantic window) no longer applies, and
+    # its score pair (5 vs 3, margin 0.4) is additionally CONFIDENT under
+    # the measured 1.5x rule (this task), unlike under the pre-plan 2x rule
+    # the fixture was tuned against. No replacement test: the shim's
+    # invariant is gone by design, not narrowed.
 
 
 class VoyageQueryEmbedding(unittest.TestCase):
@@ -2073,7 +2123,16 @@ class FindDegradesWithoutIndex(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
-    def test_find_without_index_prints_exactly_one_stderr_note(self):
+    def test_find_without_index_prints_exactly_one_note_per_degraded_arm(self):
+        """T08/D12 update: under conditional handover the semantic arm now
+        also fires whenever the lexical list is too short to fill --limit
+        (SC-05), independent of confidence — here a single lexical hit
+        against limit=10. Both arms are degraded in this fixture (no .fts,
+        no .tagvec), so PF-4 ("every degradation branch emits exactly one
+        stderr note") now yields TWO notes, one per arm, not one for the
+        whole command. Was: asserted a single total note, which relied on
+        the pre-T08 gate never invoking the semantic arm for a lone
+        confident hit at all."""
         import io
         import contextlib
         root = tempfile.mkdtemp()
@@ -2095,8 +2154,11 @@ class FindDegradesWithoutIndex(unittest.TestCase):
             with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
                 okf.cmd_find(root, args)
             lines = [l for l in err_buf.getvalue().splitlines() if l]
-            self.assertEqual(len(lines), 1)
+            self.assertEqual(len(lines), 2)
             self.assertIn("note:", lines[0])
+            self.assertIn("lexical index absent", lines[0])
+            self.assertIn("note:", lines[1])
+            self.assertIn("semantic arm skipped", lines[1])
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
