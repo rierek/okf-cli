@@ -2,10 +2,10 @@
 # okf-cli-g0gi
 title: T06 Reach build-index, prime and info over MCP
 status: todo
-type: bug
+type: task
 priority: normal
 created_at: 2026-07-26T13:03:25Z
-updated_at: 2026-07-26T13:03:39Z
+updated_at: 2026-07-26T13:10:30Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-z0tt
@@ -45,3 +45,7 @@ Plan: `docs/okf-cli-capability-surface/PLAN.md` → **Task 6**. Independent of T
 ## Recommended Skills
 
 - superpowers:test-driven-development
+
+## Sequencing note
+
+`blocked_by: okf-cli-z0tt` is deliberate although the plan calls this task otherwise independent: `McpSurfaceParity` consumes `COMMAND_DISPATCH`, which T01 introduces. The plan permits writing the other three tests first and adding the parity class later; the stricter dependency was chosen so no leaf ever ships with a weakened test. If T01 stalls, relax this and add `McpSurfaceParity` in a follow-up commit — do not replace it with a hardcoded command list.

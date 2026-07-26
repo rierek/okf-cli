@@ -5,10 +5,11 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T12:06:09Z
+updated_at: 2026-07-26T13:10:15Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
+    - okf-cli-a4as
 ---
 
 Plan: `docs/okf-retrieval-architecture/PLAN.md` → **Task 10**. Follow it step by step; it carries the literal code and tests.

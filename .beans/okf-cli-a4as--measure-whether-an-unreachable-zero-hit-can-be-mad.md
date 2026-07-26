@@ -5,7 +5,8 @@ status: todo
 type: task
 priority: high
 created_at: 2026-07-26T13:04:17Z
-updated_at: 2026-07-26T13:04:17Z
+updated_at: 2026-07-26T13:10:30Z
+parent: okf-cli-wuiv
 ---
 
 ## Origin
@@ -28,7 +29,7 @@ The PO decided on 2026-07-26 that this bean carries a **measurement only**. No t
 Both directions have concrete, cheap evidence pointing at them, which is precisely why this needs measuring rather than arguing:
 
 - *For separation:* the nonsense query above tops out at 0.46, while the minimum correct target sits at 0.494 (R34). n=1.
-- *Against a suppressing floor:* the two `synonymy` zero-hits in `docs/okf-retrieval-architecture/eval/taxonomy.md` sit at cosine 0.40 and 0.35. A floor around 0.47 would destroy exactly the cases the zero-hit feature exists to rescue.
+- *Against a suppressing floor:* the two `synonymy` zero-hits in `docs/okf-retrieval-architecture/eval/taxonomy.md` sit at cosine 0.395 and 0.35 (verbatim from `eval/taxonomy.md`, rank 90/2443 and 736/2443). A floor around 0.47 would destroy exactly the cases the zero-hit feature exists to rescue.
 
 ### Requirement 1: A negative query set exists as a versioned eval asset
 
@@ -38,8 +39,9 @@ Both directions have concrete, cheap evidence pointing at them, which is precise
 
 1. THE repository SHALL contain `docs/okf-retrieval-architecture/eval/queries_negative.json` with 40 queries, matching `queries_v2.json`'s size so the two distributions are directly comparable.
 2. THE set SHALL contain two labelled sub-populations: *hard negatives* (well-formed questions about topics demonstrably outside the catalogue's twelve bundles) and *nonsense* (strings with no lexical or semantic content).
-3. EACH hard negative SHALL record why no concept answers it, adjudicated against its own top-10 semantic hits — a query whose target turns out to exist is not a negative and SHALL be removed from the set.
-4. THE generation SHALL follow the method that produced `queries_v2.json` (subagent-written, machine-checked, R41/D10), not hand-authoring by the measuring agent.
+3. THE eval set SHALL record, for each hard negative, why no concept answers it, adjudicated against that query's own top-10 semantic hits.
+4. WHERE a hard negative's target turns out to exist in the catalogue, THE eval set SHALL exclude that query.
+5. THE generation SHALL follow the method that produced `queries_v2.json` (subagent-written, machine-checked, R41/D10), not hand-authoring by the measuring agent.
 
 ### Requirement 2: The separating statistic is measured, not chosen
 
