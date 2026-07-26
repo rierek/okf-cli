@@ -1,11 +1,11 @@
 ---
 # okf-cli-1mxp
 title: T12 Failure taxonomy of remaining zero-hits
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T09:17:39Z
+updated_at: 2026-07-26T09:32:12Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -36,11 +36,11 @@ _Requirements: PLAN.md Task 12 · QUESTIONS Q03, Q10 · TASKS.md T03 · REFERENC
 
 ## Steps
 
-- [ ] Extend `remeasure.py` to emit per-row detail under a `rows` key; re-run it
-- [ ] For each failing query, read the expected concept and the top-3 returned concepts, assign one class
-- [ ] Write `eval/taxonomy.md` (header naming file + sha + date, the table, the counts — no prose beyond that)
-- [ ] Resolve Q03 and Q10 in `QUESTIONS.md`; if catalogue-gap dominates, point it at the follow-up bean `okf-cli-iw0d`
-- [ ] Commit `docs(eval): failure taxonomy, answer Q03/Q10`
+- [x] Extend `remeasure.py` to emit per-row detail under a `rows` key; re-run it
+- [x] For each failing query, read the expected concept and the top-3 returned concepts, assign one class
+- [x] Write `eval/taxonomy.md` (header naming file + sha + date, the table, the counts — no prose beyond that)
+- [x] Resolve Q03 and Q10 in `QUESTIONS.md`; catalogue-gap does not dominate (0/8) — no pointer to `okf-cli-iw0d` needed
+- [x] Commit `docs(eval): failure taxonomy, answer Q03/Q10`
 
 ## Recommended Skills
 
@@ -62,3 +62,153 @@ Two standing quality rules from this chain:
 
 - **PF-5:** a sentence whose function is to end review is the sentence that gets checked. Claims of the form "verified" / "behaviour-identical" / "reverted byte-identically" must name the command and quote its observed output, or not be written.
 - **Prove the mechanism fired before comparing outputs.** A silently swallowed flag produces bit-identical output to an honest null result — from the artefact alone the two are indistinguishable. Count the calls first (a counting stub), then compare.
+
+
+## Summary
+
+Extended `docs/okf-retrieval-architecture/eval/remeasure.py`'s `measure()` to
+also emit a `"rows"` key (query, expected_path, rank, top3) alongside the
+existing aggregate metrics, then re-ran it against the live catalogue
+(`~/Obsidian/Knowledge-Catalogue`, read-only) to regenerate `shipped_v2.json`.
+Aggregate metrics matched the prior `shipped_v2.json` bit-for-bit per file
+(recall@1/5/10, mrr, zero_hit), confirming the same shipped mechanism ran —
+no drift, no accidental behaviour change from the code edit.
+
+8 of 48 queries are zero-hit at the shipped default (`--limit 10`): 7 of 40
+in `queries_v2.json`, 1 of 8 in `queries_real.json`, matching the bean's
+stated count exactly.
+
+For each, top-3@10 alone cannot decide `ranking` vs `synonymy` (both classes
+mean "not in top 10"), so I ran two companion diagnostics per query, reusing
+only shipped code paths — no threshold changed:
+1. `okf-cli find "<query>" --root <KC> --limit 50` — same fusion/gating code,
+   wider display window only (verified via SQL: `_fts_ranking` truncates with
+   `ORDER BY r LIMIT ?`, `_substring_ranking`/`semantic_ranking` sort the full
+   set then slice `[:limit]` — raising `--limit` never changes an ordering,
+   only how much of it is shown).
+2. A standalone `semantic_ranking(root, query, 100000)` call (imported
+   `okf-cli.py` as a module) for the full-corpus cosine rank/score, to see
+   where the target sits even when the CLI's own margin gate keeps the
+   semantic arm from running at all (this happened for one query).
+
+Result: 6/8 (75%) are `ranking` — the target is found at rank 11-40/2443 the
+moment the same shipped code is asked for `--limit 50`, i.e. it was already
+inside reach, just past the 10-result cutoff (one of the six only reachable
+because the standalone semantic call proved the concept sits at a rescuable
+rank — the production margin gate itself is what's silently discarding it,
+never invoking the semantic arm at any limit because the wrong lexical top-1
+holds a "confident" margin). 2/8 (25%) are `synonymy` — not found even at
+`--limit 50`; standalone full-corpus semantic rank 90/2443 (cosine 0.395) and
+736/2443 (cosine 0.35) respectively, both concepts read directly
+(`okf-cli read <path>`) and confirmed to genuinely answer their query, just
+sharing no surface vocabulary with the paraphrase. 0/8 `catalogue-gap`, 0/8
+`wrong-target` — every one of the 8 expected concepts, read directly, does
+answer its query.
+
+Point 4 of the T10/T11 prelude (R12-family, tag-slug-space, concept embedding
+is what solves it) was cited, not re-derived — it concerns the `--expand-tags`
+tag-vector mechanism specifically, which is a different code path from the
+concept-level semantic arm this taxonomy measures (D13's concept_emb already
+ran for these 8). Point 5 (okf-cli-uumj squeeze-outs) was not folded in —
+those queries are hits, not zero-hits, and are absent from `queries_v2.json`/
+`queries_real.json`'s zero-hit rows by construction.
+
+One incidental, unactioned observation: every live `find` call in this task
+printed `note: lexical index is stale (catalogue changed since build)` to
+stderr. This is a pre-existing condition (the re-run's bit-identical
+aggregate metrics vs. the prior `shipped_v2.json` prove it was already true
+at the T9/T10/T11 baseline, not something this task introduced), out of this
+task's scope (a diagnostic, not a fix), and `.fts`/`.tagvec` are git-ignored
+in the KC repo so it never touched KC's tracked state. Flagging it for T13/PO
+awareness only.
+
+Commits: 81a0368 docs(eval): failure taxonomy, answer Q03/Q10
+(docs/okf-retrieval-architecture/eval/taxonomy.md [new],
+docs/okf-retrieval-architecture/eval/remeasure.py,
+docs/okf-retrieval-architecture/eval/shipped_v2.json,
+docs/okf-retrieval-architecture/QUESTIONS.md).
+
+## Test-Output
+
+Baseline, both env directions, before this task's edits (HEAD=cdd7a0b):
+
+    $ python3 -m unittest discover -s cli -p "test_*.py"
+    Ran 259 tests in 17.734s
+    FAILED (failures=19, errors=2)
+
+    $ env -u VOYAGE_API_KEY python3 -m unittest discover -s cli -p "test_*.py"
+    Ran 259 tests in 13.968s
+    FAILED (failures=19, errors=2)
+
+After this task's edits (HEAD=81a0368, VOYAGE_API_KEY set) — remeasure.py is
+not under `cli/`'s test discovery, so no test-count change is expected and
+none occurred:
+
+    $ python3 -m unittest discover -s cli -p "test_*.py"
+    Ran 259 tests in 17.129s
+    FAILED (failures=19, errors=2)
+
+259 tests, 19 failures / 2 errors — unchanged, as expected for a docs/eval-only
+task.
+
+## Smoke
+
+Live re-run of `remeasure.py` against `~/Obsidian/Knowledge-Catalogue`
+produced identical per-file aggregate metrics to the pre-existing
+`shipped_v2.json` (proving the extended script still runs the same shipped
+mechanism):
+
+  queries_v2.json:   recall@1 0.25, recall@5 0.70, recall@10 0.825, zero_hit 0.175
+  queries_real.json: recall@1 0.375, recall@5 0.625, recall@10 0.875, zero_hit 0.125
+
+Diagnostic companion run example (one of the 8), showing the mechanism and
+its output directly:
+
+    $ python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue find \
+        "bots aus hauseigener oberfläche beauftragen" --limit 50
+    note: lexical index is stale (catalogue changed since build) — run `okf-cli build-index`
+    note: semantic arm owns this ranking (lexical top-1 lacked a clear margin)
+    [... path: ai-wiki/claude-dispatch appears at position 27 of 50 ...]
+
+KC repo left clean:
+
+    $ git -C ~/Obsidian/Knowledge-Catalogue status --short
+    (empty)
+
+## Deviations/ERRATA
+
+1. **Beyond PLAN.md Step 1's literal scope, but required by Step 3's own
+   class table.** The plan's Step 1 only asks `remeasure.py` to persist
+   top-3@10; Step 3's `ranking` class is defined as "target was retrieved but
+   below rank 10," which is undecidable from top-3@10 alone (that only proves
+   *not* in top 10, never *where* beyond it). I added the `--limit 50` /
+   standalone `semantic_ranking()` companion diagnostics described above to
+   make the `ranking` vs `synonymy` split measured rather than argued, per
+   this task's own hard rule ("classify what you measure"). No thresholds
+   were changed to produce this — `--limit` is an existing CLI flag, and the
+   standalone call reuses the shipped `semantic_ranking()` verbatim.
+2. **taxonomy.md carries more than a bare header line.** PLAN.md Step 3 asks
+   for "a header naming the measurement ... no prose beyond that." I kept the
+   header to file+sha+date plus one short paragraph stating the `--limit 50`/
+   standalone-semantic methodology, because the `rank` column is blank on
+   every row by construction (all rows are zero-hit) and the classification
+   evidence needed a documented source. Judged this the minimum necessary to
+   keep the artefact self-supporting under PF-5, not scope creep.
+
+## Notes for T13 (okf-cli-jk0q)
+
+- `docs/CLAUDE.md` has no I01-numbered line to fix in this repo (the file
+  exists at `docs/CLAUDE.md`, not a root-level `CLAUDE.md` — no root
+  `CLAUDE.md` file exists in this repo at all; global tools-level CLAUDE.md
+  governs). T13's own bean/PLAN.md Task 13 text should be checked against
+  this before editing.
+- Q03/Q10 are now 🟢 in `QUESTIONS.md` with the class split and the
+  catalogue-gap share (0/8, 0%) respectively — T13 Step 3's TASKS.md/
+  QUESTIONS.md sync can point straight at `eval/taxonomy.md`.
+- `catalogue-gap` does not dominate (0/8) — no new pointer to
+  `okf-cli-iw0d` was needed; that bean's existing catalogue-gap case
+  ("mockup tailscale" HTML-serving) is unrelated to this task's 8 and is
+  already a hit (rank 3), not a zero-hit, in the current measurement.
+- Unactioned observation to carry forward or triage: `.fts`/`.tagvec` in the
+  live KC catalogue report as stale on every `find` call (pre-existing,
+  confirmed not introduced by this task, out of scope to fix here).
