@@ -948,9 +948,15 @@ SEMANTIC_NOISE_RATIO = 0.25   # P12 re-measure finding: below this
                               # against a real catalogue (8c EARS, S3).
                               # Strictly below every legitimate literal
                               # golden ratio (S2 floor is 0.25, S1 0.30).
-SEMANTIC_MODEL = "bge-m3"
-OLLAMA_EMBED_URL = "http://localhost:11434/api/embed"
-OLLAMA_EMBED_TIMEOUT = 5
+# D13 — voyage-3-large is the productive semantic model: MRR 0.452 vs 0.150
+# for bge-m3 on the unbiased query set, zero-hit 0.167 vs 0.646 (R42). That is
+# the difference between usable and not, not a tuning gap. The accepted price
+# is a network call and an API key in the request path; D16 makes the
+# degradation two-stage (voyage -> lexical only), so bge-m3 is NOT a runtime
+# fallback and concept_emb holds voyage rows only.
+SEMANTIC_MODEL = "voyage-3-large"
+VOYAGE_EMBED_URL = "https://api.voyageai.com/v1/embeddings"
+VOYAGE_EMBED_TIMEOUT = 10
 
 
 def _tagvec_db_path(root):
@@ -979,19 +985,40 @@ def _load_concept_vectors(db_path, model):
             for path, dim, vec_blob in rows]
 
 
-def _embed_query_bge_m3(text):
-    """Best-effort LOCAL Ollama embed call for the query string. NETWORK —
-    reached only when the semantic pass actually fires (never at import
-    time, never unconditionally). Any failure propagates so the caller
-    degrades gracefully; this function never catches."""
+# Forward-declared for Task 11 (_query_vector()), which wires this cache
+# into semantic_ranking()/_expand_query_tags(). semantic_ranking() here in
+# Task 7 still calls _embed_query_voyage() directly and does not read this
+# dict — it exists now only so the pre-existing semantic suite's
+# setUp-time okf._QUERY_VEC_CACHE.clear() (PLAN.md Task 7 Step 5) has an
+# attribute to clear before Task 11 lands (see Deviations/ERRATA, T07 bean).
+_QUERY_VEC_CACHE = {}
+
+
+def _embed_query_voyage(text):
+    """Best-effort Voyage embed call for the query string. NETWORK — reached
+    only when the semantic arm actually runs (never at import time, never
+    unconditionally). `input_type="query"` is the asymmetric query form the
+    measurement used (eval/hybrid_eval.py:73-80); documents were embedded with
+    input_type="document" by the producer. Any failure propagates so the
+    caller degrades gracefully; this function never catches."""
+    api_key = os.environ.get("VOYAGE_API_KEY")
+    if not api_key:
+        raise RuntimeError("VOYAGE_API_KEY not set")
     req = urllib.request.Request(
-        OLLAMA_EMBED_URL,
-        data=json.dumps({"model": SEMANTIC_MODEL, "input": text}).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        VOYAGE_EMBED_URL,
+        data=json.dumps({
+            "model": SEMANTIC_MODEL,
+            "input": [text],
+            "input_type": "query",
+        }).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + api_key,
+        },
     )
-    with urllib.request.urlopen(req, timeout=OLLAMA_EMBED_TIMEOUT) as resp:
+    with urllib.request.urlopen(req, timeout=VOYAGE_EMBED_TIMEOUT) as resp:
         body = json.loads(resp.read().decode("utf-8"))
-    return body["embeddings"][0]
+    return body["data"][0]["embedding"]
 
 
 def _cosine(a, b):
@@ -1017,49 +1044,43 @@ def _keyword_top1_is_confident(hits):
     return margin >= SEMANTIC_MARGIN_RATIO
 
 
-def semantic_backstop(root, query, exclude_paths, limit):
-    """[(cosine, path), ...] sorted descending, excluding exclude_paths, or
-    [] with one stderr note on any degradation (cache/table absent, backend
-    unreachable) — see module docstring above."""
+def semantic_ranking(root, query, limit):
+    """[(cosine, path), ...] best first, or [] with one stderr note on any
+    degradation (cache/table absent, no API key, backend unreachable).
+
+    Renamed from semantic_backstop(): under conditional handover this arm is
+    no longer a fallback that only fills gaps — on a paraphrase query it OWNS
+    the ranking (D12). It also no longer takes exclude_paths, because
+    deduplication happens in fusion, after the owner has been decided."""
     vectors = _load_concept_vectors(_tagvec_db_path(root), SEMANTIC_MODEL)
     if vectors is None:
-        print("note: semantic backstop skipped (.tagvec cache/concept "
-              "embeddings absent) — keyword-only results", file=sys.stderr)
+        print("note: semantic arm skipped (.tagvec cache/concept embeddings "
+              "absent) — lexical results only", file=sys.stderr)
         return []
     try:
-        qvec = _embed_query_bge_m3(query)
+        qvec = _embed_query_voyage(query)
     except Exception as exc:
-        print("note: semantic backstop skipped (embedding backend "
-              "unavailable: {}) — keyword-only results".format(exc),
-              file=sys.stderr)
+        print("note: semantic arm skipped (embedding backend unavailable: {})"
+              " — lexical results only".format(exc), file=sys.stderr)
         return []
-    ranked = sorted(
-        ((_cosine(qvec, vec), path) for path, vec in vectors if path not in exclude_paths),
-        key=lambda x: -x[0],
-    )
+    ranked = sorted(((_cosine(qvec, vec), path) for path, vec in vectors),
+                    key=lambda x: -x[0])
     return ranked[:limit]
 
 
-def _semantic_hit_dicts(root, query, exclude_paths, limit, max_score):
-    """semantic_backstop() results, re-hydrated with title/type/description/
-    snippet (read from the concept's own file) into the same hit-dict shape
-    cmd_find's keyword loop produces, so both can be printed uniformly."""
+def _semantic_hit_dicts(root, query, limit):
+    """semantic_ranking() results, hydrated into the same hit-dict shape the
+    lexical arm produces so fusion and printing treat both uniformly.
+    Semantic score is round(100 * cosine) — the same 0..100 scale the FTS arm
+    reports, which makes the printed number comparable without implying the
+    two are fused by score (they are not; see fuse_conditional)."""
     terms = tokenize(query)
     out = []
-    for cosine, path in semantic_backstop(root, query, exclude_paths, limit):
-        ap = os.path.join(root, path + ".md")
-        if not os.path.isfile(ap):
-            continue
-        fm, body = split_frontmatter(read_file(ap))
-        title = fm.get("title", path.rsplit("/", 1)[-1])
-        typ = fm.get("type", "")
-        desc = _dequote(fm.get("description", ""))
-        snip = make_snippet(body, terms)
-        out.append({
-            "score": round(cosine * max_score), "path": path, "title": title,
-            "type": typ, "desc": desc, "snip": snip, "provenance": "semantic",
-            "cosine": cosine,
-        })
+    for cosine, path in semantic_ranking(root, query, limit):
+        hit = _hydrate_hit(root, path, terms, int(round(100 * cosine)),
+                           "semantic", cosine=cosine)
+        if hit is not None:
+            out.append(hit)
     return out
 
 
@@ -1099,8 +1120,15 @@ def cmd_find(root, args):
         or (len(hits) >= 2 and not _keyword_top1_is_confident(hits))
     )
     if fire_backstop:
+        # T07 dropped exclude_paths/max_score from _semantic_hit_dicts()
+        # (dedup now belongs to fusion, per D12/D16) — Task 8 replaces this
+        # whole gate+fuse block with fuse_conditional(). Until then, keep
+        # this call-site compatible by filtering exclude here instead: same
+        # observable behaviour, no fusion logic implemented early. See T07
+        # bean Deviations/ERRATA.
         exclude = {h["path"] for h in hits}
-        semantic_hits = _semantic_hit_dicts(root, args.query, exclude, args.limit, max_score)
+        semantic_hits = [h for h in _semantic_hit_dicts(root, args.query, args.limit)
+                          if h["path"] not in exclude]
 
     # Fuse: the keyword top-1 (if any) is PINNED at rank 1 — this is an
     # absolute invariant, independent of the gate above, so "never replacing

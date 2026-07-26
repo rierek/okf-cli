@@ -85,12 +85,30 @@ class SeedThenTeardownIsClean(unittest.TestCase):
             fixtures.teardown(CATALOGUE_ROOT)
 
     def test_token_absent_before_seed(self):
-        self.assertEqual(
-            _find_hits(CATALOGUE_ROOT, fixtures.SEED_TOKEN),
-            [],
-            "seed token must not appear in any real catalogue concept "
-            "before seed",
-        )
+        # T07 (D13/D16): the semantic arm now speaks a real, populated
+        # voyage-3-large index, so it legitimately returns nearest-neighbour
+        # hits for ANY string, including a nonsense seed token — that does
+        # not refute this test's LEXICAL claim ("the token appears in no
+        # real concept"), it is the arm doing its job. Neutralise the arm
+        # here instead of weakening the assertion: force its query-embed
+        # call to raise, which triggers the documented degradation (semantic
+        # arm -> [] + one stderr note, lexical path unaffected) so this test
+        # stays network-free, per SC-NET.
+        orig_embed = okf._embed_query_voyage
+
+        def _raise(_text):
+            raise RuntimeError("network disabled under test")
+
+        okf._embed_query_voyage = _raise
+        try:
+            self.assertEqual(
+                _find_hits(CATALOGUE_ROOT, fixtures.SEED_TOKEN),
+                [],
+                "seed token must not appear in any real catalogue concept "
+                "before seed",
+            )
+        finally:
+            okf._embed_query_voyage = orig_embed
 
     def test_seed_writes_four_files_teardown_removes_them(self):
         written = fixtures.seed(CATALOGUE_ROOT)

@@ -1489,12 +1489,13 @@ class SemanticBackstop(unittest.TestCase):
         self._w("b/far.md", "Far Concept", [], "alpha beta far-body prose.\n")
         self._w("b/strong.md", "Zqxstrong Sanity", ["zqxstrong"],
                 "zqxstrong appears in title tags and body.\n")
-        self._orig_embed = okf._embed_query_bge_m3
+        self._orig_embed = okf._embed_query_voyage
         self._orig_cosine = okf._cosine
+        okf._QUERY_VEC_CACHE.clear()
 
     def tearDown(self):
         import shutil
-        okf._embed_query_bge_m3 = self._orig_embed
+        okf._embed_query_voyage = self._orig_embed
         okf._cosine = self._orig_cosine
         shutil.rmtree(self.tmp, ignore_errors=True)
 
@@ -1519,7 +1520,7 @@ class SemanticBackstop(unittest.TestCase):
         for key, path, vec in rows:
             conn.execute(
                 "INSERT INTO concept_emb VALUES (?,?,?,?,?)",
-                (key, path, "bge-m3", len(vec), struct.pack("<{}f".format(len(vec)), *vec)),
+                (key, path, "voyage-3-large", len(vec), struct.pack("<{}f".format(len(vec)), *vec)),
             )
         conn.commit()
         conn.close()
@@ -1541,27 +1542,27 @@ class SemanticBackstop(unittest.TestCase):
     def test_no_tagvec_cache_degrades_gracefully(self):
         out, err = self._run("zzz-no-keyword-match-zzz")
         self.assertIn("(no matches", out)
-        self.assertIn("semantic backstop skipped", err)
+        self.assertIn("semantic arm skipped", err)
 
     def test_empty_concept_emb_table_degrades_gracefully(self):
         self._make_tagvec([])
         out, err = self._run("zzz-no-keyword-match-zzz")
         self.assertIn("(no matches", out)
-        self.assertIn("semantic backstop skipped", err)
+        self.assertIn("semantic arm skipped", err)
 
     def test_embedding_backend_failure_degrades_gracefully(self):
         self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
 
         def _raise(_text):
             raise OSError("connection refused")
-        okf._embed_query_bge_m3 = _raise
+        okf._embed_query_voyage = _raise
         out, err = self._run("zzz-no-keyword-match-zzz")
         self.assertIn("(no matches", out)
-        self.assertIn("semantic backstop skipped", err)
+        self.assertIn("semantic arm skipped", err)
 
     def test_zero_keyword_hit_is_rescued_with_provenance(self):
         self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
-        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
         out, err = self._run("zzz-no-keyword-match-zzz")
         self.assertIn("path: b/near", out)
         self.assertIn("provenance: semantic", out)
@@ -1573,7 +1574,7 @@ class SemanticBackstop(unittest.TestCase):
 
         def _must_not_be_called(_text):
             raise AssertionError("semantic backstop must not fire on a strong hit")
-        okf._embed_query_bge_m3 = _must_not_be_called
+        okf._embed_query_voyage = _must_not_be_called
         out, err = self._run("zqxstrong")
         lines = out.splitlines()
         self.assertEqual(lines[4], "path: b/strong")  # Top-1
@@ -1590,7 +1591,7 @@ class SemanticBackstop(unittest.TestCase):
         self._w("b/wanted.md", "Wanted Concept", [],
                 "totally different content words only.\n")
         self._make_tagvec([("k1", "b/wanted", [1.0, 0.0])])
-        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
         out, err = self._run("unmarked item lacking classification")
         self.assertIn("path: b/wanted", out)
         self.assertIn("provenance: semantic", out)
@@ -1611,7 +1612,7 @@ class SemanticBackstop(unittest.TestCase):
         self._w("b/wanted.md", "Wanted Concept", [],
                 "totally different content words only.\n")
         self._make_tagvec([("k1", "b/wanted", [1.0, 0.0])])
-        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
         out, err = self._run("unmarked item lacking classification")
         self.assertIn("path: b/wanted", out)
         self.assertIn("provenance: semantic", out)
@@ -1639,7 +1640,7 @@ class SemanticBackstop(unittest.TestCase):
         self._w("b/unrelated.md", "Totally Unrelated Concept", [],
                 "nothing to do with the query at all.\n")
         self._make_tagvec([("k1", "b/unrelated", [0.0, 1.0])])
-        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
         okf._cosine = lambda a, b: 0.7  # reviewer's exact repro value
         out, _err = self._run("zqxmargin raretermxyz")
         lines = out.splitlines()
@@ -1652,7 +1653,7 @@ class SemanticBackstop(unittest.TestCase):
             ("k1", "b/near", [1.0, 0.0]),
             ("k2", "b/far", [0.1, 0.99]),
         ])
-        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
         out, _err = self._run("zzz-no-keyword-match-zzz")
         paths = [line[len("path: "):] for line in out.splitlines()
                  if line.startswith("path: ")]
@@ -1666,7 +1667,7 @@ class SemanticBackstop(unittest.TestCase):
             self._w("b/noise{}.md".format(i), "Noise {}".format(i), [],
                     "zzz-no-keyword-match-zzz appears once, weakly.\n")
         self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
-        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
         out, _err = self._run("zzz-no-keyword-match-zzz", limit=3)
         paths = [line[len("path: "):] for line in out.splitlines()
                  if line.startswith("path: ")]
@@ -1680,7 +1681,7 @@ class SemanticBackstop(unittest.TestCase):
             ("k1", "b/near", [1.0, 0.0]),
             ("k2", "b/far", [0.1, 0.99]),
         ])
-        okf._embed_query_bge_m3 = lambda text: [1.0, 0.0]
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
         orig_cosine = okf._cosine
         okf._cosine = lambda a, b: -orig_cosine(a, b)
         try:
@@ -1691,6 +1692,97 @@ class SemanticBackstop(unittest.TestCase):
                 self.assertEqual(paths, ["b/near", "b/far"])
         finally:
             okf._cosine = orig_cosine
+
+
+class VoyageQueryEmbedding(unittest.TestCase):
+    """D13/D16 — the query path speaks voyage-3-large with input_type=query
+    (the asymmetric form the measurement used, eval/hybrid_eval.py:73-80),
+    and it degrades to lexical-only on any failure. Network is faked."""
+
+    def setUp(self):
+        self.orig_env = os.environ.get("VOYAGE_API_KEY")
+        os.environ["VOYAGE_API_KEY"] = "test-key"
+
+    def tearDown(self):
+        if self.orig_env is None:
+            os.environ.pop("VOYAGE_API_KEY", None)
+        else:
+            os.environ["VOYAGE_API_KEY"] = self.orig_env
+
+    def test_request_uses_query_input_type_and_bearer_auth(self):
+        seen = {}
+
+        class _Resp:
+            def __enter__(self_inner):
+                return self_inner
+
+            def __exit__(self_inner, *a):
+                return False
+
+            def read(self_inner):
+                return json.dumps(
+                    {"data": [{"embedding": [0.5, 0.5]}]}).encode("utf-8")
+
+        def _fake_urlopen(req, timeout=None):
+            seen["payload"] = json.loads(req.data.decode("utf-8"))
+            seen["auth"] = req.get_header("Authorization")
+            return _Resp()
+
+        orig = okf.urllib.request.urlopen
+        okf.urllib.request.urlopen = _fake_urlopen
+        try:
+            vec = okf._embed_query_voyage("mockup tailscale")
+        finally:
+            okf.urllib.request.urlopen = orig
+
+        self.assertEqual(vec, [0.5, 0.5])
+        self.assertEqual(seen["payload"]["model"], "voyage-3-large")
+        self.assertEqual(seen["payload"]["input_type"], "query")
+        self.assertEqual(seen["payload"]["input"], ["mockup tailscale"])
+        self.assertEqual(seen["auth"], "Bearer test-key")
+
+    def test_missing_api_key_raises_so_the_caller_can_degrade(self):
+        os.environ.pop("VOYAGE_API_KEY", None)
+        with self.assertRaises(RuntimeError):
+            okf._embed_query_voyage("x")
+
+
+class SemanticRankingDegradation(unittest.TestCase):
+    """R05/D16 — every failure mode returns [] plus one stderr note, and none
+    of them raises."""
+
+    def test_absent_cache_returns_empty(self):
+        root = tempfile.mkdtemp()
+        try:
+            self.assertEqual(okf.semantic_ranking(root, "x", 10), [])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_unreachable_backend_returns_empty(self):
+        root = tempfile.mkdtemp()
+        try:
+            db = okf._tagvec_db_path(root)
+            os.makedirs(os.path.dirname(db))
+            conn = sqlite3.connect(db)
+            conn.execute("CREATE TABLE concept_emb(key TEXT, path TEXT, "
+                         "model TEXT, dim INT, vec BLOB)")
+            conn.execute("INSERT INTO concept_emb VALUES(?,?,?,?,?)",
+                         ("k", "b/one", "voyage-3-large", 2,
+                          struct.pack("<2f", 1.0, 0.0)))
+            conn.commit()
+            conn.close()
+
+            def _raise(_text):
+                raise RuntimeError("no network")
+
+            orig = okf._embed_query_voyage
+            okf._embed_query_voyage = _raise
+            try:
+                self.assertEqual(okf.semantic_ranking(root, "x", 10), [])
+            finally:
+                okf._embed_query_voyage = orig
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
 
 
 class TokenizeUnicode(unittest.TestCase):
