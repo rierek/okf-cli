@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: critical
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T07:43:21Z
+updated_at: 2026-07-26T07:44:23Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-8j7l
@@ -372,3 +372,42 @@ double-noting when handover and degradation coincide. Test churn confirmed as 1 
 deletion + 2 D12-covered rewrites, no orphaned invariant. Conventions clean (44 and 34 chars,
 no `Co-Authored-By`, no new imports). No key material in either commit. Live `.fts` index
 intact at 13,164,544 bytes, catalogue clean.
+
+
+
+## RULING 2026-07-26 — B01 fix: (b), the PARK variant explicitly
+
+**Plan author retracts his own ownership assignment.** Verified: T09's file list
+(`PLAN.md:1569-1571`) does not contain `cli/test_eval_runner.py`, and
+`RunnerAgainstRealCatalogueTest.setUp` does teardown + seed + FTS parking with NO embedding
+step. Step 4 is a shell sequence for the gate run, not a path the unit test traverses. The
+reviewer's bisection was the right method and its conclusion stands.
+
+**Chosen: park the credential for this one test. NOT the embedding variant.**
+
+Why embedding is excluded, non-negotiable: embedding S1/S4 inside `setUp` would make a UNIT
+TEST perform real Voyage calls. That violates the global constraint "no network under test"
+and the very SC-NET that T07 proved three ways with a socket-level guard — and it would spend
+money on every suite run, with a credential that is about to be rotated.
+
+Why parking is not gate-greening: it is exactly the pattern T06 already established and
+justified with `_park_fts_index()`. A freshly seeded fixture is BY CONSTRUCTION absent from
+every precomputed index — the FTS index and the embedding cache alike. This test exercises the
+EVAL RUNNER, not the retrieval architecture. Neutralising the arm the fixture structurally
+cannot participate in is what lets the test check what it claims to check.
+
+Implementation requirements: use the same context-manager style as `_park_fts_index`
+(restoration on EVERY exit path, exceptions included) and put the REASON in the docstring —
+otherwise a later reader sees "inconvenient failure silenced".
+
+Why not (a): a permanently red baseline degrades into "the known failures" and then swallows
+the next real one. That was rejected in T07 and the reasoning is unchanged here.
+**Baseline stays 19F/2E WITH the key set** — the real operating condition.
+
+**Nothing is hidden; three separate places carry the property:**
+1. the `cmd_find` integration test demanded in the running fix round — lexically ambiguous,
+   semantic arm owns the ranking, lexical top-1 still present in the result;
+2. `okf-cli-uumj` — operational visibility for a stale `concept_emb`;
+3. the parked test continues to exercise the runner.
+
+Each finding is checked where it belongs, none is dropped.
