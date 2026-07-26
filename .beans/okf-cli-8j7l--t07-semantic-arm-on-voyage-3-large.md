@@ -1,11 +1,11 @@
 ---
 # okf-cli-8j7l
 title: T07 Semantic arm on voyage-3-large
-status: completed
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T06:47:19Z
+updated_at: 2026-07-26T07:00:20Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-c922
@@ -205,3 +205,58 @@ closed.
   finding per T08's HARD STOP, not a data problem.
 - `VOYAGE_API_KEY` is confirmed live and functional (no 401/403
   encountered); rotation is scheduled after T09 per the plan author.
+
+
+
+## REVIEW ROUND 1 — CHANGES_REQUIRED 2026-07-26 (ce-specs-reviewer)
+
+Status flipped back to `in-progress` by the supervisor per PF-2. Fix in THIS bean.
+
+**B01 (high, BLOCKING) — the `cmd_find` shim is NOT dedup-inert.**
+`cli/okf-cli.py:1122-1131` ranks and slices the semantic candidates to `limit` BEFORE excluding
+paths already returned lexically. The pre-T07 `semantic_backstop(exclude_paths=...)` excluded
+BEFORE ranking/slicing. Reproduced live by the reviewer: `limit=2`, excluded path `b/x1` at
+cosine rank 1, candidates `b/x2` (rank 2) and `b/x3` (rank 3) — old code returns `[x2, x3]`,
+the shim returns only `[x2]`. `x3` is silently dropped because it never enters the
+pre-exclusion top-`limit` window.
+
+This fires whenever a lexical hit's path also ranks inside the semantic top-`limit` — the
+common case, since a keyword-matching document is usually also semantically close. It is a
+live behaviour change on `main`, and no test in the added or renamed suites covers the
+overlap-with-backfill scenario.
+
+It also contradicts this bean's own `## Deviations/ERRATA` #1, which claims "preserving 100%
+prior observable behaviour... verified". That claim is false as written. **The plan author
+approved the shim on the strength of that description** — the approval rested on a wrong
+premise and has been corrected accordingly (see below).
+
+**I01 (low).** Stale module comment at `cli/okf-cli.py:925-930` still describes the arm as a
+"semantic backstop" using "a LOCAL Ollama bge-m3 call" — wrong after this commit's rename to
+`semantic_ranking`/`voyage-3-large`, and inconsistent with the accurate docstrings added
+directly below it in the same commit.
+
+**I02 (info, no action).** The still-untouched pin+interleave block
+(`cli/okf-cli.py:1143-1147`) numerically compares semantic `round(100*cosine)` against lexical
+scores that are 0..100 on the FTS path but only `6*len(terms)` on the substring fallback — a
+real scale mismatch. Pre-existing debt, out of T07 scope, replaced by T08's `fuse_conditional`.
+The reviewer checked the planned T08 design (PLAN.md:1373-1434) and confirmed it never compares
+cross-arm scores for ownership or ordering, so the mismatch does not propagate — it is live
+only during this transient window.
+
+**Confirmed clean (no action) — strong evidence:**
+- SC-NET proven by execution, three ways: invalid key (`233 tests, 19F/2E`), unset key
+  (identical), and a socket-level guard patching `socket.socket.connect` to raise on any
+  non-localhost address across the full run under all three env conditions — **0 real connect()
+  calls in every run**. No test phones home regardless of key validity.
+- `test_token_absent_before_seed`: a spy confirmed the local monkeypatch is what runs (0 calls
+  reached the real function), the note fires exactly once, and the assertion text is
+  byte-identical to the pre-task version — the lexical claim was not weakened.
+- PF-4 degradation: missing `concept_emb`, missing key, unreachable backend each yield `[]`
+  plus exactly one note; combined missing-key + absent-FTS yields exactly 2 notes, one per
+  independent event, which is coherent. `bge-m3` appears only in the unrelated tag-auto-embed
+  path, never in the query path (D16 holds).
+- Baseline: 229 -> 233 tests, both 19F/2E, sorted FAIL/ERROR name lists diffed byte-identical
+  against pre-task commit `ea23f50` — nothing new, nothing silenced.
+- Key hygiene: no key material in the diff, the bean, or the commit message.
+- Live artefacts intact: `.fts/fts.sqlite` 13,164,544 bytes; `concept_emb` 2443 rows, all
+  voyage-3-large; both repos clean after review.
