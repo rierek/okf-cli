@@ -7,7 +7,7 @@ priority: high
 tags:
     - to-review
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T10:04:34Z
+updated_at: 2026-07-26T11:55:30Z
 parent: okf-cli-wuiv
 ---
 
@@ -303,3 +303,10 @@ socket-level guard patching `socket.socket.connect` to raise on any non-localhos
 across the full 233-test run, under three environment conditions (valid key, invalid key, no
 key) — zero real `connect()` calls in all three. That proves a negative instead of asserting
 it. That is the bar.
+
+
+## Review 2026-07-26
+
+US-01 · `find "mockup tailscale"` surfaces `serve-excalidraw-drafts` (rank 3, `provenance: semantic`, cosine 0.55) although the word "mockup" appears nowhere in it — the R12 counter-probe that previously returned nothing · a
+US-02 · `find "konvention"` matches inflected forms ("Konventionen") via the stemming, prefix-matching lexical arm instead of requiring an exact substring · a
+US-03 · `find "größe"` treats the umlaut word as one token; the Unicode-aware tokenizer no longer splits at the diacritic · a
