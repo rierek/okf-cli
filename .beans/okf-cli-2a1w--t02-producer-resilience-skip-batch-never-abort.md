@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T05:36:54Z
+updated_at: 2026-07-26T05:39:31Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-pean
@@ -455,3 +455,21 @@ So the hook works in the main session and did not fire for the subagent.
 exactly where most commits are produced in this chain, while only the main session is covered.
 Escalated to the plan author for Erik; the hook and settings live in `~/.claude/` (global user
 config) and are not touched from this session.
+
+
+
+## RETRACTION 2026-07-26 — supervisor claim about subagent hooks was wrong
+
+The section above concludes "PreToolUse hooks appear not to fire for Agent-tool subagents".
+**That is withdrawn.** Hooks DO fire for subagents — the plan author disproved it by having a
+general-purpose subagent attempt the same 55-character commit with `-m` in a throwaway repo:
+blocked verbatim with `E1: Commit-Title >50 Zeichen (55). Kuerzen.`, never executed.
+
+Real root cause and the binding rule that follows from it: see `## PF-3` in the parent bean
+`okf-cli-cskz`. Short version: `git-enforce.py` tokenises with `shlex(punctuation_chars=True)`
+in non-POSIX mode, which turns a `backslash + newline` continuation into a literal backslash
+token, so `args[j+1]` after `-m` is the backslash rather than the message. E1/E2 are defeated
+by that invocation form only. Commit single-line and the guard works.
+
+The B02 deviation itself (55-character subject in `203a1b0`, no rebase) is unaffected and
+stands as ruled.
