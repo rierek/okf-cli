@@ -1793,5 +1793,76 @@ class FtsIndexBuild(unittest.TestCase):
             conn.close()
 
 
+class FtsTokenizerRegression(unittest.TestCase):
+    """I01 (T05 review 2026-07-26, ce-specs-reviewer on okf-cli-ntc8) — the
+    FTS_TOKENIZER config (porter unicode61 remove_diacritics 2) was
+    unprotected: the reviewer reduced it to bare "unicode61" and every
+    FtsIndexBuild test stayed green. This test queries the REAL
+    build_fts_index() output and only passes when porter stemming is active
+    — "study"* (query stem "studi") bridges to an indexed "studies" (also
+    stems to "studi"); a plain prefix match would not, because "study" is
+    not a literal prefix of "studies" (stud-Y vs stud-IES diverge)."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Konzept\ntitle: Process notes\n"
+                    "description: d\ntags: []\n---\n"
+                    "Ongoing studies of the process.\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_porter_stem_bridges_study_query_to_studies_token(self):
+        okf.build_fts_index(self.root)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            rows = conn.execute(
+                'SELECT path FROM docs WHERE docs MATCH \'"study"*\''
+            ).fetchall()
+        finally:
+            conn.close()
+        self.assertEqual([r[0] for r in rows], ["b/one"])
+
+
+class FtsIndexStaleDegrades(unittest.TestCase):
+    """I02 (T05 review 2026-07-26) — bean AC7 of T05 ("IF index metadata is
+    missing or unreadable THEN the staleness check SHALL report stale") had
+    no committed test; only a live reviewer probe verified it. This locks it
+    in: a garbage-byte file and a schema-less-but-openable sqlite file must
+    both make _fts_index_stale report True without raising."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_garbage_byte_file_reports_stale_without_raising(self):
+        db_path = os.path.join(self.root, "garbage.sqlite")
+        with open(db_path, "wb") as f:
+            f.write(b"not a database")
+        conn = sqlite3.connect(db_path)
+        try:
+            self.assertTrue(okf._fts_index_stale(self.root, conn))
+        finally:
+            conn.close()
+
+    def test_schemaless_db_reports_stale_without_raising(self):
+        db_path = os.path.join(self.root, "empty.sqlite")
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE unrelated(x)")
+        conn.commit()
+        try:
+            self.assertTrue(okf._fts_index_stale(self.root, conn))
+        finally:
+            conn.close()
+
+
 if __name__ == "__main__":
     unittest.main()
