@@ -860,7 +860,7 @@ One correction the measurement bean must carry, found while grounding this plan:
 
 ## Self-review
 
-**Spec coverage.** Every finding B01-B09 maps to a task: B01 → Task 2, B02+B05 → Task 3, B03+B04 → Task 4, B06 → Task 5, B07+B08 → Task 6 (whitelist + wrappers), B09 → Task 6 Step 5. The three origin beans are covered: `okf-cli-3suc` by Tasks 2-4, `okf-cli-6zhw` by Tasks 1, 2, 4, 5 (single source of truth = D02, conformance gate = Task 5, sorting = D03), `okf-cli-4ws6` by Task 6. The PO decisions D01-D04 are each implemented or explicitly recorded as out of scope.
+**Spec coverage.** Every finding B01-B10 maps to a task: B01 → Task 2, B02+B05 → Task 3, B03+B04 → Task 4, B06 → Task 5, B07+B08 → Task 6 (whitelist + wrappers), B09 → Task 6 Step 5, B10 → Task 2 Step 4b. The three origin beans are covered: `okf-cli-3suc` by Tasks 2-4, `okf-cli-6zhw` by Tasks 1, 2, 4, 5 (single source of truth = D02, conformance gate = Task 5, sorting = D03), `okf-cli-4ws6` by Task 6. The PO decisions D01-D04 are each implemented or explicitly recorded as out of scope.
 
 **Placeholders.** None: every step carries its literal code, its literal command and its expected output. The one conditional instruction (Task 5 Step 2, "if the list differs, reconcile against B06") names the exact expected list rather than deferring the content.
 
