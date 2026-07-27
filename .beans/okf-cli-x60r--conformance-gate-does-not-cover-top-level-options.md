@@ -105,7 +105,7 @@ FAIL: test_top_level_option_has_help (cli.test_okf_cli.CommandHelpConformance.te
 R-02 (okf-cli-x60r): the subcommand-only gate above missed the
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py", line 2722, in test_top_level_option_has_help
+  File "/Users/erik/dev/okf-tools/cli/test_okf_cli.py", line 2722, in test_top_level_option_has_help
     self.assertEqual(missing, [])
     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
 AssertionError: Lists differ: ['root'] != []

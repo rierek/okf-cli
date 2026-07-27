@@ -65,7 +65,7 @@ The session started from the opposite question: "`log.md` grows over time, query
 ## Reference updates outside okf-cli (the actual blast radius)
 
 - [ ] `~/.claude/skills/obs-orphans/SKILL.md:153` — remove the "append a bullet under today's `## YYYY-MM-DD` in `log.md`" instruction; replace with rationale-in-commit-body per the `ce-okf/SKILL.md:99` pattern. **Highest priority — this is a live writer to the file.**
-- [ ] `~/.claude/skills/claude-setup/PROCEDURE_FULL.md:368` — core-files health check asserts `log.md` exists; it would fail after the delete. Drive-by: the same check also asserts `okf-cli.py` at the catalogue root, which is ALREADY absent (the CLI lives at `~/Obsidian/tools/okf-tools/cli/okf-cli.py`) — so this line is already broken. Fix both names.
+- [ ] `~/.claude/skills/claude-setup/PROCEDURE_FULL.md:368` — core-files health check asserts `log.md` exists; it would fail after the delete. Drive-by: the same check also asserts `okf-cli.py` at the catalogue root, which is ALREADY absent (the CLI lives at `~/dev/okf-tools/cli/okf-cli.py`) — so this line is already broken. Fix both names.
 - [ ] `~/.claude/skills/claude-setup/PROCEDURE_FULL.md:371` — "Reserved `index.md`/`log.md` carry no `type`" stays valid per D06; verify wording still reads correctly with no `log` command.
 - [ ] `~/.claude/skills/ce-okf/SKILL.md` — four sites: `:92`, `:99`, `:122`, `:178`. Drop all `log.md` / `okf-cli.py log --write` prose; the skill gets shorter, its rule ("rationale in the commit body") already stands on its own.
 - [ ] `~/.claude/skills/ce-okf-p/references/init-procedure.md:111` — the `LOG.md` → `log.md` lowercase-rename convention now rests on SPEC fidelity only, no okf-cli reference. Adjust if it implies our command.

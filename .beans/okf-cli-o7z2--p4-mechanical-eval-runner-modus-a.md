@@ -63,7 +63,7 @@ P2-completion prelude.
 RED (runner.py absent, cli/test_eval_runner.py written first):
 
     FileNotFoundError: [Errno 2] No such file or directory:
-    '/Users/erik/Obsidian/tools/okf-tools/cli/eval/runner.py'
+    '/Users/erik/dev/okf-tools/cli/eval/runner.py'
 
 GREEN after implementing cli/eval/runner.py (9 new tests, real catalogue):
 

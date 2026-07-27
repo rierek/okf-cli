@@ -1,7 +1,7 @@
 metadata:
   catalogue: okf-cli + okf MCP server
-  cli_source: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py
-  mcp_source: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py
+  cli_source: /Users/erik/dev/okf-tools/cli/okf-cli.py
+  mcp_source: /Users/erik/dev/okf-tools/mcp/okf_mcp.py
   total_cli_verbs: 20
   total_mcp_tools: 9
   coverage: 9 CLI verbs exposed as MCP tools; 11 CLI-only verbs (agent-facing, viz, admin)

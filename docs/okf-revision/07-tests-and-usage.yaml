@@ -1,27 +1,27 @@
 tests:
   - id: TST01
-    claim: Unit test suite exists at /Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py with 22 test classes and 98 test methods.
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py:1-1140
+    claim: Unit test suite exists at /Users/erik/dev/okf-tools/cli/test_okf_cli.py with 22 test classes and 98 test methods.
+    path: /Users/erik/dev/okf-tools/cli/test_okf_cli.py:1-1140
 
   - id: TST02
     claim: Test framework is stdlib unittest (no external dependencies); run via `python3 -m unittest test_okf_cli -v`.
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py:1-5
+    path: /Users/erik/dev/okf-tools/cli/test_okf_cli.py:1-5
 
   - id: TST03
     claim: Test suite covers subcommand logic (cmd_refs, cmd_check, cmd_visualize, cmd_prime) and function units (convert_flat_index, rewrite_crosslinks_in_body, build_ref_matrix, etc.).
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py:305-1137
+    path: /Users/erik/dev/okf-tools/cli/test_okf_cli.py:305-1137
 
   - id: TST04
     claim: CmdRefs test class includes JSON flag scenario with args.json=True at lines 846, 855, invoking okf.cmd_refs() with json parameter.
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py:823-858
+    path: /Users/erik/dev/okf-tools/cli/test_okf_cli.py:823-858
 
   - id: TST05
     claim: Test suite would catch bug where cmd_refs() receives unrecognized --json flag if it fails argument handling, because test directly invokes cmd_refs(args) with json=True.
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py:842-851
+    path: /Users/erik/dev/okf-tools/cli/test_okf_cli.py:842-851
 
   - id: TST06
     claim: Test suite does NOT include integration tests for MCP-to-CLI flag forwarding; tests use direct Python function calls, not subprocess CLI invocation.
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py:11-13
+    path: /Users/erik/dev/okf-tools/cli/test_okf_cli.py:11-13
 
 verb_usage:
   - id: USE01

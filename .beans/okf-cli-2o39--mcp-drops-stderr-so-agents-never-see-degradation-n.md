@@ -122,7 +122,7 @@ test_find_returns_absent_note_ahead_of_stdout (cli.test_okf_mcp.McpFindDegradati
 FAIL: test_find_returns_absent_note_ahead_of_stdout (cli.test_okf_mcp.McpFindDegradationNoteBoundary.test_find_returns_absent_note_ahead_of_stdout)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
-  File "/Users/erik/Obsidian/tools/okf-tools/cli/test_okf_mcp.py", line 194, in test_find_returns_absent_note_ahead_of_stdout
+  File "/Users/erik/dev/okf-tools/cli/test_okf_mcp.py", line 194, in test_find_returns_absent_note_ahead_of_stdout
     self.assertIn("note: lexical index absent", out)
     ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 AssertionError: 'note: lexical index absent' not found in '------\nscore: 4/6\ntitle: One\ntype: Runbook\npath: b/one\ndescription: first\nbody-snippet: # One…\n------\n'

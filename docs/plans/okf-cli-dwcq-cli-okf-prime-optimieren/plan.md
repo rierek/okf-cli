@@ -52,7 +52,7 @@ class RenderBundleLine(unittest.TestCase):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/erik/Obsidian/tools/okf-tools && python3 -m unittest cli.test_okf_cli.RenderBundleLine -v`
+Run: `cd /Users/erik/dev/okf-tools && python3 -m unittest cli.test_okf_cli.RenderBundleLine -v`
 Expected: FAIL / ERROR with `AttributeError: module 'okf_cli' has no attribute 'render_bundle_line'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -71,13 +71,13 @@ def render_bundle_line(root, b):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/erik/Obsidian/tools/okf-tools && python3 -m unittest cli.test_okf_cli.RenderBundleLine -v`
+Run: `cd /Users/erik/dev/okf-tools && python3 -m unittest cli.test_okf_cli.RenderBundleLine -v`
 Expected: PASS (2 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/erik/Obsidian/tools/okf-tools
+cd /Users/erik/dev/okf-tools
 git add cli/okf-cli.py cli/test_okf_cli.py
 git commit -m "feat(cli): add render_bundle_line compact bundle renderer"
 ```
@@ -136,7 +136,7 @@ class CmdPrimeBundleListing(unittest.TestCase):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/erik/Obsidian/tools/okf-tools && python3 -m unittest cli.test_okf_cli.CmdPrimeBundleListing -v`
+Run: `cd /Users/erik/dev/okf-tools && python3 -m unittest cli.test_okf_cli.CmdPrimeBundleListing -v`
 Expected: FAIL on `test_default_uses_compact_line_not_description` (current default already prints `description:`)
 
 - [ ] **Step 3: Write minimal implementation**
@@ -176,13 +176,13 @@ Update the `--full` help text (cli/okf-cli.py:1885):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/erik/Obsidian/tools/okf-tools && python3 -m unittest cli.test_okf_cli.CmdPrimeBundleListing cli.test_okf_cli.RenderBundleLine -v`
+Run: `cd /Users/erik/dev/okf-tools && python3 -m unittest cli.test_okf_cli.CmdPrimeBundleListing cli.test_okf_cli.RenderBundleLine -v`
 Expected: PASS (4 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/erik/Obsidian/tools/okf-tools
+cd /Users/erik/dev/okf-tools
 git add cli/okf-cli.py cli/test_okf_cli.py
 git commit -m "fix(cli): prime defaults to compact bundle listing, --full keeps detail"
 ```
@@ -196,14 +196,14 @@ git commit -m "fix(cli): prime defaults to compact bundle listing, --full keeps 
 
 - [ ] **Step 1: Run the full test suite, confirm no new failures**
 
-Run: `cd /Users/erik/Obsidian/tools/okf-tools && python3 -m unittest discover -s cli -v 2>&1 | tail -30`
+Run: `cd /Users/erik/dev/okf-tools && python3 -m unittest discover -s cli -v 2>&1 | tail -30`
 Expected: same pre-existing 19 failures/2 errors as before this plan (per `docs/SSTD.md`, 2026-07-18) — no new ones. If the count changed, stop and investigate before continuing.
 
 - [ ] **Step 2: Re-measure `prime` against the real catalogue**
 
 Run:
 ```bash
-cd /Users/erik/Obsidian/tools/okf-tools
+cd /Users/erik/dev/okf-tools
 python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue prime | wc -l
 python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue prime | wc -c
 python3 cli/okf-cli.py --root ~/Obsidian/Knowledge-Catalogue prime --full | wc -l
@@ -213,7 +213,7 @@ Expected: default line count drops from 268 to roughly 90-100 (69-line guide + ~
 - [ ] **Step 3: Commit the measurement as bean evidence, close the bean**
 
 ```bash
-cd /Users/erik/Obsidian/tools/okf-tools
+cd /Users/erik/dev/okf-tools
 beans update okf-cli-dwcq -s completed --body-append "## Summary of Changes
 
 Default \`prime\` bundle listing is now compact (name + concept count), matching

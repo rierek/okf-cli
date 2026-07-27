@@ -118,7 +118,7 @@ class ParserExtraction(unittest.TestCase):
 - [ ] **Step 2: Run it, confirm it fails for the stated reason**
 
 ```bash
-cd /Users/erik/Obsidian/tools/okf-tools
+cd /Users/erik/dev/okf-tools
 rm -rf cli/__pycache__
 python3 -m unittest cli.test_okf_cli.ParserExtraction -v
 ```
@@ -182,7 +182,7 @@ The inline dispatch dict at `cli/okf-cli.py:2701-2711` is deleted — `COMMAND_D
 - [ ] **Step 5: Prove the refactor changed no output**
 
 ```bash
-cd /Users/erik/Obsidian/tools/okf-tools
+cd /Users/erik/dev/okf-tools
 git stash && python3 cli/okf-cli.py --help > /tmp/help_before.txt 2>&1 && \
   python3 cli/okf-cli.py find --help > /tmp/find_before.txt 2>&1 && git stash pop
 python3 cli/okf-cli.py --help > /tmp/help_after.txt 2>&1

@@ -21,7 +21,7 @@ bugs:
   - id: B01
     severity: high
     claim: "2 of 9 MCP tools (okf_index, okf_list = 22%) are non-functional: okf_mcp.py passes --json to okf-cli, but those subcommands do not define --json."
-    path: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py (index/list handlers) vs cli/okf-cli.py:1884,1889
+    path: /Users/erik/dev/okf-tools/mcp/okf_mcp.py (index/list handlers) vs cli/okf-cli.py:1884,1889
     status: confirmed-live
     fix_direction: "either add --json to index/list argparse in okf-cli.py, or stop sending --json from okf_mcp.py and parse text output"
 
@@ -31,7 +31,7 @@ improvements:
     path: 02-verbs.yaml#coverage_analysis
   - id: I02
     claim: "Default --root resolves to the okf-cli.py script directory, not the Knowledge Catalogue — every caller MUST pass --root or silently operate on the wrong root."
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py:72-73,1983-1984
+    path: /Users/erik/dev/okf-tools/cli/okf-cli.py:72-73,1983-1984
   - id: I03
     claim: "okf-meta-wiki reference doc claims '100% coverage, 18/18 verbs' but omits 2 real verbs (prime, remove-tags); actual count is 20 -> doc is stale/incomplete while asserting completeness."
     path: /Users/erik/Obsidian/Knowledge-Catalogue/okf-meta-wiki/okf-cli-mcp-overview.md (Table 1) vs LIVE04

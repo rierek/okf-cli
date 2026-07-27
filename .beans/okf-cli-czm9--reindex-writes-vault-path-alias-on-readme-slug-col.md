@@ -14,7 +14,7 @@ Found while ingesting into `sproutling-okf` on 2026-07-26.
 
 `okf-cli reindex <bundle>` rewrites crosslinks of files it was not asked to touch, and when two `README.md` files exist in different subdirs of one bundle it emits a **vault-style absolute path alias** instead of the plain bundle-relative slug.
 
-Observed in `/Users/erik/Obsidian/tools/sproutling/docs/sproutling-okf`:
+Observed in `/Users/erik/dev/sproutling/docs/sproutling-okf`:
 
 - `e2e-tests/FLOW-PREFLIGHT.md`, `e2e-tests/GUARDRAILS.md`, `e2e-tests/index.md` were modified although the ingest touched none of them.
 - The rewrite turned `README.md` into `SPF_Sproutling/docs/sproutling-okf/e2e-tests/README.md` — a vault path, not a bundle-relative link.

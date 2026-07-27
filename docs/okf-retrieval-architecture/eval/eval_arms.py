@@ -20,7 +20,7 @@ import subprocess
 import sys
 import urllib.request
 
-REPO = "/Users/erik/Obsidian/tools/okf-tools"
+REPO = "/Users/erik/dev/okf-tools"
 CLI = os.path.join(REPO, "cli", "okf-cli.py")
 EMBED_URL = "http://localhost:11434/api/embed"
 

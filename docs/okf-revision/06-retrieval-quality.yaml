@@ -28,8 +28,8 @@ findings:
     path: "okf-cli.py:538-574"
 
   - id: RET08
-    claim: "No .py file under /Users/erik/Obsidian/tools/okf-tools (cli or mcp) contains the strings 'tagvec', 'tag_vectors', 'embedding', 'sqlite3', or 'vector' — confirmed via full-tree grep with zero matches."
-    path: "grep -rn tagvec|tag_vectors|embedding|sqlite3|vector /Users/erik/Obsidian/tools/okf-tools/ → no output"
+    claim: "No .py file under /Users/erik/dev/okf-tools (cli or mcp) contains the strings 'tagvec', 'tag_vectors', 'embedding', 'sqlite3', or 'vector' — confirmed via full-tree grep with zero matches."
+    path: "grep -rn tagvec|tag_vectors|embedding|sqlite3|vector /Users/erik/dev/okf-tools/ → no output"
 
   - id: RET09
     claim: "cmd_tags's fuzzy search (used for `tags <candidate>` and by cmd_find's tag validation flow) is implemented by fuzzy_matches(), which shells out to `fzf --filter` for subsequence matching and combines it with difflib.SequenceMatcher ratio — a lexical/character-level method, not embeddings."

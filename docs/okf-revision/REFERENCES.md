@@ -1,11 +1,11 @@
 # REFERENCES — okf-cli + okf-mcp Reifegraderhöhung
 
 ## Code
-- CLI (20 Verben, 85 KB, dependency-free): `/Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py`
+- CLI (20 Verben, 85 KB, dependency-free): `/Users/erik/dev/okf-tools/cli/okf-cli.py`
   - `cmd_find` Ranking: `:538-574` · Verb-Registrierung: `:1884-1976` · Root-Resolution: `:72-73`, `:1983-1984`
-- MCP-Server (FastMCP, 9 Tools): `/Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py` (`:119-120` init, `:47` OKF_CLI-Override)
+- MCP-Server (FastMCP, 9 Tools): `/Users/erik/dev/okf-tools/mcp/okf_mcp.py` (`:119-120` init, `:47` OKF_CLI-Override)
 - CLI-Wrapper (Bash): `/Users/erik/.local/bin/okf-cli`
-- Test-Suite (22 Klassen/98 Methoden, nur Python-Funktion-Ebene): `/Users/erik/Obsidian/tools/okf-tools/cli/test_okf_cli.py`
+- Test-Suite (22 Klassen/98 Methoden, nur Python-Funktion-Ebene): `/Users/erik/dev/okf-tools/cli/test_okf_cli.py`
 
 ## Daten / Katalog
 - Catalogue-Root: `/Users/erik/Obsidian/Knowledge-Catalogue/` (22 Bundles)

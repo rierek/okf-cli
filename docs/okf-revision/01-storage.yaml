@@ -6,20 +6,20 @@ findings:
     path: /Users/erik/.local/bin/okf-cli
 
   - id: STO02
-    claim: The Bash wrapper delegates to a Python script located at /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py
+    claim: The Bash wrapper delegates to a Python script located at /Users/erik/dev/okf-tools/cli/okf-cli.py
     path: /Users/erik/.local/bin/okf-cli:2-3
 
   - id: STO03
     claim: Main CLI module okf-cli.py is 85 KB in size and located in the cli subdirectory of okf-tools source
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py
+    path: /Users/erik/dev/okf-tools/cli/okf-cli.py
 
   - id: STO04
-    claim: Secondary MCP server module okf_mcp.py is located at /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py
-    path: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py
+    claim: Secondary MCP server module okf_mcp.py is located at /Users/erik/dev/okf-tools/mcp/okf_mcp.py
+    path: /Users/erik/dev/okf-tools/mcp/okf_mcp.py
 
   - id: STO05
-    claim: okf-tools source repository root is /Users/erik/Obsidian/tools/okf-tools/ containing cli/, mcp/, docs/ subdirectories
-    path: /Users/erik/Obsidian/tools/okf-tools/
+    claim: okf-tools source repository root is /Users/erik/dev/okf-tools/ containing cli/, mcp/, docs/ subdirectories
+    path: /Users/erik/dev/okf-tools/
 
   - id: STO06
     claim: Knowledge Catalogue root directory is /Users/erik/Obsidian/Knowledge-Catalogue/ which serves as the catalogue root
@@ -31,7 +31,7 @@ findings:
 
   - id: STO08
     claim: Bundle concepts are Markdown files (.md) organized in subdirectories within each bundle; non-reserved files are indexed
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py:89-98 (iter_concepts function)
+    path: /Users/erik/dev/okf-tools/cli/okf-cli.py:89-98 (iter_concepts function)
 
   - id: STO09
     claim: Tag vector database for fuzzy tag search is stored at /Users/erik/Obsidian/Knowledge-Catalogue/.tagvec/tag_vectors.sqlite (5.7 MB SQLite database)
@@ -54,20 +54,20 @@ findings:
     path: /Users/erik/Obsidian/Knowledge-Catalogue/SPEC.md
 
   - id: STO14
-    claim: okf-tools project has its own .okf.toml configuration file at /Users/erik/Obsidian/tools/okf-tools/docs/.okf.toml
-    path: /Users/erik/Obsidian/tools/okf-tools/docs/.okf.toml
+    claim: okf-tools project has its own .okf.toml configuration file at /Users/erik/dev/okf-tools/docs/.okf.toml
+    path: /Users/erik/dev/okf-tools/docs/.okf.toml
 
   - id: STO15
-    claim: Default catalogue root is resolved via --root argument; if not provided, defaults to the directory of okf-cli.py (/Users/erik/Obsidian/tools/okf-tools/cli/)
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py:72-73 (catalogue_root function)
+    claim: Default catalogue root is resolved via --root argument; if not provided, defaults to the directory of okf-cli.py (/Users/erik/dev/okf-tools/cli/)
+    path: /Users/erik/dev/okf-tools/cli/okf-cli.py:72-73 (catalogue_root function)
 
   - id: STO16
     claim: Argument parser defines --root with help text indicating script directory is the default
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py:1882
+    path: /Users/erik/dev/okf-tools/cli/okf-cli.py:1882
 
   - id: STO17
     claim: Root resolution error message explicitly documents that root defaults to script directory when --root is not passed
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py:1983-1984
+    path: /Users/erik/dev/okf-tools/cli/okf-cli.py:1983-1984
 
   - id: STO18
     claim: No environment variables are used for OKF configuration; all configuration is file-based or argument-based
@@ -75,8 +75,8 @@ findings:
 
   - id: STO19
     claim: Bundle filtering logic excludes directories starting with . or _ to distinguish bundles from system/metadata directories
-    path: /Users/erik/Obsidian/tools/okf-tools/cli/okf-cli.py:76-77 (is_bundle_dir function)
+    path: /Users/erik/dev/okf-tools/cli/okf-cli.py:76-77 (is_bundle_dir function)
 
   - id: STO20
     claim: okf-tools package is a git repository with no package manifest (package.json, Cargo.toml, setup.py, pyproject.toml); it is a pure-Python dependency-free tool
-    path: /Users/erik/Obsidian/tools/okf-tools/ contains .git/ but no package manifest files
+    path: /Users/erik/dev/okf-tools/ contains .git/ but no package manifest files

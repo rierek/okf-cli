@@ -20,7 +20,7 @@ import struct
 import sys
 import time
 
-REPO = "/Users/erik/Obsidian/tools/okf-tools"
+REPO = "/Users/erik/dev/okf-tools"
 sys.path.insert(0, os.path.join(REPO, "cli", "embeddings"))
 import build_tagvec as bt  # noqa: E402
 

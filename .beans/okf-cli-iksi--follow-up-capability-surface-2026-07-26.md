@@ -23,7 +23,7 @@ Follow-up epic for findings raised during the PO review of okf-cli-5uog on 2026-
 
 ## Shared context for both leaves
 
-**Repo:** `/Users/erik/Obsidian/tools/okf-tools`, branch `main`, main-direct (repo Worktree-Weiche: solo).
+**Repo:** `/Users/erik/dev/okf-tools`, branch `main`, main-direct (repo Worktree-Weiche: solo).
 
 **Test baseline, measured live on 2026-07-26 after the predecessor epic landed:** `python3 -m unittest discover -s cli -p "test_*.py"` gives `Ran 279 tests` with exactly `failures=19, errors=2`. All 19F/2E are pre-existing in the crosslink suites. A leaf is done only when the count is still exactly 19F/2E plus its own new tests, all green. The suite prints stdout noise, so `tail` hides the summary — use `| grep -E "^(Ran |OK|FAILED)"`.
 

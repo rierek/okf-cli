@@ -24,7 +24,7 @@ import urllib.request
 
 import numpy as np
 
-REPO = "/Users/erik/Obsidian/tools/okf-tools"
+REPO = "/Users/erik/dev/okf-tools"
 sys.path.insert(0, os.path.join(REPO, "cli", "embeddings"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fts_arm  # noqa: E402

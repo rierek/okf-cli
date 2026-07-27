@@ -9,23 +9,23 @@ findings:
   claim: The server launch command is 'uv run --with mcp' executing the Python entrypoint
   path: /Users/erik/.claude.json:mcpServers.okf.command and args
 - id: MCP04
-  claim: The MCP server entrypoint is okf_mcp.py, located at /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py
-  path: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py
+  claim: The MCP server entrypoint is okf_mcp.py, located at /Users/erik/dev/okf-tools/mcp/okf_mcp.py
+  path: /Users/erik/dev/okf-tools/mcp/okf_mcp.py
 - id: MCP05
   claim: The server is built using mcp.server.fastmcp.FastMCP framework
-  path: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py:119
+  path: /Users/erik/dev/okf-tools/mcp/okf_mcp.py:119
 - id: MCP06
   claim: Server name is registered as 'okf' in FastMCP initialization
-  path: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py:120
+  path: /Users/erik/dev/okf-tools/mcp/okf_mcp.py:120
 - id: MCP07
   claim: No environment variables are passed to the server in the registration
   path: /Users/erik/.claude.json:mcpServers.okf.env
 - id: MCP08
-  claim: The okf_mcp.py wraps okf-cli.py commands, located at ~/Obsidian/tools/okf-tools/cli/okf-cli.py by default
-  path: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py:47-48
+  claim: The okf_mcp.py wraps okf-cli.py commands, located at ~/dev/okf-tools/cli/okf-cli.py by default
+  path: /Users/erik/dev/okf-tools/mcp/okf_mcp.py:47-48
 - id: MCP09
   claim: The okf-cli path can be overridden via the OKF_CLI environment variable
-  path: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py:47
+  path: /Users/erik/dev/okf-tools/mcp/okf_mcp.py:47
 - id: MCP10
   claim: Nine okf verbs are registered as MCP tools—find, read, toc, index, list, check, reindex, refs, rename
-  path: /Users/erik/Obsidian/tools/okf-tools/mcp/okf_mcp.py:7-17
+  path: /Users/erik/dev/okf-tools/mcp/okf_mcp.py:7-17
