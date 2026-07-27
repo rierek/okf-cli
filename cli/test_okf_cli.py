@@ -1286,6 +1286,24 @@ class CmdIndexJson(unittest.TestCase):
         self.assertIn("* [One]", out_json_false)
         self.assertNotIn("{", out_json_false)
 
+    def test_json_without_bundle_reports_a_concept_count_not_the_list(self):
+        """okf-cli-7u5z (D01) — the catalogue-wide shape mirrors the text
+        branch, which prints a count. Enumerating every concept of every
+        bundle produced 794 KB against the real catalogue."""
+        import json
+        entry = json.loads(self._run(bundle=None, json_flag=True))["bundles"][0]
+        self.assertEqual(entry["concepts"], 1)
+
+    def test_json_without_bundle_carries_description_and_directories(self):
+        """okf-cli-7u5z (D01) — the other two fields the text block shows."""
+        import json
+        os.makedirs(os.path.join(self.tmp, "b", "sub"))
+        with open(os.path.join(self.tmp, "b", "index.md"), "w", encoding="utf-8") as f:
+            f.write("# B\n\nthe b bundle\n")
+        entry = json.loads(self._run(bundle=None, json_flag=True))["bundles"][0]
+        self.assertEqual(entry["description"], "the b bundle")
+        self.assertEqual(entry["directories"], ["sub"])
+
 
 class RootSafety(unittest.TestCase):
     """okf-cli-1617 (P11) — no --root + no auto-detectable catalogue must

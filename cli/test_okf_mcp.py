@@ -237,6 +237,35 @@ class McpSurfaceParity(unittest.TestCase):
         self.assertEqual(unknown, [])
 
 
+class McpOutputCeiling(McpBoundaryTestBase):
+    """okf-cli-7u5z (D02) — a result too large for any consumer must fail with
+    guidance instead of being handed back. The catalogue-wide `index --json`
+    reached 794 KB; the harness discarded the call, so the agent got nothing
+    and no hint about what to do differently."""
+
+    def setUp(self):
+        super().setUp()
+        self._prev_max = mcp.MAX_OUTPUT_CHARS
+        mcp.MAX_OUTPUT_CHARS = 10
+
+    def tearDown(self):
+        mcp.MAX_OUTPUT_CHARS = self._prev_max
+        super().tearDown()
+
+    def test_oversized_result_raises_with_the_command_size_and_remedy(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            mcp.run_okf(self.root, "index", {})
+        msg = str(ctx.exception)
+        self.assertIn("index", msg)
+        self.assertIn("10", msg)
+        self.assertIn("narrow", msg.lower())
+
+    def test_result_within_budget_passes_through(self):
+        mcp.MAX_OUTPUT_CHARS = 10_000_000
+        out = mcp.run_okf(self.root, "index", {})
+        self.assertIn("bundles", out)
+
+
 class McpDefaultCliPath(unittest.TestCase):
     """The OKF_CLI fallback (no env override) must point at a CLI that exists.
     Every boundary suite patches mcp.OKF_CLI, so the fallback was uncovered --

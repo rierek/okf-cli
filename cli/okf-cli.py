@@ -516,10 +516,23 @@ def render_bundle_block(root, b, full=False):
     return "\n".join(lines)
 
 
+def _bundle_summary_json(root, b):
+    """The machine-readable twin of render_bundle_block: what the text
+    catalogue TOC shows, nothing more (okf-cli-7u5z). Enumerating concepts
+    here turned the catalogue-wide TOC into a 794 KB dump that no MCP
+    consumer could accept — the per-bundle branch is where concepts live."""
+    bp = os.path.join(root, b)
+    return {
+        "bundle": b,
+        "description": _collapse(bundle_description(bp)),
+        "concepts": sum(1 for _ in iter_concepts(bp)),
+        "directories": bundle_top_dirs(bp),
+    }
+
+
 def _concepts_json(bp):
     """[{id, title, type, description}, ...] for every concept under `bp`,
-    sorted by concept id. Shared by both cmd_index --json branches (F02
-    dedup, prelude 2026-07-25 on okf-cli-83vq)."""
+    sorted by concept id (F02 dedup, prelude 2026-07-25 on okf-cli-83vq)."""
     concepts = []
     for cid, ap in sorted(iter_concepts(bp)):
         t, title, desc = meta_of(ap)
@@ -533,11 +546,8 @@ def cmd_index(root, args):
             bp = os.path.join(root, args.bundle)
             print(json.dumps({"bundle": args.bundle, "concepts": _concepts_json(bp)}))
             return
-        bundles = [
-            {"bundle": b, "concepts": _concepts_json(os.path.join(root, b))}
-            for b in list_bundles(root)
-        ]
-        print(json.dumps({"bundles": bundles}))
+        print(json.dumps({"bundles": [_bundle_summary_json(root, b)
+                                      for b in list_bundles(root)]}))
         return
     if args.bundle:
         bp = os.path.join(root, args.bundle)

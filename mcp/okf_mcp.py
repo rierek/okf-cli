@@ -61,6 +61,12 @@ import subprocess
 OKF_CLI = os.environ.get("OKF_CLI",
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cli", "okf-cli.py"))
 
+# Ceiling on a single result (okf-cli-7u5z, D02). Beyond it the consumer drops
+# the call entirely, so returning the payload helps nobody -- an error naming the
+# remedy does. Sized so the largest legitimate bundle listing still passes while
+# a catalogue-wide dump does not.
+MAX_OUTPUT_CHARS = int(os.environ.get("OKF_MCP_MAX_CHARS", "120000"))
+
 
 def run_okf(root, command, params):
     """Invoke okf-cli.py, return parsed JSON for --json commands else raw text.
@@ -78,6 +84,11 @@ def run_okf(root, command, params):
     if proc.returncode != 0 and command != "check":
         raise RuntimeError("okf-cli {} failed: {}".format(command, proc.stderr.strip()))
     out = proc.stdout
+    if len(out) > MAX_OUTPUT_CHARS:
+        raise RuntimeError(
+            "okf-cli {} produced {} characters, over the {} character budget. "
+            "Narrow the call -- pass a bundle/scope/type filter, or use find "
+            "for a ranked subset.".format(command, len(out), MAX_OUTPUT_CHARS))
     if _COMMANDS[command][1]:  # supports_json
         return json.loads(out) if out.strip() else {}
     if proc.stderr:
