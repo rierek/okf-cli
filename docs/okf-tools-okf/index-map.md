@@ -19,3 +19,5 @@ design facts from the retrieval/MCP maturity work.
 - [capability-surface/](capability-surface/index.md) — durable passages of the capability-surface plan
   - [capability-surface-decisions.md](capability-surface/capability-surface-decisions.md) — D01-D04
   - [find-score-formula-drift.md](capability-surface/find-score-formula-drift.md) — B10
+- [mcp-boundary/](mcp-boundary/index.md) — durable findings about the CLI↔MCP seam (output budget, shapes that survive the hand-off)
+  - [mcp-output-budget-and-index-json-shape.md](mcp-boundary/mcp-output-budget-and-index-json-shape.md) — `index --json` bundle summary + `MAX_OUTPUT_CHARS` ceiling
