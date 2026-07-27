@@ -11,8 +11,3 @@ related: [lean-stack]
 
 Werkzeuge fuer das Open Knowledge Format: `cli/` (okf-cli), `mcp/` (MCP-Server),
 `plugin/`. Der Kanon dazu liegt in `lean-stack`.
-
-## Klasse B
-
-Klassenpflichten laut lean-stack-Kanon: beans als Work-State, `<slug>-okf` als
-Wissens-Bundle, ce-Trias, git-hooks + TDD. Nicht hier duplizieren.
