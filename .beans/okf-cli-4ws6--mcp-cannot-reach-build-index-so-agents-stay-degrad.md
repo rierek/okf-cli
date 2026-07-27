@@ -1,11 +1,11 @@
 ---
 # okf-cli-4ws6
 title: MCP cannot reach build-index, so agents stay degraded
-status: todo
+status: completed
 type: bug
 priority: normal
 created_at: 2026-07-26T12:25:37Z
-updated_at: 2026-07-26T14:34:11Z
+updated_at: 2026-07-27T17:54:06Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-g0gi
@@ -63,3 +63,27 @@ Scope held to D04 exactly — `build-index`, `prime`, `info`, nothing else. Whic
 **One correction made against the plan, worth the PO's eye.** PLAN.md dictated a docstring sentence claiming every result line names its origin as `provenance: lexical` or `provenance: semantic`. That is false of the code: `cmd_find`'s print loop (`cli/okf-cli.py:1229-1230`) emits the `provenance:` line only for semantic hits — lexical hits carry the field internally and never print it. The implementer caught it and shipped a true sentence instead; the reviewer confirmed it at the code. Shipping the plan's text verbatim would have written a promise into the agent interface that the tool does not keep — the same defect class as B10, which this epic fixed in the CLI's own help.
 
 A regression guard came with it: `McpSurfaceParity` derives from `COMMAND_DISPATCH`, so a command whitelisted on the MCP side but renamed or removed on the CLI side now fails the suite.
+
+
+## Closed 2026-07-27 — already fixed by okf-cli-g0gi
+
+The defect described here no longer exists. `mcp/okf_mcp.py` now whitelists 13 commands,
+including the three this bean named as the remedy: `build-index`, `prime`, `info`.
+
+Verified live in this session against `~/Obsidian/Knowledge-Catalogue`:
+
+```
+okf_find  → note: lexical index is stale (catalogue changed since build) — run `okf-cli build-index`
+okf_build_index → {"result":"indexed 2489 concept(s) -> .../.fts/fts.sqlite"}
+okf_find  → no staleness note
+```
+
+The loop this bean called broken — agent receives the remedy over MCP, cannot act on it —
+is closed: the agent read the note and executed the fix over MCP without leaving the tool
+surface. Delivered by `okf-cli-g0gi` (T06, completed 2026-07-26); this bean was simply
+never flipped.
+
+The selective surface for the remaining write/admin verbs stands as intended (`merge-tags`,
+`normalize-tags`, `remove-tags`, `fix-crosslinks`, `fix-xml-tags`, `rewrite-path`), confirmed
+by the PO 2026-07-27. `log` is separately slated for removal (okf-cli-ji5g), `visualize`
+writes a file and needs no agent path.
