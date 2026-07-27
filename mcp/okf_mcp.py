@@ -57,8 +57,9 @@ def build_argv(root, command, params):
 import json
 import subprocess
 
+# Resolve the CLI relative to this file so a repo move cannot strand the server.
 OKF_CLI = os.environ.get("OKF_CLI",
-    os.path.join(os.path.expanduser("~"), "Obsidian", "tools", "okf-tools", "cli", "okf-cli.py"))
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cli", "okf-cli.py"))
 
 
 def run_okf(root, command, params):

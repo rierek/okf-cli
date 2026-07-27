@@ -50,7 +50,7 @@ class McpBoundaryTestBase(unittest.TestCase):
     OKF_CLI pinned to this worktree's cli/okf-cli.py.
 
     okf_mcp.OKF_CLI is bound from os.environ at IMPORT time (module-level
-    global, mcp/okf_mcp.py:47-48) and read as a plain global inside
+    global in mcp/okf_mcp.py) and read as a plain global inside
     run_okf() -- it is never re-read from os.environ afterwards. Since this
     module's import (above) already ran before any setUp, setting
     os.environ["OKF_CLI"] here would be a no-op. Patch the module attribute
@@ -235,6 +235,25 @@ class McpSurfaceParity(unittest.TestCase):
         spec.loader.exec_module(okf)
         unknown = sorted(set(mcp._COMMANDS) - set(okf.COMMAND_DISPATCH))
         self.assertEqual(unknown, [])
+
+
+class McpDefaultCliPath(unittest.TestCase):
+    """The OKF_CLI fallback (no env override) must point at a CLI that exists.
+    Every boundary suite patches mcp.OKF_CLI, so the fallback was uncovered --
+    a repo move left it dangling at the old absolute path and every tool call
+    died with ENOENT before reaching the CLI."""
+
+    def test_default_resolves_next_to_this_repo(self):
+        env = dict(os.environ)
+        env.pop("OKF_CLI", None)
+        spec = importlib.util.spec_from_file_location(
+            "okf_mcp_fresh", os.path.join(_HERE, "..", "mcp", "okf_mcp.py"))
+        fresh = importlib.util.module_from_spec(spec)
+        with mock.patch.dict(os.environ, env, clear=True):
+            spec.loader.exec_module(fresh)
+        self.assertEqual(os.path.realpath(fresh.OKF_CLI),
+                         os.path.realpath(os.path.join(_HERE, "okf-cli.py")))
+        self.assertTrue(os.path.exists(fresh.OKF_CLI), fresh.OKF_CLI)
 
 
 if __name__ == "__main__":
