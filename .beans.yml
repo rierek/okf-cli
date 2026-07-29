@@ -2,5 +2,5 @@ beans:
     path: .beans
     prefix: okf-cli-
     id_length: 4
-    default_status: todo
+    default_status: draft
     default_type: task
