@@ -1,10 +1,11 @@
 ---
 # okf-cli-kgt2
 title: Migrate the catalogue's remaining legacy crosslinks
-status: draft
+status: completed
 type: task
+priority: normal
 created_at: 2026-08-03T18:26:10Z
-updated_at: 2026-08-03T18:26:10Z
+updated_at: 2026-08-03T19:08:25Z
 ---
 
 The catalogue still carries both link forms side by side. Sampling `home-lab-wiki` shows canonical `](/home-lab-wiki/services/authelia.md)` next to legacy bundle-relative `](/services/...)`, `](/context/...)`, `](/decisions/...)`.
