@@ -1,11 +1,11 @@
 ---
 # okf-cli-iaxj
 title: Rebuild a stale FTS index from a Stop hook
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-07-27T12:46:04Z
-updated_at: 2026-08-03T19:37:56Z
+updated_at: 2026-08-03T19:46:37Z
 ---
 
 ## Context
@@ -56,3 +56,24 @@ same staleness-visibility question for the embedding side.
 
 Which catalogue roots the hook covers is a scoping question — the KC is the obvious
 first one; repo-local `docs/*-okf` bundles may or may not be worth the same treatment.
+
+
+## PO decisions 2026-08-03 (D01-D03, supervisor session)
+
+Recorded verbatim from the PO review gate. These close the open design point named in ## Approach.
+
+**D01 — Event: SessionStart, conditional.** Not Stop, not SessionEnd. Grounds: `Stop` fires per turn ("when main agent considers stopping"), not per session — the bean's ## Approach names it, but its ## Objective says "at the end of a session"; the Approach wording is the error. SessionEnd cannot see the case that actually produced the 2026-08-03 symptom: the catalogue was edited in Obsidian *between* sessions. SessionStart with a cheap probe covers both agent-side and out-of-band edits. The rebuild runs backgrounded so session start never blocks.
+
+**D02 — Mechanism: expose the probe as an okf-cli flag.** `build-index` gains `--if-stale`: it consults the existing `_fts_index_stale()` (cli/okf-cli.py:716, a stat()-only comparison of concept count and newest mtime against `fts_meta`) and skips the rebuild when the index is current. Grounds: the staleness logic then lives in the repo covered by the 295-test suite instead of in an untested shell script, and the hook collapses to a thin wrapper. Rejected alternatives: unconditional rebuild (cli/okf-cli.py:675 `build_fts_index` is always full with no no-op path — every trigger would re-read all 2489 concept bodies, contradicting the "idempotent and cheap when current" acceptance line); parsing the stderr note (cli/okf-cli.py:915 is prose with no contract — any rewording breaks the hook silently).
+
+Side effect noted at decision time: this gives the FTS staleness state its first machine-readable surface. okf-cli-uumj and okf-cli-3520 want the same for the embedding side and should follow this shape rather than invent a second one.
+
+**D03 — Scope: Knowledge-Catalogue only.** The hook covers the root named by `kc_root` in `.okf.toml` (docs/.okf.toml already documents that key as "single source for tooling (okf-cli / okf-MCP / hook)"). Repo-local `docs/*-okf` bundles stay out: covering them needs a discovery rule and makes the hook cwd-dependent, with no observed need. Revisit if a second case appears.
+
+## Supervisor notes 2026-08-03
+
+Cross-repo task. Two sinks: `cli/okf-cli.py` + tests in /Users/erik/dev/okf-tools, hook script in /Users/erik/.claude (which is its own git repo). `~/.claude/settings.json` is git-ignored there (.gitignore:41), so the registration is machine-local and cannot be versioned — same situation as the roster-gate hook, and the canon (OKF `lean-stack-okf/autonome-agent-kette`) already accepts manual per-machine wiring for it.
+
+`hooks.SessionStart` is already populated (sessionstart.sh) — the new hook is appended, never replaces it.
+
+The Knowledge-Catalogue is a SEPARATE git repo. The hook writes `<kc>/.fts/fts.sqlite` there. Confirm `.fts/` is ignored in that repo before shipping, otherwise the hook dirties an unrelated working tree on every session start.
