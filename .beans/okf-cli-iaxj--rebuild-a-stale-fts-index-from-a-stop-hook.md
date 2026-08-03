@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-27T12:46:04Z
-updated_at: 2026-08-03T20:08:22Z
+updated_at: 2026-08-03T20:13:14Z
 ---
 
 ## Context
@@ -230,3 +230,57 @@ Two non-blocking findings, neither requiring a change to this task's code.
 **I02 — routed to `.claude`-store bean, not fixed here.** None of the three `~/.claude/hooks/*.test.sh` suites is reachable through a `just` recipe (`just test` there covers only `test-layer0` and `test-hooks`, and the latter runs `git-hooks/*.test.sh` exclusively). This contradicts the just-canon rule "if the recipe is missing, create it", but it is a pre-existing gap in that repo — this task merely joined it. Out of scope here by repo boundary.
 
 Reviewer could not reproduce two things and said so rather than asserting them: the end-to-end smoke against the live Knowledge-Catalogue (deliberately, to keep that working tree untouched — the mechanics are independently covered by unit and hook tests), and a real Claude Code SessionStart pass with the registered entry. The second one resolves itself at the next session start on this machine.
+
+
+
+## ERRATA 2026-08-03 — hooks entity drift
+
+**What was missing:** `/Users/erik/.claude` runs an architecture model under `architecture/layer0/` where every hook registered in `settings.json` must have a matching `architecture/entities/hook-*.yml` (generative source per DESIGN arch-refs-tooling Stage C — the `hooks` key in `settings.json` counts as generated from these entities, and hand-edits are visible drift, not forbidden, per `generate.py`'s own docstring). Step 3 of the original task registered `fts-rebuild-if-stale.sh` in `settings.json` (correct, D01) but never created the corresponding entity — `/dev/CLAUDE.md` rule 22 ("Struktur-Änderungen gehen im selben Commit ins YAML wie in den Code") was violated, and `python3 architecture/layer0/generate.py --check` went red on `hooks-Drift`.
+
+**Why the checker found it and my own test suite did not:** `fts-rebuild-if-stale.test.sh` proves the hook script's *runtime behaviour* (exit 0, silent, all guarded failure paths) by invoking the shell script directly — it never reads `settings.json` or `architecture/entities/`, so it has no way to see a model/reality mismatch. The drift lives one layer up, between two config artefacts (the JSON registration and the YAML model), neither of which my task's acceptance criteria named as a thing to keep in sync — the bean's own Acceptance list (`## Acceptance` above) predates this repo's architecture-model convention and does not mention it. A behavioural test proves the artefact works; it does not prove the artefact is *modelled*. Those are different claims and this gap sat exactly at that seam.
+
+**How it was fixed:** Read four neighbour `SessionStart` entities (`hook-sstd-resume.sh.yml`, `hook-claude-setup-report.sh.yml`, `hook-context-mode-cache-heal.mjs.yml`, `hook-herdr-agent-state.sh.yml`) to derive the schema rather than guess it (`id`, `type: hook`, `storage_path`, a prose comment block, `depends_on`, `registration: {event, matcher, command, timeout?, order}`). Checked for a generative path first (`generate.py --apply`) per instruction, and rejected it: `--apply` rewrites the *entire* `hooks` key in `settings.json` from `entities/hook-*.yml`, and a second, unrelated, unmodelled hook already lived there — `"command": "rtk hook claude"` (Bash/PreToolUse) — added by an RTK installation step at 21:04 that day, confirmed strictly before this task's edits by comparing `settings.json.pre-rtk`'s mtime/content (no `rtk hook claude` string) against the live `settings.json` (has it). `--apply` would have silently deleted that live, working, out-of-scope hook from `settings.json` — since `settings.json` is git-ignored in this repo, that deletion would not even show in `git diff` before commit. Wrote `architecture/entities/hook-fts-rebuild-if-stale.sh.yml` by hand instead, matching the derived schema exactly (`order: 50`, one past the existing SessionStart hooks' 10/20/30/40). `generate.py --check` now reports zero drift for my hook; the pre-existing `rtk hook claude` drift remains and is explicitly NOT fixed here — out of scope, not caused by this task, and its owner/intent (should it get an entity, or is RTK's own installer meant to manage that separately?) is unknown to me. Flagging for the coordinator/PO to route.
+
+**Check output, before (after adding the entity for MY hook, showing the drift split into two independent hunks):**
+```
+hooks-Drift entities <-> settings.json:
+    --- settings.json:hooks
+    +++ entities/hook-*.yml
+    @@ -58,15 +58,6 @@
+    ...
+       "matcher": "Bash"
+    -  },
+    -  {
+    -   "hooks": [
+    -    {
+    -     "command": "rtk hook claude",
+    ...
+    @@ ... SessionStart hunk for fts-rebuild-if-stale.sh (present before the entity existed, absent after)
+1 Befund(e).
+```
+
+**Check output, after:**
+```
+hooks-Drift entities <-> settings.json:
+    --- settings.json:hooks
+    +++ entities/hook-*.yml
+    @@ -58,15 +58,6 @@
+    ...
+       "matcher": "Bash"
+    -  },
+    -  {
+    -   "hooks": [
+    -    {
+    -     "command": "rtk hook claude",
+    -     "type": "command"
+    -    }
+    -   ],
+    -   "matcher": "Bash"
+       }
+      ],
+      "SessionStart": [
+1 Befund(e).
+```
+The SessionStart hunk for `fts-rebuild-if-stale.sh` is gone; only the pre-existing, unrelated `rtk hook claude` (PreToolUse/Bash) hunk remains.
+
+**Forward-Guard (candidate, for whoever owns this repo's dispatch prompts, not self-applied here):** any task that registers a hook in `~/.claude/settings.json` must, in the same commit, either create the matching `architecture/entities/hook-*.yml` (by hand, following the schema of an existing sibling entity for the same event) or run `generate.py --check` before closing and treat a non-zero exit as part of the task's own gate — not a separate discovery after spec-review. A dispatch prompt for hook work in this repo should say so explicitly, the same way this task's prompt named `git-conventions` and `git add` discipline; right now nothing in the dispatch surface points an implementer at `architecture/layer0/` at all unless they already know it is there. Logged as LL-20-followup in `docs/LESSONS-LEARNED.md` (okf-tools) rather than a new numbered lesson, since it is the same root cause as LL-20/LL-21 (a mechanism invisible from inside the one repo being edited) wearing a different coat.
