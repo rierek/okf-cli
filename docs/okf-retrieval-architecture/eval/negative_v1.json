@@ -1,0 +1,898 @@
+{
+  "counts": {
+    "queries_embedded": 88,
+    "embed_cache_hits": 0,
+    "concept_vectors_loaded": 2947,
+    "cosine_comparisons": 259336,
+    "floors_evaluated": 36
+  },
+  "n_positive": 48,
+  "n_negative": 40,
+  "distributions": {
+    "negative_top1": {
+      "label": "negative top-1",
+      "n": 40,
+      "min": 0.2941236477979073,
+      "p05": 0.34392616052666675,
+      "p25": 0.41327540809154806,
+      "median": 0.4698720492237186,
+      "p75": 0.5159966725882972,
+      "p95": 0.5641145234097711,
+      "max": 0.5659715393904864
+    },
+    "negative_top1_hard": {
+      "label": "hard negatives top-1",
+      "n": 20,
+      "min": 0.36864014766459074,
+      "p05": 0.3816322493767446,
+      "p25": 0.41553897061964057,
+      "median": 0.4692765819455337,
+      "p75": 0.4972976860901054,
+      "p95": 0.5464397728887243,
+      "max": 0.5641145234097711
+    },
+    "negative_top1_nonsense": {
+      "label": "nonsense top-1",
+      "n": 20,
+      "min": 0.2941236477979073,
+      "p05": 0.34268202587337077,
+      "p25": 0.41327540809154806,
+      "median": 0.49270761422556836,
+      "p75": 0.519735472272329,
+      "p95": 0.5646154144412989,
+      "max": 0.5659715393904864
+    },
+    "positive_top1": {
+      "label": "positive top-1",
+      "n": 48,
+      "min": 0.34591323452436007,
+      "p05": 0.4190049974916588,
+      "p25": 0.4779615602899885,
+      "median": 0.53454512694931,
+      "p75": 0.5783464156897041,
+      "p95": 0.654232295637014,
+      "max": 0.7211195629061548
+    },
+    "positive_target": {
+      "label": "positive target",
+      "n": 48,
+      "min": 0.28918564640389877,
+      "p05": 0.3604545125368534,
+      "p25": 0.4521633069321126,
+      "median": 0.5207074142401387,
+      "p75": 0.5604052112648559,
+      "p95": 0.6417174692095287,
+      "max": 0.7211195629061548
+    }
+  },
+  "tradeoff": [
+    {
+      "floor": 0.3,
+      "suppressed": 1,
+      "suppressed_pct": 0.025,
+      "targets_lost": 1,
+      "targets_missing_before": 0,
+      "noisy_lines": 0
+    },
+    {
+      "floor": 0.31,
+      "suppressed": 1,
+      "suppressed_pct": 0.025,
+      "targets_lost": 1,
+      "targets_missing_before": 0,
+      "noisy_lines": 0
+    },
+    {
+      "floor": 0.32,
+      "suppressed": 1,
+      "suppressed_pct": 0.025,
+      "targets_lost": 1,
+      "targets_missing_before": 0,
+      "noisy_lines": 0
+    },
+    {
+      "floor": 0.33,
+      "suppressed": 1,
+      "suppressed_pct": 0.025,
+      "targets_lost": 1,
+      "targets_missing_before": 0,
+      "noisy_lines": 0
+    },
+    {
+      "floor": 0.34,
+      "suppressed": 1,
+      "suppressed_pct": 0.025,
+      "targets_lost": 1,
+      "targets_missing_before": 0,
+      "noisy_lines": 0
+    },
+    {
+      "floor": 0.35,
+      "suppressed": 3,
+      "suppressed_pct": 0.075,
+      "targets_lost": 1,
+      "targets_missing_before": 0,
+      "noisy_lines": 1
+    },
+    {
+      "floor": 0.36,
+      "suppressed": 3,
+      "suppressed_pct": 0.075,
+      "targets_lost": 2,
+      "targets_missing_before": 0,
+      "noisy_lines": 1
+    },
+    {
+      "floor": 0.37,
+      "suppressed": 4,
+      "suppressed_pct": 0.1,
+      "targets_lost": 3,
+      "targets_missing_before": 0,
+      "noisy_lines": 1
+    },
+    {
+      "floor": 0.38,
+      "suppressed": 4,
+      "suppressed_pct": 0.1,
+      "targets_lost": 3,
+      "targets_missing_before": 0,
+      "noisy_lines": 1
+    },
+    {
+      "floor": 0.39,
+      "suppressed": 7,
+      "suppressed_pct": 0.175,
+      "targets_lost": 4,
+      "targets_missing_before": 0,
+      "noisy_lines": 1
+    },
+    {
+      "floor": 0.4,
+      "suppressed": 8,
+      "suppressed_pct": 0.2,
+      "targets_lost": 7,
+      "targets_missing_before": 0,
+      "noisy_lines": 1
+    },
+    {
+      "floor": 0.41,
+      "suppressed": 10,
+      "suppressed_pct": 0.25,
+      "targets_lost": 8,
+      "targets_missing_before": 0,
+      "noisy_lines": 2
+    },
+    {
+      "floor": 0.42,
+      "suppressed": 12,
+      "suppressed_pct": 0.3,
+      "targets_lost": 8,
+      "targets_missing_before": 0,
+      "noisy_lines": 3
+    },
+    {
+      "floor": 0.43,
+      "suppressed": 14,
+      "suppressed_pct": 0.35,
+      "targets_lost": 9,
+      "targets_missing_before": 0,
+      "noisy_lines": 4
+    },
+    {
+      "floor": 0.44,
+      "suppressed": 16,
+      "suppressed_pct": 0.4,
+      "targets_lost": 11,
+      "targets_missing_before": 0,
+      "noisy_lines": 5
+    },
+    {
+      "floor": 0.45,
+      "suppressed": 17,
+      "suppressed_pct": 0.425,
+      "targets_lost": 12,
+      "targets_missing_before": 0,
+      "noisy_lines": 7
+    },
+    {
+      "floor": 0.46,
+      "suppressed": 17,
+      "suppressed_pct": 0.425,
+      "targets_lost": 15,
+      "targets_missing_before": 0,
+      "noisy_lines": 8
+    },
+    {
+      "floor": 0.47,
+      "suppressed": 21,
+      "suppressed_pct": 0.525,
+      "targets_lost": 17,
+      "targets_missing_before": 0,
+      "noisy_lines": 12
+    },
+    {
+      "floor": 0.48,
+      "suppressed": 22,
+      "suppressed_pct": 0.55,
+      "targets_lost": 19,
+      "targets_missing_before": 0,
+      "noisy_lines": 13
+    },
+    {
+      "floor": 0.49,
+      "suppressed": 24,
+      "suppressed_pct": 0.6,
+      "targets_lost": 22,
+      "targets_missing_before": 0,
+      "noisy_lines": 14
+    },
+    {
+      "floor": 0.5,
+      "suppressed": 27,
+      "suppressed_pct": 0.675,
+      "targets_lost": 24,
+      "targets_missing_before": 0,
+      "noisy_lines": 15
+    },
+    {
+      "floor": 0.51,
+      "suppressed": 29,
+      "suppressed_pct": 0.725,
+      "targets_lost": 24,
+      "targets_missing_before": 0,
+      "noisy_lines": 16
+    },
+    {
+      "floor": 0.52,
+      "suppressed": 32,
+      "suppressed_pct": 0.8,
+      "targets_lost": 24,
+      "targets_missing_before": 0,
+      "noisy_lines": 19
+    },
+    {
+      "floor": 0.53,
+      "suppressed": 32,
+      "suppressed_pct": 0.8,
+      "targets_lost": 28,
+      "targets_missing_before": 0,
+      "noisy_lines": 22
+    },
+    {
+      "floor": 0.54,
+      "suppressed": 33,
+      "suppressed_pct": 0.825,
+      "targets_lost": 31,
+      "targets_missing_before": 0,
+      "noisy_lines": 25
+    },
+    {
+      "floor": 0.55,
+      "suppressed": 36,
+      "suppressed_pct": 0.9,
+      "targets_lost": 34,
+      "targets_missing_before": 0,
+      "noisy_lines": 26
+    },
+    {
+      "floor": 0.56,
+      "suppressed": 37,
+      "suppressed_pct": 0.925,
+      "targets_lost": 35,
+      "targets_missing_before": 0,
+      "noisy_lines": 27
+    },
+    {
+      "floor": 0.57,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 39,
+      "targets_missing_before": 0,
+      "noisy_lines": 34
+    },
+    {
+      "floor": 0.58,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 39,
+      "targets_missing_before": 0,
+      "noisy_lines": 36
+    },
+    {
+      "floor": 0.59,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 40,
+      "targets_missing_before": 0,
+      "noisy_lines": 36
+    },
+    {
+      "floor": 0.6,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 40,
+      "targets_missing_before": 0,
+      "noisy_lines": 37
+    },
+    {
+      "floor": 0.61,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 45,
+      "targets_missing_before": 0,
+      "noisy_lines": 41
+    },
+    {
+      "floor": 0.62,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 45,
+      "targets_missing_before": 0,
+      "noisy_lines": 42
+    },
+    {
+      "floor": 0.63,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 45,
+      "targets_missing_before": 0,
+      "noisy_lines": 44
+    },
+    {
+      "floor": 0.64,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 45,
+      "targets_missing_before": 0,
+      "noisy_lines": 44
+    },
+    {
+      "floor": 0.65,
+      "suppressed": 40,
+      "suppressed_pct": 1.0,
+      "targets_lost": 46,
+      "targets_missing_before": 0,
+      "noisy_lines": 45
+    }
+  ],
+  "rows_negative": [
+    {
+      "query": "Rust Lifetimes und Borrow-Checker bei verschachtelten Structs erkl\u00e4ren",
+      "class": "hard_negative",
+      "top1_cosine": 0.41553897061964057
+    },
+    {
+      "query": "PostgreSQL Autovacuum Tuning bei hoher Schreiblast",
+      "class": "hard_negative",
+      "top1_cosine": 0.5392095034063976
+    },
+    {
+      "query": "Apache Kafka Consumer-Group Rebalancing verhindern",
+      "class": "hard_negative",
+      "top1_cosine": 0.38969384392493184
+    },
+    {
+      "query": "SwiftUI NavigationStack Zustandsverwaltung bei tiefen Hierarchien",
+      "class": "hard_negative",
+      "top1_cosine": 0.5641145234097711
+    },
+    {
+      "query": "Figma Plugin API Zugriff auf Variablen und Modi",
+      "class": "hard_negative",
+      "top1_cosine": 0.48651923625005705
+    },
+    {
+      "query": "Emacs org-mode Agenda-Views und Capture-Templates konfigurieren",
+      "class": "hard_negative",
+      "top1_cosine": 0.4368690165509128
+    },
+    {
+      "query": "ZFS Snapshot Replikation mit send und receive einrichten",
+      "class": "hard_negative",
+      "top1_cosine": 0.5168020948993816
+    },
+    {
+      "query": "LaTeX Beamer Overlay-Spezifikationen f\u00fcr schrittweise Aufdeckung",
+      "class": "hard_negative",
+      "top1_cosine": 0.46337655954144397
+    },
+    {
+      "query": "Logseq Datalog-Queries \u00fcber Block-Referenzen schreiben",
+      "class": "hard_negative",
+      "top1_cosine": 0.5464397728887243
+    },
+    {
+      "query": "Prometheus Alertmanager Routing-B\u00e4ume und Silences konfigurieren",
+      "class": "hard_negative",
+      "top1_cosine": 0.4698720492237186
+    },
+    {
+      "query": "AWS Lambda cold start latency reduction with provisioned concurrency",
+      "class": "hard_negative",
+      "top1_cosine": 0.4395375027387662
+    },
+    {
+      "query": "Kubernetes CRD operator reconcile loop exponential backoff",
+      "class": "hard_negative",
+      "top1_cosine": 0.36864014766459074
+    },
+    {
+      "query": "Terraform remote state locking with DynamoDB",
+      "class": "hard_negative",
+      "top1_cosine": 0.5033484949953909
+    },
+    {
+      "query": "Unity URP custom shader graph performance on mobile",
+      "class": "hard_negative",
+      "top1_cosine": 0.3816322493767446
+    },
+    {
+      "query": "Flutter widget rebuild optimization with const constructors",
+      "class": "hard_negative",
+      "top1_cosine": 0.4692765819455337
+    },
+    {
+      "query": "gRPC bidirectional streaming backpressure handling in Go",
+      "class": "hard_negative",
+      "top1_cosine": 0.3871883902488665
+    },
+    {
+      "query": "LangGraph checkpointer with Postgres for durable agent state",
+      "class": "hard_negative",
+      "top1_cosine": 0.47358437556348726
+    },
+    {
+      "query": "Map ISO 27001 Annex A controls onto an existing ISMS",
+      "class": "hard_negative",
+      "top1_cosine": 0.4972976860901054
+    },
+    {
+      "query": "Elasticsearch shard allocation and rebalancing in a hot-warm architecture",
+      "class": "hard_negative",
+      "top1_cosine": 0.4011411066462112
+    },
+    {
+      "query": "Resolve GraphQL Federation subgraph schema conflicts",
+      "class": "hard_negative",
+      "top1_cosine": 0.42647926468596886
+    },
+    {
+      "query": "qwfjzp",
+      "class": "nonsense",
+      "top1_cosine": 0.4283938065776296
+    },
+    {
+      "query": "asdkjhasd lkjh",
+      "class": "nonsense",
+      "top1_cosine": 0.4685865938844978
+    },
+    {
+      "query": "vlorbnik gtaschumo",
+      "class": "nonsense",
+      "top1_cosine": 0.39978095955223997
+    },
+    {
+      "query": "8472 0193 55",
+      "class": "nonsense",
+      "top1_cosine": 0.519735472272329
+    },
+    {
+      "query": ";;__--?? ##",
+      "class": "nonsense",
+      "top1_cosine": 0.486106055159415
+    },
+    {
+      "query": "zxqvbnmlk",
+      "class": "nonsense",
+      "top1_cosine": 0.5487900662704459
+    },
+    {
+      "query": "hjkl;asdf gh",
+      "class": "nonsense",
+      "top1_cosine": 0.5159966725882972
+    },
+    {
+      "query": "mrufeldan poskuvret",
+      "class": "nonsense",
+      "top1_cosine": 0.34268202587337077
+    },
+    {
+      "query": "0x00ff 9931 4482",
+      "class": "nonsense",
+      "top1_cosine": 0.5659715393904864
+    },
+    {
+      "query": "!!??!! ,,..;;",
+      "class": "nonsense",
+      "top1_cosine": 0.41327540809154806
+    },
+    {
+      "query": "gnurbelt fazquint",
+      "class": "nonsense",
+      "top1_cosine": 0.4037317246069932
+    },
+    {
+      "query": "tttttt rrrr eeee",
+      "class": "nonsense",
+      "top1_cosine": 0.4449857894039758
+    },
+    {
+      "query": "plkmnjiuhb",
+      "class": "nonsense",
+      "top1_cosine": 0.5415400765549007
+    },
+    {
+      "query": "vv3q7 z8x1c b0n2m",
+      "class": "nonsense",
+      "top1_cosine": 0.5502548864430885
+    },
+    {
+      "query": "ohnalep truskimo",
+      "class": "nonsense",
+      "top1_cosine": 0.34392616052666675
+    },
+    {
+      "query": "()[]{}<>|\\ ~~",
+      "class": "nonsense",
+      "top1_cosine": 0.5007862015984003
+    },
+    {
+      "query": "aoeuidhtns",
+      "class": "nonsense",
+      "top1_cosine": 0.5646154144412989
+    },
+    {
+      "query": "384 927 5610 44821",
+      "class": "nonsense",
+      "top1_cosine": 0.496402709698201
+    },
+    {
+      "query": "krembazul nofterick",
+      "class": "nonsense",
+      "top1_cosine": 0.2941236477979073
+    },
+    {
+      "query": "qq//ww--ee..rr",
+      "class": "nonsense",
+      "top1_cosine": 0.49270761422556836
+    }
+  ],
+  "rows_positive": [
+    {
+      "query": "reihenfolge hochfahren ereignis paralleler vorgang oberfl\u00e4che",
+      "target": "dev-wiki/tui-architecture-design/app-shell-bootstrap-and-program-handle",
+      "top1_cosine": 0.43742493091807605,
+      "target_cosine": 0.43742493091807605,
+      "target_rank": 1
+    },
+    {
+      "query": "jupyter pandas numpy conda",
+      "target": "general-knowledge-wiki/ai-agentic-coding/python",
+      "top1_cosine": 0.4779615602899885,
+      "target_cosine": 0.4521633069321126,
+      "target_rank": 3
+    },
+    {
+      "query": "hunderte flugk\u00f6rper agieren gemeinsam f\u00fchrerlos",
+      "target": "general-knowledge-wiki/defense-and-geopolitics/orchestrierung-und-koordination-des-schwarms",
+      "top1_cosine": 0.609053823468232,
+      "target_cosine": 0.609053823468232,
+      "target_rank": 1
+    },
+    {
+      "query": "barrierefreiheit richtlinien sehbehinderte nutzer pr\u00fcfen",
+      "target": "linear-design-system/accessibility/wcag-2.2-aa-compliance",
+      "top1_cosine": 0.6294002841971993,
+      "target_cosine": 0.6040483789616614,
+      "target_rank": 3
+    },
+    {
+      "query": "digitaler helfer protokolliert besprechungen eigenst\u00e4ndig",
+      "target": "general-knowledge-wiki/ai-agentic-coding/fireflies-ai",
+      "top1_cosine": 0.5649737135207933,
+      "target_cosine": 0.5604052112648559,
+      "target_rank": 2
+    },
+    {
+      "query": "obergrenze der aufnahmef\u00e4higkeit bei chatbots",
+      "target": "general-knowledge-wiki/ai-agentic-coding/kontext-fenster",
+      "top1_cosine": 0.447060127700472,
+      "target_cosine": 0.4368469404848453,
+      "target_rank": 5
+    },
+    {
+      "query": "schrittweise bauanleitung tastaturbedientes konsolenprogramm vorgangsverwaltung",
+      "target": "devdash-tui/tui-implementation-plan",
+      "top1_cosine": 0.5461667590195463,
+      "target_cosine": 0.5461667590195463,
+      "target_rank": 1
+    },
+    {
+      "query": "aufgaben\u00fcbersicht im notizprogramm ohne eigenentwicklung",
+      "target": "agent-memory/po-immersion-beans-via-obsidian-bases-no-custom-tui",
+      "top1_cosine": 0.5783464156897041,
+      "target_cosine": 0.46098324856049344,
+      "target_rank": 47
+    },
+    {
+      "query": "bots aus hauseigener oberfl\u00e4che beauftragen",
+      "target": "ai-wiki/claude-dispatch",
+      "top1_cosine": 0.4626104947909599,
+      "target_cosine": 0.39328258985645226,
+      "target_rank": 31
+    },
+    {
+      "query": "know-how bewahren beim ruhestand \u00e4lterer belegschaft",
+      "target": "km-wiki/wissenstransfer-zwischen-generationen-wird-vernachlaessigt",
+      "top1_cosine": 0.5663267073634702,
+      "target_cosine": 0.5398138583786067,
+      "target_rank": 4
+    },
+    {
+      "query": "Fu\u00dftruppen schie\u00dfen Helikopter vom Himmel",
+      "target": "general-knowledge-wiki/defense-and-geopolitics/manpads",
+      "top1_cosine": 0.44833836084426604,
+      "target_cosine": 0.44799890880818205,
+      "target_rank": 2
+    },
+    {
+      "query": "wer hat Vorrang bei widerspr\u00fcchlichen Baupl\u00e4nen",
+      "target": "dev-arch-wiki/architecture-methodology/single-source-of-truth-prinzip",
+      "top1_cosine": 0.34591323452436007,
+      "target_cosine": 0.28918564640389877,
+      "target_rank": 41
+    },
+    {
+      "query": "Pflichtunterlagen Norm lernendes Unternehmen",
+      "target": "km-wiki/iso-30401-dokumentationsanforderungen",
+      "top1_cosine": 0.5654551489135239,
+      "target_cosine": 0.5240122356778351,
+      "target_rank": 3
+    },
+    {
+      "query": "Gefahren und Potenziale vorausschauend abw\u00e4gen",
+      "target": "qm-wiki/norm-reference/umgang-mit-chancen-und-risiken",
+      "top1_cosine": 0.561265052804965,
+      "target_cosine": 0.5528795709338552,
+      "target_rank": 3
+    },
+    {
+      "query": "Folienrahmen f\u00fcr Pr\u00e4sentation im Breitbild",
+      "target": "linear-design-system/dev-build/components/linear-slide",
+      "top1_cosine": 0.5604904532687914,
+      "target_cosine": 0.5604904532687914,
+      "target_rank": 1
+    },
+    {
+      "query": "Sorten von Algorithmen Aufbau und Aufsicht",
+      "target": "ai-wiki/ai-model",
+      "top1_cosine": 0.4694971743546029,
+      "target_cosine": 0.3953865355605922,
+      "target_rank": 106
+    },
+    {
+      "query": "wo lege ich Erinnerungen richtig ab",
+      "target": "memory-layer-wiki/architecture/two-store-model-and-routing",
+      "top1_cosine": 0.48829529863051413,
+      "target_cosine": 0.45227355121694973,
+      "target_rank": 8
+    },
+    {
+      "query": "Ansicht umschalten ohne Stapel im Terminal",
+      "target": "dev-wiki/tui-architecture-design/value-receiver-model-discipline",
+      "top1_cosine": 0.5054712159027994,
+      "target_cosine": 0.4973560170143391,
+      "target_rank": 3
+    },
+    {
+      "query": "Weckruf Blogbeitrag bedrohte Angestellte",
+      "target": "ai-wiki/something-big-is-happening-matt-schumer",
+      "top1_cosine": 0.4017313997543369,
+      "target_cosine": 0.3604545125368534,
+      "target_rank": 2
+    },
+    {
+      "query": "Platzhalter f\u00fcr Ansicht mit null Eintr\u00e4gen",
+      "target": "linear-design-system/patterns/empty-states",
+      "top1_cosine": 0.5306665122789537,
+      "target_cosine": 0.5306665122789537,
+      "target_rank": 1
+    },
+    {
+      "query": "handgepflegte \u00dcbersicht zusammengeh\u00f6riger Artikel",
+      "target": "general-knowledge-wiki/personal-knowledge-mgmt/map-of-content",
+      "top1_cosine": 0.5161588369820249,
+      "target_cosine": 0.4881346605381928,
+      "target_rank": 6
+    },
+    {
+      "query": "Kollegen Mannschaft Abgrenzung Kriterien",
+      "target": "qm-wiki/qmb-training/knowledge-blocks/unterschied-zwischen-team-und-gruppe",
+      "top1_cosine": 0.4658092660707306,
+      "target_cosine": 0.4080595871338225,
+      "target_rank": 9
+    },
+    {
+      "query": "Staffelstab automatisch weiterreichen Etappe",
+      "target": "lean-stack-okf/tpic-phasen-transit",
+      "top1_cosine": 0.4998905664683832,
+      "target_cosine": 0.49248456556732406,
+      "target_rank": 2
+    },
+    {
+      "query": "typische Stolperfallen Selbsthosten zuhause",
+      "target": "home-lab-wiki/context/lessons/synology-spezifisch",
+      "top1_cosine": 0.6180489733581085,
+      "target_cosine": 0.5207074142401387,
+      "target_rank": 12
+    },
+    {
+      "query": "Startseite Vorlage Eingangskorb Besprechungen Vorhaben",
+      "target": "obsidian-vault-mgmt-wiki/konventionen-templates/template-para-dashboard",
+      "top1_cosine": 0.6034456100492223,
+      "target_cosine": 0.6034456100492223,
+      "target_rank": 1
+    },
+    {
+      "query": "Liste n\u00fctzlicher KI-Assistenten f\u00fcr Vortragsfolien",
+      "target": "ai-wiki/custom-gpts-collection",
+      "top1_cosine": 0.6766409363749584,
+      "target_cosine": 0.6417174692095287,
+      "target_rank": 2
+    },
+    {
+      "query": "Aufstellung gew\u00fcnschter Funktionen mit Rangfolge",
+      "target": "dev-arch-wiki/archive/project-documents/fpd-feature-planning-document",
+      "top1_cosine": 0.4190049974916588,
+      "target_cosine": 0.3939140363410814,
+      "target_rank": 12
+    },
+    {
+      "query": "Alarm aufs Handy bei Serverproblemen",
+      "target": "general-knowledge-wiki/ai-agentic-coding/telegram",
+      "top1_cosine": 0.5602122904443393,
+      "target_cosine": 0.45895492562009055,
+      "target_rank": 4
+    },
+    {
+      "query": "Firma hinter dem Programmier-Assistenten aus Kalifornien",
+      "target": "general-knowledge-wiki/ai-agentic-coding/anthropic",
+      "top1_cosine": 0.5901103686393331,
+      "target_cosine": 0.5450779785435549,
+      "target_rank": 3
+    },
+    {
+      "query": "Leitplanken f\u00fcr Beitr\u00e4ge zum Gestaltungshandbuch",
+      "target": "design-wiki/conventions",
+      "top1_cosine": 0.5685695884281526,
+      "target_cosine": 0.5685695884281526,
+      "target_rank": 1
+    },
+    {
+      "query": "metadaten auswerten erweiterung wissensarchiv",
+      "target": "general-knowledge-wiki/ai-agentic-coding/dataview",
+      "top1_cosine": 0.521385767188143,
+      "target_cosine": 0.35031113901932404,
+      "target_rank": 862
+    },
+    {
+      "query": "chatverlauf wegwerfen \u00fcbergabenotiz fortsetzen",
+      "target": "general-knowledge-wiki/ai-agentic-coding/context-reset",
+      "top1_cosine": 0.5100321335524022,
+      "target_cosine": 0.4872844937779004,
+      "target_rank": 8
+    },
+    {
+      "query": "chatgpt gegenst\u00fcck konkurrenz vergleich",
+      "target": "general-knowledge-wiki/ai-agentic-coding/openai-codex",
+      "top1_cosine": 0.5783231699078855,
+      "target_cosine": 0.5267416887874423,
+      "target_rank": 14
+    },
+    {
+      "query": "vorschrift arbeitsklima raumbedingungen qualit\u00e4tsmanagement",
+      "target": "qm-wiki/norm-reference/prozess-und-umgebungsfaktoren",
+      "top1_cosine": 0.6039041558361095,
+      "target_cosine": 0.6039041558361095,
+      "target_rank": 1
+    },
+    {
+      "query": "werkzeug misst restliches kontingent in euro",
+      "target": "ai-wiki/claude-code-usage-limits-ccmeter",
+      "top1_cosine": 0.42861081279785235,
+      "target_cosine": 0.3820967197119478,
+      "target_rank": 9
+    },
+    {
+      "query": "s\u00e4ugling ern\u00e4hrung notieren heimserver anwendung",
+      "target": "home-lab-wiki/services/mybabytracker",
+      "top1_cosine": 0.527872712583793,
+      "target_cosine": 0.47640613299616996,
+      "target_rank": 2
+    },
+    {
+      "query": "wesenszug leitfigur auftreten werbefloskeln vermeiden",
+      "target": "linear-design-system/voice-and-tone/personality",
+      "top1_cosine": 0.5292344403490149,
+      "target_cosine": 0.5292344403490149,
+      "target_rank": 1
+    },
+    {
+      "query": "stolpersteine probelauf katalogwerkzeug erfahrungsbericht",
+      "target": "claude-code-wiki/optimization-lessons-learned/okf-p-init-testlauf-sproutling",
+      "top1_cosine": 0.4609375560225759,
+      "target_cosine": 0.4609375560225759,
+      "target_rank": 1
+    },
+    {
+      "query": "kommandozeilenwerkzeug unleserliche t\u00f6ne bei fernsitzung",
+      "target": "dev-wiki/tui-architecture-design/color-profile-and-dark-bg",
+      "top1_cosine": 0.5109768470351598,
+      "target_cosine": 0.47740846624967775,
+      "target_rank": 5
+    },
+    {
+      "query": "protokoll der beschl\u00fcsse zur werkzeugauswahl",
+      "target": "lean-stack-okf/lean-stack-key-decisions",
+      "top1_cosine": 0.45331740047084745,
+      "target_cosine": 0.4285055744357398,
+      "target_rank": 3
+    },
+    {
+      "query": "Wie sieht eine typische \u00dcbersichtsdatei in OKF aus?",
+      "target": "okf-meta-wiki/examples/index-map-skeleton",
+      "top1_cosine": 0.53454512694931,
+      "target_cosine": 0.4844927114954783,
+      "target_rank": 8
+    },
+    {
+      "query": "Was sind die Grundbestandteile eines Systems f\u00fcr das Wissensmangement?",
+      "target": "km-wiki/bausteine-des-wissensmanagements-probst-2006",
+      "top1_cosine": 0.6422958751414612,
+      "target_cosine": 0.5862340192901986,
+      "target_rank": 21
+    },
+    {
+      "query": "Wie wird das IP forewarding auf macOS f\u00fcr tailscale konfiguriert?",
+      "target": "dev-wiki/testsystem-vite-tailscale/tailscale-subnet-routing",
+      "top1_cosine": 0.7211195629061548,
+      "target_cosine": 0.7211195629061548,
+      "target_rank": 1
+    },
+    {
+      "query": "data-ui konvention namensschema",
+      "target": "dev-wiki/debug-interface/data-ui-convention",
+      "top1_cosine": 0.6033712659911048,
+      "target_cosine": 0.6033712659911048,
+      "target_rank": 1
+    },
+    {
+      "query": "reverse extraction DESIGN.md",
+      "target": "dev-wiki/design-system-replication/replikations-playbook",
+      "top1_cosine": 0.6254258900231277,
+      "target_cosine": 0.5659113213586291,
+      "target_rank": 8
+    },
+    {
+      "query": "Persistente KI-Betriebsschicht auf Basis eines lokalen Second Brains",
+      "target": "ai-wiki/ai-operating-system",
+      "top1_cosine": 0.654232295637014,
+      "target_cosine": 0.6537834629906655,
+      "target_rank": 2
+    },
+    {
+      "query": "service home-lab photos",
+      "target": "home-lab-wiki/services/immich",
+      "top1_cosine": 0.5343951295726445,
+      "target_cosine": 0.5343951295726445,
+      "target_rank": 1
+    },
+    {
+      "query": "mockup tailscale",
+      "target": "dev-wiki/testsystem-vite-tailscale/serve-excalidraw-drafts",
+      "top1_cosine": 0.5568818302642689,
+      "target_cosine": 0.548363105573483,
+      "target_rank": 3
+    }
+  ]
+}
