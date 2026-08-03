@@ -1,11 +1,11 @@
 ---
 # okf-cli-iaxj
 title: Rebuild a stale FTS index from a Stop hook
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-07-27T12:46:04Z
-updated_at: 2026-08-03T19:46:37Z
+updated_at: 2026-08-03T19:59:38Z
 ---
 
 ## Context
@@ -44,13 +44,13 @@ same staleness-visibility question for the embedding side.
 
 ## Acceptance
 
-- [ ] Hook script exists in `~/.claude/hooks/`, executable, follows local hook conventions
-- [ ] Registered under `hooks.Stop` in the user settings
-- [ ] Rebuilds the FTS index for `~/Obsidian/Knowledge-Catalogue`
-- [ ] Runs unattended: no prompt, no blocking of session shutdown, non-zero exit never breaks the stop path
-- [ ] Idempotent and cheap when the index is already current (skip, or a rebuild that is fast enough to be unnoticeable)
-- [ ] Verified: touch a concept, end a session, confirm the next `find` reports no staleness note
-- [ ] Decision recorded in the body: unconditional rebuild vs. staleness probe
+- [x] Hook script exists in `~/.claude/hooks/`, executable, follows local hook conventions
+- [x] Registered under `hooks.Stop` in the user settings — SUPERSEDED by D01 (2026-08-03): registered under `hooks.SessionStart` instead, per the PO decision below. `hooks.Stop` was the bean's original ## Approach guess, corrected before implementation; checked here because the underlying intent (unattended registration in user settings) is met, under the event D01 actually names.
+- [x] Rebuilds the FTS index for `~/Obsidian/Knowledge-Catalogue`
+- [x] Runs unattended: no prompt, no blocking of session shutdown, non-zero exit never breaks the stop path — re-scoped by D01 to session *start*, same property, see hook script's hard-requirement comment block
+- [x] Idempotent and cheap when the index is already current (skip, or a rebuild that is fast enough to be unnoticeable) — `build-index --if-stale` skip path
+- [x] Verified: touch a concept, end a session, confirm the next `find` reports no staleness note — adapted to session *start* per D01; see Smoke section of the closing report
+- [x] Decision recorded in the body: unconditional rebuild vs. staleness probe — D01-D03 below
 
 ## Notes
 
@@ -77,3 +77,143 @@ Cross-repo task. Two sinks: `cli/okf-cli.py` + tests in /Users/erik/dev/okf-tool
 `hooks.SessionStart` is already populated (sessionstart.sh) — the new hook is appended, never replaces it.
 
 The Knowledge-Catalogue is a SEPARATE git repo. The hook writes `<kc>/.fts/fts.sqlite` there. Confirm `.fts/` is ignored in that repo before shipping, otherwise the hook dirties an unrelated working tree on every session start.
+
+
+
+## Summary
+
+Implemented per PO decisions D01-D03 (SessionStart, conditional via a new `--if-stale` CLI flag, Knowledge-Catalogue-only scope), superseding the bean's original ## Approach text (Stop hook, unconditional-vs-probe open point).
+
+Step 1 (`cli/okf-cli.py`, repo `okf-tools`): `build-index` gained `--if-stale`, which consults the existing `_fts_index_stale()` and skips the rebuild when the index is current; without the flag, behaviour is byte-identical to before (unconditional full rebuild). Registered on the `build-index` subparser with `help=`, so the existing `CommandHelpConformance` gate (T05, bean okf-cli-80nb) covers it — no separate conformance script exists in this repo, it is a `unittest` class inside `test_okf_cli.py` and ran as part of the full suite.
+
+Step 2 (`~/.claude/hooks/`, separate repo): new hook `fts-rebuild-if-stale.sh` (SessionStart). Reads `kc_root` from `docs/.okf.toml` itself (sed-only, no TOML dependency) since `okf-cli`'s own `--root` auto-detection does not consume that key. Invokes `python3 <hardcoded okf-cli.py path> --root <kc_root> build-index --if-stale` fully detached in the background (`( ... & disown ) 2>/dev/null`), then unconditionally `exit 0`. Every failure path (missing `.okf.toml`, missing/empty/dangling `kc_root`, missing `okf-cli.py`, `okf-cli` exiting non-zero) is guarded to stay silent and exit 0. Test double `fts-rebuild-if-stale.test.sh` (8 cases, all green) exercises all of them plus the happy path and the non-zero-exit path, using a fake `okf-cli.py` stub so it never touches the real Knowledge-Catalogue.
+
+Step 3: registered by appending a new entry to `hooks.SessionStart` in `~/.claude/settings.json` (existing four entries untouched). That file is git-ignored in `~/.claude` (confirmed `.gitignore:41` still lists it) — the JSON block is quoted verbatim below and in `## Deviations/ERRATA`, since it cannot go into any commit.
+
+Step 4: verified end-to-end against the real Knowledge-Catalogue — see `## Smoke`.
+
+## Test-Output (RED to GREEN)
+
+**RED** (`CmdBuildIndexIfStale`, before implementing the flag):
+
+```
+FAIL: test_help_documents_the_flag (cli.test_okf_cli.CmdBuildIndexIfStale.test_help_documents_the_flag)
+AssertionError: unexpectedly None : build-index has no --if-stale option
+
+FAIL: test_if_stale_skips_rebuild_when_index_is_current (cli.test_okf_cli.CmdBuildIndexIfStale.test_if_stale_skips_rebuild_when_index_is_current)
+AssertionError: 1785786587.373397 != 1785786587.3746557
+
+Ran 5 tests in 0.016s
+FAILED (failures=2)
+```
+
+**GREEN** (same class, after implementing `--if-stale` + the flag registration):
+
+```
+test_help_documents_the_flag ... ok
+test_if_stale_rebuilds_when_a_concept_changed ... ok
+test_if_stale_rebuilds_when_index_is_absent ... ok
+test_if_stale_skips_rebuild_when_index_is_current ... ok
+test_without_flag_always_rebuilds_even_when_current ... ok
+
+Ran 5 tests in 0.016s
+OK
+```
+
+**Full suite** (baseline was 295, 0 failures, 0 errors):
+
+```
+python3 -m unittest discover -s cli -p 'test_*.py'
+...
+Ran 300 tests in 20.481s
+OK
+```
+300 = 295 baseline + 5 new (`CmdBuildIndexIfStale`). Meets the stated lower bound.
+
+**Hook test suite** (`~/.claude/hooks/fts-rebuild-if-stale.test.sh`, new, 8 assertions across 6 named cases):
+
+```
+ok   missing .okf.toml (12ms)
+ok   missing .okf.toml never forks: guard stopped the fork before it ever ran
+ok   okf-cli not found (29ms)
+ok   kc_root key missing (27ms)
+ok   kc_root key missing never forks: guard stopped the fork before it ever ran
+ok   kc_root points nowhere (29ms)
+ok   kc_root points nowhere never forks: guard stopped the fork before it ever ran
+ok   happy path backgrounds and returns immediately (21ms)
+ok   happy path invoked with correct args
+ok   okf-cli nonzero exit stays swallowed (39ms)
+ok   nonzero exit case: background job ran despite failing
+all tests passed
+```
+
+Sibling hook suites re-run to confirm no regression from the `settings.json` edit: `git-enforce.test.sh` → `pass=118 fail=0`; `md-prose-wrap.test.sh` → `all tests passed`.
+
+**Mutation gate, acceptance-line by acceptance-line:**
+
+- *Rebuilds the FTS index / idempotent-and-cheap-when-current* — `test_if_stale_skips_rebuild_when_index_is_current` and `test_without_flag_always_rebuilds_even_when_current`. Mutated `if not stale:` to `if False:` (always rebuild even under `--if-stale`) → the skip test failed with the exact db-mtime-changed assertion. Mutated the `getattr(args, "if_stale", False)` guard to `if True:` (probe even without the flag) → the no-flag regression test failed because the "current" skip message appeared where the unconditional rebuild message was expected. Mutated away the `--if-stale` argparse registration → `test_help_documents_the_flag` failed (`None`), proving the help-coverage line is enforced.
+- *Registered in user settings, unattended, non-zero exit never breaks session start* — hook test suite. Mutated away each of the four guards individually (`.okf.toml` missing, both `kc_root` guards together, and confirmed the `OKF_CLI_PY` guard is genuinely redundant, not undertested — see ERRATA) and watched the corresponding case go red for the stated reason (either an unswallowed `sed` stderr line, or a proven fork that should have been blocked). Reverted with `cp` from a pre-mutation backup each time, confirmed byte-identical via `diff` before moving on — never `git checkout --` against an uncommitted diff.
+- *Verified: touch a concept, run the hook, confirm the next `find` reports no staleness note* — see `## Smoke`, reproduced against the real Knowledge-Catalogue, not a fixture.
+- *Decision recorded in the body* — pre-existing D01-D03 blocks, unchanged by this task.
+
+## Smoke (Step 4, real Knowledge-Catalogue)
+
+Before (baseline, unmodified — stale index inherited from before this session):
+
+```
+$ python3 /Users/erik/dev/okf-tools/cli/okf-cli.py --root /Users/erik/Obsidian/Knowledge-Catalogue find "test query xyz" 2>&1 1>/dev/null
+note: lexical index is stale (catalogue changed since build) — run `okf-cli build-index`
+```
+
+Touched one real concept file to (re)confirm the trigger condition:
+
+```
+$ touch /Users/erik/Obsidian/Knowledge-Catalogue/general-knowledge-wiki/misc/kaizen-nomi.md
+```
+
+Ran the hook directly (as SessionStart would):
+
+```
+$ bash /Users/erik/.claude/hooks/fts-rebuild-if-stale.sh
+hook exit=0
+```
+(`.fts/fts.sqlite` mtime confirmed refreshed within ~2s of the background job starting.)
+
+After:
+
+```
+$ python3 /Users/erik/dev/okf-tools/cli/okf-cli.py --root /Users/erik/Obsidian/Knowledge-Catalogue find "test query xyz" 2>&1 1>/dev/null
+note: semantic arm owns this ranking (lexical top-1 lacked a clear margin)
+```
+
+The staleness note is gone. The remaining line is an unrelated, expected note (fusion mechanics for this particular query, not a degradation) — the acceptance criterion is specifically the staleness note's absence, which is met.
+
+## Deviations/ERRATA
+
+1. **`.okf.toml` in the Knowledge-Catalogue** was not touched (read-only, per instructions). `docs/.okf.toml` inside `okf-tools` was read as the format reference, per the bean's pointer, and is also the file the hook reads at runtime (hardcoded path, see point 3).
+2. **Knowledge-Catalogue `.gitignore` check (required by the task):** `.fts/` IS present (`~/Obsidian/Knowledge-Catalogue/.gitignore` line 7). No finding — the hook does not dirty that working tree.
+3. **Config-source decision (bean explicitly left open, "a hardcoded path... is an acceptable answer if named as such"):** the hook hardcodes `OKF_TOML="$HOME/dev/okf-tools/docs/.okf.toml"` and `OKF_CLI_PY="$HOME/dev/okf-tools/cli/okf-cli.py"`, both overridable via env var (used by the test double, never in production). Reason: `okf-cli` is a **zsh alias** on this machine (`okf-cli: aliased to python3 ~/dev/okf-tools/cli/okf-cli.py --root ...`), not a PATH executable — aliases do not propagate to a hook's non-interactive subshell, so calling the bare name would silently fail. There is exactly one okf-tools checkout and one `.okf.toml` on this machine; per-machine wiring is already the accepted precedent here (`roster-gate.sh`, `hooks.SessionStart` itself). Logged as LL-20 in `docs/LESSONS-LEARNED.md`.
+4. **A guard that a black-box exit-code/output test cannot prove necessary:** the `[ -f "$OKF_CLI_PY" ] || exit 0` guard is real but its removal does not turn any test red — `python3 <missing-path>` fails instantly and is redirected to `/dev/null` by the same backgrounding wrapper that swallows a real `okf-cli` non-zero exit, so "guarded" and "not guarded but failed anyway" are externally identical for this one case (unlike the `kc_root` guards, where an unguarded empty value would reach a real CLI's `--root ""` auto-detection and silently rebuild the *wrong* catalogue — that case IS covered, via a fork-never-happened assertion). This is reported as an open finding per the mutation-gate instructions, not silently smoothed over. Logged as LL-21.
+5. **`settings.json` `hooks.SessionStart` block actually registered** (git-ignored, cannot be committed — quoted verbatim so the wiring is reproducible on a second machine):
+
+```json
+{
+    "matcher": "",
+    "hooks": [
+        {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/fts-rebuild-if-stale.sh",
+            "timeout": 5
+        }
+    ]
+}
+```
+Appended as the fifth entry of the existing `hooks.SessionStart` array (after the pre-existing `sstd-resume.sh`, `claude-setup-report.sh`, `context-mode-cache-heal.mjs`, `herdr-agent-state.sh` entries — none replaced).
+6. **Acceptance checkbox "Registered under `hooks.Stop`"** is checked with an inline annotation rather than left unchecked or silently reworded, because D01 (already recorded in the same bean body) supersedes it to `hooks.SessionStart` — the underlying intent (unattended user-settings registration) is met under the event D01 actually names. Flagging this explicitly rather than either checking it as literally true (it is not) or leaving it unchecked with no explanation (which would misread as incomplete).
+7. **Incidental side effect, cleaned up:** an early manual verification run (`okf-cli.py --root docs build-index --if-stale`) built `docs/.fts/` inside the `okf-tools` repo itself (untracked, not `.gitignore`d there). Removed before any commit; `git status` confirmed clean. Not a task deliverable — repo-local `docs/*-okf` bundles are explicitly out of scope per D03.
+
+## Notes for follow-up
+
+- `docs/.fts/` is untracked and un-ignored in the `okf-tools` repo's own `.gitignore` — anyone running `build-index` against `docs/` locally will see it as an untracked directory in `git status`. Not this task's scope to fix (D03 excludes repo-local bundles from the hook), flagging for whoever picks up repo-local coverage next.
+- D02's side note applies directly: `okf-cli-uumj` / `okf-cli-3520` (embedding-side staleness) should follow the same shape — a `--if-stale`-style flag consulted by a machine-readable probe function, not a second untested shell mechanism.
+- The hook is single-machine by design (point 3 above); porting to a second machine means either exporting `OKF_TOML`/`OKF_CLI_PY` or editing the two hardcoded defaults in `fts-rebuild-if-stale.sh`.
