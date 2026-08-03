@@ -3,8 +3,9 @@
 title: Rebuild a stale FTS index from a Stop hook
 status: todo
 type: task
+priority: high
 created_at: 2026-07-27T12:46:04Z
-updated_at: 2026-07-27T12:46:04Z
+updated_at: 2026-08-03T19:37:56Z
 ---
 
 ## Context

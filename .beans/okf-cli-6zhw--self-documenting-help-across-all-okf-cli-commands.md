@@ -3,9 +3,9 @@
 title: Self-documenting help across all okf-cli commands
 status: todo
 type: feature
-priority: normal
+priority: deferred
 created_at: 2026-07-26T12:22:54Z
-updated_at: 2026-07-26T14:33:59Z
+updated_at: 2026-08-03T19:37:56Z
 parent: okf-cli-5uog
 blocked_by:
     - okf-cli-z0tt

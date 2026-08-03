@@ -3,9 +3,9 @@
 title: fix-crosslinks reports doc examples as unresolved
 status: draft
 type: task
-priority: low
+priority: deferred
 created_at: 2026-08-03T19:10:30Z
-updated_at: 2026-08-03T19:10:30Z
+updated_at: 2026-08-03T19:37:56Z
 ---
 
 ## Context

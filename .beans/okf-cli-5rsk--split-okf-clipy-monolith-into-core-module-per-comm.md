@@ -3,9 +3,9 @@
 title: Split okf-cli.py monolith into core module + per-command files
 status: todo
 type: task
-priority: low
+priority: deferred
 created_at: 2026-07-26T12:47:21Z
-updated_at: 2026-07-26T12:47:21Z
+updated_at: 2026-08-03T19:37:56Z
 ---
 
 ## Context

@@ -3,9 +3,9 @@
 title: Producer leaves stale concept_emb rows on content change
 status: todo
 type: bug
-priority: normal
+priority: high
 created_at: 2026-07-26T07:14:42Z
-updated_at: 2026-07-26T07:14:58Z
+updated_at: 2026-08-03T19:37:57Z
 parent: okf-cli-wuiv
 ---
 

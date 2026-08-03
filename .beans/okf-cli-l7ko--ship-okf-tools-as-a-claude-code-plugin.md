@@ -3,8 +3,9 @@
 title: Ship okf-tools as a Claude Code plugin
 status: todo
 type: feature
+priority: deferred
 created_at: 2026-07-27T12:46:26Z
-updated_at: 2026-07-27T12:46:26Z
+updated_at: 2026-08-03T19:37:56Z
 ---
 
 ## Context

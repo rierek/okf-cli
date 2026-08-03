@@ -1,11 +1,11 @@
 ---
 # okf-cli-snxj
 title: T10 Informative zero-hit for agent consumers
-status: todo
+status: scrapped
 type: task
 priority: normal
 created_at: 2026-07-25T23:25:05Z
-updated_at: 2026-07-26T13:10:15Z
+updated_at: 2026-08-03T19:37:56Z
 parent: okf-cli-cskz
 blocked_by:
     - okf-cli-uagv
@@ -219,3 +219,19 @@ A second option worth measuring alongside it rather than assuming: keep returnin
 Related, already tracked, and plausibly the same underlying question: `okf-cli-uumj` asks whether the binary ownership decision is too absolute in both directions.
 
 **Source:** PO review session 2026-07-26, live against `~/Obsidian/Knowledge-Catalogue`.
+
+## Scrapped 2026-08-03 — PO decision
+
+The code shipped and works in isolation (commit edc2347, four green tests, mutation-probed). It is the reachability that fails, and D18 closed the only route to it.
+
+Three facts decide this together.
+
+The branch fires only on an empty result list, and against a populated concept_emb the semantic arm always returns something — reproduced live at planning time and again during a4as.
+
+D18 rejected the absolute cosine floor on both populations. Top-1 cosine separates target from no-target at AUC 0.641 with complete range overlap, and the statistic is inverted where a floor would sit: nonsense scores higher than well-formed questions about absent topics. No threshold makes the branch reachable.
+
+The population it would serve is 8 of 48 queries, down from 47 of 48 before this chain started. The shipped retrieval already answers the cases this feature was designed to rescue.
+
+A feature that never fires is not a feature. Scrapped rather than left open, so it stops reading as work waiting on a number.
+
+The code stays in place — it costs nothing, harms nothing, and becomes live the moment a reachability signal is found. If that happens it will be through a margin-based statistic (top-1 against top-2), which D18 explicitly left open and okf-cli-uumj asks about.

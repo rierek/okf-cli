@@ -3,9 +3,9 @@
 title: Make a stale concept_emb visible, like .fts
 status: todo
 type: task
-priority: normal
+priority: deferred
 created_at: 2026-07-26T07:34:54Z
-updated_at: 2026-07-26T07:34:54Z
+updated_at: 2026-08-03T19:37:56Z
 parent: okf-cli-wuiv
 ---
 

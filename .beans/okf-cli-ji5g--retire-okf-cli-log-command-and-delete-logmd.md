@@ -3,8 +3,9 @@
 title: Retire okf-cli log command and delete log.md
 status: todo
 type: task
+priority: deferred
 created_at: 2026-07-26T13:02:10Z
-updated_at: 2026-07-26T13:02:10Z
+updated_at: 2026-08-03T19:37:56Z
 ---
 
 Retire the `log` command from okf-cli and delete `log.md` from the Knowledge Catalogue. The command is a thin wrapper around `git log` that materialises a snapshot file nobody reads, and the file drifts stale. Git is already the single source of truth for change history; commit bodies already carry the per-change rationale.

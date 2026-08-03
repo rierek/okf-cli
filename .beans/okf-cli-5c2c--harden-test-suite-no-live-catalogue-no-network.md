@@ -3,9 +3,9 @@
 title: 'Harden test suite: no live catalogue, no network'
 status: todo
 type: task
-priority: normal
+priority: deferred
 created_at: 2026-07-26T06:43:49Z
-updated_at: 2026-07-26T06:43:49Z
+updated_at: 2026-08-03T19:37:56Z
 parent: okf-cli-wuiv
 ---
 

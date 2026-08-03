@@ -1,13 +1,11 @@
 ---
 # okf-cli-cskz
 title: 'Retrieval architecture: FTS5 arm + conditional handover'
-status: todo
+status: completed
 type: feature
 priority: high
-tags:
-    - rejected
 created_at: 2026-07-25T23:21:47Z
-updated_at: 2026-07-26T12:25:45Z
+updated_at: 2026-08-03T19:38:47Z
 parent: okf-cli-wuiv
 ---
 
@@ -321,3 +319,29 @@ US-07 · A `--expand-tags` flag exists, is documented, ships off by default, and
 US-09 · The producer writes each batch before starting the next, retries then halves then skips a failing batch, and left the live catalogue at full coverage (2443/2443 voyage-3-large rows) · a
 
 NB · The MCP wrapper exposes 10 of the CLI's 21 commands; `build-index` is among the missing, so an agent following the degradation note it receives cannot act on it. Also missing: `prime`, the documented agent-onboarding command. `okf_find`'s docstring still describes the pre-feature keyword search. Raised by the PO during round 4 → okf-cli-4ws6 (bug, under okf-cli-5uog)
+
+## Closed 2026-08-03 — PO decision
+
+All 13 leaves are terminal: 12 completed, okf-cli-snxj (T10) scrapped.
+
+The feature met its own success measure and holds it. Against eval/queries_v2.json + queries_real.json (n=48): zero-hit 0.1667 against a target of 0.30, MRR 0.4519 against 0.35, real-query zero-hit 0.125 against 0.25, p50 0.621 s against 2.0 s. All four, no retune.
+
+The `rejected` tag from the 2026-07-26 PO review is removed, because both verdicts behind it are now resolved rather than outstanding.
+
+US-06 (informative zero-hit) is scrapped. D18 measured the population it needed and closed the only route to reachability: top-1 cosine separates target from no-target at AUC 0.641 with complete range overlap, and the statistic is inverted where a floor would sit. The branch cannot be made to fire by choosing a number.
+
+US-07 (help and discoverability) was never about this feature. It left as its own follow-up epic okf-cli-5uog with okf-cli-3suc and okf-cli-6zhw beneath it, and is now on deferred priority — the CLI is discoverable enough for its single user.
+
+## Scope decision that came with the close
+
+The milestone was carrying fifteen open items against a tool that works. Measured, not assumed: retrieval went from 0.979 zero-hit to 0.167 over this chain, and the PO uses it daily without hitting the gaps these beans describe.
+
+Three beans survive as genuinely required, all of the same class — an artefact goes stale and nothing says so:
+
+- okf-cli-iaxj, rebuild the FTS index from a Stop hook. Observed live on 2026-08-03: `note: lexical index is stale (catalogue changed since build)` on an ordinary find against the catalogue.
+- okf-cli-xori, is_bundle_dir treats every directory under docs/ as a bundle, so topic folders outrank the canonical concepts. PO field observation.
+- okf-cli-3520, the producer leaves dead concept_emb rows behind. Same failure class on the semantic arm.
+
+The rest went to deferred priority rather than scrapped: 5rsk, l7ko, 3suc, 6zhw, 5c2c, ji5g, uumj, o1u6. They are polish on a working tool, and none of them has a user waiting.
+
+One of those deferrals is a deliberate risk, recorded so it is not a surprise later: okf-cli-5c2c would stop the test suite from reaching the live catalogue and the network. Until it is done the suite can go red because the catalogue changed, not because the code broke. Accepted for now on the grounds that it has not happened yet.
