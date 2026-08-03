@@ -736,6 +736,23 @@ def _fts_index_stale(root, conn):
 
 
 def cmd_build_index(root, args):
+    """(Re)build the FTS index, or — with --if-stale — skip when it is
+    already current. Skips only when the artefact both exists and passes
+    _fts_index_stale()'s stat()-only check; absent or stale still gets the
+    full rebuild path (D02). Without the flag this is unconditional, exactly
+    as before the flag existed — a caller that omits --if-stale must see
+    byte-identical behaviour to the pre-flag CLI."""
+    if getattr(args, "if_stale", False):
+        db_path = _fts_db_path(root)
+        if os.path.isfile(db_path):
+            conn = sqlite3.connect(db_path)
+            try:
+                stale = _fts_index_stale(root, conn)
+            finally:
+                conn.close()
+            if not stale:
+                print("index is current, skipping rebuild -> {}".format(db_path))
+                return
     n, db = build_fts_index(root)
     print("indexed {} concept(s) -> {}".format(n, db))
 
@@ -2812,9 +2829,12 @@ def build_parser():
     ap.add_argument("--root", help="catalogue root (default: auto-detect from cwd; "
                     "hard-fails if none found)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    _sub(sub, "build-index", "search",
-         "(re)build the FTS5 lexical search index at "
-         "<root>/.fts/fts.sqlite (local only, no network)")
+    pbi = _sub(sub, "build-index", "search",
+               "(re)build the FTS5 lexical search index at "
+               "<root>/.fts/fts.sqlite (local only, no network)")
+    pbi.add_argument("--if-stale", action="store_true",
+                      help="skip the rebuild when the existing index is "
+                           "already current (default: always rebuild)")
     pc = _sub(sub, "check", "maintenance",
               "conformance scan: §9 hard rules + local invariants")
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")

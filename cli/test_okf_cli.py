@@ -2274,6 +2274,89 @@ class FtsIndexBuild(unittest.TestCase):
             conn.close()
 
 
+class CmdBuildIndexIfStale(unittest.TestCase):
+    """okf-cli-iaxj — `build-index --if-stale` skips the rebuild when the
+    existing index is current, so the Stop/SessionStart hook can call it on
+    every trigger without re-reading every concept body each time (D02)."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: One\ndescription: d\n"
+                    "tags: []\n---\nbody one.\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _run(self, if_stale):
+        import io
+        import contextlib
+        import types
+        args = types.SimpleNamespace(if_stale=if_stale)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_build_index(self.root, args)
+        return buf.getvalue()
+
+    def test_without_flag_always_rebuilds_even_when_current(self):
+        """Regression guard for the D02 promise: omitting --if-stale must
+        stay byte-identical to today — an unconditional full rebuild, never
+        a skip, no matter how fresh the index already is."""
+        okf.build_fts_index(self.root)
+        db_path = okf._fts_db_path(self.root)
+        before = os.path.getmtime(db_path)
+        out = self._run(if_stale=False)
+        after = os.path.getmtime(db_path)
+        self.assertIn("indexed 1 concept(s)", out)
+        self.assertGreaterEqual(after, before)
+
+    def test_if_stale_skips_rebuild_when_index_is_current(self):
+        okf.build_fts_index(self.root)
+        db_path = okf._fts_db_path(self.root)
+        # os.replace() on rebuild always produces a fresh inode/mtime, so an
+        # unchanged mtime is proof the rebuild branch never ran.
+        before = os.path.getmtime(db_path)
+        out = self._run(if_stale=True)
+        after = os.path.getmtime(db_path)
+        self.assertEqual(before, after)
+        self.assertIn("index is current", out)
+        self.assertIn(db_path, out)
+
+    def test_if_stale_rebuilds_when_a_concept_changed(self):
+        okf.build_fts_index(self.root)
+        with open(os.path.join(self.root, "b", "two.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Konzept\ntitle: Two\ndescription: d\n"
+                    "tags: []\n---\nbody two.\n")
+        out = self._run(if_stale=True)
+        self.assertIn("indexed 2 concept(s)", out)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM docs").fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(total, 2)
+
+    def test_if_stale_rebuilds_when_index_is_absent(self):
+        # No build_fts_index() call at all — the .fts dir does not exist yet.
+        out = self._run(if_stale=True)
+        self.assertIn("indexed 1 concept(s)", out)
+        self.assertTrue(os.path.isfile(okf._fts_db_path(self.root)))
+
+    def test_help_documents_the_flag(self):
+        ap = okf.build_parser()
+        parsers = okf.subcommand_parsers(ap)
+        actions = okf.parser_actions(parsers["build-index"])
+        flag = next((a for a in actions if a.dest == "if_stale"), None)
+        self.assertIsNotNone(flag, "build-index has no --if-stale option")
+        self.assertTrue((flag.help or "").strip())
+
+
 def _run_find(root, query, **kw):
     """Module-level twin of the per-class _run() helper at
     cli/test_okf_cli.py:1381 — same in-process convention (SimpleNamespace
