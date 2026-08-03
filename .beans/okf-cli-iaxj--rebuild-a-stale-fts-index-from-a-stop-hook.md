@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-27T12:46:04Z
-updated_at: 2026-08-03T19:59:38Z
+updated_at: 2026-08-03T20:08:22Z
 ---
 
 ## Context
@@ -217,3 +217,16 @@ Appended as the fifth entry of the existing `hooks.SessionStart` array (after th
 - `docs/.fts/` is untracked and un-ignored in the `okf-tools` repo's own `.gitignore` — anyone running `build-index` against `docs/` locally will see it as an untracked directory in `git status`. Not this task's scope to fix (D03 excludes repo-local bundles from the hook), flagging for whoever picks up repo-local coverage next.
 - D02's side note applies directly: `okf-cli-uumj` / `okf-cli-3520` (embedding-side staleness) should follow the same shape — a `--if-stale`-style flag consulted by a machine-readable probe function, not a second untested shell mechanism.
 - The hook is single-machine by design (point 3 above); porting to a second machine means either exporting `OKF_TOML`/`OKF_CLI_PY` or editing the two hardcoded defaults in `fts-rebuild-if-stale.sh`.
+
+
+## Review 2026-08-03 — ce-specs-reviewer: APPROVED
+
+Verdict APPROVED. Reviewer ran the full suite himself (300 tests, 0 failures/errors), the hook suite himself (11/11), and seven own mutations. Every acceptance criterion has a named responsible test that goes red for the right reason under mutation — including the regression promise that `build-index` without the flag still rebuilds unconditionally.
+
+Two non-blocking findings, neither requiring a change to this task's code.
+
+**I01 — ERRATA correction to this bean's own claim.** `~/.claude/hooks/fts-rebuild-if-stale.sh:32`, the `[ -n "$kc_root" ] || exit 0` guard, is an equivalent mutant: removing it in isolation turns no test red, because the following `[ -d "$kc_root" ] || exit 0` (line 33) catches the empty-string case anyway (`[ -d "" ]` is always false). The behaviour is correct either way — but the wording in `## Deviations/ERRATA` above ("both kc_root guards proven") overstates what the mutation test established. Only the `-d` guard is proven. No action; recorded so a later reader does not treat the stronger claim as evidence.
+
+**I02 — routed to `.claude`-store bean, not fixed here.** None of the three `~/.claude/hooks/*.test.sh` suites is reachable through a `just` recipe (`just test` there covers only `test-layer0` and `test-hooks`, and the latter runs `git-hooks/*.test.sh` exclusively). This contradicts the just-canon rule "if the recipe is missing, create it", but it is a pre-existing gap in that repo — this task merely joined it. Out of scope here by repo boundary.
+
+Reviewer could not reproduce two things and said so rather than asserting them: the end-to-end smoke against the live Knowledge-Catalogue (deliberately, to keep that working tree untouched — the mechanics are independently covered by unit and hook tests), and a real Claude Code SessionStart pass with the registered entry. The second one resolves itself at the next session start on this machine.
