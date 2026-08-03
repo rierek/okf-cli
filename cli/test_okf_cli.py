@@ -409,21 +409,25 @@ class CheckCommand(unittest.TestCase):
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertIn("crosslink-format", self._names(warnings))
 
-    def test_bundle_relative_crosslink_is_clean(self):
-        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](/y.md)\n")
+    def test_catalogue_root_crosslink_is_clean(self):
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](/b/y.md)\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertNotIn("crosslink-format", self._names(warnings))
 
-    def test_cross_bundle_dotdot_link_is_clean(self):
+    def test_cross_bundle_dotdot_link_is_flagged(self):
+        """Inverted with the canonical form: check_crosslink_format flags ANY
+        relative link now, `../other/y.md` included, because it resolves
+        inconsistently and orphans in Obsidian. fix-crosslinks migrates it."""
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](../other/y.md)\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
-        self.assertNotIn("crosslink-format", self._names(warnings))
+        self.assertIn("crosslink-format", self._names(warnings))
 
     def test_clean_bundle_has_zero_violations(self):
         self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
         self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n\n## Contents\n\n"
                               + okf.MARK_START + "\n* [X](x.md)\n" + okf.MARK_END + "\n")
-        self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n---\n# X\n\n[Y](/other.md)\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n---\n# X\n\n[Y](/b/index.md)\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
@@ -461,7 +465,12 @@ class VisualizeDefaultOutputPath(unittest.TestCase):
 class ResolveCrosslinkTarget(unittest.TestCase):
     """T07 — resolve_crosslink_target reuses bundle_graph's cdir-relative
     normalization formula, gated by a real isfile() check (the safety anchor
-    that keeps doc examples pointing at non-existent paths untouched)."""
+    that keeps doc examples pointing at non-existent paths untouched).
+
+    Expectations are catalogue-root-absolute (`/bundle/subdir/concept.md`,
+    leading `/` = catalogue root = Obsidian vault root). This class used to
+    assert the older bundle-relative form (`/y.md`); the canonical form moved
+    on and the tests did not, which is why they had been failing."""
 
     def setUp(self):
         import tempfile
@@ -480,22 +489,22 @@ class ResolveCrosslinkTarget(unittest.TestCase):
     def test_same_dir_target_resolves(self):
         self._w("b/y.md", "")
         got = okf.resolve_crosslink_target(self.tmp, "b", "", "y.md")
-        self.assertEqual(got, "/y.md")
+        self.assertEqual(got, "/b/y.md")
 
     def test_subdir_target_resolves_from_bundle_root(self):
         self._w("b/sub/y.md", "")
         got = okf.resolve_crosslink_target(self.tmp, "b", "", "sub/y.md")
-        self.assertEqual(got, "/sub/y.md")
+        self.assertEqual(got, "/b/sub/y.md")
 
     def test_target_resolves_relative_to_source_cdir(self):
         self._w("b/sub/y.md", "")
         got = okf.resolve_crosslink_target(self.tmp, "b", "sub", "y.md")
-        self.assertEqual(got, "/sub/y.md")
+        self.assertEqual(got, "/b/sub/y.md")
 
     def test_dotslash_target_normalizes(self):
         self._w("b/y.md", "")
         got = okf.resolve_crosslink_target(self.tmp, "b", "", "./y.md")
-        self.assertEqual(got, "/y.md")
+        self.assertEqual(got, "/b/y.md")
 
     def test_nonexistent_target_returns_none(self):
         got = okf.resolve_crosslink_target(self.tmp, "b", "", "ghost.md")
@@ -504,7 +513,7 @@ class ResolveCrosslinkTarget(unittest.TestCase):
     def test_index_md_target_resolves(self):
         self._w("b/sub/index.md", "")
         got = okf.resolve_crosslink_target(self.tmp, "b", "", "sub/index.md")
-        self.assertEqual(got, "/sub/index.md")
+        self.assertEqual(got, "/b/sub/index.md")
 
 
 class RewriteCrosslinksInBody(unittest.TestCase):
@@ -529,7 +538,7 @@ class RewriteCrosslinksInBody(unittest.TestCase):
         self._w("b/y.md", "")
         new, changed, unresolved = okf.rewrite_crosslinks_in_body(
             self.tmp, "b", "", "See [Y](y.md) for details.")
-        self.assertEqual(new, "See [Y](/y.md) for details.")
+        self.assertEqual(new, "See [Y](/b/y.md) for details.")
         self.assertEqual(changed, 1)
         self.assertEqual(unresolved, [])
 
@@ -537,7 +546,7 @@ class RewriteCrosslinksInBody(unittest.TestCase):
         self._w("b/y.md", "")
         new, changed, unresolved = okf.rewrite_crosslinks_in_body(
             self.tmp, "b", "", "[Y](y.md#section)")
-        self.assertEqual(new, "[Y](/y.md#section)")
+        self.assertEqual(new, "[Y](/b/y.md#section)")
         self.assertEqual(changed, 1)
 
     def test_unresolvable_target_left_untouched(self):
@@ -547,12 +556,25 @@ class RewriteCrosslinksInBody(unittest.TestCase):
         self.assertEqual(changed, 0)
         self.assertEqual(unresolved, ["ghost.md"])
 
-    def test_already_bundle_relative_link_untouched(self):
+    def test_already_canonical_link_untouched(self):
+        """Idempotence now belongs to the catalogue-root-absolute form: a
+        second fix-crosslinks pass must leave a migrated link byte-identical."""
         self._w("b/y.md", "")
-        body = "[Y](/y.md)"
+        body = "[Y](/b/y.md)"
         new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
         self.assertEqual(new, body)
         self.assertEqual(changed, 0)
+
+    def test_legacy_bundle_relative_link_is_migrated(self):
+        """The other half of that rule: `/y.md` was the OLD canonical form
+        (leading / = bundle root), so it is legacy input to be rewritten, not
+        a link to leave alone. resolve_crosslink_target tries the legacy
+        reading first precisely so this migration works."""
+        self._w("b/y.md", "")
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(
+            self.tmp, "b", "", "[Y](/y.md)")
+        self.assertEqual(new, "[Y](/b/y.md)")
+        self.assertEqual(changed, 1)
 
     def test_cross_bundle_dotdot_link_untouched(self):
         body = "[Y](../other-bundle/y.md)"
@@ -564,14 +586,14 @@ class RewriteCrosslinksInBody(unittest.TestCase):
         self._w("b/y.md", "")
         body = "[Y](y.md) and again [Y2](y.md)"
         new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
-        self.assertEqual(new, "[Y](/y.md) and again [Y2](/y.md)")
+        self.assertEqual(new, "[Y](/b/y.md) and again [Y2](/b/y.md)")
         self.assertEqual(changed, 2)
 
     def test_subdir_relative_link_from_root_rewritten(self):
         self._w("b/sub/y.md", "")
         new, changed, unresolved = okf.rewrite_crosslinks_in_body(
             self.tmp, "b", "", "[Y](sub/y.md)")
-        self.assertEqual(new, "[Y](/sub/y.md)")
+        self.assertEqual(new, "[Y](/b/sub/y.md)")
         self.assertEqual(changed, 1)
 
 
@@ -605,7 +627,7 @@ class FixCrosslinksCommand(unittest.TestCase):
         self.assertEqual(len(touched), 1)
         self.assertEqual(unresolved, [])
         content = self._r("b/x.md")
-        self.assertIn("[Y](/y.md)", content)
+        self.assertIn("[Y](/b/y.md)", content)
         self.assertTrue(content.startswith("---\ntype: Concept\ntitle: X\n---\n"))
 
     def test_dry_run_does_not_write(self):
@@ -708,7 +730,7 @@ class ConfigAwareTypes(unittest.TestCase):
 class RefMatrix(unittest.TestCase):
     """build_ref_matrix: every markdown link under scan_root resolving to the
     target file. Same link-regex as bundle_graph; code fences stripped; http/
-    anchors ignored; relative + bundle-relative (/) both resolved."""
+    anchors ignored; relative + catalogue-root-absolute (/) both resolved."""
 
     def setUp(self):
         import tempfile
@@ -734,19 +756,25 @@ class RefMatrix(unittest.TestCase):
         hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "docs/arch.md"))
         self.assertEqual(self._sources(hits), ["README.md", "docs/overview.md"])
 
-    def test_bundle_relative_leading_slash_resolves(self):
+    def test_catalogue_root_leading_slash_resolves(self):
         self._w("docs/arch.md", "# Arch\n")
-        self._w("docs/x.md", "see [a](/arch.md)\n")   # /arch.md = bundle(docs) root
+        # /docs/arch.md — leading / is the CATALOGUE root, so the bundle
+        # segment is part of the link.
+        self._w("docs/x.md", "see [a](/docs/arch.md)\n")
         hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "docs/arch.md"))
         self.assertEqual(self._sources(hits), ["docs/x.md"])
 
-    def test_leading_slash_is_bundle_root_not_scan_root(self):
-        # OKF: /x.md in b1/foo.md means b1/x.md, NOT <scan_root>/x.md
+    def test_leading_slash_is_scan_root_not_bundle_root(self):
+        """Inverted from the old bundle-root rule (and renamed, so the name
+        stops asserting the opposite of the code): `/b1/x.md` names the same
+        file no matter which bundle the link sits in, so BOTH sources are
+        inbound references. Under the old reading the link in b2 would have
+        meant b2/x.md and been unrelated."""
         self._w("b1/x.md", "# X\n")
-        self._w("b1/foo.md", "[x](/x.md)\n")
-        self._w("b2/bar.md", "[x](/x.md)\n")   # means b2/x.md — unrelated to target
+        self._w("b1/foo.md", "[x](/b1/x.md)\n")
+        self._w("b2/bar.md", "[x](/b1/x.md)\n")
         hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "b1/x.md"))
-        self.assertEqual(self._sources(hits), ["b1/foo.md"])
+        self.assertEqual(self._sources(hits), ["b1/foo.md", "b2/bar.md"])
 
     def test_http_and_anchor_and_fenced_ignored(self):
         self._w("docs/arch.md", "# Arch\n")
@@ -875,10 +903,10 @@ class RenameConcept(unittest.TestCase):
         self._w("aaa/sub/index.md", "# Sub\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
         self._w("bbb/index.md", "# BBB\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
         self._w("aaa/a.md", "---\ntype: Concept\n---\n"
-                            "Links [B](/b.md) and [C](/sub/c.md#h).")
-        self._w("aaa/b.md", "---\ntype: Concept\n---\nBack to [A](/a.md).")
-        self._w("aaa/sub/c.md", "---\ntype: Concept\n---\nSee [A](/a.md).")
-        self._w("bbb/x.md", "---\ntype: Concept\n---\nCross to [A](../aaa/a.md).")
+                            "Links [B](/aaa/b.md) and [C](/aaa/sub/c.md#h).")
+        self._w("aaa/b.md", "---\ntype: Concept\n---\nBack to [A](/aaa/a.md).")
+        self._w("aaa/sub/c.md", "---\ntype: Concept\n---\nSee [A](/aaa/a.md).")
+        self._w("bbb/x.md", "---\ntype: Concept\n---\nCross to [A](/aaa/a.md).")
 
     def tearDown(self):
         import shutil
@@ -893,20 +921,24 @@ class RenameConcept(unittest.TestCase):
     def _ap(self, rel):
         return os.path.join(self.tmp, rel)
 
-    def test_link_expr_same_bundle_is_bundle_relative(self):
+    def test_link_expr_same_bundle_is_catalogue_absolute(self):
         self.assertEqual(
             okf.link_expr(self.tmp, self._ap("aaa/b.md"), self._ap("aaa/a.md")),
-            "/a.md")
+            "/aaa/a.md")
 
-    def test_link_expr_cross_bundle_is_path_relative(self):
+    def test_link_expr_cross_bundle_is_catalogue_absolute(self):
         self.assertEqual(
             okf.link_expr(self.tmp, self._ap("aaa/b.md"), self._ap("bbb/a.md")),
-            "../bbb/a.md")
+            "/bbb/a.md")
 
-    def test_link_expr_cross_bundle_from_subdir_climbs_correctly(self):
+    def test_link_expr_from_subdir_does_not_climb(self):
+        """Renamed from ..._climbs_correctly: under the catalogue-absolute
+        form nothing climbs. The expression no longer depends on where the
+        SOURCE sits, which is the whole point — the same link text names the
+        same file from anywhere in the catalogue."""
         self.assertEqual(
             okf.link_expr(self.tmp, self._ap("aaa/sub/c.md"), self._ap("bbb/a.md")),
-            "../../bbb/a.md")
+            "/bbb/a.md")
 
     def test_split_link_suffix_keeps_anchor(self):
         self.assertEqual(okf._split_link_suffix("/sub/c.md#h"), ("/sub/c.md", "#h"))
@@ -914,21 +946,24 @@ class RenameConcept(unittest.TestCase):
     def test_plan_same_bundle_rewrites_inbound_only(self):
         plan = okf.plan_rename(self.tmp, self._ap("aaa/a.md"), self._ap("aaa/a2.md"))
         srcs = {s: (o, n) for s, o, n in plan["inbound"]}
-        self.assertEqual(srcs["aaa/b.md"], ("/a.md", "/a2.md"))
-        self.assertEqual(srcs["aaa/sub/c.md"], ("/a.md", "/a2.md"))
-        self.assertEqual(srcs["bbb/x.md"], ("../aaa/a.md", "../aaa/a2.md"))
+        self.assertEqual(srcs["aaa/b.md"], ("/aaa/a.md", "/aaa/a2.md"))
+        self.assertEqual(srcs["aaa/sub/c.md"], ("/aaa/a.md", "/aaa/a2.md"))
+        self.assertEqual(srcs["bbb/x.md"], ("/aaa/a.md", "/aaa/a2.md"))
         self.assertEqual(plan["outbound"], [])          # bundle unchanged
         self.assertEqual(plan["bundles"], ["aaa"])
 
     def test_plan_cross_bundle_rewrites_inbound_and_outbound(self):
         plan = okf.plan_rename(self.tmp, self._ap("aaa/a.md"), self._ap("bbb/a.md"))
         srcs = {s: (o, n) for s, o, n in plan["inbound"]}
-        self.assertEqual(srcs["aaa/b.md"], ("/a.md", "../bbb/a.md"))
-        self.assertEqual(srcs["aaa/sub/c.md"], ("/a.md", "../../bbb/a.md"))
-        self.assertEqual(srcs["bbb/x.md"], ("../aaa/a.md", "/a.md"))
-        # moved file's own links reforged, anchor preserved
-        self.assertIn(("/b.md", "../aaa/b.md"), plan["outbound"])
-        self.assertIn(("/sub/c.md#h", "../aaa/sub/c.md#h"), plan["outbound"])
+        self.assertEqual(srcs["aaa/b.md"], ("/aaa/a.md", "/bbb/a.md"))
+        self.assertEqual(srcs["aaa/sub/c.md"], ("/aaa/a.md", "/bbb/a.md"))
+        self.assertEqual(srcs["bbb/x.md"], ("/aaa/a.md", "/bbb/a.md"))
+        # The moved file's OWN links need no reforging any more: a
+        # catalogue-absolute link names the same file regardless of where the
+        # source sits, so moving a.md from aaa/ to bbb/ leaves its outbound
+        # links valid as written. Under the old bundle-relative form every one
+        # of them had to be rewritten — that whole class of churn is gone.
+        self.assertEqual(plan["outbound"], [])
         self.assertEqual(plan["bundles"], ["aaa", "bbb"])
 
     def test_apply_link_rewrites_targets_link_not_label(self):
@@ -1370,6 +1405,159 @@ class RootSafety(unittest.TestCase):
         self.assertEqual(okf.catalogue_root(None), expected)
 
 
+class FindFilterContract(unittest.TestCase):
+    """I01 — --scope/--type/--tag constrain the ANSWER, not one arm of it.
+
+    The regression this locks down (B01): the filters used to be applied by
+    whichever arm happened to implement them, so the moment fuse_conditional
+    handed ranking ownership to the semantic arm, a scoped query returned
+    concepts from entirely different bundles. Testing an arm in isolation
+    cannot catch that — which arm answers is decided per query at runtime. So
+    every case here drives cmd_find, the seam where the user sets the filter,
+    across all three ownership regimes:
+
+      lexical   FTS index present, literal query -> the lexical arm owns
+      semantic  FTS index present, no literal match -> the semantic arm owns
+      degraded  no FTS index -> the substring scan answers
+
+    Each case pairs a NEGATIVE assertion (the bait violating the filter is
+    absent) with a POSITIVE one (the wanted concept is present). Without the
+    positive half a filter that wrongly drops everything would pass."""
+
+    # (filter kwarg, bait that must not survive it)
+    DIMENSIONS = [
+        ("scope", "keep/inner", ["keep/outer", "bait/cross"]),
+        ("type", "Concept", ["keep/inner/type-bait"]),
+        ("tag", "keeper", ["keep/inner/tag-bait"]),
+    ]
+    WANTED = "keep/inner/wanted"
+    LITERAL = "zqxcontract"
+    PARAPHRASE = "zzz-no-keyword-match-zzz"
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        body = "{} appears in every fixture body.\n".format(self.LITERAL)
+        self._w("keep/inner/wanted.md", "Concept", "Wanted", ["keeper"], body)
+        self._w("keep/inner/type-bait.md", "Pattern", "Type Bait", ["keeper"],
+                body)
+        self._w("keep/inner/tag-bait.md", "Concept", "Tag Bait", ["other"],
+                body)
+        # in-scope bundle but outside the scoped SUBDIR
+        self._w("keep/outer.md", "Concept", "Outer Bait", ["keeper"], body)
+        # different bundle entirely — the shape the user actually reported
+        self._w("bait/cross.md", "Concept", "Cross Bait", ["keeper"], body)
+        self._orig_embed = okf._embed_query_voyage
+        okf._QUERY_VEC_CACHE.clear()
+        # Every concept embeds to the same vector: which one the semantic arm
+        # would rank first is irrelevant here, only which ones it may return.
+        self._make_tagvec([
+            ("k1", "keep/inner/wanted"), ("k2", "keep/inner/type-bait"),
+            ("k3", "keep/inner/tag-bait"), ("k4", "keep/outer"),
+            ("k5", "bait/cross"),
+        ])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+
+    def tearDown(self):
+        import shutil
+        okf._embed_query_voyage = self._orig_embed
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, typ, title, tags, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: {}\ntitle: {}\ntags: [{}]\ndescription: d\n---\n"
+                "# {}\n\n{}".format(typ, title, ", ".join(tags), title, body)
+            )
+
+    def _make_tagvec(self, rows):
+        db = os.path.join(self.tmp, ".tagvec", "tag_vectors.sqlite")
+        os.makedirs(os.path.dirname(db), exist_ok=True)
+        import sqlite3, struct
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE concept_emb(key TEXT PRIMARY KEY, path TEXT, "
+            "model TEXT, dim INT, vec BLOB)"
+        )
+        for key, path in rows:
+            conn.execute(
+                "INSERT INTO concept_emb VALUES (?,?,?,?,?)",
+                (key, path, "voyage-3-large", 2,
+                 struct.pack("<2f", 1.0, 0.0)),
+            )
+        conn.commit()
+        conn.close()
+
+    def _paths(self, query, **kw):
+        import io, contextlib, types
+        args = types.SimpleNamespace(
+            query=query, limit=10, type=None, tag=None, scope=None,
+            breakdown=False,
+        )
+        for k, v in kw.items():
+            setattr(args, k, v)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), \
+                contextlib.redirect_stderr(io.StringIO()):
+            okf.cmd_find(self.tmp, args)
+        return [l[len("path: "):] for l in buf.getvalue().splitlines()
+                if l.startswith("path: ")]
+
+    def _check_every_dimension(self, query, regime):
+        for kwarg, value, baits in self.DIMENSIONS:
+            with self.subTest(regime=regime, filter=kwarg):
+                paths = self._paths(query, **{kwarg: value})
+                for bait in baits:
+                    self.assertNotIn(bait, paths)
+                self.assertIn(self.WANTED, paths)
+
+    def _silence_semantic_arm(self):
+        """Make the semantic arm unavailable so a lexical case really tests
+        the lexical arm. Without this the arms cover for each other: the
+        semantic arm reads its paths from concept_emb, so it would happily
+        supply a correctly-filtered hit for a concept the lexical arm had
+        just mangled or dropped, and the case would pass for the wrong
+        reason (caught by mutation-testing this very class)."""
+        def _unavailable(_text):
+            raise OSError("semantic arm disabled for this regime")
+        okf._embed_query_voyage = _unavailable
+
+    def test_lexical_owned_ranking_honours_every_filter(self):
+        okf.build_fts_index(self.tmp)
+        self._silence_semantic_arm()
+        self._check_every_dimension(self.LITERAL, "lexical")
+
+    def test_semantic_owned_ranking_honours_every_filter(self):
+        okf.build_fts_index(self.tmp)
+        # Guard the regime itself: if a literal match crept in, the lexical
+        # arm would own the ranking and this would silently retest the case
+        # above instead of the one B01 broke.
+        self.assertEqual(self._paths(self.PARAPHRASE, scope="keep/inner"),
+                         [self.WANTED, "keep/inner/type-bait",
+                          "keep/inner/tag-bait"])
+        self._check_every_dimension(self.PARAPHRASE, "semantic")
+
+    def test_substring_fallback_honours_every_filter(self):
+        # no build_fts_index() — _rank_lexically degrades to the full scan
+        self.assertFalse(os.path.isfile(okf._fts_db_path(self.tmp)))
+        self._silence_semantic_arm()
+        self._check_every_dimension(self.LITERAL, "degraded")
+
+    def test_scoped_substring_fallback_reports_the_real_path(self):
+        """B04 — with --scope <bundle>/<subdir> the substring arm built its
+        path from the BUNDLE name plus a cid relative to the SUBDIR, printing
+        `keep/wanted` for a concept living at `keep/inner/wanted`: a path no
+        `okf-cli read` can resolve. Unscoped output is unaffected, which is
+        what keeps the frozen eval baseline valid."""
+        self.assertFalse(os.path.isfile(okf._fts_db_path(self.tmp)))
+        self._silence_semantic_arm()
+        self.assertEqual(sorted(self._paths(self.LITERAL, scope="keep/inner")),
+                         ["keep/inner/tag-bait", "keep/inner/type-bait",
+                          "keep/inner/wanted"])
+
+
 class FindFilterComposition(unittest.TestCase):
     """P8/8a (okf-cli-8uaf, FIL03/FIL04) — find gains --type/--tag/--scope
     so keyword search is composable with exact-match filters. --bundle was
@@ -1720,6 +1908,43 @@ class SemanticBackstop(unittest.TestCase):
         self.assertIn("path: b/wanted", out)
         self.assertIn("provenance: semantic", out)
 
+    def test_scope_confines_the_semantic_arm(self):
+        """B01 — --scope is a filter on the ANSWER, not on one arm. The
+        lexical arm confines itself (SQL path predicate / resolve_scopes),
+        so a scoped query used to return out-of-scope concepts only when
+        the semantic arm owned the ranking: the user asked for
+        home-lab-wiki/services and got agent-memory and qm-wiki hits."""
+        self._w("other/leak.md", "Leaked Concept", [],
+                "totally different content words only.\n")
+        self._make_tagvec([("k1", "other/leak", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, err = self._run("zzz-no-keyword-match-zzz", scope="b")
+        self.assertNotIn("path: other/leak", out)
+
+    def test_type_filter_confines_the_semantic_arm(self):
+        """B02 — same defect class as B01: --type is applied to the lexical
+        arm's SQL only, so a semantic-owned ranking returns the wrong type."""
+        self._w("b/other-type.md", "Wrong Type", [],
+                "totally different content words only.\n")
+        ap = os.path.join(self.tmp, "b/other-type.md")
+        with open(ap, encoding="utf-8") as f:
+            txt = f.read()
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(txt.replace("type: Concept", "type: Pattern"))
+        self._make_tagvec([("k1", "b/other-type", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, err = self._run("zzz-no-keyword-match-zzz", type="Concept")
+        self.assertNotIn("path: b/other-type", out)
+
+    def test_tag_filter_confines_the_semantic_arm(self):
+        """B03 — same defect class as B01 for --tag."""
+        self._w("b/untagged.md", "Untagged Concept", [],
+                "totally different content words only.\n")
+        self._make_tagvec([("k1", "b/untagged", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, err = self._run("zzz-no-keyword-match-zzz", tag="zqxstrong")
+        self.assertNotIn("path: b/untagged", out)
+
     def test_confident_literal_top1_survives_unrelated_semantic_scale(self):
         """T08/D12 update of the former F01 regression (pre-plan absolute
         pin, removed by this task). fuse_conditional decides ownership from
@@ -1918,7 +2143,7 @@ class SemanticRankingDegradation(unittest.TestCase):
     def test_absent_cache_returns_empty(self):
         root = tempfile.mkdtemp()
         try:
-            self.assertEqual(okf.semantic_ranking(root, "x", 10), [])
+            self.assertEqual(okf.semantic_ranking(root, "x", 10, okf.FindFilters()), [])
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
@@ -1942,7 +2167,7 @@ class SemanticRankingDegradation(unittest.TestCase):
             orig = okf._embed_query_voyage
             okf._embed_query_voyage = _raise
             try:
-                self.assertEqual(okf.semantic_ranking(root, "x", 10), [])
+                self.assertEqual(okf.semantic_ranking(root, "x", 10, okf.FindFilters()), [])
             finally:
                 okf._embed_query_voyage = orig
         finally:
@@ -2093,14 +2318,14 @@ class FtsRanking(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def test_returns_none_without_an_index(self):
-        self.assertIsNone(okf._fts_ranking(self.root, "tunnel", 10))
+        self.assertIsNone(okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters()))
 
     def test_absent_index_prints_exactly_one_stderr_note(self):
         import io
         import contextlib
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
-            result = okf._fts_ranking(self.root, "tunnel", 10)
+            result = okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters())
         self.assertIsNone(result)
         lines = [l for l in buf.getvalue().splitlines() if l]
         self.assertEqual(len(lines), 1)
@@ -2108,29 +2333,31 @@ class FtsRanking(unittest.TestCase):
 
     def test_ranks_title_match_above_body_match(self):
         okf.build_fts_index(self.root)
-        ranked = okf._fts_ranking(self.root, "tunnel", 10)
+        ranked = okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters())
         self.assertEqual(ranked[0][0], "b/two")
 
     def test_type_filter_narrows(self):
         okf.build_fts_index(self.root)
-        ranked = okf._fts_ranking(self.root, "tunnel", 10, type_filter="Runbook")
+        ranked = okf._fts_ranking(self.root, "tunnel", 10,
+                                  okf.FindFilters(type="Runbook"))
         self.assertEqual([p for p, _s in ranked], ["b/one"])
 
     def test_tag_filter_matches_whole_tags_only(self):
         okf.build_fts_index(self.root)
-        ranked = okf._fts_ranking(self.root, "tunnel", 10, tag_filter="tail")
+        ranked = okf._fts_ranking(self.root, "tunnel", 10,
+                                  okf.FindFilters(tag="tail"))
         self.assertEqual(ranked, [])
 
     def test_scope_filter_narrows_to_a_bundle(self):
         okf.build_fts_index(self.root)
-        self.assertNotEqual(okf._fts_ranking(self.root, "tunnel", 10, scope="b"), [])
-        self.assertEqual(okf._fts_ranking(self.root, "tunnel", 10, scope="zz"), [])
+        self.assertNotEqual(okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters(scope="b")), [])
+        self.assertEqual(okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters(scope="zz")), [])
 
     def test_corrupt_index_degrades_to_none(self):
         okf.build_fts_index(self.root)
         with open(okf._fts_db_path(self.root), "wb") as f:
             f.write(b"not a database")
-        self.assertIsNone(okf._fts_ranking(self.root, "tunnel", 10))
+        self.assertIsNone(okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters()))
 
     def test_corrupt_index_prints_exactly_one_stderr_note(self):
         import io
@@ -2140,7 +2367,7 @@ class FtsRanking(unittest.TestCase):
             f.write(b"not a database")
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
-            result = okf._fts_ranking(self.root, "tunnel", 10)
+            result = okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters())
         self.assertIsNone(result)
         lines = [l for l in buf.getvalue().splitlines() if l]
         self.assertEqual(len(lines), 1)
@@ -2159,7 +2386,7 @@ class FtsRanking(unittest.TestCase):
         try:
             buf = io.StringIO()
             with contextlib.redirect_stderr(buf):
-                result = okf._fts_ranking(self.root, "tunnel", 10)
+                result = okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters())
         finally:
             os.chmod(db_path, 0o644)
         self.assertIsNone(result)
@@ -2264,7 +2491,7 @@ class FtsBm25WeightsApplied(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def test_title_weight_outranks_denser_body_match(self):
-        ranked = okf._fts_ranking(self.root, "zqxwgt", 10)
+        ranked = okf._fts_ranking(self.root, "zqxwgt", 10, okf.FindFilters())
         self.assertEqual(ranked[0][0], "b/titlehit")
 
     def test_unweighted_bm25_would_rank_body_first(self):

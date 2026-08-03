@@ -740,8 +740,123 @@ def cmd_build_index(root, args):
     print("indexed {} concept(s) -> {}".format(n, db))
 
 
-def _fts_ranking(root, query, limit, type_filter=None, tag_filter=None,
-                 scope=None, notify=True):
+class FindFilters:
+    """--scope/--type/--tag as ONE value, with the predicate defined once.
+
+    I01, the architectural finding behind B01: the same three filters used to
+    be implemented three times — SQL in the FTS arm, a Python scan in the
+    substring arm, nothing at all in the semantic arm — and travelled as three
+    loose positional arguments through five signatures. Nothing made an arm
+    apply them, so the semantic arm silently answered unfiltered and a scoped
+    query returned concepts from other bundles entirely.
+
+    The filters describe the ANSWER, not one arm of it. Whichever arm ends up
+    owning the ranking (fuse_conditional decides per query), the same
+    predicate holds:
+
+      scope  path is the scope itself or lives beneath it
+      type   exact equality on the concept's frontmatter `type`
+      tag    WHOLE-tag membership — a "tail" query must never hit "tailscale"
+
+    Arms consume it one of two ways, and both hand back what they did NOT
+    cover so that skipping a dimension is visible instead of silent:
+    sql_where() for arms that filter in the database, matches()/matches_loaded()
+    for arms that walk the file tree."""
+
+    __slots__ = ("scope", "type", "tag")
+
+    def __init__(self, scope=None, type=None, tag=None):
+        # Normalize "" to None once, here: cmd_find reads these off argparse
+        # and the MCP layer passes empty strings for "unset".
+        self.scope = (scope or "").rstrip("/") or None
+        self.type = type or None
+        self.tag = tag or None
+
+    def __bool__(self):
+        return bool(self.scope or self.type or self.tag)
+
+    def __repr__(self):
+        return "FindFilters(scope={!r}, type={!r}, tag={!r})".format(
+            self.scope, self.type, self.tag)
+
+    def sql_where(self, columns):
+        """(sql_fragment, params, residual) for a table that natively carries
+        the dimensions named in `columns` ({dimension: column_name}).
+
+        `residual` is a FindFilters holding exactly the dimensions this SQL did
+        NOT cover — the caller must run it through matches()/matches_loaded()
+        or it drops them. That return value IS the contract: a table lacking a
+        column no longer means the filter quietly disappears.
+
+        Column names come from caller literals, never from user input, so
+        formatting them into the SQL is safe; every VALUE is still bound."""
+        sql, params = "", []
+        covered = set()
+        if self.scope and "scope" in columns:
+            col = columns["scope"]
+            sql += " AND ({0} = ? OR {0} LIKE ?)".format(col)
+            params.extend([self.scope, self.scope + "/%"])
+            covered.add("scope")
+        if self.type and "type" in columns:
+            sql += " AND {} = ?".format(columns["type"])
+            params.append(self.type)
+            covered.add("type")
+        if self.tag and "tag" in columns:
+            # whole-tag match: the column is a space-joined slug list, so pad
+            # both sides rather than substring-matching.
+            sql += " AND instr(' ' || {} || ' ', ' ' || ? || ' ') > 0".format(
+                columns["tag"])
+            params.append(self.tag)
+            covered.add("tag")
+        residual = FindFilters(
+            scope=None if "scope" in covered else self.scope,
+            type=None if "type" in covered else self.type,
+            tag=None if "tag" in covered else self.tag,
+        )
+        return sql, params, residual
+
+    def path_in_scope(self, path):
+        return (not self.scope or path == self.scope
+                or path.startswith(self.scope + "/"))
+
+    def matches_loaded(self, path, fm, text):
+        """Full predicate for a concept whose file the caller already read.
+        Covers all three dimensions — an arm that has the text in hand has no
+        reason to check only some of them."""
+        if not self.path_in_scope(path):
+            return False
+        if self.type and fm.get("type", "") != self.type:
+            return False
+        if self.tag and self.tag not in extract_tags(text):
+            return False
+        return True
+
+    def matches(self, root, path):
+        """Same predicate, reading the concept file when needed. Checks scope
+        first so a filtered-out path costs no disk read. A path that no longer
+        resolves fails — _hydrate_hit drops it anyway."""
+        if not self:
+            return True
+        if not self.path_in_scope(path):
+            return False
+        if not (self.type or self.tag):
+            return True
+        ap = os.path.join(root, path + ".md")
+        if not os.path.isfile(ap):
+            return False
+        text = read_file(ap)
+        fm, _body = split_frontmatter(text)
+        return self.matches_loaded(path, fm, text)
+
+
+# Column maps naming which dimensions each table can filter natively. The FTS
+# `docs` table carries all three; the embedding cache carries only the path,
+# which is why semantic_ranking gets a non-empty residual to apply itself.
+FTS_FILTER_COLUMNS = {"scope": "path", "type": "ctype", "tag": "tags"}
+EMB_FILTER_COLUMNS = {"scope": "path"}
+
+
+def _fts_ranking(root, query, limit, filters, notify=True):
     """[(path, positive_score), ...] best first, or None when the index is
     unusable (absent or corrupt) — None is the caller's signal to degrade to
     the substring scan (D15). bm25() is lower-is-better, so it is negated.
@@ -773,18 +888,12 @@ def _fts_ranking(root, query, limit, type_filter=None, tag_filter=None,
     sql = ("SELECT path, bm25(docs, {}) AS r FROM docs WHERE docs MATCH ?"
            .format(FTS_BM25_WEIGHTS))
     params = [expr]
-    if type_filter:
-        sql += " AND ctype = ?"
-        params.append(type_filter)
-    if tag_filter:
-        # whole-tag match: tags is a space-joined slug list, so pad both sides
-        # rather than substring-matching (a "tail" query must not hit
-        # "tailscale").
-        sql += " AND instr(' ' || tags || ' ', ' ' || ? || ' ') > 0"
-        params.append(tag_filter)
-    if scope:
-        sql += " AND (path = ? OR path LIKE ?)"
-        params.extend([scope.rstrip("/"), scope.rstrip("/") + "/%"])
+    # `docs` carries all three dimensions, so the residual is empty and there
+    # is nothing left for this arm to enforce in Python.
+    where, where_params, residual = filters.sql_where(FTS_FILTER_COLUMNS)
+    sql += where
+    params.extend(where_params)
+    assert not residual, "docs table covers every filter dimension"
     sql += " ORDER BY r LIMIT ?"
     params.append(limit)
     try:
@@ -839,22 +948,32 @@ def _hydrate_hit(root, path, terms, score, provenance, cosine=None):
     return hit
 
 
-def _substring_ranking(root, query, terms, limit, type_filter=None,
-                       tag_filter=None, scope=None):
+def _substring_ranking(root, query, terms, limit, filters):
     """The pre-FTS lexical arm, unchanged: substring matching with field
     weights title 3 / tags 2 / body 1 over a full scan. It stays in the tool
     as the degradation target for a missing or unusable index (D15) — its
     scoring, its `contrib` breakdown and its 6*len(terms) scale must remain
-    byte-identical, because the frozen eval baseline was recorded against it."""
+    byte-identical, because the frozen eval baseline was recorded against it.
+
+    Scope is enforced twice on purpose, and the two are not redundant:
+    resolve_scopes() confines the TRAVERSAL (so a filtered-out concept is
+    never even read from disk), while matches_loaded() re-checks the assembled
+    path. Only the second one is a predicate; dropping it would reopen the
+    I01 gap the moment the traversal changes shape."""
     hits = []
-    for b, bp in resolve_scopes(root, scope):
+    for _b, bp in resolve_scopes(root, filters.scope):
+        # B04: the path prefix is the SCOPE's position under root, not the
+        # bundle name. iter_concepts() yields cids relative to `bp`, so with
+        # --scope b/sub the old "{bundle}/{cid}" form printed `b/y` for a
+        # concept that actually lives at `b/sub/y` — a path no okf-cli read
+        # can resolve. Unscoped, relpath(bp, root) IS the bundle name, so the
+        # frozen eval baseline sees byte-identical output.
+        prefix = os.path.relpath(bp, root).replace(os.sep, "/")
         for cid, ap in iter_concepts(bp):
             text = read_file(ap)
             fm, body = split_frontmatter(text)
             t = fm.get("type", "")
-            if type_filter and t != type_filter:
-                continue
-            if tag_filter and tag_filter not in extract_tags(text):
+            if not filters.matches_loaded("{}/{}".format(prefix, cid), fm, text):
                 continue
             title = fm.get("title", cid)
             tags = fm.get("tags", "")
@@ -875,7 +994,7 @@ def _substring_ranking(root, query, terms, limit, type_filter=None,
                     contrib["body"].append(term)
             if score:
                 hits.append({
-                    "score": score, "path": "{}/{}".format(b, cid),
+                    "score": score, "path": "{}/{}".format(prefix, cid),
                     "title": title, "type": t,
                     "desc": _dequote(fm.get("description", "")),
                     "snip": make_snippet(body, terms), "contrib": contrib,
@@ -885,19 +1004,16 @@ def _substring_ranking(root, query, terms, limit, type_filter=None,
     return hits[:limit]
 
 
-def _rank_lexically(root, query, terms, limit, type_filter=None,
-                    tag_filter=None, scope=None, notify=True):
+def _rank_lexically(root, query, terms, limit, filters, notify=True):
     """(hits, max_score) — the FTS arm when the index is usable, otherwise the
     substring scan (D15). The two arms report on different scales, so the
     scale is returned with the result instead of being recomputed by the
     caller: 0..100 for BM25 (relative to this run's own top hit), and
     6*len(terms) for the substring fallback, which keeps that path
     byte-identical to pre-plan output."""
-    ranked = _fts_ranking(root, query, limit, type_filter, tag_filter, scope,
-                          notify=notify)
+    ranked = _fts_ranking(root, query, limit, filters, notify=notify)
     if ranked is None:
-        return (_substring_ranking(root, query, terms, limit, type_filter,
-                                   tag_filter, scope),
+        return (_substring_ranking(root, query, terms, limit, filters),
                 6 * len(terms))
     top = ranked[0][1] if ranked else 1.0
     hits = []
@@ -954,26 +1070,49 @@ def _tagvec_db_path(root):
     return os.path.join(root, ".tagvec", "tag_vectors.sqlite")
 
 
-def _load_concept_vectors(db_path, model):
-    """[(path, [float, ...]), ...] for every concept_emb row of `model`, or
-    None if the cache file/table is absent or has no rows for this model
-    (the graceful-skip signal semantic_backstop() acts on)."""
+def _load_concept_vectors(db_path, model, filters=None):
+    """([(path, [float, ...]), ...], residual) for every concept_emb row of
+    `model`, or (None, _) if the cache file/table is absent or has no rows for
+    this model (the graceful-skip signal semantic_ranking() acts on).
+
+    concept_emb carries only the path, so of the three filter dimensions this
+    query can enforce scope alone — with the SAME predicate the FTS arm uses,
+    since concept_emb.path and docs.path share the `<bundle>/<concept>` form.
+    Enforcing it in SQL rather than after ranking keeps --limit meaningful: an
+    out-of-scope concept never occupies a slot it would then be dropped from
+    (B01). The returned `residual` carries type/tag for the caller to apply."""
+    filters = filters or FindFilters()
+    where, where_params, residual = filters.sql_where(EMB_FILTER_COLUMNS)
     if not os.path.isfile(db_path):
-        return None
+        return None, residual
+    scope = filters.scope
+    sql = "SELECT path, dim, vec FROM concept_emb WHERE model = ?" + where
+    params = [model] + where_params
     try:
         conn = sqlite3.connect(db_path)
         try:
-            rows = conn.execute(
-                "SELECT path, dim, vec FROM concept_emb WHERE model = ?", (model,)
-            ).fetchall()
+            rows = conn.execute(sql, params).fetchall()
+            # "no rows" means two different things once a scope narrows the
+            # query, and they must not share a return value: a cache with no
+            # embeddings for this model is a DEGRADATION (None -> stderr
+            # note), while a populated cache holding nothing inside the
+            # requested scope is a correct, complete, empty answer ([] -> no
+            # note). Conflating them would print "embeddings absent" at the
+            # user every time they scoped to a bundle that simply has none.
+            if not rows and scope:
+                have_any = conn.execute(
+                    "SELECT 1 FROM concept_emb WHERE model = ? LIMIT 1",
+                    (model,)).fetchone()
+                if have_any:
+                    return [], residual
         finally:
             conn.close()
     except sqlite3.DatabaseError:
-        return None
+        return None, residual
     if not rows:
-        return None
-    return [(path, list(struct.unpack("<{}f".format(dim), vec_blob)))
-            for path, dim, vec_blob in rows]
+        return None, residual
+    return ([(path, list(struct.unpack("<{}f".format(dim), vec_blob)))
+             for path, dim, vec_blob in rows], residual)
 
 
 # One CLI invocation answers one query, and both the semantic arm and (when
@@ -1089,18 +1228,28 @@ def _keyword_top1_is_confident(hits):
     return top1 >= (1 + SEMANTIC_MARGIN_RATIO) * top2
 
 
-def semantic_ranking(root, query, limit):
+def semantic_ranking(root, query, limit, filters):
     """[(cosine, path), ...] best first, or [] with one stderr note on any
     degradation (cache/table absent, no API key, backend unreachable).
 
     Renamed from semantic_backstop(): under conditional handover this arm is
     no longer a fallback that only fills gaps — on a paraphrase query it OWNS
     the ranking (D12). It also no longer takes exclude_paths, because
-    deduplication happens in fusion, after the owner has been decided."""
-    vectors = _load_concept_vectors(_tagvec_db_path(root), SEMANTIC_MODEL)
+    deduplication happens in fusion, after the owner has been decided.
+
+    B01: the filters are not the lexical arm's private business. Whichever arm
+    ends up owning the ranking, --scope/--type/--tag describe the ANSWER, so
+    they are enforced here too. Scope rides along in the cache query; the
+    residual (type/tag, absent from concept_emb) is applied while walking the
+    ranked list — lazily, stopping at `limit`, so it costs one frontmatter
+    read per candidate actually considered rather than one per embedding."""
+    vectors, residual = _load_concept_vectors(
+        _tagvec_db_path(root), SEMANTIC_MODEL, filters)
     if vectors is None:
         print("note: semantic arm skipped (.tagvec cache/concept embeddings "
               "absent) — lexical results only", file=sys.stderr)
+        return []
+    if not vectors:
         return []
     try:
         qvec = _query_vector(query)
@@ -1110,10 +1259,18 @@ def semantic_ranking(root, query, limit):
         return []
     ranked = sorted(((_cosine(qvec, vec), path) for path, vec in vectors),
                     key=lambda x: -x[0])
-    return ranked[:limit]
+    if not residual:
+        return ranked[:limit]
+    out = []
+    for cosine, path in ranked:
+        if len(out) >= limit:
+            break
+        if residual.matches(root, path):
+            out.append((cosine, path))
+    return out
 
 
-def _semantic_hit_dicts(root, query, limit):
+def _semantic_hit_dicts(root, query, limit, filters):
     """semantic_ranking() results, hydrated into the same hit-dict shape the
     lexical arm produces so fusion and printing treat both uniformly.
     Semantic score is round(100 * cosine) — the same 0..100 scale the FTS arm
@@ -1121,7 +1278,7 @@ def _semantic_hit_dicts(root, query, limit):
     two are fused by score (they are not; see fuse_conditional)."""
     terms = tokenize(query)
     out = []
-    for cosine, path in semantic_ranking(root, query, limit):
+    for cosine, path in semantic_ranking(root, query, limit, filters):
         hit = _hydrate_hit(root, path, terms, int(round(100 * cosine)),
                            "semantic", cosine=cosine)
         if hit is not None:
@@ -1176,15 +1333,20 @@ def cmd_find(root, args):
         print("(empty query)")
         return
     breakdown = getattr(args, "breakdown", False)
-    type_filter = getattr(args, "type", None)
-    tag_filter = getattr(args, "tag", None)
+    # I01: built ONCE, here, and handed to every arm as a single value. The
+    # three filters used to travel as loose positional arguments, which is how
+    # the semantic arm ended up never receiving them at all (B01).
     # 8a (FIL03/FIL04): --scope narrows via resolve_scopes(); without it,
     # behavior is unchanged (resolve_scopes(root, None) == list_bundles(root)
     # iteration, as before). --bundle was a duplicate alias, removed D02
-    # (PO-grilling 2026-07-26) — --scope is the only filter dimension.
-    target = getattr(args, "scope", None)
+    # (PO-grilling 2026-07-26).
+    filters = FindFilters(
+        scope=getattr(args, "scope", None),
+        type=getattr(args, "type", None),
+        tag=getattr(args, "tag", None),
+    )
     hits, max_score = _rank_lexically(root, args.query, terms, args.limit,
-                                      type_filter, tag_filter, target)
+                                      filters)
 
     # The semantic arm costs a network call, so run it only when it can
     # change the answer: whenever the lexical arm is not confident (it will
@@ -1208,13 +1370,16 @@ def cmd_find(root, args):
             # would print it twice with the expansion note in between —
             # PF-4 says exactly one note per degraded arm, per invocation.
             hits, max_score = _rank_lexically(
-                root, " ".join(terms), terms, args.limit,
-                type_filter, tag_filter, target, notify=False)
+                root, " ".join(terms), terms, args.limit, filters,
+                notify=False)
             lexical_owned_provisionally = _keyword_top1_is_confident(hits)
 
     semantic_hits = []
     if not lexical_owned_provisionally or len(hits) < args.limit:
-        semantic_hits = _semantic_hit_dicts(root, args.query, args.limit)
+        # B01: the SAME filters object the lexical arm got — --scope/--type/
+        # --tag constrain the answer, not one arm of it.
+        semantic_hits = _semantic_hit_dicts(root, args.query, args.limit,
+                                            filters)
 
     all_hits, lexical_owned = fuse_conditional(hits, semantic_hits, args.limit)
     if not lexical_owned and semantic_hits:
