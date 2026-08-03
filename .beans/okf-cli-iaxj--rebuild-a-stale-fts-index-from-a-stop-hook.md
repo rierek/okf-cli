@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-27T12:46:04Z
-updated_at: 2026-08-03T20:18:32Z
+updated_at: 2026-08-03T20:19:52Z
 ---
 
 ## Context
@@ -297,3 +297,9 @@ Regression holds: hook suite 11/11, okf-tools suite 300 tests, 0 failures/errors
 I01 stands unchanged — the rework never touched `fts-rebuild-if-stale.sh`. I02 is now tracked as bean `.claude-ofl6` in the `~/.claude` store instead of living only in a report.
 
 **Independent finding, pre-existing, routed out of this task.** `settings.json` carries a `rtk hook claude` entry (PreToolUse/Bash) that no entity models. Timestamps settle authorship: `settings.json.pre-rtk` (21:04:59) contains neither that entry nor ours; `settings.json` (21:55:51) contains both — so the rtk entry predates this task's registration by roughly fifty minutes and was not caused by it. The implementer hit this while looking for a one-line fix: `generate.py --apply` would have made the checker green instantly, but `do_apply` (generate.py:82-96) rebuilds the whole `hooks` key from `entities/hook-*.yml` alone, so an unmodelled entry silently disappears — and because that file is git-ignored, no `git diff` would ever have shown it. He wrote the entity by hand instead and escalated. Both the implementer and the reviewer established this by reading the code, never by running `--apply`. Tracked as `.claude-hazard` bean in the `~/.claude` store.
+
+
+
+## ERRATA 2026-08-03 — bean ID correction
+
+The Re-Review section above refers to the routed rtk finding as "`.claude-hazard` bean". That was a placeholder written before the bean existed. The actual ID is **`.claude-oolq`** ("generate.py --apply silently drops the rtk hook", type bug, priority high) in the `/Users/erik/.claude/.beans` store. Recorded as a correction rather than an edit, per the append-never-rewrite rule.
