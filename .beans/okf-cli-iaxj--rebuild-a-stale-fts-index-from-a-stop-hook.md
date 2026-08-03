@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-07-27T12:46:04Z
-updated_at: 2026-08-03T20:13:14Z
+updated_at: 2026-08-03T20:18:32Z
 ---
 
 ## Context
@@ -284,3 +284,16 @@ hooks-Drift entities <-> settings.json:
 The SessionStart hunk for `fts-rebuild-if-stale.sh` is gone; only the pre-existing, unrelated `rtk hook claude` (PreToolUse/Bash) hunk remains.
 
 **Forward-Guard (candidate, for whoever owns this repo's dispatch prompts, not self-applied here):** any task that registers a hook in `~/.claude/settings.json` must, in the same commit, either create the matching `architecture/entities/hook-*.yml` (by hand, following the schema of an existing sibling entity for the same event) or run `generate.py --check` before closing and treat a non-zero exit as part of the task's own gate — not a separate discovery after spec-review. A dispatch prompt for hook work in this repo should say so explicitly, the same way this task's prompt named `git-conventions` and `git add` discipline; right now nothing in the dispatch surface points an implementer at `architecture/layer0/` at all unless they already know it is there. Logged as LL-20-followup in `docs/LESSONS-LEARNED.md` (okf-tools) rather than a new numbered lesson, since it is the same root cause as LL-20/LL-21 (a mechanism invisible from inside the one repo being edited) wearing a different coat.
+
+
+## Re-Review 2026-08-03 — ce-specs-reviewer: APPROVED (after the entity-drift fix)
+
+Verdict APPROVED, no new findings. The reviewer verified the rework himself rather than trusting the report: the new entity's field set matches four neighbouring hook entities exactly (nothing missing, nothing invented), its `registration` block is byte-for-byte identical to the live `settings.json` entry — the failure mode worth naming here is an entity that *disagrees* with reality, because then the checker goes green while lying — and `order: 50` slots cleanly behind the existing 10/20/30/40.
+
+Both commits are collateral-free: `f1d6a16d` touches exactly one file, `034312b` exactly two, and none of the unrelated dirty files lying around in `~/.claude` were swept in.
+
+Regression holds: hook suite 11/11, okf-tools suite 300 tests, 0 failures/errors.
+
+I01 stands unchanged — the rework never touched `fts-rebuild-if-stale.sh`. I02 is now tracked as bean `.claude-ofl6` in the `~/.claude` store instead of living only in a report.
+
+**Independent finding, pre-existing, routed out of this task.** `settings.json` carries a `rtk hook claude` entry (PreToolUse/Bash) that no entity models. Timestamps settle authorship: `settings.json.pre-rtk` (21:04:59) contains neither that entry nor ours; `settings.json` (21:55:51) contains both — so the rtk entry predates this task's registration by roughly fifty minutes and was not caused by it. The implementer hit this while looking for a one-line fix: `generate.py --apply` would have made the checker green instantly, but `do_apply` (generate.py:82-96) rebuilds the whole `hooks` key from `entities/hook-*.yml` alone, so an unmodelled entry silently disappears — and because that file is git-ignored, no `git diff` would ever have shown it. He wrote the entity by hand instead and escalated. Both the implementer and the reviewer established this by reading the code, never by running `--apply`. Tracked as `.claude-hazard` bean in the `~/.claude` store.
