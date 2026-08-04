@@ -6,7 +6,7 @@ tags:
   - retrieval
   - architecture
   - hybrid-search
-  - embedding
+  - embeddings
   - fusion
 timestamp: 2026-07-26T00:00:00Z
 ---

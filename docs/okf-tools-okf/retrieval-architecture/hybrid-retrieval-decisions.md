@@ -7,7 +7,7 @@ tags:
   - architecture
   - decision
   - hybrid-search
-  - embedding
+  - embeddings
 timestamp: 2026-07-26T00:00:00Z
 ---
 
