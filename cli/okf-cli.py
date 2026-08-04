@@ -2404,8 +2404,13 @@ def rewrite_crosslinks_in_body(root, bundle, cdir, body):
     """Rewrite every resolvable markdown link to canonical catalogue-root-absolute
     form (`/bundle/subdir/concept.md`). Migrates legacy bundle-relative (`/sub/x`)
     and path-relative (`x`, `../other/x`) links alike; already-canonical links are
-    left byte-identical (idempotent). Skips http(s)/mailto/anchor-only. Returns
-    (new_body, changed_count, unresolved_targets)."""
+    left byte-identical (idempotent). Skips http(s)/mailto/anchor-only, and
+    everything inside fenced or inline code — a link written between backticks
+    is prose *about* link syntax, which Obsidian never resolves. Masking it
+    keeps the OKF documentation bundles from reporting their own examples as
+    unresolved, and stops a fenced example whose path happens to resolve from
+    being silently rewritten. Mirrors check_crosslink_format, which masks the
+    same spans. Returns (new_body, changed_count, unresolved_targets)."""
     changed = 0
     unresolved = []
 
@@ -2426,7 +2431,8 @@ def rewrite_crosslinks_in_body(root, bundle, cdir, body):
         changed += 1
         return "[{}]({})".format(label, new_target)
 
-    new_body = CROSSLINK_RE.sub(repl, body)
+    masked, tokens = _mask_code_spans(body)
+    new_body = _unmask(CROSSLINK_RE.sub(repl, masked), tokens)
     return new_body, changed, unresolved
 
 

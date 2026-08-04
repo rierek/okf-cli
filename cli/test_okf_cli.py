@@ -596,6 +596,27 @@ class RewriteCrosslinksInBody(unittest.TestCase):
         self.assertEqual(new, "[Y](/b/sub/y.md)")
         self.assertEqual(changed, 1)
 
+    def test_link_in_inline_code_is_not_unresolved(self):
+        """A link inside backticks is prose about link syntax, not a link —
+        Obsidian never resolves it. check_crosslink_format masks code spans
+        for exactly this reason; the rewrite path must agree, or the OKF
+        documentation bundles report their own examples as broken links."""
+        body = "Bundle-relative form: `[customers](/tables/customers.md)`."
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        self.assertEqual(new, body)
+        self.assertEqual(changed, 0)
+        self.assertEqual(unresolved, [])
+
+    def test_resolvable_link_in_fence_is_not_rewritten(self):
+        """The sharper half: a fenced example whose path happens to resolve
+        must stay byte-identical. Rewriting it would silently mutate the
+        documentation example it illustrates."""
+        self._w("b/y.md", "")
+        body = "```markdown\n[Y](y.md)\n```"
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        self.assertEqual(new, body)
+        self.assertEqual(changed, 0)
+
 
 class FixCrosslinksCommand(unittest.TestCase):
     """T09 — fix_crosslinks: file-level orchestration, frontmatter untouched,
