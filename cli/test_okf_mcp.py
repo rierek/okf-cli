@@ -320,6 +320,32 @@ class McpWikilinksSurface(unittest.TestCase):
         self.assertNotIn("--unresolved", without)
 
 
+class McpPrimeIsCompact(unittest.TestCase):
+    """okf-cli, 2026-08-05 — okf_prime is a session-start call, and the tool
+    result lands in the agent's context whole. It takes the compact rendering
+    for the same reason the `just -g start` recipe does; the long form stays
+    reachable from the CLI. A boolean absent from _BOOL_FLAGS is silently
+    dropped, so the marshalling is asserted, not the intent."""
+
+    def test_compact_is_marshalled_onto_the_prime_call(self):
+        self.assertEqual(mcp.build_argv("/root", "prime", {"compact": True}),
+                         ["--root", "/root", "prime", "--compact"])
+
+    def test_the_registered_tool_asks_for_compact(self):
+        argvs = []
+        real = mcp.run_okf
+
+        def spy(root, command, params):
+            argvs.append(mcp.build_argv(root, command, params))
+            return ""
+        mcp.run_okf = spy
+        try:
+            mcp._register(_ToolCollector()).tools["okf_prime"]("/root")
+        finally:
+            mcp.run_okf = real
+        self.assertEqual(argvs, [["--root", "/root", "prime", "--compact"]])
+
+
 class McpWikilinksBoundary(McpBoundaryTestBase):
     """REQ-15 / AC-15.3 — the registered tool function, driven over the real
     subprocess, returns the REQ-08 object."""

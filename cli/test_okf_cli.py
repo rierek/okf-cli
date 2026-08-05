@@ -1464,6 +1464,112 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
             self.assertTrue(os.path.isfile(okf.resolve_concept(self.tmp, b)))
 
 
+class CmdPrimeCompactGuide(unittest.TestCase):
+    """`prime --compact` is what a session-start recipe pulls, and there the
+    guide competes for context with the SSTD, the roadmap and the git log. The
+    measurement that opened this (2026-08-05): prime was 13199 of 27391
+    characters of `just -g start`. --compact drops what is one call away
+    (`find --help`) or irrelevant before the first read (the tag-editing
+    ceremony), and keeps what is not guessable: every command name, every find
+    flag, the two score scales, the live catalogue state, the bundle list.
+
+    The default and --full renderings are untouched; the guards for those live
+    in CmdPrimeOnboardingGuide and must stay green alongside these."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        ap = os.path.join(self.tmp, "b", "one.md")
+        os.makedirs(os.path.dirname(ap))
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: One\n---\n# One\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _prime(self, full=False, compact=False):
+        import io, contextlib, types
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_prime(self.tmp, types.SimpleNamespace(full=full, compact=compact))
+        return buf.getvalue()
+
+    def test_compact_is_shorter_than_the_default_guide(self):
+        """Both renderings list one bundle here, so the difference is guide
+        prose alone — the thing this change is about."""
+        self.assertLess(len(self._prime(compact=True)), len(self._prime()))
+
+    def test_compact_drops_the_verbatim_find_help(self):
+        find_help = okf.subcommand_parsers(okf.build_parser())["find"].format_help()
+        self.assertNotIn(find_help.strip(), self._prime(compact=True))
+
+    def test_compact_still_names_every_find_flag(self):
+        """The anti-drift guard for the shortened find block: the flag list is
+        rendered from the parser, not transcribed, so a flag registered
+        tomorrow cannot go missing here. Derived from the production parser
+        rather than a literal list, or this test would rot with the text."""
+        out = self._prime(compact=True)
+        parser = okf.subcommand_parsers(okf.build_parser())["find"]
+        flags = [o for a in parser._actions for o in a.option_strings
+                 if o.startswith("--") and o != "--help"]
+        self.assertTrue(flags)
+        self.assertEqual(sorted(f for f in flags if f not in out), [])
+
+    def test_compact_keeps_the_two_score_scales_apart(self):
+        """`score: a/b` names a scale, not a confidence. An agent that reads
+        a/100 and a/(6 * n) as one scale misreads every degraded run — this is
+        the one fact from find's help that is not recoverable by trying."""
+        out = self._prime(compact=True)
+        self.assertIn("a/100", out)
+        self.assertIn("6 * n", out)
+
+    def test_compact_points_at_the_full_help(self):
+        self.assertIn("find --help", self._prime(compact=True))
+
+    def test_compact_names_every_registered_command(self):
+        out = self._prime(compact=True)
+        registered = set(okf.subcommand_parsers(okf.build_parser()))
+        self.assertEqual(sorted(n for n in registered if n not in out), [])
+
+    def test_compact_command_directory_is_one_line_per_command(self):
+        """Where the directory's characters went: wrapping at 96 columns put a
+        21-space continuation indent under most descriptions. Nothing is
+        dropped, the wrapping is — asserted by matching each command's whole
+        registered description against its single line."""
+        lines = self._prime(compact=True).splitlines()
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        for name, parser in parsers.items():
+            head = "    {:<16} ".format(name)
+            own = [l for l in lines if l.startswith(head)]
+            self.assertEqual(len(own), 1, name)
+            self.assertEqual(own[0][len(head):], parser.description)
+
+    def test_compact_keeps_the_write_gate(self):
+        out = self._prime(compact=True)
+        self.assertIn("ce-okf", out)
+        self.assertIn("check", out)
+
+    def test_compact_keeps_the_live_state_and_the_bundles(self):
+        out = self._prime(compact=True)
+        self.assertRegex(out, r"(?i)fts index:")
+        self.assertRegex(out, r"(?i)tag vocabulary:")
+        for b in okf.list_bundles(self.tmp):
+            self.assertIn("{} (1 concepts)".format(b), out)
+
+    def test_compact_keeps_the_retrieval_ladder(self):
+        out = self._prime(compact=True)
+        for step in ("find", "index", "toc", "read", "refs"):
+            self.assertIn(step, out)
+        self.assertIn("progressive disclosure", out.lower())
+
+    def test_default_keeps_the_root_contract(self):
+        """Counter-mutation to the intro trim: --compact may assume its caller
+        passes --root (a recipe or the MCP server always does), the default
+        rendering may not — it is what a human reads first."""
+        self.assertIn("--root", self._prime())
+
+
 class CmdListJson(unittest.TestCase):
     """okf-cli-83vq (B01) — `list --json` emits a json.loads-parseable array;
     non-json output stays byte-identical to today's human-readable form."""

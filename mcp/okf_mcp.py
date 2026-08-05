@@ -24,7 +24,8 @@ _COMMANDS = {
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
           "scope": "--scope"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
-_BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved"}
+_BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
+               "compact": "--compact"}
 
 
 def build_argv(root, command, params):
@@ -199,8 +200,9 @@ def _register(server):
         retrieve from it, the full command directory, `find`'s options and score
         scales, this catalogue's live state (index, tag vocabulary) and its
         bundle TOC. Start here before searching a catalogue you have not worked
-        with in this session."""
-        return run_okf(root, "prime", {})
+        with in this session. Rendered compact — bundle descriptions come from
+        okf_index, find's full option help from the CLI."""
+        return run_okf(root, "prime", {"compact": True})
 
     @server.tool()
     def okf_info(root: str) -> str:

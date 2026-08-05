@@ -1541,6 +1541,56 @@ violations.
 """
 
 
+_PRIME_INTRO_COMPACT = """\
+# OKF Knowledge Catalogue — agent onboarding
+
+The catalogue is a read-mostly, LLM-facing knowledge store, separate from any
+Obsidian vault it may be opened in. It holds thematic *bundles*; a bundle is a
+folder of Markdown *concepts*, each with YAML frontmatter carrying a non-empty
+`type`. A concept-id is its path below the bundle, minus `.md`. The store is a
+plain git repo — ordinary file tools and git apply.
+
+## Retrieve — by command, not by blind grep
+
+Progressive disclosure: widen only when the cheaper step left the question open.
+
+  1. find "<query>"             ranked search across all bundles
+  2. index [<bundle>]           what bundles and directories exist
+  3. toc <bundle>[/<concept>]   headings before bodies — the cheapest way to
+                                decide whether a page is worth reading. A bare
+                                <bundle> or <bundle>/<subdir> resolves to its
+                                index.md, so the names listed below are the
+                                argument, verbatim.
+  4. read <bundle>/<concept>    the page itself
+  5. refs / wikilinks           follow the graph out of a page
+
+## Write — through the ce-okf skill, never by hand
+
+Concepts are not hand-authored: `ce-okf` routes a source to a bundle, applies
+frontmatter and re-indexes. `index.md` listings and `log.md` are marker-managed
+and generated — never edit between the `<!-- okf:... -->` markers. A commit is
+allowed only once `check` reports zero violations.
+"""
+
+_FIND_SCALES_COMPACT = """\
+`score: a/b` names the scale in use, not a confidence: a/100 is the FTS5/BM25
+lexical arm (relative to this run's own top hit) and the semantic arm
+(round(100 * cosine)); a/(6 * n) is the substring fallback used when no FTS
+index is available, over n query terms. `provenance:` names the arm that
+produced the line. Degradations are announced on stderr.
+"""
+
+
+def render_find_compact():
+    """`find`'s options for the compact guide. The signature comes from the
+    parser, so a flag registered later cannot go missing here — only the score
+    scales are prose, because they are the one thing an agent cannot recover by
+    trying the command. Everything else is one `find --help` away."""
+    usage = subcommand_parsers(build_parser())["find"].format_usage().strip()
+    return "## find — the entry point\n\n{}\n\n{}\nFull flag semantics: `find --help`.".format(
+        usage, _FIND_SCALES_COMPACT)
+
+
 def render_catalogue_state(root):
     """The live half of the onboarding: facts read off this catalogue rather
     than asserted in prose, so they cannot go stale. Retrieval quality depends
@@ -1573,12 +1623,23 @@ def cmd_prime(root, args):
     """One-shot agent onboarding: guide, command directory, catalogue state and
     bundle TOC in a single call. The guide used to be <root>/CLAUDE.md, which
     made prime empty the moment that file was removed (okf-cli-3hjr); it is now
-    the CLI's own, and its command section is generated from the parser."""
-    print(_PRIME_INTRO)
-    print(command_overview())
-    print()
-    print("## find — the entry point, in full\n")
-    print(subcommand_parsers(build_parser())["find"].format_help().strip())
+    the CLI's own, and its command section is generated from the parser.
+
+    --compact is the session-start rendering (okf-cli, 2026-08-05): a recipe
+    that primes on every session pays this guide against the SSTD, the roadmap
+    and the git log. It keeps every command, every find flag and the live
+    state, and drops the prose that is one call away."""
+    if args.compact:
+        print(_PRIME_INTRO_COMPACT)
+        print(command_overview(width=10 ** 6))
+        print()
+        print(render_find_compact())
+    else:
+        print(_PRIME_INTRO)
+        print(command_overview())
+        print()
+        print("## find — the entry point, in full\n")
+        print(subcommand_parsers(build_parser())["find"].format_help().strip())
     print()
     print(render_catalogue_state(root))
     print()
@@ -3690,7 +3751,7 @@ def _sub(sub, name, group, summary, **kwargs):
     return sub.add_parser(name, help=summary, description=summary, **kwargs)
 
 
-def render_command_overview(parsers, footer=True):
+def render_command_overview(parsers, footer=True, width=96):
     """The purpose-grouped command directory, rendered from the registered
     parsers (D02/D03). argparse's own listing above it is flat and
     alphabetical; this block answers "what can this CLI do" by purpose. Both
@@ -3698,7 +3759,9 @@ def render_command_overview(parsers, footer=True):
 
     `parsers` is the {name: parser} mapping from subcommand_parsers(). The
     same block is the command section of `prime` (okf-cli-3hjr), which is why
-    the footer — a --help cross-reference — is optional there."""
+    the footer — a --help cross-reference — is optional there. `width` is the
+    wrap column; `prime --compact` raises it so each command costs one line
+    instead of two-plus a 21-space continuation indent."""
     lines = ["commands by purpose:"]
     for group in _GROUP_ORDER:
         names = sorted(n for n, g in COMMAND_GROUPS.items() if g == group)
@@ -3707,7 +3770,7 @@ def render_command_overview(parsers, footer=True):
         lines.append("  {}:".format(group))
         for name in names:
             lines.append(textwrap.fill(
-                parsers[name].description, width=96,
+                parsers[name].description, width=width,
                 initial_indent="    {:<16} ".format(name),
                 subsequent_indent=" " * 21))
     if footer:
@@ -3716,11 +3779,12 @@ def render_command_overview(parsers, footer=True):
     return "\n".join(lines)
 
 
-def command_overview():
+def command_overview(width=96):
     """The command directory as prime needs it: built from a fresh parser, so
     a newly registered subcommand reaches the onboarding text without anyone
     editing the onboarding text."""
-    return render_command_overview(subcommand_parsers(build_parser()), footer=False)
+    return render_command_overview(subcommand_parsers(build_parser()),
+                                   footer=False, width=width)
 
 
 _FIND_EPILOG = """\
