@@ -3336,14 +3336,51 @@ class WikilinkExtraction(unittest.TestCase):
         recs = okf.parse_wikilinks("---\n---\nBody [[a]]\n")
         self.assertEqual([(r["region"], r["page"]) for r in recs], [("body", "a")])
 
+    def test_empty_frontmatter_block_still_bounds_the_region(self):
+        """`---\\n---` is an empty head, not a thematic rule. The region label of
+        what follows is `body` either way, so only the BOUNDARY shows the
+        difference — and the boundary is what decides which mask the bytes
+        before it get. Asserting the label alone left this unpinned."""
+        self.assertTrue(okf.is_yaml_frontmatter_block(""))
+        self.assertEqual(okf.wikilink_regions("---\n---\n\n[[A]]\n")[0],
+                         ("frontmatter", 0, 7))
+
     def test_indented_fence_in_a_block_scalar_keeps_the_block_yaml(self):
         """An indented fence may be the content of a YAML block scalar.
-        Rejecting the whole block for it hid every link property in the file."""
+        Rejecting the whole block for it hid every link property in the file.
+
+        The indent has to be one FENCE_START_RE can see (up to three spaces): a
+        four-space fence never matches the pattern at all, so a fixture built
+        that way passes without the guard existing."""
+        recs = okf.parse_wikilinks(
+            '---\nexample: |\n  ```\n  code\n  ```\nrelated: "[[b]]"\n---\n# X\n')
+        self.assertEqual([(r["region"], r["page"]) for r in recs],
+                         [("frontmatter", "b")])
         recs = okf.parse_wikilinks(
             '---\nexample: |\n    ```\n    code\n    ```\nrelated:\n\n'
             '    - "[[b]]"\n---\n# X\n')
         self.assertEqual([(r["region"], r["page"]) for r in recs],
                          [("frontmatter", "b")])
+
+    def test_unindented_continuation_line_keeps_the_block_yaml(self):
+        """A plain scalar continued on an unindented line is sloppy YAML but
+        common here — 432 qm-wiki files carry a multi-line German description
+        that way. Requiring EVERY line to read as YAML reclassified them as body
+        and shifted 555 links between regions; the FIRST line decides."""
+        recs = okf.parse_wikilinks(
+            '---\ndescription: Eine Beschreibung,\n'
+            'die hier unindentiert weitergeht\ntags:\n  - x\n'
+            'related:\n  - "[[X]]"\n---\nBody [[B]].\n')
+        self.assertEqual([(r["region"], r["page"]) for r in recs],
+                         [("frontmatter", "X"), ("body", "B")])
+
+    def test_indented_first_line_of_a_file_is_not_code(self):
+        """An indented run opens a code block only after a blank line. Reading
+        the predecessor of line 0 wraps to the LAST line, so a file ending in a
+        blank line would open a phantom block on its own first line and drop the
+        link — which is why line 0 is excluded outright."""
+        recs = okf.parse_wikilinks("    [[A]]\nprose\n\n")
+        self.assertEqual([r["page"] for r in recs], ["A"])
 
     def test_md_suffix_is_stripped_case_insensitively(self):
         self.assertEqual(okf.parse_wikilinks("[[Old.MD]]")[0]["page"], "Old")
@@ -3426,8 +3463,28 @@ class WikilinkExtraction(unittest.TestCase):
             "---\ntype: Concept\n```\nf\n```\nSee `[[a]]` here\n---\nTail\n")
         self.assertEqual(recs, [])
 
+    def test_tilde_fence_in_a_key_like_block_still_means_body(self):
+        """A tilde fence is as valid as a backtick one in CommonMark. Matching
+        only backticks let an unindented `~~~` block sit inside a key-like head
+        and the whole thing be judged YAML — frontmatter masking over prose."""
+        recs = okf.parse_wikilinks(
+            "---\nNote: a line that reads like a key\n~~~\nsample\n~~~\n"
+            "and [[X]] here\n---\nBody [[B]].\n")
+        self.assertEqual([(r["region"], r["page"]) for r in recs],
+                         [("body", "X"), ("body", "B")])
+
     def test_percent_comment_in_frontmatter_is_masked(self):
         self.assertEqual(okf.parse_wikilinks("---\nx: %%[[a]]%%\n---\n# X\n"), [])
+
+    def test_inline_code_in_frontmatter_is_masked(self):
+        """Inline code is masked in BOTH regions. Exempting it in frontmatter
+        cost more than it bought: a `---` thematic rule whose first line happens
+        to read like `key: value` lands in the YAML branch, and its prose
+        backticks then become rewritable. A genuine backticked link property has
+        zero occurrences catalogue-wide — under-reported, never corrupted."""
+        recs = okf.parse_wikilinks(
+            '---\ntype: Concept\nnote: "see `[[X]]` for details"\n---\nBody [[B]].\n')
+        self.assertEqual([(r["region"], r["page"]) for r in recs], [("body", "B")])
 
     def test_frontmatter_end_agrees_with_split_frontmatter(self):
         """The region split is derived arithmetic; if it drifts from
@@ -3736,6 +3793,24 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
             okf.cmd_rename(self.tmp, args)
         return buf.getvalue()
 
+    def _rename_fails(self, old, new, message, apply=False):
+        """Assert a refusal AND which one. `assertRaises(SystemExit)` alone is
+        not an assertion about the guard under test: cmd_rename has ten of them
+        plus the turns-ambiguous refusal, so dropping the guard a test names
+        still produced an exit and the test still passed. The message is the
+        only thing that distinguishes them."""
+        import contextlib
+        import io
+        import types
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                okf.cmd_rename(self.tmp, types.SimpleNamespace(
+                    old=old, new=new, apply=apply, force=False))
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn(message, err.getvalue())
+        return err.getvalue()
+
     def test_inbound_plain_is_rewritten(self):
         self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
         self._rename("a/old.md", "a/new.md", apply=True)
@@ -4033,6 +4108,35 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self._rename("A/old.md", "A/new.md", apply=True)
         self.assertIn("[[new]]", self._r("a/src.md"))
 
+    def test_differently_cased_source_path_still_places_a_self_reference(self):
+        """D14 — the source has to be respelled the way the filesystem stores it
+        before `old_rel` is derived, because cmd_rename compares that string
+        against the scan's own spelling to decide WHERE to write a
+        self-reference. Without the normalisation the two never match and the
+        rewrite is aimed at the path the file has just vacated."""
+        self._w("a/old.md", "---\ntype: Concept\n---\nSelf [[old]].\n")
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        self._rename("A/old.md", "A/new.md", apply=True)
+        self.assertIn("[[new]]", self._r("a/new.md"))
+        self.assertIn("[[new]]", self._r("a/src.md"))
+
+    def test_ambiguity_is_seen_through_a_case_variant_candidate(self):
+        """D06 — the resolver is case-insensitive, so the candidate list holds
+        the filesystem's spelling while the caller's path may differ. Comparing
+        the two exactly dropped a case-variant candidate out of the
+        skipped-ambiguous branch, and the occurrence fell through unreported.
+
+        Driven at plan level on purpose: cmd_rename canonicalises the source
+        first, so the two spellings can only diverge below that."""
+        self._w("a/G.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("c/x.md", "---\ntype: Concept\n---\nSee [[g]].\n")
+        recs, _ = okf.plan_wikilink_rewrites(
+            self.tmp, os.path.join(self.tmp, "a/g.md"),
+            os.path.join(self.tmp, "a/g2.md"))
+        self.assertEqual([(r["source"], r["status"]) for r in recs],
+                         [("c/x.md", "skipped-ambiguous")])
+
     def test_basename_preserving_move_that_turns_a_link_ambiguous_is_refused(self):
         """The token does not change, so nothing is rewritten — but its meaning
         does. 81 basenames in the live catalogue exist in more than one bundle,
@@ -4051,15 +4155,41 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         """The scanner strips the page part, the index does not strip filenames,
         so the rewritten link could never meet its target."""
         self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
-        with self.assertRaises(SystemExit):
-            self._rename("a/old.md", "a/ sp .md", apply=True)
+        self._rename_fails("a/old.md", "a/ sp .md",
+                           "leading or trailing whitespace", apply=True)
         self.assertIn("[[old]]", self._r("a/src.md"))
 
     def test_control_character_destination_basename_is_refused(self):
         self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
-        with self.assertRaises(SystemExit):
-            self._rename("a/old.md", "a/ne\nw.md", apply=True)
+        self._rename_fails("a/old.md", "a/ne\nw.md",
+                           "control character", apply=True)
         self.assertIn("[[old]]", self._r("a/src.md"))
+
+    def test_non_md_destination_is_refused(self):
+        """A non-markdown destination has no concept identity — nothing resolves
+        to it, so every rewritten link would be dead on arrival."""
+        self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._rename_fails("a/x.md", "a/y.txt", "both paths must be .md")
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp, "a/x.md")))
+
+    def test_destination_outside_the_catalogue_root_is_refused(self):
+        """A destination outside the root escapes every scan, so the rewrite
+        would point out of the catalogue. Dry-run deliberately: without the
+        guard an --apply run moves the file out of the tree under test."""
+        self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._rename_fails("a/x.md", "../out.md", "under the catalogue root")
+
+    def test_root_level_destination_is_refused(self):
+        """A root-level file is not a concept and is not in the resolution
+        index, so no wikilink can address it."""
+        self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._rename_fails("a/x.md", "top.md", "inside a bundle")
+
+    def test_forbidden_char_destination_is_refused(self):
+        """ASM-03 — a wikilink metacharacter in the filename makes the rewritten
+        link unparseable."""
+        self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._rename_fails("a/x.md", "a/y#z.md", "forbidden char")
 
     def test_differently_cased_markdown_link_is_rewritten_too(self):
         """A link may spell its target in a different case than the disk does;
@@ -4073,13 +4203,23 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
 
     def test_outbound_pass_masks_like_the_applier(self):
         """Planner and applier must agree, or the run reports rewrites it then
-        declines to make."""
+        declines to make.
+
+        The masked-out link must be a DIFFERENT link than the live one and the
+        live one must actually change: two occurrences of an already
+        catalogue-absolute link produce no rewrite at all, and two occurrences of
+        the same relative link collapse in _dedupe — either way the count is
+        identical with and without the mask and the test asserts nothing."""
         self._w("b/index.md", "# B\n\nIntro.\n")
         self._w("a/target.md", "---\ntype: Concept\n---\n# T\n")
+        self._w("a/other.md", "---\ntype: Concept\n---\n# O\n")
         self._w("a/mover.md", "---\ntype: Concept\n---\n"
-                              "Real [T](/a/target.md)\n\n```\n[T](/a/target.md)\n```\n")
+                              "Real [T](target.md)\n\nand `[U](other.md)` inline.\n")
         out = self._rename("a/mover.md", "b/mover.md")
-        self.assertIn("0 outbound link(s)", out)
+        self.assertIn("1 outbound link(s)", out)
+        self.assertNotIn("other.md", out)
+        self._rename("a/mover.md", "b/mover.md", apply=True)
+        self.assertIn("`[U](other.md)`", self._r("b/mover.md"))
 
     def test_force_overwrite_discloses_what_it_clobbers(self):
         self._w("b/keep.md", "---\ntype: Concept\n---\n# Keep\n")
@@ -4094,6 +4234,10 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
                 old="a/x.md", new="b/keep.md", apply=True, force=True))
         self.assertIn("overwrote", buf.getvalue())
         self.assertIn("b/keep.md", buf.getvalue())
+        # The destination is what this move REPLACES, not a third concept
+        # competing for the name. Reporting it as a collision makes --force
+        # accuse itself and buries the one line that says what was lost.
+        self.assertNotIn("wikilink-collision", buf.getvalue())
 
     def test_reserved_destination_is_refused(self):
         """A reserved name is not a concept, so nothing resolves to it: every
