@@ -1242,14 +1242,110 @@ class RenderBundleLine(unittest.TestCase):
 
 
 class CmdPrimeBundleListing(unittest.TestCase):
-    """T-okf-cli-dwcq — prime defaults to compact per-bundle lines; --full keeps
-    today's full per-bundle blocks (description/directories/types/tags)."""
+    """T-okf-cli-dwcq, revised by okf-cli-3hjr — the three listing depths.
+
+    dwcq made the compact name+count line the DEFAULT, because prime was then
+    carrying a 69-line CLAUDE.md on top of it and the total was unreadable. With
+    the guide rewritten and sized, the catalogue TOC an agent actually navigates
+    by (`index`: description + concepts + directories) is the default again, and
+    dwcq's listing survives as `--compact`. --full is unchanged."""
 
     def setUp(self):
         import tempfile
         self.tmp = tempfile.mkdtemp()
-        with open(os.path.join(self.tmp, "CLAUDE.md"), "w", encoding="utf-8") as f:
-            f.write("# Guide\n")
+        ap = os.path.join(self.tmp, "b", "one.md")
+        os.makedirs(os.path.join(self.tmp, "b", "sub"))
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: One\ntags:\n  - t\n---\n# One\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _prime(self, full=False, compact=False):
+        import io, contextlib, types
+        args = types.SimpleNamespace(full=full, compact=compact)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_prime(self.tmp, args)
+        return buf.getvalue()
+
+    def test_default_runs_the_index_listing(self):
+        out = self._prime()
+        self.assertIn("description:", out)
+        self.assertIn("concepts: 1", out)
+        self.assertIn("directories:", out)
+        self.assertNotIn("types:", out)      # that depth is --full
+
+    def test_compact_keeps_the_dwcq_one_liner(self):
+        out = self._prime(compact=True)
+        self.assertIn("b (1 concepts)", out)
+        self.assertNotIn("description:", out)
+        self.assertNotIn("directories:", out)
+
+    def test_full_adds_types_and_tags(self):
+        out = self._prime(full=True)
+        self.assertIn("description:", out)
+        self.assertIn("types: Concept", out)
+        self.assertIn("tags: t", out)
+
+
+class ResolveConceptDirectoryFallback(unittest.TestCase):
+    """okf-cli-3hjr — prime lists bundles by the path an agent should type next,
+    and that path is the bundle. `toc <bundle>` / `read <bundle>` therefore have
+    to resolve to the bundle's own index.md instead of failing on a directory."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "b", "sub"))
+        self._w("b/index.md", "# B\n\n## Contents\n")
+        self._w("b/one.md", "---\ntype: Concept\ntitle: One\n---\n# One\n")
+        self._w("b/sub/index.md", "# Sub\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        with open(os.path.join(self.tmp, rel), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_bundle_resolves_to_its_index(self):
+        self.assertEqual(okf.resolve_concept(self.tmp, "b"),
+                         os.path.join(self.tmp, "b", "index.md"))
+
+    def test_subdirectory_resolves_to_its_index(self):
+        self.assertEqual(okf.resolve_concept(self.tmp, "b/sub"),
+                         os.path.join(self.tmp, "b", "sub", "index.md"))
+
+    def test_concept_path_is_unaffected(self):
+        """The fallback must not shadow a concept: b/one.md wins over any
+        directory reading of the same reference."""
+        self.assertEqual(okf.resolve_concept(self.tmp, "b/one"),
+                         os.path.join(self.tmp, "b", "one.md"))
+
+    def test_directory_without_index_still_fails(self):
+        os.makedirs(os.path.join(self.tmp, "empty"))
+        with self.assertRaises(SystemExit):
+            okf.resolve_concept(self.tmp, "empty")
+
+    def test_missing_reference_still_fails(self):
+        with self.assertRaises(SystemExit):
+            okf.resolve_concept(self.tmp, "nope")
+
+
+class CmdPrimeOnboardingGuide(unittest.TestCase):
+    """okf-cli-3hjr — prime carries its own onboarding guide. Until now it
+    printed <root>/CLAUDE.md; that file was removed from the catalogue on
+    2026-07-28 (claude-ablation-1, D14/D15), which left prime emitting
+    `(missing: CLAUDE.md)` plus a bundle list. The guide now lives in the CLI,
+    and its command overview is generated from the same _sub() registry that
+    builds the parser, so it cannot drift from the commands it describes."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
         ap = os.path.join(self.tmp, "b", "one.md")
         os.makedirs(os.path.dirname(ap))
         with open(ap, "w", encoding="utf-8") as f:
@@ -1259,24 +1355,113 @@ class CmdPrimeBundleListing(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _prime(self, full=False):
+    def _prime(self, full=False, compact=False):
         import io, contextlib, types
-        args = types.SimpleNamespace(full=full)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            okf.cmd_prime(self.tmp, args)
+            okf.cmd_prime(self.tmp, types.SimpleNamespace(full=full, compact=compact))
         return buf.getvalue()
 
-    def test_default_uses_compact_line_not_description(self):
-        out = self._prime(full=False)
-        self.assertIn("b (1 concepts)", out)
-        self.assertNotIn("description:", out)
-        self.assertNotIn("directories:", out)
+    def test_guide_renders_without_claude_md(self):
+        """The regression the ablation exposed: no CLAUDE.md, no guide."""
+        out = self._prime()
+        self.assertNotIn("missing: CLAUDE.md", out)
+        self.assertIn("OKF Knowledge Catalogue", out)
 
-    def test_full_keeps_description_and_directories(self):
-        out = self._prime(full=True)
-        self.assertIn("description:", out)
-        self.assertIn("concepts: 1", out)
+    def test_claude_md_is_not_read_at_all(self):
+        """Not merely tolerated when absent — no longer a source. A catalogue
+        that still carries one must not have it injected into every prime."""
+        with open(os.path.join(self.tmp, "CLAUDE.md"), "w", encoding="utf-8") as f:
+            f.write("# Guide\nSENTINEL-FROM-CLAUDE-MD\n")
+        self.assertNotIn("SENTINEL-FROM-CLAUDE-MD", self._prime())
+
+    def test_overview_covers_every_registered_command(self):
+        """The anti-drift guard. A hand-written command list would pass today
+        and rot on the next `_sub()` registration; this fails the moment a
+        command exists that prime does not name."""
+        out = self._prime()
+        registered = set(okf.subcommand_parsers(okf.build_parser()))
+        missing = sorted(n for n in registered if n not in out)
+        self.assertEqual(missing, [])
+
+    def test_overview_is_generated_not_transcribed(self):
+        """Counter-mutation to the test above: assert the rendering comes from
+        the registry, by pinning a summary that only the registry holds."""
+        out = self._prime()
+        summary = okf.build_parser()
+        parsers = okf.subcommand_parsers(summary)
+        self.assertIn(parsers["find"].description.split(":")[0], out)
+
+    def test_retrieval_path_is_ordered_and_named(self):
+        out = self._prime()
+        for step in ("find", "index", "toc", "read"):
+            self.assertIn(step, out)
+        self.assertIn("progressive disclosure", out.lower())
+
+    def test_write_path_names_the_skill_and_the_gate(self):
+        out = self._prime()
+        self.assertIn("ce-okf", out)
+        self.assertIn("check", out)
+
+    def test_state_reports_absent_index_and_open_tag_vocabulary(self):
+        out = self._prime()
+        self.assertIn("build-index", out)
+        self.assertRegex(out, r"(?i)fts index:\s*absent")
+        self.assertRegex(out, r"(?i)tag vocabulary:\s*open")
+
+    def test_state_reports_present_index_and_closed_tag_vocabulary(self):
+        okf.build_fts_index(self.tmp)
+        with open(os.path.join(self.tmp, "TAGS.md"), "w", encoding="utf-8") as f:
+            f.write("| tag | description |\n| --- | --- |\n| `x` | y |\n")
+        out = self._prime()
+        self.assertRegex(out, r"(?i)fts index:\s*present")
+        self.assertRegex(out, r"(?i)tag vocabulary:\s*closed")
+
+    def test_guide_is_catalogue_agnostic(self):
+        """The old CLAUDE.md hardcoded one operator's catalogue path into every
+        example. The CLI ships to any catalogue; it speaks of --root."""
+        out = self._prime()
+        self.assertNotIn("Obsidian/Knowledge-Catalogue", out)
+        self.assertIn("--root", out)
+
+    def test_root_docs_are_pointed_at_only_when_present(self):
+        self.assertNotIn("SPEC.md", self._prime())
+        with open(os.path.join(self.tmp, "SPEC.md"), "w", encoding="utf-8") as f:
+            f.write("# spec\n")
+        self.assertIn("SPEC.md", self._prime())
+
+    def test_bundle_toc_survives_the_guide(self):
+        out = self._prime()
+        self.assertIn("bundle: b", out)
+
+    def test_find_help_is_inlined(self):
+        """`find` is the entry point an agent reaches for first, and its filters
+        and score scales are not guessable. prime carries its --help verbatim so
+        the first search does not cost a second round trip."""
+        out = self._prime()
+        find_help = okf.subcommand_parsers(okf.build_parser())["find"].format_help()
+        self.assertIn(find_help.strip(), out)
+
+    def test_find_help_is_rendered_not_paraphrased(self):
+        """Counter-mutation: pin option strings that only argparse emits, so a
+        hand-written summary of `find` cannot pass this pair of tests."""
+        out = self._prime()
+        for flag in ("--breakdown", "--expand-tags", "--scope"):
+            self.assertIn(flag, out)
+        self.assertIn("score lines:", out)
+
+    def test_bundle_names_are_the_next_call_verbatim(self):
+        """Point 4 of the 2026-08-05 brief: every name prime lists must be the
+        exact argument of the next call, not a label the agent has to assemble.
+        Asserted by resolving each listed name through the production resolver
+        rather than by re-deriving the path here."""
+        with open(os.path.join(self.tmp, "b", "index.md"), "w", encoding="utf-8") as f:
+            f.write("# B\n")
+        out = self._prime()
+        self.assertIn("toc <bundle>", out)
+        for b in okf.list_bundles(self.tmp):
+            self.assertIn("bundle: {}".format(b), out)
+            self.assertTrue(os.path.isfile(okf.resolve_concept(self.tmp, b)))
 
 
 class CmdListJson(unittest.TestCase):

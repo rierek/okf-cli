@@ -1446,12 +1446,25 @@ def make_snippet(body, terms, width=140):
 
 
 def resolve_concept(root, path):
+    """<bundle>/<concept-id> to an absolute file. A reference that names a
+    DIRECTORY resolves to that directory's index.md (okf-cli-3hjr), so the
+    bundle names prime lists are usable verbatim as `toc <bundle>` /
+    `read <bundle>`. The concept file wins over the directory reading, so the
+    fallback can never shadow a page."""
     ref = path[:-3] if path.endswith(".md") else path
     ap = os.path.join(root, ref + ".md")
-    if not os.path.isfile(ap):
-        print("not found: {}".format(path), file=sys.stderr)
+    if os.path.isfile(ap):
+        return ap
+    as_dir = os.path.join(root, ref)
+    if os.path.isdir(as_dir):
+        idx = _find_reserved_name(os.listdir(as_dir), "index.md")
+        if idx:
+            return os.path.join(as_dir, idx)
+        print("not found: {} is a directory without an index.md".format(path),
+              file=sys.stderr)
         sys.exit(1)
-    return ap
+    print("not found: {}".format(path), file=sys.stderr)
+    sys.exit(1)
 
 
 def cmd_read(root, args):
@@ -1485,26 +1498,107 @@ def iter_headings(body):
             yield len(m.group(1)), m.group(2).strip()
 
 
-def cmd_prime(root, args):
-    """One-shot agent onboarding: CLAUDE.md guide + catalogue TOC in a single call."""
-    p = os.path.join(root, "CLAUDE.md")
-    print("------")
-    if os.path.isfile(p):
-        print(read_file(p))
-    else:
-        print("(missing: CLAUDE.md)")
-    print("------")
+_PRIME_INTRO = """\
+# OKF Knowledge Catalogue — agent onboarding
+
+The catalogue is a read-mostly, LLM-facing knowledge store, separate from any
+Obsidian vault it may be opened in. It holds thematic *bundles*; a bundle is a
+folder of Markdown *concepts*, each with YAML frontmatter carrying a non-empty
+`type`. A concept-id is its path below the bundle, minus `.md`. The store is a
+plain git repo — ordinary file tools and git apply.
+
+Every invocation needs `--root <catalogue>`; without it the CLI searches cwd and
+its ancestors for a catalogue marker and fails if it finds none. It never falls
+back to its own script directory.
+
+## Retrieve — by command, not by blind grep
+
+Progressive disclosure: widen only when the cheaper step left the question open.
+
+  1. find "<query>"             ranked search across all bundles
+  2. index [<bundle>]           what bundles and directories exist
+  3. toc <bundle>[/<concept>]   headings before bodies — the cheapest way to
+                                decide whether a page is worth reading. A bare
+                                <bundle> or <bundle>/<subdir> resolves to its
+                                index.md, so the names listed below are the
+                                argument, verbatim.
+  4. read <bundle>/<concept>    the page itself
+  5. refs / wikilinks           follow the graph out of a page
+
+Reach for `toc` before `read`: a concept can run long, and its headings usually
+settle the question or name the section to read. Concepts cross-link in
+Markdown — following a link beats re-running a search, and a large bundle's
+`index.md` is the map its concepts hang from.
+
+## Write — through the ce-okf skill, never by hand
+
+Concepts are not hand-authored. The `ce-okf` skill routes a source to a bundle,
+applies frontmatter and re-indexes. `index.md` listings and `log.md` are
+marker-managed and generated (`reindex`, `log --write`) — never edit between the
+`<!-- okf:... -->` markers. Tag edits go through `merge-tags` / `remove-tags`,
+not a search-and-replace. A commit is allowed only once `check` reports zero
+violations.
+"""
+
+
+def render_catalogue_state(root):
+    """The live half of the onboarding: facts read off this catalogue rather
+    than asserted in prose, so they cannot go stale. Retrieval quality depends
+    on the FTS index being there, and a write attempt depends on whether the
+    tag vocabulary is closed — an agent needs both before its first call."""
     bundles = list_bundles(root)
-    if args.full:
-        for b in bundles:
-            print(render_bundle_block(root, b, full=True))
-            print("-----")
+    concepts = sum(sum(1 for _ in iter_concepts(os.path.join(root, b))) for b in bundles)
+    lines = ["## This catalogue", "",
+             "root: {}".format(root),
+             "bundles: {} · concepts: {}".format(len(bundles), concepts)]
+    if os.path.isfile(_fts_db_path(root)):
+        lines.append("fts index: present — `find` runs its lexical arm")
     else:
-        print("bundles:")
+        lines.append("fts index: absent — `find` degrades to a substring scan; "
+                     "run `build-index`")
+    registered = load_tags(root)
+    if registered is None:
+        lines.append("tag vocabulary: open — no TAGS.md, any tag passes")
+    else:
+        lines.append("tag vocabulary: closed — {} tags in TAGS.md; check a new one with "
+                     "`tags --validate`, adopt it with `tags --register`".format(len(registered)))
+    docs = [d for d in ("README.md", "SPEC.md", "TYPES.md", "PROPERTIES.md", "TAGS.md")
+            if os.path.isfile(os.path.join(root, d))]
+    if docs:
+        lines.append("root docs: {}".format(" · ".join(docs)))
+    return "\n".join(lines)
+
+
+def cmd_prime(root, args):
+    """One-shot agent onboarding: guide, command directory, catalogue state and
+    bundle TOC in a single call. The guide used to be <root>/CLAUDE.md, which
+    made prime empty the moment that file was removed (okf-cli-3hjr); it is now
+    the CLI's own, and its command section is generated from the parser."""
+    print(_PRIME_INTRO)
+    print(command_overview())
+    print()
+    print("## find — the entry point, in full\n")
+    print(subcommand_parsers(build_parser())["find"].format_help().strip())
+    print()
+    print(render_catalogue_state(root))
+    print()
+    print("## Bundles\n")
+    print("The catalogue TOC, as `index` renders it. Each name is a path: "
+          "`toc <bundle>`,\n`index <bundle>`, `--scope <bundle>` on find and "
+          "list.\n")
+    bundles = list_bundles(root)
+    if args.compact:
         for b in bundles:
             print("- " + render_bundle_line(root, b))
-        print("(for description/directories/types/tags per bundle: "
-              "okf-cli index <bundle> [--full], or `okf-cli index` for all)")
+        print("(`prime` without --compact inlines each bundle's description and "
+              "directories)")
+    else:
+        for b in bundles:
+            print(render_bundle_block(root, b, full=args.full))
+            print("-----")
+        if not args.full:
+            print("(types+tags per bundle: `prime --full`; name+count only: "
+                  "`prime --compact`)")
 
 
 def cmd_toc(root, args):
@@ -3596,11 +3690,15 @@ def _sub(sub, name, group, summary, **kwargs):
     return sub.add_parser(name, help=summary, description=summary, **kwargs)
 
 
-def render_command_overview(sub):
+def render_command_overview(parsers, footer=True):
     """The purpose-grouped command directory, rendered from the registered
     parsers (D02/D03). argparse's own listing above it is flat and
     alphabetical; this block answers "what can this CLI do" by purpose. Both
-    come from the same registrations, so neither can drift from the other."""
+    come from the same registrations, so neither can drift from the other.
+
+    `parsers` is the {name: parser} mapping from subcommand_parsers(). The
+    same block is the command section of `prime` (okf-cli-3hjr), which is why
+    the footer — a --help cross-reference — is optional there."""
     lines = ["commands by purpose:"]
     for group in _GROUP_ORDER:
         names = sorted(n for n, g in COMMAND_GROUPS.items() if g == group)
@@ -3609,12 +3707,20 @@ def render_command_overview(sub):
         lines.append("  {}:".format(group))
         for name in names:
             lines.append(textwrap.fill(
-                sub.choices[name].description, width=96,
+                parsers[name].description, width=96,
                 initial_indent="    {:<16} ".format(name),
                 subsequent_indent=" " * 21))
-    lines.append("")
-    lines.append("run `okf-cli.py <command> --help` for one command's options.")
+    if footer:
+        lines.append("")
+        lines.append("run `okf-cli.py <command> --help` for one command's options.")
     return "\n".join(lines)
+
+
+def command_overview():
+    """The command directory as prime needs it: built from a fresh parser, so
+    a newly registered subcommand reaches the onboarding text without anyone
+    editing the onboarding text."""
+    return render_command_overview(subcommand_parsers(build_parser()), footer=False)
 
 
 _FIND_EPILOG = """\
@@ -3715,10 +3821,13 @@ def build_parser():
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
     pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pp = _sub(sub, "prime", "navigation",
-              "one-shot agent onboarding: CLAUDE.md guide + catalogue TOC")
+              "one-shot agent onboarding: usage guide, command directory, "
+              "catalogue state and bundle TOC")
     pp.add_argument("--full", action="store_true",
-                     help="print full per-bundle blocks (description+directories+types+tags) "
-                          "instead of the default compact name+count listing")
+                     help="add types+tags to each bundle block")
+    pp.add_argument("--compact", action="store_true",
+                     help="list bundles as name+count one-liners instead of the "
+                          "`index` blocks (description+directories)")
     pr = _sub(sub, "read", "navigation", "print one concept page")
     pr.add_argument("path", help="<bundle>/<concept-id> of the page to print")
     prf = _sub(sub, "refs", "search",
@@ -3784,7 +3893,7 @@ def build_parser():
     pwl.add_argument("--unresolved", action="store_true",
                      help="list only unresolved and ambiguous occurrences (summary stays complete)")
     pwl.add_argument("--json", action="store_true", help="machine-readable output")
-    ap.epilog = render_command_overview(sub)
+    ap.epilog = render_command_overview(sub.choices)
     return ap
 
 

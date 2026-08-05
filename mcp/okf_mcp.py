@@ -195,9 +195,11 @@ def _register(server):
 
     @server.tool()
     def okf_prime(root: str) -> str:
-        """One-shot onboarding for a fresh session: the catalogue's CLAUDE.md
-        guide plus its TOC. Start here before searching a catalogue you have
-        not worked with in this session."""
+        """One-shot onboarding for a fresh session: what the store is, how to
+        retrieve from it, the full command directory, `find`'s options and score
+        scales, this catalogue's live state (index, tag vocabulary) and its
+        bundle TOC. Start here before searching a catalogue you have not worked
+        with in this session."""
         return run_okf(root, "prime", {})
 
     @server.tool()
