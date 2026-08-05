@@ -1,68 +1,64 @@
 # NSP — wikilink-awareness
 
-Handover for a specialist picking this topic up cold. Written 2026-08-05 against verified state, not from memory.
+Handover for a specialist picking this topic up cold. Written 2026-08-05 against verified state, replacing a version whose "verified state" had drifted in seven places.
 
 ## Mission
 
-Close the remaining verification gaps in the wikilink-awareness feature so that every REQ code in `SPEC.md` withstands an adversarial reviewer. The feature itself is implemented and green; what is missing is assertion coverage on a set of guards, plus one deployment decision that only Erik can make.
+The feature is done. What remains is one measurement that needs the Obsidian app, one deferred design decision, and the discipline not to reopen the rest.
 
-Terminal condition: all 15 mutants in `mutants.py` are KILLED, the suite is green, the live figures still hold, and a fresh adversarial review finds no severity-1 defect.
+Terminal condition is already met on everything the CLI can reach: all 39 mutants KILLED, suite green, live figures holding, D02 deployed, review round 5 closed with zero severity-1 findings.
 
 ## Verified state
 
-The whole change is an **uncommitted working-tree diff** on `main` in `/Users/erik/dev/okf-tools`, baseline commit `a7770f0`. Four modified files (`cli/okf-cli.py` +887, `cli/test_okf_cli.py` +1321, `cli/test_okf_mcp.py` +67, `mcp/okf_mcp.py` +15) and one untracked directory (`docs/wikilink-awareness/`). Committing this is the first thing to agree with Erik — a session boundary with 2252 uncommitted lines is the largest single risk on this topic.
+Committed on `main` in `/Users/erik/dev/okf-tools`, tree clean. Relevant commits: `4240159` (spec, handover, mutation stand), `d331d5f` (kill the 15 surviving mutants), plus the round-5 commit carrying `mutants.py`'s R-batch and the SPEC amendments. The catalogue side is one commit in its own repo: `Knowledge-Catalogue@2b16fc5` adds `.okf.toml`.
 
-Tests: `test_okf_cli` 362 green, `test_okf_mcp` 26 green, whole repo 450 green.
+Tests: 400 green in ~5 s (`test_okf_cli` + `test_okf_mcp`).
 
-Live catalogue, read-only: 2105 wikilink occurrences, 257 resolved, 0 ambiguous, 1848 unresolved; body 179 (162 resolved), frontmatter 1926 (95 resolved). Full-catalogue scan ~1 s against the 5 s NFR-01 budget. An integrity sweep over all 2777 rename-reachable files reports 0 length drifts, 0 span mismatches, 0 splice drift.
+Mutation: **39 mutants, killed=39, survived=0, botched=0.** Two further candidates are recorded inside `mutants.py` as equivalent-not-surviving, with the argument for each; do not re-add them as mutants.
 
-Mutation: 15 of 31 mutants survive, unchanged since run 4. These are the open work.
+Live catalogue, read-only: 2105 wikilink occurrences, 257 resolved, 0 ambiguous, 1848 unresolved; body 179 (162 resolved), frontmatter 1926 (95 resolved). Full-catalogue scan 0.9 s against the 5 s NFR-01 budget. Integrity sweep over all 2777 rename-reachable files: 0 length drifts, 0 span mismatches.
+
+The check gate is armed and proven armed: `check` is byte-identical before and after `.okf.toml` (`OK — 0 violations`), and a synthetic dead-target occurrence warns in an opted-in bundle and stays silent in an opted-out one. A clean `check` on a clean catalogue proves nothing by itself — that probe is what separates "armed" from "misconfigured".
 
 ## Where things are
 
 `cli/okf-cli.py` holds all feature code: the scanner (`WIKILINK_RE`, `_fenced_code_spans`, `_indented_code_spans`, `_blank`, `_dead_zone_mask`, `is_yaml_frontmatter_block`, `wikilink_regions`, `parse_wikilinks`), the resolver (`build_concept_basename_index`, `resolve_wikilink`), the reporting command (`cmd_wikilinks`), the check (`check_wikilink_resolvable`, `wikilink_checked_bundles`) and the rename half (`canonical_case_path`, `iter_rename_scan_md`, `_rewrite_wikilink_raw`, `plan_wikilink_rewrites`, `_index_after_move`, `_apply_wikilink_rewrites`, `cmd_rename`).
 
-`docs/wikilink-awareness/SPEC.md` is the contract: 15 REQ, 2 NFR, ~80 AC, plus the amendment record (D01–D15, C01–C08, ASM-01–05, Q01–Q06) that explains why each rule reads the way it does. Read the D-codes before changing behaviour; several encode a defect that was already paid for once.
+`docs/wikilink-awareness/SPEC.md` is the contract: 15 REQ, 2 NFR, ~80 AC, plus the amendment record (D01–D16, C01–C09, ASM-01–05, Q01–Q07). Read the D-codes before changing behaviour; several encode a defect that was already paid for once. The `Assertion coverage` section under Traceability is the newest part and the one most likely to be skipped — it is the reason to trust the AC table at all.
 
-`docs/wikilink-awareness/mutants.py` is the mutation harness. Run `python3 docs/wikilink-awareness/mutants.py` from the repo root for the full set, or name ids to iterate: `python3 docs/wikilink-awareness/mutants.py Q80 Q82`. It copies `cli/` to a scratch directory and never writes to the repo.
+`docs/wikilink-awareness/mutants.py` is the mutation harness. `python3 docs/wikilink-awareness/mutants.py` for the full set, or name ids to iterate: `python3 docs/wikilink-awareness/mutants.py Q80 R11`. It copies `cli/` to a scratch directory and never writes to the repo.
 
 ## Open work
 
-### T01 🟣 Close the 15 surviving mutants
+### T01 🟣 Falsify or confirm the ASM-01 subtree preference
 
-Each row below names the weakening, why the guard exists, and the shape of the test that would kill it. Add the tests to the existing classes in `cli/test_okf_cli.py` (`WikilinkExtraction`, `WikilinkResolve`, `WikilinkCommand`, `RenameWikilinks`, `WikilinkCheck`).
+The only item that needs the Obsidian app. `[[GLOSSARY]]` at `lean-stack-okf/improve-bean-canon-design.md:112` has six candidates catalogue-wide, and `resolve_wikilink` answers `/lean-stack-okf/GLOSSARY.md` through the same-bundle tie-break. If Obsidian shows any other target, or a broken link, the subtree half of ASM-01 is falsified and REQ-03 needs a design decision.
 
-| Id | Weakening | Why the guard exists | Test shape |
-| --- | --- | --- | --- |
-| Q09 | `_indented_code_spans` drops the `i == 0` guard | Without it, index `-1` wraps to the last line and the first line of a file can open a phantom code block | File whose very first line is `    [[A]]` and whose last line is non-blank prose; the link must still be scanned |
-| Q23 | `is_yaml_frontmatter_block` requires every line to look like YAML, not just the first | 432 qm-wiki files carry a multi-line German description continued on unindented lines; the all-lines rule reclassified them as body and shifted 555 links between regions | Frontmatter whose first line is `key: value`, followed by an unindented continuation line with no colon and a block-list item; a link property must be reported as `frontmatter` |
-| Q23b | an empty `---\n---` block counts as body | `split_frontmatter` cannot tell an empty head from a thematic rule; calling it body shifts the region of everything after it | File `---\n---\n\n[[A]]`; the occurrence must be region `body` and the head must not be scanned as prose |
-| Q23c | an indented fence disqualifies a YAML block | An indented fence is the content of a block scalar (`example: \|`); rejecting the block for it hid every link property in the file | Frontmatter with `example: \|` and an indented ` ``` ` inside; a sibling link property must still be region `frontmatter` |
-| Q38 | `keep` in `plan_wikilink_rewrites` no longer excludes `new_link` | Otherwise a `--force` overwrite reports the destination it is replacing as a collision with itself | `--force` overwrite of an existing destination; the disclosure must name the clobbered file but must not list it as a collision |
-| Q47 | `_contains_path` compares case-sensitively | The resolver is case-insensitive (D06); an exact comparison drops case-variant candidates out of the `skipped-ambiguous` branch | Ambiguous inbound link whose stored candidate differs from `old_link` only in case; status must be `skipped-ambiguous` |
-| Q52 | the `FILENAME_FORBIDDEN_CHARS` destination guard is dropped | A wikilink metacharacter in a filename makes the rewritten link unparseable (ASM-03) | `rename a/x.md a/y#z.md` must exit 2 with a message containing `forbidden char` — build the fixture so no other guard fires first |
-| Q62 | `FENCE_START_RE` matches backticks only | Tilde fences are equally valid CommonMark; missing them lets an unindented `~~~` block be judged YAML | Block whose first line is key-like and which contains an unindented `~~~` fence; must be classified as body |
-| Q63 | the `.md` guard is dropped | A non-markdown destination has no concept identity; every rewritten link would be dead on arrival | `rename a/x.md a/y.txt` must exit 2 with `both paths must be .md` |
-| Q64 | the catalogue-root guard is dropped | A destination outside the root escapes every scan; the rewrite would point out of the catalogue | `rename a/x.md ../out.md` must exit 2 with `under the catalogue root` |
-| Q65 | the bundle-depth guard is dropped | A root-level file is not a concept and is not in the resolution index | `rename a/x.md top.md` must exit 2 with `inside a bundle` |
-| Q76 | `canonical_case_path` returns its argument unchanged | The caller's spelling is compared against the scan's in three places; without normalisation a case-variant source silently mismatches (D14) | Rename addressing the source as `A/X.MD` when the filesystem stores `a/x.md`, with a self-reference in the file; must not crash and must write outbound rewrites to the new path |
-| Q78 | the outbound pass scans unmasked text | Plan and applier must use the same mask, or the plan reports rewrites the applier declines to make | Cross-bundle move of a file carrying a markdown link inside **inline code** (not a fence); the link must be neither reported nor rewritten |
-| Q80 | the whitespace-basename guard is dropped | A leading or trailing space in the basename can never be matched again: the scanner strips the page part, the index does not strip filenames | `rename a/x.md "a/ y.md"` must exit 2 with a message containing `leading or trailing whitespace` |
-| Q82 | inline code is exempted in the frontmatter region | A `---` thematic rule whose first line reads like `key: value` lands in the YAML branch, and its prose backticks would become rewritable | Frontmatter value carrying a backticked `` `[[X]]` ``; the occurrence must not be reported |
+Blocked on the vault being open: the Obsidian CLI reaches only the app's focused window, and `Knowledge-Catalogue` is not open. Once it is, go through skill `obsidian-tooling`:
 
-Two of these are known to pass **for the wrong reason** today and are the reason the whole set is listed rather than just patched: `test_whitespace_destination_basename_is_refused` and `test_control_character_destination_basename_is_refused` assert only that a `SystemExit` occurred, and the `turns-ambiguous` refusal fires first on their fixtures. Every new or amended test in this table must assert **the specific message**, and the fixture must contain no inbound link that could trigger a different refusal.
+```
+just obs-run Knowledge-Catalogue links path="lean-stack-okf/improve-bean-canon-design.md"
+```
 
-### T02 🟣 Deploy the D02 opt-in set
+Two traps. A plain `find` for the six candidates returns nothing, because `lean-stack-okf` and `devd2-okf` are symlinks and `find` needs `-L` — the previous handover concluded the falsifier was unavailable for exactly this reason. And `just obs` before any call, or the command silently answers for whichever vault happens to be focused.
 
-REQ-14 gates `check` behind `wikilink_checked_bundles` in `<root>/.okf.toml`. No such file exists in the live catalogue, so the check is inert in production and a reviewer flagged D02 as undeployed. Writing it is a **change to the Obsidian store** and needs Erik's explicit confirmation before it happens. Until then the feature ships switched off, which is defensible but must be stated, not glossed.
+Record the outcome as an ASM-01 update either way. A confirmed assumption is worth as much as a falsified one here, because Q02 is carried by it.
 
-### T03 🟣 Dispatch review round 5
+### T02 🟣 Decide Q07 — Unicode normalisation
 
-Four rounds have run with two independent adversarial reviewers each. Round 5 should be treated as the last: fix severity-1 findings, document everything below that as a known limit. Erik's standing preference on this point was recorded as "one more round, then cut".
+A confirmed defect with zero live exposure, deferred on purpose. A concept stored NFD with a link written NFC reports `unresolved`, and `rename` then leaves that link behind — the silent-orphan class D06 exists to close, reached from a different direction. Reproduce it in four lines: create `<bundle>/<NFD "Qualität">.md`, then resolve the NFC spelling and the NFD spelling of the same word; the first is `unresolved`, the second `resolved`.
 
-### T04 🟡 ASM-01 subtree preference
+Zero exposure today: 2422 index keys, not one non-ASCII basename. That is what makes it deferrable, not what makes it fine.
 
-The case-insensitivity half of ASM-01 is now established. The subtree-preference half — that Obsidian prefers a candidate in the linking note's own subtree on a basename collision — is still assumed at medium confidence. Falsifier: open `lean-stack-okf/improve-bean-canon-design.md` in Obsidian and see whether `[[GLOSSARY]]` resolves inside `lean-stack-okf`. This needs the app, not the CLI.
+The fix touches five key-deriving sites (`build_concept_basename_index`, `resolve_wikilink` twice, `plan_wikilink_rewrites`), which is the code four review rounds hardened. Add the mutant before the fix — drop the normalisation, expect SURVIVED — so the test is proven non-vacuous rather than assumed to be. Keep the D06 property that `[[STRASSE]]` stays unresolved against `Straße.md`: normalisation and case folding are separate axes and only one of them is Obsidian's.
+
+### T03 🟡 D16 leaves the D02 contrast bundle out
+
+`bew_BeWiki-Python-Download-okf` was to be opted in as the contrast case proving the check reports what it should. It is not, because its 11 unresolved links have no owner and a permanent warning costs `check` the clean run that makes it readable. The contrast is carried by a fixture instead. If that trade is wrong, the fix is one line in `.okf.toml` — but then accept that `check` warns on every run from now on.
+
+## Do not reopen
+
+Review is closed after round 5. Severity-1 counts per round were 2, 2, 4, 4, 0, and the findings moved steadily outward: round 1 hit core mechanics, round 4 could only reach validation edges after 50 000 fuzz documents produced no byte error in the rewriter, round 5 produced one unasserted guard (the reserved source), one deferred defect with no live exposure, one docstring that overstated its own case, and two equivalent mutants. That trajectory is the argument for the cut. Reopening costs more than it can find.
 
 ## Traps — already paid for, do not re-derive
 
@@ -74,11 +70,15 @@ Fences are found line-based, not by regex pairing. A regex pairs backtick runs l
 
 A rename decides what it breaks by simulating resolution before and after the move (`_index_after_move`), not by comparing tokens. A basename-preserving move into a bundle where another concept shares the name turns a unique address ambiguous with no token changing at all; 81 basenames in this catalogue exist in more than one bundle.
 
+`FENCE_START_RE` matches at most three spaces of indent. A fixture that indents a fence four spaces to test the indented-fence branch exercises nothing — that was a live example of a test asserting less than it claimed.
+
+A guard test must assert the message, not just `SystemExit`. `cmd_rename` has ten refusals plus the turns-ambiguous one; dropping the guard a test names still produces an exit. Use `RenameWikilinks._rename_fails`.
+
 New subcommands must be registered in alphabetical position or `CommandDirectoryOrder` fails.
 
 Standard library only, CPython 3.11+, `unittest` only — there is no pytest on any interpreter here, and NFR-02 forbids adding one.
 
-Live verification is read-only. The Obsidian store has never been written to by this work and must not be, other than through T02 once confirmed.
+Live verification is read-only. The only write this work has ever made to the Obsidian store is `.okf.toml`.
 
 ## Verification recipes
 
@@ -102,8 +102,4 @@ cd /Users/erik/dev/okf-tools && time python3 cli/okf-cli.py --root ~/Obsidian/Kn
 
 Integrity sweep — over every path from `iter_rename_scan_md`, assert `len(wikilink_scan_text(text)) == len(text)` and, for each record from `parse_wikilinks`, that `text[span[0]:span[1]] == rec["raw"]`. Any nonzero count means the mask or the offsets drifted and no rewrite may run.
 
-## Review history
-
-Round 1 found `rename` fundamentally broken for wikilinks and the index case-sensitive. Round 2 found a half-applied case fix that would have orphaned the 96 links D06 exists to rescue, plus the nested-token loss above. Round 3 found the fence-pairing defect with a live file exposed, and a YAML heuristic so strict it reclassified 432 files. Round 4 found the token-comparison rename defect, the missing path canonicalisation, and the `casefold`/`lower` divergence.
-
-Severity-1 counts per round were 2, 2, 4, 4 — flat, but the findings moved steadily outward: round 1 hit core mechanics, round 4 could only reach validation edges after 50 000 fuzz documents produced no byte error in the rewriter. That trajectory, not the raw count, is the argument for cutting after round 5.
+Gate armed, not merely silent — build the index, then call `check_wikilink_resolvable` with a synthetic ctx carrying a dead target, once attributed to an opted-in bundle and once to an opted-out one. Expect one warning and none.

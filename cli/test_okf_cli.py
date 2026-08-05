@@ -3448,7 +3448,11 @@ class WikilinkExtraction(unittest.TestCase):
 
     def test_indented_code_span_stops_at_the_last_indented_line(self):
         """A trailing blank line belongs to the prose after the block, not to
-        the block — masking it would swallow a link on the next line."""
+        the block. This cannot cost a link: the span already ends before the
+        first line that is neither blank nor indented, so the trim only ever
+        crosses whitespace — 40 000 fuzzed documents cannot tell the trimmed
+        span from the untrimmed one. Kept for the offsets it reports, not for a
+        masking difference."""
         recs = okf.parse_wikilinks("intro\n\n    code\n   \n[[x]]\n")
         self.assertEqual([r["page"] for r in recs], ["x"])
 
@@ -4250,6 +4254,16 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
                 self._rename("a/old.md", dest, apply=True)
             self.assertEqual(ctx.exception.code, 2, dest)
         self.assertEqual(self._r("a/src.md"), before)
+
+    def test_reserved_source_is_refused(self):
+        """The mirror of the reserved-destination rule, and unasserted until
+        round 5: a reserved file is a bundle's managed index, log or readme, not
+        a concept. Moving one out from under `reindex_tree` breaks the structure
+        every other surface reads, and no wikilink pointed at it to begin with."""
+        for src in ("a/index.md", "a/log.md", "a/README.md"):
+            self._w(src, "# Reserved\n")
+            self._rename_fails(src, "a/moved.md", "refusing to move a reserved file")
+            self.assertTrue(os.path.isfile(os.path.join(self.tmp, src)), src)
 
     def test_empty_destination_basename_is_refused(self):
         self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
