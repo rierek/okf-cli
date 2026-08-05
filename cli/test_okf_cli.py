@@ -914,6 +914,49 @@ class CmdRefs(unittest.TestCase):
         self.assertNotEqual(cm.exception.code, 0)
 
 
+class ResolveScopesTargets(unittest.TestCase):
+    """resolve_scopes feeds check, fix-crosslinks, fix-xml-tags, reindex and
+    every --scope. Normalising the target for the wikilink opt-in gate reaches
+    all of them, so the other target forms are pinned here."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        for b in ("alpha", "beta"):
+            os.makedirs(os.path.join(self.tmp, b, "sub"), exist_ok=True)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_relative_forms(self):
+        for target, bundle, tail in (
+            ("alpha", "alpha", "alpha"),
+            ("alpha/", "alpha", "alpha"),
+            ("alpha//", "alpha", "alpha"),
+            ("./alpha", "alpha", "alpha"),
+            ("alpha/sub", "alpha", "alpha/sub"),
+            ("alpha/../beta", "beta", "beta"),
+        ):
+            got = okf.resolve_scopes(self.tmp, target)
+            self.assertEqual(got[0][0], bundle, target)
+            self.assertEqual(got[0][1], os.path.join(self.tmp, tail), target)
+
+    def test_absolute_target_still_addresses_that_directory(self):
+        """os.path.join(root, "/x") discards root, so an absolute target used to
+        work by accident. Normalising it into a relative segment rescoped the
+        scan onto a path that does not exist and reported a clean run."""
+        ap = os.path.join(self.tmp, "beta")
+        self.assertEqual(okf.resolve_scopes(self.tmp, ap), [("beta", ap)])
+
+    def test_dot_target_means_the_whole_catalogue(self):
+        """`.` yielded a bundle literally named "." — every bundle-name-keyed
+        rule then failed to match while the scan still walked the root."""
+        for target in (".", "./"):
+            self.assertEqual(okf.resolve_scopes(self.tmp, target),
+                             okf.resolve_scopes(self.tmp, None), target)
+
+
 class RenameConcept(unittest.TestCase):
     """rename: link_expr / plan_rename reference-integrity core (no git needed)."""
 
@@ -3069,6 +3112,1284 @@ class CommandHelpConformance(unittest.TestCase):
                    if not isinstance(act, argparse._SubParsersAction)
                    and not (act.help or "").strip()]
         self.assertEqual(missing, [])
+
+
+def _cli(root, *argv):
+    """Drive the REAL cli/okf-cli.py as a subprocess. The `command:` acceptance
+    criteria of docs/wikilink-awareness/SPEC.md are written against the shell
+    surface (exit code, stdout shape), which an in-process call cannot pin."""
+    import subprocess
+    import sys
+    return subprocess.run(
+        [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", root] + list(argv),
+        capture_output=True, text=True)
+
+
+class WikilinkFixtureMixin:
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def _index(self):
+        return okf.build_concept_basename_index(self.tmp)
+
+    def _status(self, source_rel, page):
+        return okf.resolve_wikilink(self._index(), source_rel, page)
+
+
+class WikilinkExtraction(unittest.TestCase):
+    """REQ-01 — one record per [[…]] occurrence, with page/alias/suffix/embed
+    split out and the region tagged. Pure text parse, no filesystem."""
+
+    def test_shapes(self):
+        recs = okf.parse_wikilinks(
+            "[[a]] [[a|b]] [[a#h]] [[a#^blk]] ![[a]] [[dir/a]]")
+        self.assertEqual([r["page"] for r in recs],
+                         ["a", "a", "a", "a", "a", "dir/a"])
+        self.assertEqual([r["alias"] for r in recs],
+                         [None, "b", None, None, None, None])
+        self.assertEqual([r["suffix"] for r in recs],
+                         [None, None, "h", "^blk", None, None])
+        self.assertEqual([r["embed"] for r in recs],
+                         [False, False, False, False, True, False])
+
+    def test_region_is_tagged(self):
+        recs = okf.parse_wikilinks(
+            '---\ntype: Concept\nrelated:\n  - "[[a]]"\n---\nProse with [[b]].\n')
+        self.assertEqual([(r["region"], r["page"]) for r in recs],
+                         [("frontmatter", "a"), ("body", "b")])
+
+    def test_code_spans_are_not_links(self):
+        recs = okf.parse_wikilinks(
+            "```\n[[x]]\n```\n\n~~~\n[[x]]\n~~~\n\nand `[[x]]` inline.\n")
+        self.assertEqual(recs, [])
+
+    def test_md_suffix_is_stripped(self):
+        self.assertEqual([r["page"] for r in okf.parse_wikilinks("[[a.md]] [[a]]")],
+                         ["a", "a"])
+        self.assertEqual([r["page"] for r in okf.parse_wikilinks("[[8.3.3]]")],
+                         ["8.3.3"])
+
+    def test_unclosed_is_not_a_link(self):
+        for text in ("[[a", "[a]]", "[[a\n]]"):
+            self.assertEqual(okf.parse_wikilinks(text), [], text)
+
+    def test_raw_excludes_the_embed_marker(self):
+        """`raw` is a substitutable link token, so it starts at `[[` — the `!`
+        is carried by `embed` instead. The report format depends on it."""
+        rec = okf.parse_wikilinks("![[a|Label]]")[0]
+        self.assertEqual(rec["raw"], "[[a|Label]]")
+        self.assertTrue(rec["embed"])
+
+    def test_in_file_anchor_is_not_a_link(self):
+        """`[[#Heading]]` addresses a position in the current file, not another
+        concept — a record for it would be reported unresolved forever."""
+        self.assertEqual(okf.parse_wikilinks("[[#Heading]] and [[#^blk]]"), [])
+
+    def test_hash_in_an_alias_is_not_a_suffix(self):
+        """Obsidian's `#` binds to the page part. `C#` and `bug #42` are
+        realistic alias text and must survive as alias, not be split."""
+        rec = okf.parse_wikilinks("[[dotnet|C#]]")[0]
+        self.assertEqual((rec["page"], rec["alias"], rec["suffix"]), ("dotnet", "C#", None))
+        rec = okf.parse_wikilinks("[[issue|bug #42]]")[0]
+        self.assertEqual((rec["alias"], rec["suffix"]), ("bug #42", None))
+
+    def test_empty_suffix_is_none_not_empty_string(self):
+        self.assertIsNone(okf.parse_wikilinks("[[a#]]")[0]["suffix"])
+
+    def test_page_part_is_stripped(self):
+        self.assertEqual(okf.parse_wikilinks("[[ a ]]")[0]["page"], "a")
+
+    def test_comments_are_not_links(self):
+        """Obsidian excludes `%%`-commented text from its link index, and an
+        HTML comment is never rendered at all."""
+        recs = okf.parse_wikilinks(
+            "<!-- TODO revisit [[a]] -->\n%% draft: [[b]] %%\nreal [[c]]\n")
+        self.assertEqual([r["page"] for r in recs], ["c"])
+
+    def test_indented_code_block_is_not_a_link(self):
+        """A 4-space-indented block is a code block that the fence/backtick
+        masker does not see. Rewriting inside one corrupts a documentation
+        sample, so the wikilink mask has to cover it."""
+        recs = okf.parse_wikilinks("Example:\n\n    Use [[a]] in a note.\n\nEnd.\n")
+        self.assertEqual(recs, [])
+
+    def test_leading_thematic_rule_does_not_expose_a_fence(self):
+        """A body whose first line is `---` is classified as frontmatter by
+        split_frontmatter's arithmetic, which _frontmatter_end mirrors. That
+        region must be masked too, or a fenced example inside it becomes a
+        rewritable link."""
+        recs = okf.parse_wikilinks(
+            "---\n\nIntro\n\n```\nexample: [[a]]\n```\n\n---\n\nreal body\n")
+        self.assertEqual(recs, [])
+
+    def test_list_continuation_is_not_code(self):
+        """Indentation alone is not a code block — the same shape is markdown's
+        list-continuation form, and Obsidian indexes links in it."""
+        recs = okf.parse_wikilinks("- bullet\n\n    A continuation with [[a]].\n")
+        self.assertEqual([r["page"] for r in recs], ["a"])
+
+    def test_comment_regexes_do_not_span_two_comments(self):
+        """A greedy comment pattern would swallow everything between the first
+        opener and the last closer, hiding every link in between."""
+        recs = okf.parse_wikilinks(
+            "%% one %%\nlive [[a]]\n%% two %%\n"
+            "<!-- three -->\nlive [[b]]\n<!-- four -->\n")
+        self.assertEqual([r["page"] for r in recs], ["a", "b"])
+
+    def test_fence_pattern_does_not_span_two_fences(self):
+        """A greedy fence pattern reaches from the first opener to the last
+        closer and swallows every link in the prose between them."""
+        recs = okf.parse_wikilinks(
+            "```\nfirst\n```\n\nlive [[a]]\n\n```\nsecond\n```\n")
+        self.assertEqual([r["page"] for r in recs], ["a"])
+
+    def test_comment_inside_a_fence_does_not_break_the_fence(self):
+        """One alternation matched left to right: whichever construct opens
+        first owns the span, so a `%%` inside a fence cannot end it early."""
+        self.assertEqual(
+            okf.parse_wikilinks("```\n%% x %%\n[[a]]\n```\n"), [])
+
+    def test_frontmatter_indentation_is_structure_not_code(self):
+        """The one body rule that must not apply to YAML: a block list under a
+        blank line is valid YAML and looks exactly like an indented code block.
+        Inline code IS masked here — see test_thematic_rule_region_gets_body_rules
+        for why exempting it cost more than it bought."""
+        recs = okf.parse_wikilinks(
+            '---\ntype: Concept\nrelated:\n\n    - "[[b]]"\n    - "[[c]]"\n---\n# X\n')
+        self.assertEqual([(r["region"], r["page"]) for r in recs],
+                         [("frontmatter", "b"), ("frontmatter", "c")])
+
+    def test_indented_line_without_a_blank_line_is_not_code(self):
+        """A code block needs a blank line to open it. Without that rule every
+        continuation line in a wrapped paragraph becomes a dead zone."""
+        recs = okf.parse_wikilinks("Some prose\n    continued with [[a]] indented\n")
+        self.assertEqual([r["page"] for r in recs], ["a"])
+
+    def test_mask_preserves_length_so_spans_address_the_original(self):
+        """The span each record carries is what a rewrite splices on. If the
+        mask changed length the offsets would point at the wrong bytes."""
+        text = "---\ntype: Concept\n---\n`code` and [[a]] and <!-- c -->\n"
+        self.assertEqual(len(okf.wikilink_scan_text(text)), len(text))
+        a, b = okf.parse_wikilinks(text)[0]["span"]
+        self.assertEqual(text[a:b], "[[a]]")
+
+    def test_four_backtick_fence_masks_its_contents(self):
+        """A regex pairs backtick runs left to right with no notion of line
+        start or fence width, so one prose ``` mention or a 4-backtick fence
+        shifted every later pairing by one and left a real code block exposed
+        to the rewriter. One live catalogue file carried exactly this shape."""
+        self.assertEqual(okf.parse_wikilinks(
+            "Use ``` to open a fence.\n\n````\nS = \"[[a]]\"\n````\n"), [])
+        self.assertEqual(okf.parse_wikilinks(
+            "````\n```\nnested [[a]]\n```\n````\n"), [])
+
+    def test_fence_closing_rules(self):
+        """Each closing condition separately: a closer must be at least as wide
+        as its opener, must use the same character, and must carry nothing but
+        the marker. Any one of them dropped and a fence ends early, exposing
+        prose-looking code to the rewriter."""
+        # a narrower run does not close a wider fence
+        self.assertEqual(okf.parse_wikilinks("````\n```\n[[a]]\n````\n"), [])
+        # a tilde run does not close a backtick fence
+        self.assertEqual(okf.parse_wikilinks("```\n[[a]]\n~~~\n[[b]]\n```\n"), [])
+        # a closer carrying an info string does not close
+        self.assertEqual(okf.parse_wikilinks("```\n``` end\n[[a]]\n```\n"), [])
+        # a wider run does close a narrower fence
+        recs = okf.parse_wikilinks("```\ncode\n````\n\nlive [[a]]\n")
+        self.assertEqual([r["page"] for r in recs], ["a"])
+
+    def test_indented_fence_is_recognised(self):
+        """Up to three spaces of indent still opens a fence (CommonMark)."""
+        self.assertEqual(okf.parse_wikilinks("   ```\n   [[a]]\n   ```\n"), [])
+
+    def test_tab_indented_code_masks(self):
+        self.assertEqual(okf.parse_wikilinks("intro\n\n\tcode [[a]] here\n"), [])
+
+    def test_indented_first_line_is_not_code(self):
+        """No blank line can precede line 0, so an indented opening line is
+        prose (or YAML), never a code block."""
+        recs = okf.parse_wikilinks("    [[a]] on the first line\n")
+        self.assertEqual([r["page"] for r in recs], ["a"])
+
+    def test_wikilink_pattern_rejects_newlines_and_brackets(self):
+        """Load-bearing: a token containing a newline can never be found again
+        by a later scan, so a rename must not be able to produce one."""
+        self.assertEqual(okf.parse_wikilinks("[[a\nb]]"), [])
+        self.assertEqual(okf.parse_wikilinks("[[a[b]]"), [])
+
+    def test_empty_frontmatter_block_is_frontmatter(self):
+        recs = okf.parse_wikilinks("---\n---\nBody [[a]]\n")
+        self.assertEqual([(r["region"], r["page"]) for r in recs], [("body", "a")])
+
+    def test_indented_fence_in_a_block_scalar_keeps_the_block_yaml(self):
+        """An indented fence may be the content of a YAML block scalar.
+        Rejecting the whole block for it hid every link property in the file."""
+        recs = okf.parse_wikilinks(
+            '---\nexample: |\n    ```\n    code\n    ```\nrelated:\n\n'
+            '    - "[[b]]"\n---\n# X\n')
+        self.assertEqual([(r["region"], r["page"]) for r in recs],
+                         [("frontmatter", "b")])
+
+    def test_md_suffix_is_stripped_case_insensitively(self):
+        self.assertEqual(okf.parse_wikilinks("[[Old.MD]]")[0]["page"], "Old")
+
+    def test_unclosed_fence_runs_to_end_of_file(self):
+        """Obsidian renders an unterminated fence as code to EOF, so the
+        rewriter must not treat what follows as prose."""
+        self.assertEqual(okf.parse_wikilinks("intro\n\n```\ncode [[a]]\n"), [])
+
+    def test_info_string_with_a_backtick_is_not_a_fence(self):
+        recs = okf.parse_wikilinks("``` not `a` fence\nstill prose [[a]]\n")
+        self.assertEqual([r["page"] for r in recs], ["a"])
+
+    def test_thematic_rule_region_gets_body_rules(self):
+        """A head that is not YAML is body text: inline code and indented code
+        in it must mask, or the rewriter edits a documentation sample."""
+        self.assertEqual(okf.parse_wikilinks(
+            "---\n\nWrite `[[a]]` to link.\n\n---\n\nTail.\n"), [])
+        self.assertEqual(okf.parse_wikilinks(
+            "---\n\nIntro.\n\n    code sample: [[a]]\n\n---\n\nTail.\n"), [])
+
+    def test_yaml_block_with_umlaut_and_colon_keys_is_frontmatter(self):
+        """`Übersicht … ISO 9001:2015:` is a real key in this catalogue; an
+        ASCII-only key pattern rejected 432 files and pushed their link
+        properties into the body region under body masking rules."""
+        recs = okf.parse_wikilinks(
+            '---\nQualitätsmanagement Grundlagen: "[[a]]"\n'
+            'Übersicht dokumentierter Informationen ISO 9001:2015:\n'
+            '  - "[[b]]"\n---\n# X\n')
+        self.assertEqual([(r["region"], r["page"]) for r in recs],
+                         [("frontmatter", "a"), ("frontmatter", "b")])
+
+    def test_nested_dead_zone_does_not_leak_into_raw(self):
+        """`raw` is cut from the original text, so a masked span inside the
+        brackets cannot put NUL bytes into the record or break `text[span] ==
+        raw` — which every rewrite depends on."""
+        for text in ("[[a`x`b]]", "[[a<!--c-->b]]", "[[o%%z%%ld]]"):
+            recs = okf.parse_wikilinks(text)
+            self.assertTrue(recs, text)
+            for r in recs:
+                self.assertNotIn("\x00", r["raw"], text)
+                self.assertEqual(text[r["span"][0]:r["span"][1]], r["raw"], text)
+
+    def test_region_boundary_is_exclusive_at_fm_end(self):
+        """The first body byte must be body: an off-by-one here mislabels the
+        region and, with the two masks differing, changes what is even seen."""
+        text = "---\na: 1\n---[[y]]\n"
+        self.assertEqual([r["region"] for r in okf.parse_wikilinks(text)], ["body"])
+
+    def test_inline_code_needs_content(self):
+        recs = okf.parse_wikilinks("a `` [[x]] `` b\n")
+        self.assertEqual(recs, [])
+
+    def test_nested_list_continuation_is_not_code(self):
+        recs = okf.parse_wikilinks("- a\n  - b\n\n      deep [[x]]\n")
+        self.assertEqual([r["page"] for r in recs], ["x"])
+
+    def test_second_indented_paragraph_after_a_list_is_not_code(self):
+        recs = okf.parse_wikilinks("- item\n\n    cont\n\n    more [[x]]\n")
+        self.assertEqual([r["page"] for r in recs], ["x"])
+
+    def test_indented_block_after_two_blank_lines_is_still_list_continuation(self):
+        recs = okf.parse_wikilinks("- item\n\n\n    [[x]]\n")
+        self.assertEqual([r["page"] for r in recs], ["x"])
+
+    def test_indented_code_span_stops_at_the_last_indented_line(self):
+        """A trailing blank line belongs to the prose after the block, not to
+        the block — masking it would swallow a link on the next line."""
+        recs = okf.parse_wikilinks("intro\n\n    code\n   \n[[x]]\n")
+        self.assertEqual([r["page"] for r in recs], ["x"])
+
+    def test_blank_line_inside_an_indented_block_does_not_end_it(self):
+        self.assertEqual(okf.parse_wikilinks("intro\n\n    a\n\n    b [[x]]\n"), [])
+
+    def test_fence_in_a_key_like_block_still_means_body(self):
+        """A block can open with a real `key:` line and still be body text with
+        a fence in it. Only the fence check catches that, and it decides which
+        mask the prose AFTER the fence gets."""
+        recs = okf.parse_wikilinks(
+            "---\ntype: Concept\n```\nf\n```\nSee `[[a]]` here\n---\nTail\n")
+        self.assertEqual(recs, [])
+
+    def test_percent_comment_in_frontmatter_is_masked(self):
+        self.assertEqual(okf.parse_wikilinks("---\nx: %%[[a]]%%\n---\n# X\n"), [])
+
+    def test_frontmatter_end_agrees_with_split_frontmatter(self):
+        """The region split is derived arithmetic; if it drifts from
+        split_frontmatter by even one byte the two halves of a rename disagree
+        about where frontmatter stops."""
+        for text in (
+            "---\ntype: Concept\n---\nbody\n",
+            "no frontmatter at all\n",
+            "---\ntype: Concept\nbody never closes\n",
+            "---\ntype: Concept\n---\nbody with a --- rule\n",
+            "﻿---\ntype: Concept\n---\nbom first\n",
+            "---\r\ntype: Concept\r\n---\r\ncrlf body\r\n",
+        ):
+            self.assertEqual(text[okf._frontmatter_end(text):],
+                             okf.split_frontmatter(text)[1], repr(text))
+
+
+class WikilinkResolve(WikilinkFixtureMixin, unittest.TestCase):
+    """REQ-02..REQ-05 — basename resolution, same-bundle tie-break, ambiguity,
+    unresolved."""
+
+    def test_unique_basename(self):
+        self._w("b/x.md", "---\ntype: Concept\n---\nSee [[y]].\n")
+        self._w("other/sub/y.md", "---\ntype: Concept\n---\n# Y\n")
+        self.assertEqual(self._status("b/x.md", "y"),
+                         ("resolved", ["/other/sub/y.md"]))
+
+    def test_alias_and_suffix_do_not_affect_resolution(self):
+        self._w("b/x.md", "---\ntype: Concept\n---\n"
+                          "[[y]] [[y|Label]] [[y#Heading]] [[y#^blk]] [[y.md]]\n")
+        self._w("other/sub/y.md", "---\ntype: Concept\n---\n# Y\n")
+        recs = okf.resolve_wikilink_records(
+            self._index(), okf.parse_wikilinks(self._r("b/x.md"), "b/x.md"))
+        self.assertEqual([r["candidates"] for r in recs],
+                         [["/other/sub/y.md"]] * 5)
+
+    def test_same_bundle_wins(self):
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[g]].\n")
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self.assertEqual(self._status("a/x.md", "g"), ("resolved", ["/a/g.md"]))
+
+    def test_tie_break_compares_bundles_case_insensitively(self):
+        """D10 — on this filesystem `A/x.md` and `a/x.md` are one file. A
+        case-sensitive tie-break made the same link resolve from one spelling
+        and go ambiguous from the other."""
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self.assertEqual(self._status("A/x.md", "g"), ("resolved", ["/a/g.md"]))
+
+    def test_case_folding_matches_obsidian_not_unicode_casefold(self):
+        """Obsidian folds with JavaScript `toLowerCase()`, which leaves ß alone.
+        `casefold()` maps ß to ss, so it would resolve `[[STRASSE]]` here and
+        leave the link broken in the app — and on a case-sensitive checkout it
+        would collapse `Straße.md` and `Strasse.md` into one shadowing key."""
+        self._w("a/Straße.md", "---\ntype: Concept\n---\n# S\n")
+        self.assertEqual(self._status("a/x.md", "straße"),
+                         ("resolved", ["/a/Straße.md"]))
+        self.assertEqual(self._status("a/x.md", "STRASSE"), ("unresolved", []))
+
+    def test_path_form_tail_is_compared_case_insensitively(self):
+        self._w("b/sub/name.md", "---\ntype: Concept\n---\n# N\n")
+        self.assertEqual(self._status("b/x.md", "Sub/Name"),
+                         ("resolved", ["/b/sub/name.md"]))
+        # …and with the casing on the DISK side, which a one-sided casefold
+        # of the query alone would still get wrong.
+        self._w("c/Sub/Name.md", "---\ntype: Concept\n---\n# N\n")
+        self.assertEqual(self._status("c/x.md", "sub/name"),
+                         ("resolved", ["/c/Sub/Name.md"]))
+
+    def test_reserved_file_participates_as_a_source(self):
+        """D04 — reserved files are not link TARGETS but they do carry links,
+        and the reporting surface must list them."""
+        self._w("a/index.md", "# A\n\nIntro.\n\nSee [[y]].\n")
+        self._w("a/y.md", "---\ntype: Concept\n---\n# Y\n")
+        links = okf.scan_wikilinks(self.tmp, "a")
+        self.assertEqual([(l["source"], l["status"]) for l in links],
+                         [("a/index.md", "resolved")])
+
+    def test_candidate_order_is_deterministic(self):
+        """An unsorted candidate list makes an ambiguous report differ between
+        runs on the same tree, and AC-04.1 rests on the order."""
+        for b in ("d", "a", "c", "b"):
+            self._w("{}/g.md".format(b), "---\ntype: Concept\n---\n# G\n")
+        status, cands = self._status("z/x.md", "g")
+        self.assertEqual((status, cands),
+                         ("ambiguous", ["/a/g.md", "/b/g.md", "/c/g.md", "/d/g.md"]))
+
+    def test_ambiguous_across_foreign_bundles(self):
+        self._w("c/x.md", "---\ntype: Concept\n---\nSee [[g]].\n")
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self.assertEqual(self._status("c/x.md", "g"),
+                         ("ambiguous", ["/a/g.md", "/b/g.md"]))
+
+    def test_ambiguous_within_one_bundle(self):
+        """The tie-break is bundle-level, not directory-level: two candidates in
+        the linking file's own bundle stay ambiguous."""
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[g]].\n")
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("a/sub/g.md", "---\ntype: Concept\n---\n# G\n")
+        self.assertEqual(self._status("a/x.md", "g"),
+                         ("ambiguous", ["/a/g.md", "/a/sub/g.md"]))
+
+    def test_missing_target(self):
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self.assertEqual(self._status("a/x.md", "ghost"), ("unresolved", []))
+
+    def test_path_form_target_uses_last_segment(self):
+        self._w("a/x.md", "---\ntype: Concept\n---\n[[800 Bank/Claude Code Skills]]\n")
+        page = okf.parse_wikilinks(self._r("a/x.md"))[0]["page"]
+        self.assertEqual(page, "800 Bank/Claude Code Skills")
+        self.assertEqual(self._status("a/x.md", page), ("unresolved", []))
+
+    def test_non_concept_target_is_unresolved(self):
+        """No extension-based exclusion exists (D05 retired): a clause number and
+        an image name are looked up like any other page part and reported."""
+        self._w("a/x.md", "---\ntype: Concept\n---\n[[8.3.3]] and [[diagram.png]]\n")
+        recs = okf.resolve_wikilink_records(
+            self._index(), okf.parse_wikilinks(self._r("a/x.md"), "a/x.md"))
+        self.assertEqual([r["page"] for r in recs], ["8.3.3", "diagram.png"])
+        self.assertEqual([r["status"] for r in recs], ["unresolved", "unresolved"])
+
+    def test_resolution_is_case_insensitive(self):
+        """The store's filesystem is case-insensitive and Obsidian resolves
+        accordingly: `[[YAML]]` opens `yaml.md`. A case-sensitive table calls
+        96 live catalogue links dead and lets rename orphan them unannounced."""
+        self._w("a/yaml.md", "---\ntype: Concept\n---\n# YAML\n")
+        self._w("a/GLOSSARY.md", "---\ntype: Concept\n---\n# Glossary\n")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[YAML]] and [[glossary]].\n")
+        # Both directions: an uppercase link onto a lowercase file, and a
+        # lowercase link onto an uppercase file. Casefolding only the lookup
+        # side passes the first and fails the second.
+        self.assertEqual(self._status("a/x.md", "YAML"), ("resolved", ["/a/yaml.md"]))
+        self.assertEqual(self._status("a/x.md", "glossary"), ("resolved", ["/a/GLOSSARY.md"]))
+
+    def test_path_form_target_is_honoured_when_it_matches(self):
+        """An author who spelled the directory out meant it. Answering with the
+        candidate that spelling excludes is worse than answering unresolved."""
+        self._w("a/old.md", "---\ntype: Concept\n---\n# A\n")
+        self._w("z/deep/old.md", "---\ntype: Concept\n---\n# Z\n")
+        self._w("z/x.md", "---\ntype: Concept\n---\nSee [[a/old]].\n")
+        self.assertEqual(self._status("z/x.md", "a/old"), ("resolved", ["/a/old.md"]))
+        self.assertEqual(self._status("a/src.md", "z/deep/old"),
+                         ("resolved", ["/z/deep/old.md"]))
+
+    def test_path_form_that_matches_nothing_is_unresolved(self):
+        """No fallback to the bare basename: falling back answered with the very
+        candidate the spelled-out path excludes. With `a/_plan/old.md` unindexed
+        as staging, `[[_plan/old]]` used to resolve to `a/old.md` — a different
+        file — and rename then rewrote it."""
+        self._w("a/y.md", "---\ntype: Concept\n---\n# Y\n")
+        self.assertEqual(self._status("a/x.md", "gone/y"), ("unresolved", []))
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        self._w("a/_plan/old.md", "---\ntype: Concept\n---\n# Draft\n")
+        self.assertEqual(self._status("c/x.md", "_plan/old"), ("unresolved", []))
+
+    def test_reserved_file_is_not_a_resolution_target(self):
+        """`index.md` is bundle furniture, not a concept — every bundle has one,
+        so `[[index]]` could never address a unique file."""
+        self._w("a/index.md", "# A\n\nIntro.\n")
+        self.assertEqual(self._status("a/x.md", "index"), ("unresolved", []))
+
+    def test_staging_concept_is_not_a_resolution_target(self):
+        """No reporting or check surface scans `_`-prefixed staging, so a draft
+        there must not be able to satisfy a link either — otherwise a link
+        resolves against a file nothing ever audits."""
+        self._w("a/_inbox/draft.md", "---\ntype: Concept\n---\n# Draft\n")
+        self.assertEqual(self._status("a/x.md", "draft"), ("unresolved", []))
+
+    def test_symlinked_bundle_concepts_are_resolvable_targets(self):
+        """os.walk does not descend into a symlinked SUBdirectory, so the index
+        walks per bundle — five catalogue bundles are symlinks and a root-level
+        walk would make every concept in them unresolvable."""
+        import tempfile
+        ext = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(ext, "mounted.md"), "w", encoding="utf-8") as f:
+                f.write("---\ntype: Concept\n---\n# Mounted\n")
+            os.symlink(ext, os.path.join(self.tmp, "ext-bundle"))
+            self._w("a/x.md", "---\ntype: Concept\n---\nSee [[mounted]].\n")
+            self.assertEqual(self._status("a/x.md", "mounted"),
+                             ("resolved", ["/ext-bundle/mounted.md"]))
+        finally:
+            import shutil
+            shutil.rmtree(ext, ignore_errors=True)
+
+
+class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
+    """REQ-06..REQ-09 — the `wikilinks` reporting command."""
+
+    def setUp(self):
+        super().setUp()
+        self._w("a/index.md", "# A\n\nBundle entry with an intro paragraph.\n")
+        self._w("a/y.md", "---\ntype: Concept\n---\n# Y\n")
+        self._w("a/x.md", '---\ntype: Concept\nrelated:\n  - "[[ghost]]"\n---\n'
+                          "Good [[y]] and bad [[nowhere]].\n")
+        self._w("b/z.md", "---\ntype: Concept\n---\nAlso [[y]].\n")
+
+    def test_report_line_shape(self):
+        out = _cli(self.tmp, "wikilinks")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        lines = [l for l in out.stdout.splitlines() if not l.startswith("wikilinks:")]
+        self.assertEqual(len(lines), 4)
+        for line in lines:
+            self.assertRegex(
+                line,
+                r"^(resolved|ambiguous|unresolved)\s+(body|frontmatter)\s+\S+\s+\[\[.*\]\]")
+
+    def test_summary_line_shape(self):
+        out = _cli(self.tmp, "wikilinks")
+        self.assertRegex(out.stdout.splitlines()[-1],
+                         r"^wikilinks: \d+ link\(s\), \d+ resolved, \d+ ambiguous, "
+                         r"\d+ unresolved$")
+
+    def test_exit_code_is_zero_with_findings(self):
+        """The report is a report, not a gate — `check` is where a wikilink can
+        fail a run, and only for an opted-in bundle."""
+        out = _cli(self.tmp, "wikilinks")
+        self.assertIn("unresolved", out.stdout)
+        self.assertEqual(out.returncode, 0)
+
+    def test_unresolved_filter_keeps_summary_totals(self):
+        out = _cli(self.tmp, "wikilinks", "--unresolved")
+        lines = [l for l in out.stdout.splitlines() if not l.startswith("wikilinks:")]
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(all(l.startswith("unresolved") for l in lines), lines)
+        self.assertIn("wikilinks: 4 link(s), 2 resolved, 0 ambiguous, 2 unresolved",
+                      out.stdout)
+
+    def test_json_is_parseable(self):
+        out = _cli(self.tmp, "wikilinks", "--json")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        json.loads(out.stdout)
+
+    def test_json_shape(self):
+        data = json.loads(_cli(self.tmp, "wikilinks", "--json").stdout)
+        keys = {"source", "region", "raw", "page", "alias", "suffix", "embed",
+                "status", "candidates"}
+        for link in data["links"]:
+            self.assertTrue(keys.issubset(link), sorted(keys - set(link)))
+        total = sum(sum(c.values()) for c in data["by_bundle"].values())
+        self.assertEqual(total, len(data["links"]))
+        self.assertEqual(sorted(data["by_bundle"]), ["a", "b"])
+
+    def test_target_argument_scopes_the_scan(self):
+        scoped = json.loads(_cli(self.tmp, "wikilinks", "a", "--json").stdout)
+        whole = json.loads(_cli(self.tmp, "wikilinks", "--json").stdout)
+        self.assertEqual(sorted(scoped["by_bundle"]), ["a"])
+        self.assertGreater(len(whole["links"]), len(scoped["links"]))
+
+    def test_missing_target_exits_one(self):
+        out = _cli(self.tmp, "wikilinks", "nosuchbundle")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("nosuchbundle", out.stderr)
+
+    def test_by_bundle_never_contradicts_the_link_list(self):
+        """Under --unresolved the two must still agree; a by_bundle computed
+        over the unfiltered set would report counts the caller cannot see."""
+        data = json.loads(_cli(self.tmp, "wikilinks", "--unresolved", "--json").stdout)
+        self.assertTrue(data["filtered"])
+        self.assertEqual(sum(sum(c.values()) for c in data["by_bundle"].values()),
+                         len(data["links"]))
+        self.assertEqual(data["totals"],
+                         {"resolved": 2, "ambiguous": 0, "unresolved": 2})
+
+    def test_embed_is_visible_in_the_report(self):
+        """`raw` drops the `!`, so without a marker an embed and a plain link
+        print identically."""
+        self._w("a/e.md", "---\ntype: Concept\n---\n![[y]]\n")
+        out = _cli(self.tmp, "wikilinks", "a")
+        self.assertIn("(embed)", out.stdout)
+
+    def test_target_must_name_a_bundle(self):
+        """`..` walked out of the catalogue and `_plan` scanned a staging
+        directory the reporting surface is defined to exclude."""
+        self._w("_plan/note.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self._w("a/_plan/note.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self._w("a/assets/note.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        # iter_all_md prunes these names from `dirnames`, never from the
+        # directory it is handed, so a target naming one scans it regardless.
+        for bad in ("..", ".", "./", "_plan", "a/_plan", "a/assets",
+                    "a/nosuchsubdir", "nosuchbundle"):
+            out = _cli(self.tmp, "wikilinks", bad)
+            self.assertEqual(out.returncode, 1, bad)
+            self.assertRegex(out.stderr, r"not a (directory|scannable bundle path)", bad)
+            self.assertIn(bad, out.stderr, bad)
+
+
+class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
+    """REQ-10..REQ-12 — rename keeps inbound wikilinks intact in both regions,
+    discloses them in the dry-run, and refuses to guess on ambiguity."""
+
+    def setUp(self):
+        super().setUp()
+        self._w("a/index.md", "# A\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+
+    def _rename(self, old, new, apply=False):
+        import contextlib
+        import io
+        import types
+        args = types.SimpleNamespace(old=old, new=new, apply=apply, force=False)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_rename(self.tmp, args)
+        return buf.getvalue()
+
+    def test_inbound_plain_is_rewritten(self):
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertIn("[[new]]", self._r("a/src.md"))
+        self.assertNotIn("[[old]]", self._r("a/src.md"))
+
+    def test_alias_and_suffix_survive(self):
+        self._w("a/src.md", "---\ntype: Concept\n---\n"
+                            "[[old|Label]] [[old#Heading]] [[old#^blk]] ![[old]]\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        body = self._r("a/src.md")
+        for expected in ("[[new|Label]]", "[[new#Heading]]", "[[new#^blk]]", "![[new]]"):
+            self.assertIn(expected, body)
+
+    def test_frontmatter_property_is_rewritten_and_stays_parseable(self):
+        self._w("a/src.md", '---\ntype: Concept\nrelated:\n  - "[[old]]"\n---\n# Src\n')
+        before = set(okf.split_frontmatter(self._r("a/src.md"))[0])
+        self._rename("a/old.md", "a/new.md", apply=True)
+        after_text = self._r("a/src.md")
+        self.assertIn('- "[[new]]"', after_text)
+        self.assertEqual(set(okf.split_frontmatter(after_text)[0]), before)
+
+    def test_directory_only_move_rewrites_nothing(self):
+        """A wikilink carries no path, so only a basename change can break one."""
+        self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[x]].\n")
+        before = self._r("a/src.md")
+        self._rename("a/x.md", "a/sub/x.md", apply=True)
+        self.assertEqual(self._r("a/src.md"), before)
+
+    def test_code_spans_are_not_rewritten(self):
+        self._w("a/src.md", "---\ntype: Concept\n---\n"
+                            "```\n[[old]]\n```\n\nand `[[old]]` inline.\n")
+        before = self._r("a/src.md")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertEqual(self._r("a/src.md"), before)
+
+    def test_dry_run_lists_and_writes_nothing(self):
+        self._w("a/src.md", '---\ntype: Concept\nrelated:\n  - "[[old]]"\n---\n'
+                            "Body [[old]] too.\n")
+        before = self._r("a/src.md")
+        out = self._rename("a/old.md", "a/new.md")
+        wl_lines = [l for l in out.splitlines() if l.strip().startswith("wikilink ")]
+        self.assertEqual(len(wl_lines), 2)
+        self.assertTrue(any("[frontmatter]" in l for l in wl_lines), wl_lines)
+        self.assertTrue(any("[body]" in l for l in wl_lines), wl_lines)
+        self.assertEqual(self._r("a/src.md"), before)
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp, "a/old.md")))
+
+    def test_summary_counts_wikilinks_separately(self):
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]] and [Old](/a/old.md).\n")
+        out = self._rename("a/old.md", "a/new.md")
+        self.assertRegex(out, r"rename \(dry-run\): 1 inbound, 0 outbound link\(s\), "
+                              r"1 wikilink\(s\) \(0 skipped-ambiguous\), ")
+
+    def test_ambiguous_inbound_is_reported_not_rewritten(self):
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("c/x.md", "---\ntype: Concept\n---\nSee [[g]].\n")
+        before = self._r("c/x.md")
+        dry = self._rename("a/g.md", "a/g2.md")
+        self.assertIn("skipped-ambiguous", dry)
+        self.assertIn("/a/g.md", dry)
+        self.assertIn("/b/g.md", dry)
+        applied = self._rename("a/g.md", "a/g2.md", apply=True)
+        self.assertIn("skipped-ambiguous", applied)
+        self.assertEqual(self._r("c/x.md"), before)
+
+    def test_inbound_wikilink_in_staging_dir_is_rewritten(self):
+        """C02 — the rename scan must not leave a stale reference behind in a
+        `_`-prefixed staging directory, which the reporting surfaces skip.
+        Root-level staging counts too: build_ref_matrix walks the root, so a
+        per-bundle-only walk would honour the constraint for `a/_intake` and
+        quietly break it for `_inbox`."""
+        self._w("a/_intake/draft.md", "See [[old]].\n")
+        self._w("_inbox/draft.md", "See [[old]].\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertIn("[[new]]", self._r("a/_intake/draft.md"))
+        self.assertIn("[[new]]", self._r("_inbox/draft.md"))
+
+    def test_rename_reaches_every_file_its_markdown_half_reaches(self):
+        """The wikilink pass must cover exactly what build_ref_matrix covers.
+        Pruning `assets/` from it left this file with its markdown link updated
+        and its wikilink dangling in the same line — a worse outcome than
+        touching a file the reporting surfaces do not list."""
+        self._w("a/assets/note.md", "Md [Old](/a/old.md) and wiki [[old]].\n")
+        self._w("ROOTNOTE.md", "Root-level: [Old](/a/old.md) and [[old]].\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        for rel in ("a/assets/note.md", "ROOTNOTE.md"):
+            self.assertIn("[[new]]", self._r(rel), rel)
+            self.assertIn("(/a/new.md)", self._r(rel), rel)
+
+    def test_renaming_into_an_occupied_basename_is_refused(self):
+        """S1 — the rename manufactured the exact ambiguity the design refuses
+        to commit: `[[old]]` became `[[new]]` while a different `/b/new.md`
+        already owned that name, leaving both addresses ambiguous and a
+        bystander link collateral damage."""
+        self._w("b/new.md", "---\ntype: Concept\n---\n# Other New\n")
+        self._w("c/src.md", "---\ntype: Concept\n---\nDistinct: [[old]] and [[new]].\n")
+        before = self._r("c/src.md")
+        with self.assertRaises(SystemExit) as ctx:
+            self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(self._r("c/src.md"), before)
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp, "a/old.md")))
+
+    def test_occupied_basename_is_disclosed_in_the_dry_run(self):
+        self._w("b/new.md", "---\ntype: Concept\n---\n# Other New\n")
+        self._w("c/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        out = self._rename("a/old.md", "a/new.md")
+        self.assertIn("wikilink-collision", out)
+        self.assertIn("/b/new.md", out)
+
+    def test_occupied_basename_proceeds_under_force(self):
+        self._w("b/new.md", "---\ntype: Concept\n---\n# Other New\n")
+        self._w("c/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        import contextlib
+        import io
+        import types
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_rename(self.tmp, types.SimpleNamespace(
+                old="a/old.md", new="a/new.md", apply=True, force=True))
+        self.assertIn("[[new]]", self._r("c/src.md"))
+        self.assertIn("wikilink-collision", buf.getvalue())
+
+    def test_path_form_inbound_keeps_its_prefix(self):
+        self._w("c/x.md", "---\ntype: Concept\n---\nSee [[a/old]].\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertIn("[[a/new]]", self._r("c/x.md"))
+
+    def test_foreign_same_named_concept_is_not_rewritten(self):
+        """`b/src.md`'s `[[old]]` resolves to `/b/old.md` via the bundle
+        tie-break, so renaming `/a/old.md` must leave it alone."""
+        self._w("b/old.md", "---\ntype: Concept\n---\n# B Old\n")
+        self._w("b/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        before = self._r("b/src.md")
+        self._rename("a/old.md", "a/renamed.md", apply=True)
+        self.assertEqual(self._r("b/src.md"), before)
+
+    def test_self_reference_is_rewritten_at_the_new_location(self):
+        """The file holding the link is the file being moved; writing to the
+        path it just vacated raises FileNotFoundError."""
+        self._w("a/old.md", "---\ntype: Concept\n---\nI am [[old]].\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertIn("[[new]]", self._r("a/new.md"))
+
+    def test_applier_masking_is_exercised_on_a_mixed_file(self):
+        """A file with a real link AND a fenced one reaches
+        _apply_wikilink_rewrites (the planner alone cannot protect it, because
+        the rewrite list is not empty)."""
+        self._w("a/src.md", "---\ntype: Concept\n---\n"
+                            "real [[old]]\n\n```\nfenced [[old]]\n```\n\n"
+                            "    indented [[old]]\n\n%% commented [[old]] %%\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        after = self._r("a/src.md")
+        self.assertIn("real [[new]]", after)
+        self.assertIn("fenced [[old]]", after)
+        self.assertIn("indented [[old]]", after)
+        self.assertIn("commented [[old]] %%", after)
+
+    def test_same_basename_move_plans_no_wikilink_work(self):
+        """The short-circuit is the reason a directory-only move is free; an
+        identity rewrite would pass the byte-comparison test either way."""
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        plan = okf.plan_rename(self.tmp,
+                               os.path.join(self.tmp, "a/old.md"),
+                               os.path.join(self.tmp, "a/sub/old.md"))
+        self.assertEqual(plan["wikilinks"], [])
+        self.assertEqual(plan["wikilink_collisions"], [])
+
+    def test_case_variant_inbound_is_rewritten(self):
+        """The planner filtered candidates case-sensitively while the resolver
+        matched case-insensitively, so every case-variant inbound link was
+        dropped from the plan and orphaned by the move that reported success."""
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[OLD]] and [[old]].\n")
+        out = self._rename("a/old.md", "a/new.md", apply=True)
+        # Both are rewritten, and both land on the file's actual spelling —
+        # the author's casing was never the filename's to begin with.
+        self.assertEqual(self._r("a/src.md"),
+                         "---\ntype: Concept\n---\nSee [[new]] and [[new]].\n")
+        self.assertIn("rewrote 2 wikilink(s)", out)
+
+    def test_case_variant_ambiguity_is_disclosed(self):
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("c/x.md", "---\ntype: Concept\n---\nSee [[G]].\n")
+        self.assertIn("skipped-ambiguous", self._rename("a/g.md", "a/g2.md"))
+
+    def test_collision_counts_links_already_pointing_at_the_other_concept(self):
+        """A bystander `[[new]]` loses its unique target without this rename
+        touching a byte of it, so an empty rewrite list must not wave the move
+        through."""
+        self._w("b/new.md", "---\ntype: Concept\n---\n# Other New\n")
+        self._w("c/ref.md", "---\ntype: Concept\n---\nOnly [[new]] here.\n")
+        with self.assertRaises(SystemExit) as ctx:
+            self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("turns-ambiguous", self._rename("a/old.md", "a/new.md"))
+
+    def test_nested_masked_spans_survive_byte_identical(self):
+        """A stash-and-restore mask lost content whenever one masked span held
+        another's placeholder: `re.sub` does not rescan its replacement, so the
+        inner token reached disk verbatim and its text was gone."""
+        cases = {
+            "a/c1.md": "Live [[old]].\n\n<!-- note: use `foo --bar` here -->\n",
+            "a/c2.md": "Live [[old]].\n\n%% todo: rename `old` soon %%\n",
+            "a/c3.md": "Live [[old]].\n\n<!--\n```\ncode [[old]]\n```\n-->\n",
+            "a/c4.md": "Live [[old]].\n\nintro\n\n    run `make build` then go\n",
+            "a/c5.md": "Live [[old]].\n\nintro\n\n\tdef f(): return `x`",
+        }
+        for rel, body in cases.items():
+            self._w(rel, "---\ntype: Concept\n---\n" + body)
+        self._rename("a/old.md", "a/new.md", apply=True)
+        for rel, body in cases.items():
+            after = self._r(rel)
+            self.assertNotIn("\x00", after, rel)
+            self.assertEqual(after, ("---\ntype: Concept\n---\n" + body)
+                             .replace("Live [[old]]", "Live [[new]]"), rel)
+
+    def test_pre_existing_nul_is_preserved(self):
+        """The mask blanks to NUL, so a file already containing one used to have
+        it expanded into a stashed token's content on rewrite. Splicing by
+        offset against the original text removes that class entirely."""
+        self._w("a/src.md", "---\ntype: Concept\n---\nLive [[old]] and \x00 raw.\n")
+        before = self._r("a/src.md")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertEqual(self._r("a/src.md"), before.replace("[[old]]", "[[new]]"))
+
+    def test_symlinked_bundle_inbound_is_rewritten(self):
+        """os.walk does not descend into a symlinked subdirectory, so the root
+        walk alone cannot see a mounted bundle's files (C07, ASM-05)."""
+        import tempfile
+        ext = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(ext, "src.md"), "w", encoding="utf-8") as f:
+                f.write("---\ntype: Concept\n---\nSee [[old]].\n")
+            os.symlink(ext, os.path.join(self.tmp, "mounted"))
+            self._rename("a/old.md", "a/new.md", apply=True)
+            with open(os.path.join(ext, "src.md"), encoding="utf-8") as f:
+                self.assertIn("[[new]]", f.read())
+        finally:
+            import shutil
+            shutil.rmtree(ext, ignore_errors=True)
+
+    def test_cross_bundle_move_repoints_a_path_form_link(self):
+        """Carrying the old prefix over unchanged turned `[[a/old]]` into
+        `[[a/new]]` after a move to bundle `b` — an address resolving to
+        nothing, reported as a successful rewrite."""
+        self._w("b/index.md", "# B\n\nIntro.\n")
+        self._w("c/x.md", "---\ntype: Concept\n---\nSee [[a/old]].\n")
+        self._rename("a/old.md", "b/new.md", apply=True)
+        self.assertIn("[[b/new]]", self._r("c/x.md"))
+
+    def test_directory_move_repoints_a_path_form_link(self):
+        """C03 as written — "only a basename change can invalidate a wikilink" —
+        is false for the path form: a pure directory move breaks it."""
+        self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._w("c/plain.md", "---\ntype: Concept\n---\nSee [[x]].\n")
+        self._w("c/path.md", "---\ntype: Concept\n---\nSee [[a/x]].\n")
+        self._rename("a/x.md", "a/sub/x.md", apply=True)
+        self.assertIn("[[x]]", self._r("c/plain.md"))       # plain form unaffected
+        self.assertIn("[[sub/x]]", self._r("c/path.md"))
+
+    def test_md_suffix_is_preserved_by_the_rewrite(self):
+        self._w("a/src.md", "---\ntype: Concept\n---\n[[old.md]] and [[old.md|A]]\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        after = self._r("a/src.md")
+        self.assertIn("[[new.md]]", after)
+        self.assertIn("[[new.md|A]]", after)
+
+    def test_case_only_rename_still_rewrites(self):
+        """old_key == new_key on a case-only rename. Testing the bystander
+        branch first classified every genuine inbound link as a bystander and
+        dropped the whole wikilink pass."""
+        self._w("a/Foo.md", "---\ntype: Concept\n---\n# Foo\n")
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[Foo]] and [F](/a/Foo.md).\n")
+        self._rename("a/Foo.md", "a/foo.md", apply=True)
+        after = self._r("a/src.md")
+        self.assertIn("[[foo]]", after)
+        self.assertIn("(/a/foo.md)", after)
+
+    def test_uppercase_source_basename_is_matched(self):
+        self._w("a/Old2.md", "---\ntype: Concept\n---\n# O\n")
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old2]].\n")
+        self._rename("a/Old2.md", "a/fresh.md", apply=True)
+        self.assertIn("[[fresh]]", self._r("a/src.md"))
+
+    def test_differently_cased_source_path_still_matches(self):
+        """On a case-insensitive filesystem `A/old.md` reaches `a/old.md`, so
+        the path the caller typed and the path in the index differ in case. A
+        case-sensitive comparison of the two rewrote nothing and reported
+        success — the silent-orphan path again, one layer down."""
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        self._rename("A/old.md", "A/new.md", apply=True)
+        self.assertIn("[[new]]", self._r("a/src.md"))
+
+    def test_basename_preserving_move_that_turns_a_link_ambiguous_is_refused(self):
+        """The token does not change, so nothing is rewritten — but its meaning
+        does. 81 basenames in the live catalogue exist in more than one bundle,
+        so this is the shape a real move takes."""
+        self._w("b/old.md", "---\ntype: Concept\n---\n# B Old\n")
+        self._w("d/old.md", "---\ntype: Concept\n---\n# D Old\n")
+        self._w("b/src.md", "---\ntype: Concept\n---\nsee [[old]].\n")
+        self.assertEqual(self._status("b/src.md", "old"), ("resolved", ["/b/old.md"]))
+        with self.assertRaises(SystemExit) as ctx:
+            self._rename("b/old.md", "c/old.md", apply=True)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp, "b/old.md")))
+        self.assertIn("turns-ambiguous", self._rename("b/old.md", "c/old.md"))
+
+    def test_whitespace_destination_basename_is_refused(self):
+        """The scanner strips the page part, the index does not strip filenames,
+        so the rewritten link could never meet its target."""
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        with self.assertRaises(SystemExit):
+            self._rename("a/old.md", "a/ sp .md", apply=True)
+        self.assertIn("[[old]]", self._r("a/src.md"))
+
+    def test_control_character_destination_basename_is_refused(self):
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        with self.assertRaises(SystemExit):
+            self._rename("a/old.md", "a/ne\nw.md", apply=True)
+        self.assertIn("[[old]]", self._r("a/src.md"))
+
+    def test_differently_cased_markdown_link_is_rewritten_too(self):
+        """A link may spell its target in a different case than the disk does;
+        on this filesystem that link is live. The wikilink half followed it and
+        the markdown half did not, leaving one dead beside the other."""
+        self._w("a/src.md", "---\ntype: Concept\n---\n[x](/a/OLD.md) and [[OLD]].\n")
+        self._rename("a/old.md", "a/renamed.md", apply=True)
+        after = self._r("a/src.md")
+        self.assertIn("(/a/renamed.md)", after)
+        self.assertIn("[[renamed]]", after)
+
+    def test_outbound_pass_masks_like_the_applier(self):
+        """Planner and applier must agree, or the run reports rewrites it then
+        declines to make."""
+        self._w("b/index.md", "# B\n\nIntro.\n")
+        self._w("a/target.md", "---\ntype: Concept\n---\n# T\n")
+        self._w("a/mover.md", "---\ntype: Concept\n---\n"
+                              "Real [T](/a/target.md)\n\n```\n[T](/a/target.md)\n```\n")
+        out = self._rename("a/mover.md", "b/mover.md")
+        self.assertIn("0 outbound link(s)", out)
+
+    def test_force_overwrite_discloses_what_it_clobbers(self):
+        self._w("b/keep.md", "---\ntype: Concept\n---\n# Keep\n")
+        self._w("b/ref.md", "---\ntype: Concept\n---\n[k](/b/keep.md) and [[keep]].\n")
+        self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
+        import contextlib
+        import io
+        import types
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_rename(self.tmp, types.SimpleNamespace(
+                old="a/x.md", new="b/keep.md", apply=True, force=True))
+        self.assertIn("overwrote", buf.getvalue())
+        self.assertIn("b/keep.md", buf.getvalue())
+
+    def test_reserved_destination_is_refused(self):
+        """A reserved name is not a concept, so nothing resolves to it: every
+        inbound link would be rewritten to an address dead on arrival, and the
+        run would still report success."""
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        before = self._r("a/src.md")
+        for dest in ("a/sub/index.md", "a/log.md", "a/README.md"):
+            with self.assertRaises(SystemExit) as ctx:
+                self._rename("a/old.md", dest, apply=True)
+            self.assertEqual(ctx.exception.code, 2, dest)
+        self.assertEqual(self._r("a/src.md"), before)
+
+    def test_empty_destination_basename_is_refused(self):
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        with self.assertRaises(SystemExit):
+            self._rename("a/old.md", "a/.md", apply=True)
+        self.assertIn("[[old]]", self._r("a/src.md"))
+
+    def test_crlf_line_endings_survive(self):
+        """read_file translates CRLF to LF and write_file persists it, so a
+        rewrite used to rewrite every line ending in the file, not the link."""
+        self._w("a/src.md", "---\r\ntype: Concept\r\n---\r\n\r\nSee [[old]].\r\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        with open(os.path.join(self.tmp, "a/src.md"), newline="", encoding="utf-8") as f:
+            after = f.read()
+        self.assertIn("[[new]]", after)
+        self.assertEqual(after.count("\r\n"), 5)
+
+    def test_undecodable_file_is_skipped_not_mangled(self):
+        """errors='replace' would write U+FFFD over the original bytes."""
+        ap = os.path.join(self.tmp, "a/bin.md")
+        with open(ap, "wb") as f:
+            f.write(b"---\ntype: Concept\n---\nCaf\xe9 sees [[old]].\n")
+        before = open(ap, "rb").read()
+        self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertEqual(open(ap, "rb").read(), before)
+
+    def test_markdown_pass_does_not_rewrite_inside_a_fence(self):
+        """The two halves of one rename must apply one policy. A whole-file
+        str.replace edited a fenced sample the planner never reported."""
+        self._w("a/src.md", "---\ntype: Concept\n---\n"
+                            "real [O](/a/old.md)\n\n```\nexample [O](/a/old.md)\n```\n")
+        self._rename("a/old.md", "a/new.md", apply=True)
+        after = self._r("a/src.md")
+        self.assertIn("real [O](/a/new.md)", after)
+        self.assertIn("example [O](/a/old.md)", after)
+
+    def test_symlinked_bundle_markdown_link_is_rewritten_too(self):
+        """build_ref_matrix walked only the root, so a mounted file got its
+        wikilink updated and its markdown link left dangling in the same line."""
+        import tempfile
+        ext = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(ext, "src.md"), "w", encoding="utf-8") as f:
+                f.write("---\ntype: Concept\n---\nMd [O](/a/old.md) and wiki [[old]].\n")
+            os.symlink(ext, os.path.join(self.tmp, "mounted"))
+            self._rename("a/old.md", "a/new.md", apply=True)
+            with open(os.path.join(ext, "src.md"), encoding="utf-8") as f:
+                after = f.read()
+            self.assertIn("[[new]]", after)
+            self.assertIn("(/a/new.md)", after)
+        finally:
+            import shutil
+            shutil.rmtree(ext, ignore_errors=True)
+
+    def test_collision_sees_a_staging_file_the_index_skips(self):
+        """The resolution index skips staging; the rewrite pass does not. A
+        collision looked for in the index alone missed a draft that Obsidian
+        itself indexes."""
+        self._w("a/_draft/new.md", "---\ntype: Concept\n---\n# Draft New\n")
+        self._w("c/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        with self.assertRaises(SystemExit) as ctx:
+            self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_collision_lookup_is_case_insensitive(self):
+        """The link lives in a third bundle, so the tie-break cannot rescue it
+        and the differently-cased collision must still be seen."""
+        self._w("b/Foo.md", "---\ntype: Concept\n---\n# Foo\n")
+        self._w("c/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        with self.assertRaises(SystemExit):
+            self._rename("a/old.md", "a/foo.md", apply=True)
+
+    def test_collision_the_tie_break_absorbs_is_not_refused(self):
+        """A bystander in its own bundle stays resolved through the tie-break,
+        so claiming it turns ambiguous refuses a harmless rename."""
+        self._w("z/foo.md", "---\ntype: Concept\n---\n# Foo\n")
+        self._w("z/ref.md", "---\ntype: Concept\n---\nSee [[foo]].\n")
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        self._rename("a/old.md", "a/foo.md", apply=True)
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp, "a/foo.md")))
+        self.assertIn("[[foo]]", self._r("z/ref.md"))
+
+    def test_summary_separates_rewritten_from_skipped(self):
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("c/x.md", "---\ntype: Concept\n---\nSee [[g]].\n")
+        self._w("a/y.md", "---\ntype: Concept\n---\nSee [[g]].\n")
+        out = self._rename("a/g.md", "a/g2.md")
+        self.assertIn("1 wikilink(s) (1 skipped-ambiguous)", out)
+
+
+class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
+    """REQ-13/REQ-14 — the wikilink-resolvable check and its opt-in gate."""
+
+    def _optin(self, *bundles):
+        self._w(".okf.toml", "wikilink_checked_bundles = [{}]\n".format(
+            ", ".join('"{}"'.format(b) for b in bundles)))
+
+    def _findings(self, target=None):
+        errors, warnings = okf.run_checks(self.tmp, target)
+        return [(n, p, m) for n, p, m in errors + warnings if n == "wikilink-resolvable"]
+
+    def test_warns_for_opted_in_bundle(self):
+        self._optin("a")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        found = self._findings()
+        self.assertEqual([f[1] for f in found], ["a/x.md"])
+
+    def test_one_warning_per_file_lists_every_target(self):
+        self._optin("a")
+        self._w("a/x.md", "---\ntype: Concept\n---\n[[g1]] [[g2]] [[g3]]\n")
+        found = self._findings()
+        self.assertEqual(len(found), 1)
+        for target in ("[[g1]]", "[[g2]]", "[[g3]]"):
+            self.assertIn(target, found[0][2])
+
+    def test_frontmatter_only_file_is_flagged(self):
+        self._optin("a")
+        self._w("a/x.md", '---\ntype: Concept\nrelated:\n  - "[[ghost]]"\n---\n# X\n')
+        self.assertEqual([f[1] for f in self._findings()], ["a/x.md"])
+
+    def test_reserved_file_participates(self):
+        self._optin("a")
+        self._w("a/index.md", "# A\n\nIntro.\n\nSee [[ghost]].\n")
+        self.assertEqual([f[1] for f in self._findings()], ["a/index.md"])
+
+    def test_symlinked_bundle_participates(self):
+        import tempfile
+        ext = tempfile.mkdtemp()
+        try:
+            with open(os.path.join(ext, "x.md"), "w", encoding="utf-8") as f:
+                f.write("---\ntype: Concept\n---\nSee [[ghost]].\n")
+            os.symlink(ext, os.path.join(self.tmp, "mounted"))
+            self._optin("mounted")
+            self.assertEqual([f[1] for f in self._findings()], ["mounted/x.md"])
+        finally:
+            import shutil
+            shutil.rmtree(ext, ignore_errors=True)
+
+    def test_strict_run_exits_one(self):
+        self._optin("a")
+        self._w("a/index.md", "# A\n\nIntro.\n")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        out = _cli(self.tmp, "check", "--strict")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("wikilink-resolvable", out.stdout)
+
+    def test_absent_config_is_silent(self):
+        """The state the live catalogue is in today: 1930 unresolved wikilinks
+        and not one warning, because no .okf.toml opts a bundle in."""
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self.assertEqual(self._findings(), [])
+
+    def test_partial_optin_is_scoped(self):
+        self._optin("a")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self._w("b/y.md", "---\ntype: Concept\n---\nSee [[phantom]].\n")
+        self.assertEqual([f[1] for f in self._findings()], ["a/x.md"])
+
+    def test_resolved_wikilink_in_opted_in_bundle_is_clean(self):
+        self._optin("a")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[y]].\n")
+        self._w("a/y.md", "---\ntype: Concept\n---\n# Y\n")
+        self.assertEqual(self._findings(), [])
+
+    def test_severity_is_warning_not_error(self):
+        """The rule ships silent and non-blocking: an opted-in bundle with dead
+        wikilinks must not fail a plain `check`. As an error it would fail 457
+        files the day `qm-wiki` opts in."""
+        self._optin("a")
+        self._w("a/index.md", "# A\n\nIntro.\n")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        errors, warnings = okf.run_checks(self.tmp, None)
+        self.assertIn("wikilink-resolvable", [w[0] for w in warnings])
+        self.assertNotIn("wikilink-resolvable", [e[0] for e in errors])
+        self.assertEqual(_cli(self.tmp, "check").returncode, 0)
+
+    def test_dotted_target_does_not_defeat_the_gate(self):
+        """`./a` yielded bundle "." and switched this one check off while every
+        other check kept firing."""
+        self._optin("a")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self.assertEqual([f[1] for f in self._findings("./a")], ["a/x.md"])
+
+    def test_index_is_not_built_without_an_opt_in(self):
+        """The index costs a full catalogue walk. Nothing else pins that an
+        unconfigured catalogue skips it."""
+        calls = []
+        real = okf.build_concept_basename_index
+        okf.build_concept_basename_index = lambda root: (calls.append(root), real(root))[1]
+        try:
+            self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+            okf.run_checks(self.tmp, None)
+            self.assertEqual(calls, [])
+            self._optin("a")
+            okf.run_checks(self.tmp, None)
+            self.assertEqual(len(calls), 1)
+            calls.clear()
+            okf.run_checks(self.tmp, "b")        # scope excludes the opted-in bundle
+            self.assertEqual(calls, [])
+        finally:
+            okf.build_concept_basename_index = real
+
+    def test_non_array_config_is_announced_not_swallowed(self):
+        """A config that reads as if it opted a bundle in, but does not, is
+        worse than no config: the run looks clean for the wrong reason."""
+        import contextlib
+        import io
+        self._w(".okf.toml", 'wikilink_checked_bundles = "a"\n')
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            got = okf.wikilink_checked_bundles(okf.load_okf_config(self.tmp), self.tmp)
+        self.assertEqual(got, set())
+        self.assertIn("must be an array", err.getvalue())
+
+    def test_unknown_bundle_in_config_is_announced(self):
+        import contextlib
+        import io
+        self._optin("nosuchbundle")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            okf.wikilink_checked_bundles(okf.load_okf_config(self.tmp), self.tmp)
+        self.assertIn("nosuchbundle", err.getvalue())
+
+    def test_case_variant_bundle_name_does_not_defeat_the_gate(self):
+        """The store's filesystem is case-insensitive, so `check A` reaches
+        bundle `a` with ctx["bundle"] reading "A". An exact-string gate switched
+        this one check off there while every other check kept firing."""
+        self._optin("a")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self.assertEqual([f[1] for f in self._findings("A")], ["A/x.md"])
+        # …and the other direction: the config's own casing must not matter.
+        self._optin("A")
+        self.assertEqual([f[1] for f in self._findings()], ["a/x.md"])
+
+    def test_ambiguous_wikilink_also_warns(self):
+        """REQ-13 names unresolved AND ambiguous; only the first half was
+        asserted, so dropping the second survived every test."""
+        self._optin("c")
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("c/x.md", "---\ntype: Concept\n---\nSee [[g]].\n")
+        self.assertEqual([f[1] for f in self._findings()], ["c/x.md"])
+
+    def test_staging_subdir_target_is_not_checked(self):
+        """iter_all_md prunes staging from `dirnames`, never from the directory
+        it is handed, so `check <bundle>/_plan` walked into a tree the
+        Non-Goals exclude from every reporting surface."""
+        self._optin("a")
+        self._w("a/_plan/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self._w("a/assets/y.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
+        self.assertEqual(self._findings("a/_plan"), [])
+        self.assertEqual(self._findings("a/assets"), [])
+
+    def test_unknown_bundle_note_respects_case(self):
+        """The note said the opposite of what happened: the gate casefolded the
+        config entries, the diagnostic did not."""
+        import contextlib
+        import io
+        self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._optin("A")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            got = okf.wikilink_checked_bundles(okf.load_okf_config(self.tmp), self.tmp)
+        self.assertEqual(got, {"a"})
+        self.assertNotIn("non-bundle", err.getvalue())
+
+    def test_missing_target_directory_is_not_a_clean_run(self):
+        """`check b/nope` scanned nothing and exited 0 — a clean bill of health
+        for a directory that does not exist. A renamed bundle passed CI green."""
+        self._w("a/index.md", "# A\n\nIntro.\n")
+        for bad in ("a/nope", "nosuchbundle"):
+            out = _cli(self.tmp, "check", bad)
+            self.assertEqual(out.returncode, 1, bad)
+            self.assertIn(bad, out.stderr, bad)
+
+    def test_malformed_config_fails_with_a_message_not_a_traceback(self):
+        """load_okf_config is now on every check path, so a parse failure has to
+        name the file — including when --types made it irrelevant before."""
+        self._w(".okf.toml", "this is not = = toml\n")
+        out = _cli(self.tmp, "check", "--types", os.path.join(self.tmp, "TYPES.md"))
+        self.assertEqual(out.returncode, 1)
+        self.assertIn(".okf.toml is not valid TOML", out.stderr)
+        self.assertNotIn("Traceback", out.stderr)
 
 
 if __name__ == "__main__":

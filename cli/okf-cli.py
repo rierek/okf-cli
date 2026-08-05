@@ -1594,26 +1594,35 @@ def build_ref_matrix(scan_root, target_abspath):
     target_abspath = os.path.abspath(target_abspath)
     link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     hits = []
-    for dirpath, dirnames, filenames in os.walk(scan_root):
-        _prune_walk_dirs(dirnames)
-        for fn in filenames:
-            if not fn.endswith(".md"):
+    # Same traversal and same dead-zone mask as the wikilink half of a rename,
+    # so the two halves of one move cannot disagree about which files and which
+    # occurrences they cover. A root-level walk alone cannot enter a symlinked
+    # bundle, which left a mounted file with its wikilink rewritten and its
+    # markdown link dangling in the same line.
+    for ap in iter_rename_scan_md(scan_root):
+        dirpath = os.path.dirname(ap)
+        text = read_file(ap)
+        for m in link_re.finditer(wikilink_scan_text(text)):
+            raw = text[m.start(1):m.end(1)]
+            tgt = raw.split("#", 1)[0].split("?", 1)[0].strip()
+            if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
                 continue
-            ap = os.path.join(dirpath, fn)
-            body = re.sub(r"```.*?```", "", read_file(ap), flags=re.S)
-            for m in link_re.finditer(body):
-                raw = m.group(1)
-                tgt = raw.split("#", 1)[0].split("?", 1)[0].strip()
-                if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
+            if tgt.startswith("/"):
+                # OKF (catalogue-root convention): leading / = scan_root
+                # (= catalogue root = Obsidian vault root), NOT the bundle.
+                resolved = os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
+            else:
+                resolved = os.path.abspath(os.path.join(dirpath, tgt))
+            if resolved != target_abspath:
+                # A link may spell its target in a different case than the disk
+                # does; on a case-insensitive filesystem that link is live and
+                # must be rewritten too. samefile only runs on a case-equal
+                # near-miss, so this stays correct on a case-sensitive one.
+                if (resolved.lower() != target_abspath.lower()
+                        or not os.path.exists(resolved)
+                        or not os.path.samefile(resolved, target_abspath)):
                     continue
-                if tgt.startswith("/"):
-                    # OKF (catalogue-root convention): leading / = scan_root
-                    # (= catalogue root = Obsidian vault root), NOT the bundle.
-                    resolved = os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
-                else:
-                    resolved = os.path.abspath(os.path.join(dirpath, tgt))
-                if resolved == target_abspath:
-                    hits.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), raw))
+            hits.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), raw))
     return hits
 
 
@@ -2113,7 +2122,12 @@ def load_okf_config(root):
         return {}
     import tomllib
     with open(p, "rb") as f:
-        data = tomllib.load(f)
+        try:
+            data = tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            # Every caller now reaches this on every run, so a parse failure has
+            # to name the file and the reason instead of printing a traceback.
+            sys.exit("ERROR: {} is not valid TOML: {}".format(p, e))
     for k in ("kc_root", "types_source"):
         if isinstance(data.get(k), str):
             data[k] = os.path.expanduser(data[k])
@@ -2482,9 +2496,454 @@ def resolve_scopes(root, target):
     """[(bundle, bundle_path), ...] for `target` (<bundle> or <bundle>/<subdir>),
     or every bundle in the catalogue when target is None."""
     if target:
-        tp = os.path.join(root, target.rstrip("/"))
-        return [(target.split("/")[0], tp)]
+        # An absolute target addresses a directory directly and must keep doing
+        # so — os.path.join(root, "/x") discards root, and normalising it into a
+        # relative segment would silently rescope the scan onto a path that does
+        # not exist, reporting a clean run over nothing.
+        if os.path.isabs(target):
+            tp = os.path.normpath(target)
+            rel = os.path.relpath(tp, root).replace(os.sep, "/")
+            return [("" if rel.startswith("..") else rel.split("/")[0], tp)]
+        # normpath otherwise: an unnormalised `./a` yielded bundle "." and
+        # silently defeated every bundle-name-keyed rule (the wikilink opt-in
+        # gate found it) while the scan still ran over the right directory.
+        norm = os.path.normpath(target).replace(os.sep, "/").strip("/")
+        if norm in (".", ""):
+            return [(b, os.path.join(root, b)) for b in list_bundles(root)]
+        return [(norm.split("/")[0], os.path.join(root, norm))]
     return [(b, os.path.join(root, b)) for b in list_bundles(root)]
+
+
+# --- wikilinks -------------------------------------------------------------
+# Obsidian's native link form. Every markdown-link scanner in this module
+# anchors on "](" (CROSSLINK_RE plus its three inline copies), so none of them
+# can see a [[…]] — a rename rewrites the markdown links, reports success and
+# silently orphans every inbound wikilink. Everything below is the wikilink
+# counterpart of that machinery: parse, resolve, report, rewrite.
+
+WIKILINK_RE = re.compile(r"(!?)\[\[([^\[\]\n]+)\]\]")
+
+
+def _frontmatter_end(text):
+    """Offset where split_frontmatter's `body` begins (0 when the file carries
+    no frontmatter block). Same arithmetic as split_frontmatter, exposed so a
+    scan can tag which region an occurrence sits in — Obsidian treats a
+    frontmatter link property as a real link, so both regions count."""
+    if text.startswith(FM_DELIM):
+        end = text.find("\n" + FM_DELIM, len(FM_DELIM))
+        if end != -1:
+            return end + len(FM_DELIM) + 1
+    return 0
+
+
+def _split_wikilink_inner(inner):
+    """(page, alias, suffix) for the text between `[[` and `]]`.
+
+    Obsidian's grammar is `[[page#suffix|alias]]` — the `#` binds to the page
+    part only. An alias may legitimately contain one (`[[dotnet|C#]]`,
+    `[[issue|bug #42]]`), so the alias segment is never re-split."""
+    page_part, sep, alias = inner.partition("|")
+    page, hsep, suffix = page_part.partition("#")
+    page = page.strip()
+    if page.lower().endswith(".md"):
+        # case-insensitively, like every other comparison here: `[[Old.MD]]`
+        # must not be the one spelling that fails to resolve.
+        page = page[:-3]
+    return (page,
+            alias.strip() if sep else None,
+            suffix.strip() if hsep and suffix.strip() else None)
+
+
+# Spans Obsidian does not index as links. Fences are found line-based, not by
+# regex: a regex pairs backtick runs left to right with no notion of line start
+# or fence length, so one prose ``` mention or a 4-backtick fence shifts every
+# later pairing by one and leaves a real code block exposed to the rewriter.
+FENCE_LINE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*(.*)$")
+COMMENT_RE = re.compile(r"%%[\s\S]*?%%|<!--[\s\S]*?-->")
+INLINE_CODE_RE = re.compile(r"(`+)(?:(?!\1).)+?\1")
+LIST_ITEM_RE = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]")
+# A YAML-looking line: a comment, a block-list item, an indented continuation,
+# or a `key:` — where the key may hold spaces, umlauts and even a colon
+# (`Übersicht … ISO 9001:2015:` is a real key in this catalogue), so the match
+# runs to the LAST colon before whitespace or end of line.
+YAML_LINE_RE = re.compile(r"^(?:[ \t]*#|[ \t]*-[ \t]|[ \t]+\S|[^\s:#][^\n]*:(?:[ \t]|$))")
+FENCE_START_RE = re.compile(r"^ {0,3}(?:`{3,}|~{3,})")
+
+
+def _split_lines_with_offsets(text):
+    lines, offs, pos = [], [], 0
+    for ln in text.splitlines(keepends=True):
+        lines.append(ln)
+        offs.append(pos)
+        pos += len(ln)
+    offs.append(pos)
+    return lines, offs
+
+
+def _fenced_code_spans(lines, offs):
+    """CommonMark fenced blocks. An opener is up to three spaces of indent then
+    three or more backticks or tildes; it closes on a line of at least as many
+    of the same character carrying nothing else. An unclosed fence runs to end
+    of file, which is how Obsidian renders it too."""
+    spans, i, n = [], 0, len(lines)
+    while i < n:
+        m = FENCE_LINE_RE.match(lines[i].rstrip("\n"))
+        if not m:
+            i += 1
+            continue
+        marker, rest = m.group(1), m.group(2)
+        if marker[0] == "`" and "`" in rest:
+            i += 1                       # info string may not contain a backtick
+            continue
+        start, char, width = i, marker[0], len(marker)
+        i += 1
+        while i < n:
+            cm = FENCE_LINE_RE.match(lines[i].rstrip("\n"))
+            if (cm and cm.group(1)[0] == char and len(cm.group(1)) >= width
+                    and not cm.group(2).strip()):
+                i += 1
+                break
+            i += 1
+        spans.append((offs[start], offs[i]))
+    return spans
+
+
+def _indented_code_spans(lines, offs):
+    """4-space/tab indented code blocks.
+
+    Indentation alone does not make one: the same shape is markdown's
+    list-continuation form, which Obsidian renders as prose and does index. A
+    run of indented lines opens a code block only when it follows a blank line
+    whose own predecessor is neither a list item nor itself indented."""
+    def indented(ln):
+        return ln.startswith("    ") or ln.startswith("\t")
+
+    spans, i, n = [], 0, len(lines)
+    while i < n:
+        if not lines[i].strip() or not indented(lines[i]):
+            i += 1
+            continue
+        if i == 0 or lines[i - 1].strip():
+            i += 1
+            continue                                  # no blank line opens it
+        prev = next((lines[j] for j in range(i - 2, -1, -1) if lines[j].strip()), None)
+        if prev is not None and (LIST_ITEM_RE.match(prev) or indented(prev)):
+            i += 1
+            continue                                  # list continuation, not code
+        start = i
+        i += 1                                        # guaranteed progress
+        while i < n and (not lines[i].strip() or indented(lines[i])):
+            i += 1
+        end = i
+        while end > start and not lines[end - 1].strip():
+            end -= 1
+        spans.append((offs[start], offs[end]))
+    return spans
+
+
+def _blank(text, spans):
+    """`text` with every span blanked to NUL, LENGTH PRESERVED, newlines kept.
+
+    Length preservation is the point: offsets in the masked copy address the
+    same bytes in the original, so a scan can report and rewrite against the
+    real text without a stash/restore round trip. A stash lost content whenever
+    one masked span held another's placeholder — `re.sub` does not rescan its
+    replacement, so the inner token reached disk verbatim."""
+    if not spans:
+        return text
+    out = list(text)
+    for a, b in spans:
+        for i in range(a, b):
+            if out[i] != "\n":
+                out[i] = "\x00"
+    return "".join(out)
+
+
+def _dead_zone_mask(text, yaml=False):
+    """Blank every span Obsidian does not index, in stages.
+
+    Each stage runs over the output of the previous one, so a construct inside
+    an already-masked span cannot open a new one: no nesting, no pairing drift.
+
+    `yaml=True` skips only the indented-code stage, because YAML indentation is
+    structure — a block list under a blank line is not a code block. Inline code
+    is masked in both regions: exempting it in frontmatter cost more than it
+    bought, since a `---` thematic rule whose first line happens to read like
+    `key: value` lands here and its prose backticks are then rewritable, while a
+    genuine link property wrapped in backticks has zero occurrences catalogue-
+    wide and would only be under-reported, never corrupted."""
+    lines, offs = _split_lines_with_offsets(text)
+    masked = _blank(text, _fenced_code_spans(lines, offs))
+    masked = _blank(masked, [(m.start(), m.end()) for m in COMMENT_RE.finditer(masked)])
+    masked = _blank(masked,
+                    [(m.start(), m.end()) for m in INLINE_CODE_RE.finditer(masked)])
+    if yaml:
+        return masked
+    lines, offs = _split_lines_with_offsets(masked)
+    return _blank(masked, _indented_code_spans(lines, offs))
+
+
+def is_yaml_frontmatter_block(block):
+    """True when every non-blank line of a `---`-delimited block reads as YAML.
+
+    This is what separates real frontmatter from a `---` thematic rule opening
+    the body. Both look identical to split_frontmatter, and getting it wrong
+    costs bytes in both directions: body rules applied to YAML swallow a link
+    property, YAML rules applied to prose expose a fenced example to the
+    rewriter."""
+    lines = [ln for ln in block.splitlines() if ln.strip()]
+    if not lines:
+        return True         # `---\n---` is an empty frontmatter block, not prose
+    # An UNINDENTED fence is never YAML, however key-like its neighbours. An
+    # indented one may be the content of a block scalar (`example: |`), and
+    # rejecting the whole block for it hid every link property in the file.
+    if any(FENCE_START_RE.match(ln) and not ln[:1].isspace() for ln in lines):
+        return False
+    # The FIRST line decides, not every line: a plain scalar continued on an
+    # unindented line is sloppy YAML but common here (432 qm-wiki files carry a
+    # multi-line German description that way), while a `---` thematic rule
+    # opening a body starts with prose that carries no `key:` at all.
+    return bool(YAML_LINE_RE.match(lines[0]))
+
+
+def wikilink_regions(text):
+    """[(label, start, end)] — the frontmatter region, then the body.
+
+    `_frontmatter_end` mirrors split_frontmatter, which cannot tell a YAML block
+    from a thematic rule; this can, and a head that is not YAML is body text
+    reported as such."""
+    fm_end = _frontmatter_end(text)
+    # The block BETWEEN the delimiters — _frontmatter_end points past the
+    # closing one, and a `---` line is not itself YAML.
+    if fm_end and not is_yaml_frontmatter_block(
+            text[len(FM_DELIM):fm_end - len(FM_DELIM) - 1]):
+        fm_end = 0
+    return [("frontmatter", 0, fm_end), ("body", fm_end, len(text))]
+
+
+def wikilink_scan_text(text):
+    """The masked copy a wikilink scan reads, aligned byte-for-byte with `text`."""
+    fm_end = wikilink_regions(text)[0][2]
+    return (_dead_zone_mask(text[:fm_end], yaml=True)
+            + _dead_zone_mask(text[fm_end:]))
+
+
+def parse_wikilinks(text, source=None):
+    """Every `[[…]]` occurrence in one file's text as a record, minus the
+    status/candidates the resolver fills in.
+
+    `raw` excludes a leading `!` — the embed marker lives in its own field,
+    which keeps `raw` a link token that can be substituted as-is. Each record
+    also carries `span`, the (start, end) offsets of `raw` in the ORIGINAL
+    text, which is what lets a rewrite touch exactly the occurrences this scan
+    accepted and nothing else."""
+    out = []
+    fm_end = wikilink_regions(text)[0][2]
+    for m in WIKILINK_RE.finditer(wikilink_scan_text(text)):
+        # Cut from the ORIGINAL, not the masked copy: a dead zone nested inside
+        # the brackets would otherwise put NUL bytes into `raw` and break the
+        # contract that `text[span] == raw`.
+        inner = text[m.start(2):m.end(2)]
+        page, alias, suffix = _split_wikilink_inner(inner)
+        if not page:
+            continue               # [[#heading]] — an in-file anchor, no target
+        out.append({
+            "source": source,
+            "region": "frontmatter" if m.start() < fm_end else "body",
+            "raw": "[[{}]]".format(inner),
+            "page": page,
+            "alias": alias,
+            "suffix": suffix,
+            "embed": bool(m.group(1)),
+            "span": (m.start(2) - 2, m.end(2) + 2),
+        })
+    return out
+
+
+def build_concept_basename_index(root):
+    """lowercased basename (no .md) -> sorted catalogue-root-absolute paths of
+    every non-reserved concept. A wikilink carries no path, so the basename IS
+    the address — this is the table it resolves against.
+
+    Case-insensitive because the store's filesystem is: `open("TYPES.md")` and
+    `open("types.MD")` reach the same file on macOS, and Obsidian resolves
+    `[[YAML]]` to `yaml.md` accordingly. A case-sensitive table reports 96 live
+    catalogue links as dead and lets `rename` orphan them unannounced — the
+    exact failure this feature exists to close.
+
+    `lower()`, not `casefold()`: Obsidian folds with JavaScript's
+    `toLowerCase()`, which leaves ß alone where casefold maps it to ss. Under
+    casefold `[[STRASSE]]` would resolve to `Straße.md` here and stay broken in
+    the app, and on a case-sensitive checkout `Straße.md` and `Strasse.md` would
+    collapse into one key and shadow each other.
+
+    Traverses with iter_all_md (minus reserved files) rather than
+    iter_concepts, so the set of resolution TARGETS is the same set of files
+    the reporting and check surfaces scan as SOURCES: iter_concepts descends
+    into `_`-prefixed staging directories, which would make a draft a valid
+    link target that no surface ever reports on. Walks per bundle because
+    os.walk does not descend into symlinked subdirectories and five catalogue
+    bundles are symlinks."""
+    idx = {}
+    for b in list_bundles(root):
+        for ap in iter_all_md(os.path.join(root, b)):
+            fn = os.path.basename(ap)
+            if fn.lower() in RESERVED:
+                continue
+            idx.setdefault(fn[:-3].lower(), []).append(
+                "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
+    for k in idx:
+        idx[k].sort()
+    return idx
+
+
+def resolve_wikilink(index, source_rel, page):
+    """(status, candidates) for one page part seen in `source_rel`.
+
+    Resolution order, matching how Obsidian narrows a target:
+      1. every concept whose basename equals the page part's last segment,
+         compared case-insensitively;
+      2. if the page part carries a path (`[[dir/name]]`), only the candidates
+         whose own path ends in that path — an author who spelled the directory
+         out meant it. A path matching nothing is `unresolved`, not a fallback
+         to the bare basename: the fallback answered with the very candidate the
+         spelling excludes, which is the failure this step exists to prevent;
+      3. on a remaining collision, the linking file's own bundle wins when
+         exactly one candidate lives there."""
+    cands = index.get(page.rsplit("/", 1)[-1].lower(), [])
+    if not cands:
+        return "unresolved", []
+    if "/" in page:
+        tail = "/{}.md".format(page.strip("/")).lower()
+        cands = [c for c in cands if c.lower().endswith(tail)]
+        if not cands:
+            return "unresolved", []
+    if len(cands) == 1:
+        return "resolved", list(cands)
+    own = (source_rel or "").split("/", 1)[0].lower()
+    same = [c for c in cands if c.lstrip("/").split("/", 1)[0].lower() == own]
+    if len(same) == 1:
+        return "resolved", same
+    return "ambiguous", list(cands)
+
+
+def resolve_wikilink_records(index, records):
+    """Fill status/candidates into parse_wikilinks() records, in place."""
+    for rec in records:
+        rec["status"], rec["candidates"] = resolve_wikilink(
+            index, rec["source"], rec["page"])
+    return records
+
+
+def scan_wikilinks(root, target=None, index=None):
+    """Every resolved wikilink record under `target` (bundle or bundle/subdir,
+    whole catalogue when None). Traverses with iter_all_md, so `_`-prefixed
+    staging dirs and assets/ are excluded and reserved files are included."""
+    if index is None:
+        index = build_concept_basename_index(root)
+    out = []
+    for _bundle, bp in resolve_scopes(root, target):
+        for ap in iter_all_md(bp):
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            out += resolve_wikilink_records(
+                index, parse_wikilinks(read_file(ap), rel))
+    return out
+
+
+def wikilink_checked_bundles(config, root=None):
+    """The opt-in set for the wikilink-resolvable check. Absent key or absent
+    .okf.toml means the empty set: the rule ships silent and is switched on per
+    bundle, so introducing it cannot bury a clean catalogue in warnings.
+
+    A value the gate cannot honour is announced on stderr rather than silently
+    disabling the rule — a config that reads as if it opted a bundle in, but
+    does not, is worse than no config at all."""
+    if "wikilink_checked_bundles" not in config:
+        return set()
+    v = config["wikilink_checked_bundles"]
+    if not isinstance(v, (list, tuple)) or not all(isinstance(x, str) for x in v):
+        sys.stderr.write("note: wikilink_checked_bundles must be an array of "
+                         "bundle names; got {!r} — wikilink check stays off\n".format(v))
+        return set()
+    # Casefolded: the store's filesystem is, so `check A` reaches bundle `a`
+    # and its ctx["bundle"] reads "A". An exact-string gate switched this one
+    # check off there while every other check kept firing.
+    out = {x.lower() for x in v}
+    if root is not None:
+        known = {b.lower() for b in list_bundles(root)}
+        unknown = sorted(x for x in v if x.lower() not in known)
+        if unknown:
+            sys.stderr.write("note: wikilink_checked_bundles names non-bundle(s): "
+                             "{} — no file will be checked for them\n".format(", ".join(unknown)))
+    return out
+
+
+def check_wikilink_resolvable(ctx, checked, index):
+    """One warning per file carrying at least one unresolved or ambiguous
+    wikilink, naming every such target. Reserved files and symlinked bundles
+    participate — unlike check_crosslink_format, whose early returns are
+    specific to the catalogue-absolute markdown convention."""
+    if not checked or ctx["bundle"].lower() not in checked:
+        return []
+    # iter_all_md prunes staging and assets from `dirnames`, never from the
+    # directory it is handed, so `check <bundle>/_plan` walked straight into a
+    # tree the Non-Goals exclude from every reporting surface.
+    if any(s.startswith((".", "_")) or s == "assets"
+           for s in ctx["rel"].split("/")[1:-1]):
+        return []
+    bad = [r["raw"] for r in resolve_wikilink_records(
+        index, parse_wikilinks(ctx["text"], ctx["rel"]))
+        if r["status"] != "resolved"]
+    if not bad:
+        return []
+    return ["unresolved wikilink target(s): {}".format(", ".join(bad))]
+
+
+def cmd_wikilinks(root, args):
+    if args.target:
+        norm = os.path.normpath(args.target).replace(os.sep, "/").strip("/")
+        segments = [s for s in norm.split("/") if s not in (".", "")]
+        tp = os.path.join(root, norm)
+        if not os.path.isdir(tp):
+            print("not a directory: {}".format(args.target), file=sys.stderr)
+            sys.exit(1)
+        # The target must name a bundle, or a subdirectory of one that
+        # iter_all_md would actually traverse. Without this, `wikilinks ..`
+        # walks out of the catalogue, and `wikilinks <bundle>/_plan` scans
+        # staging that the reporting surface is defined to exclude —
+        # iter_all_md prunes those names from `dirnames`, never from the
+        # directory it is handed as a starting point.
+        excluded = [s for s in segments if s.startswith((".", "_")) or s == "assets"]
+        if not segments or segments[0] not in list_bundles(root) or excluded:
+            print("not a scannable bundle path: {}".format(args.target), file=sys.stderr)
+            sys.exit(1)
+    links = scan_wikilinks(root, args.target)
+    totals = {"resolved": 0, "ambiguous": 0, "unresolved": 0}
+    for r in links:
+        totals[r["status"]] += 1
+    shown = [r for r in links if r["status"] != "resolved"] if args.unresolved else links
+    if args.json:
+        import json
+        # by_bundle counts what `links` carries, so the two never contradict
+        # each other; `totals` is always the unfiltered census and `filtered`
+        # says which of the two a consumer is looking at.
+        by_bundle = {}
+        for r in shown:
+            b = r["source"].split("/", 1)[0]
+            by_bundle.setdefault(b, {"resolved": 0, "ambiguous": 0, "unresolved": 0})
+            by_bundle[b][r["status"]] += 1
+        print(json.dumps({"links": shown, "by_bundle": by_bundle,
+                          "totals": totals, "filtered": bool(args.unresolved)}))
+        return
+    for r in shown:
+        line = "{:<10} {:<11} {}  {}{}".format(
+            r["status"], r["region"], r["source"], r["raw"],
+            "  (embed)" if r["embed"] else "")
+        if r["status"] == "ambiguous":
+            line += "  candidates: {}".format(", ".join(r["candidates"]))
+        print(line)
+    print("wikilinks: {} link(s), {} resolved, {} ambiguous, {} unresolved".format(
+        len(links), totals["resolved"], totals["ambiguous"], totals["unresolved"]))
 
 
 def run_checks(root, target, types_source=None):
@@ -2497,10 +2956,17 @@ def run_checks(root, target, types_source=None):
     Returns (errors, warnings), each a list of (check_name, rel_path, message).
     """
     scopes = resolve_scopes(root, target)
+    config = load_okf_config(root)
     if types_source is None:
-        types_source = load_okf_config(root).get("types_source")
+        types_source = config.get("types_source")
     types_set = load_types(root, types_source)
     tags_set = load_tags(root)
+    # The basename index costs a full catalogue walk, so it is built only when
+    # a bundle IN THIS RUN'S SCOPE has opted in — an unconfigured catalogue, or
+    # a scan targeting a bundle that did not opt in, pays nothing.
+    wl_checked = (wikilink_checked_bundles(config, root)
+                  & {b.lower() for b, _ in scopes})
+    wl_index = build_concept_basename_index(root) if wl_checked else {}
     per_file_checks = [
         ("frontmatter-parseable", "error", check_fm_parseable),
         ("type-nonempty", "error", check_type_nonempty),
@@ -2512,6 +2978,8 @@ def run_checks(root, target, types_source=None):
         ("crosslink-format", "warning", check_crosslink_format),
         ("tags-block-form", "warning", check_tags_block_form),
         ("xml-like-tags", "warning", check_xml_like_tags),
+        ("wikilink-resolvable", "warning",
+         lambda c: check_wikilink_resolvable(c, wl_checked, wl_index)),
     ]
 
     errors, warnings = [], []
@@ -2529,6 +2997,12 @@ def run_checks(root, target, types_source=None):
 
 
 def cmd_check(root, args):
+    target = getattr(args, "target", None)
+    if target and not os.path.isdir(os.path.join(root, os.path.normpath(target))):
+        # Without this a typo'd or renamed bundle scanned nothing and exited 0 —
+        # a clean bill of health for a directory that does not exist.
+        print("not a directory: {}".format(target), file=sys.stderr)
+        sys.exit(1)
     errors, warnings = run_checks(root, getattr(args, "target", None),
                                   types_source=getattr(args, "types", None))
     if args.strict:
@@ -2597,12 +3071,189 @@ def _dedupe(pairs):
     return out
 
 
+def canonical_case_path(root, abspath):
+    """`abspath` respelled the way the filesystem stores it.
+
+    On a case-insensitive filesystem the caller may name a file in any casing,
+    and every downstream comparison — the basename index, the markdown ref
+    matrix, the self-reference check in cmd_rename — then compares the caller's
+    spelling against the scan's. Normalising once here is what keeps those
+    comparisons exact rather than case-folded, which matters because a folded
+    comparison would be wrong on a case-sensitive filesystem."""
+    rel = os.path.relpath(abspath, root)
+    if rel.startswith(".."):
+        return abspath
+    cur = root
+    for seg in rel.replace(os.sep, "/").split("/"):
+        try:
+            match = next((e for e in os.listdir(cur) if e.lower() == seg.lower()), None)
+        except OSError:
+            match = None
+        cur = os.path.join(cur, match or seg)
+    return cur
+
+
+def iter_rename_scan_md(root):
+    """Every .md the rename inbound scan must see.
+
+    build_ref_matrix's own traversal (a root-level walk under
+    _prune_walk_dirs: dot-dirs and node_modules out, `_`-prefixed staging dirs
+    and root-level files IN — unlike iter_all_md) plus a second pass over each
+    symlinked bundle, because os.walk does not descend into a symlinked
+    subdirectory and five catalogue bundles are symlinks. Either half alone
+    leaves a stale reference behind: the root walk misses the mounts, a
+    per-bundle walk misses root-level staging.
+
+    Deliberately wider than the reporting surfaces: staging directories, root-
+    level files and `assets/` are all rewritten. A stale reference in a file
+    `wikilinks` never lists is still a stale reference, and the markdown half of
+    the same rename already reaches every one of them — pruning here would leave
+    a file with its markdown link updated and its wikilink dangling in the same
+    line."""
+    seen = set()
+    starts = [root] + [os.path.join(root, b) for b in list_bundles(root)
+                       if os.path.islink(os.path.join(root, b))]
+    for start in starts:
+        for dirpath, dirnames, filenames in os.walk(start):
+            _prune_walk_dirs(dirnames)
+            for fn in filenames:
+                if not fn.endswith(".md"):
+                    continue
+                ap = os.path.join(dirpath, fn)
+                if ap not in seen:
+                    seen.add(ap)
+                    yield ap
+
+
+def _rewrite_wikilink_raw(raw, new_link):
+    """`[[old|Label]]` -> `[[new|Label]]`, given the target's new catalogue-root
+    absolute path. Alias, heading/block suffix and an explicit `.md` carry over
+    verbatim, so a deep link survives the rename.
+
+    A path-qualified link keeps a path of the same depth, re-derived from the
+    NEW location — carrying the old prefix over unchanged turned `[[a/old]]`
+    into `[[a/new]]` after a move to bundle `b`, an address that resolves to
+    nothing."""
+    inner = raw[2:-2]
+    cut = len(inner)
+    for ch in "#|":
+        i = inner.find(ch)
+        if i != -1:
+            cut = min(cut, i)
+    head, rest = inner[:cut], inner[cut:]
+    md = ".md" if head.endswith(".md") else ""
+    depth = len((head[:-3] if md else head).split("/"))
+    new_segments = new_link.lstrip("/")[:-3].split("/")
+    page = "/".join(new_segments[-depth:])
+    return "[[{}{}{}]]".format(page, md, rest)
+
+
+def plan_wikilink_rewrites(root, old_abs, new_abs):
+    """The wikilink half of plan_rename. Returns (records, collisions).
+
+    Each record is a parse_wikilinks() record plus `status` (`rewrite` or
+    `skipped-ambiguous`), `candidates` and `new_raw`. `collisions` are the
+    concepts that ALREADY carry the new basename: renaming into an occupied
+    basename turns every rewritten `[[old]]` — and every pre-existing
+    `[[new]]` elsewhere — from a unique address into an ambiguous one, which
+    is the very corruption the skipped-ambiguous rule refuses to commit. The
+    caller decides; this function only refuses to hide it.
+
+    A plain `[[name]]` carries no path, so a move keeping the basename leaves it
+    valid — but a path-qualified `[[dir/name]]` does not survive one, which is
+    why there is no basename short-circuit: every candidate occurrence is
+    compared against the token the move would produce, and only a difference is
+    planned. An occurrence whose page part is ambiguous is reported, never
+    rewritten: guessing which of several same-named concepts the author meant is
+    not a rename, it is a coin flip."""
+    old_base, new_base = os.path.basename(old_abs)[:-3], os.path.basename(new_abs)[:-3]
+    index = build_concept_basename_index(root)
+    old_link = "/" + os.path.relpath(old_abs, root).replace(os.sep, "/")
+    new_link = "/" + os.path.relpath(new_abs, root).replace(os.sep, "/")
+    files = list(iter_rename_scan_md(root))
+    # Collisions come from the rename scan's own reach, not from the resolution
+    # index: the index skips staging, assets and root-level files, every one of
+    # which this rename rewrites and Obsidian itself indexes.
+    keep = {old_link.lower(), new_link.lower()}
+    collisions = sorted(
+        c for c in ("/" + os.path.relpath(ap, root).replace(os.sep, "/") for ap in files)
+        if os.path.basename(c)[:-3].lower() == new_base.lower()
+        and c.lower() not in keep)
+    # Casefolded, because resolve_wikilink is (D06). A case-sensitive filter
+    # here silently excluded every case-variant inbound link from the plan — the
+    # 96 live links D06 exists to rescue would have been orphaned by the very
+    # rename that was supposed to carry them.
+    old_key, new_key = old_base.lower(), new_base.lower()
+    after = _index_after_move(index, old_link, new_link, collisions)
+    out = []
+    for ap in files:
+        rel = os.path.relpath(ap, root).replace(os.sep, "/")
+        for rec in parse_wikilinks(read_file(ap), rel):
+            key = rec["page"].rsplit("/", 1)[-1].lower()
+            if key not in (old_key, new_key):
+                continue
+            # Resolve the occurrence against the catalogue as it is and as it
+            # will be. Deciding from the token alone missed the case where the
+            # token does not change but its meaning does — a basename-preserving
+            # move into a bundle where another concept shares the name turned a
+            # unique address ambiguous with nothing to rewrite and nothing said.
+            status, cands = resolve_wikilink(index, rel, rec["page"])
+            was_ours = status == "resolved" and _same_path(cands, old_link)
+            new_raw = _rewrite_wikilink_raw(rec["raw"], new_link) if was_ours else rec["raw"]
+            page_after = _split_wikilink_inner(new_raw[2:-2])[0]
+            status_after, cands_after = resolve_wikilink(after, rel, page_after)
+            turns = status == "resolved" and status_after != "resolved"
+            if was_ours and new_raw != rec["raw"]:
+                rec.update(status="rewrite", candidates=cands, new_raw=new_raw,
+                           turns_ambiguous=turns)
+            elif key == old_key and status == "ambiguous" and _contains_path(cands, old_link):
+                rec.update(status="skipped-ambiguous", candidates=cands,
+                           new_raw=None, turns_ambiguous=False)
+            elif turns:
+                # Either a bystander already pointing at the basename this move
+                # is about to occupy, or a link whose token does not change but
+                # whose target set does. Both lose a unique address without a
+                # byte of them being touched.
+                rec.update(status="collision-affected", candidates=cands_after,
+                           new_raw=None, turns_ambiguous=True)
+            else:
+                continue
+            out.append(rec)
+    return out, collisions
+
+
+def _index_after_move(index, old_link, new_link, collisions=()):
+    """The basename index as it will look once the move has happened.
+
+    `collisions` are folded in because they come from the rename scan's wider
+    reach: a same-named draft in staging is invisible to the index but visible
+    to Obsidian, so leaving it out made the simulation call an address unique
+    that the app will show as ambiguous."""
+    out = {}
+    for k, v in index.items():
+        kept = [c for c in v if c.lower() != old_link.lower()]
+        if kept:
+            out[k] = kept
+    key = os.path.basename(new_link)[:-3].lower()
+    out[key] = sorted(set(out.get(key, [])) | {new_link} | set(collisions))
+    return out
+
+
+def _same_path(cands, link):
+    return len(cands) == 1 and cands[0].lower() == link.lower()
+
+
+def _contains_path(cands, link):
+    return any(c.lower() == link.lower() for c in cands)
+
+
 def plan_rename(root, old_abs, new_abs):
     """Compute the reference rewrites a move old->new requires, WITHOUT touching
     disk (so it also drives the dry-run preview). Returns:
       inbound  = [(source_rel, old_raw, new_raw), ...]  links pointing AT the file
       outbound = [(old_raw, new_raw), ...]              the moved file's own links
                  (only when the bundle changes; within a bundle they stay valid)
+      wikilinks= [record, ...]                          see plan_wikilink_rewrites
       bundles  = sorted affected bundle names (reindex targets)."""
     old_abs, new_abs = os.path.abspath(old_abs), os.path.abspath(new_abs)
     inbound = []
@@ -2617,9 +3268,12 @@ def plan_rename(root, old_abs, new_abs):
     outbound = []
     if bundle_of(root, old_abs) != bundle_of(root, new_abs):
         src = old_abs if os.path.exists(old_abs) else new_abs
-        body = re.sub(r"```.*?```", "", read_file(src), flags=re.S)
-        for m in CROSSLINK_RE.finditer(body):
-            raw = m.group(2)
+        # Same mask the applier uses, or the plan reports rewrites the applier
+        # then declines to make: the old ```-only strip left inline-code and
+        # indented examples in the plan and out of the file.
+        src_text = read_file(src)
+        for m in CROSSLINK_RE.finditer(wikilink_scan_text(src_text)):
+            raw = src_text[m.start(2):m.end(2)]
             tgt = resolve_link_target(root, old_abs, raw)
             if tgt is None or not os.path.isfile(tgt):
                 continue
@@ -2629,16 +3283,83 @@ def plan_rename(root, old_abs, new_abs):
                 outbound.append((raw, new_raw))
         outbound = _dedupe(outbound)
     bundles = sorted({bundle_of(root, old_abs), bundle_of(root, new_abs)})
-    return {"inbound": inbound, "outbound": outbound, "bundles": bundles}
+    wikilinks, collisions = plan_wikilink_rewrites(root, old_abs, new_abs)
+    return {"inbound": inbound, "outbound": outbound,
+            "wikilinks": wikilinks, "wikilink_collisions": collisions,
+            "bundles": bundles}
 
 
 def _apply_link_rewrites(abspath, rewrites):
-    """Replace each `](old_raw)` occurrence with `](new_raw)` in one file. The
-    `](...)` wrapper anchors the match to real link targets, never label text."""
-    text = read_file(abspath)
-    for old_raw, new_raw in rewrites:
-        text = text.replace("]({})".format(old_raw), "]({})".format(new_raw))
-    write_file(abspath, text)
+    """Rewrite one file's markdown link targets, splicing by offset over the
+    same dead-zone mask build_ref_matrix used to find them.
+
+    A whole-file `str.replace` edited bytes the planner never reported: a link
+    inside a code fence was rewritten and not counted, so the run changed a
+    documentation sample while claiming a smaller edit than it made."""
+    text = read_file_verbatim(abspath)
+    if text is None:
+        sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
+        return
+    mapping = dict(rewrites)
+    out, last = [], 0
+    for m in CROSSLINK_RE.finditer(wikilink_scan_text(text)):
+        a, b = m.start(2), m.end(2)
+        new_raw = mapping.get(text[a:b])
+        if new_raw is None:
+            continue
+        out.append(text[last:a])
+        out.append(new_raw)
+        last = b
+    out.append(text[last:])
+    write_file_verbatim(abspath, "".join(out))
+
+
+def read_file_verbatim(abspath):
+    """File text with line endings and bytes exactly as stored, or None when it
+    is not valid UTF-8.
+
+    read_file() translates CRLF to LF and replaces undecodable bytes with
+    U+FFFD; harmless for a scan, destructive on a rewrite, because write_file
+    then persists the translation across the whole file — not just the link it
+    was asked to change."""
+    try:
+        with open(abspath, encoding="utf-8", newline="") as f:
+            return f.read()
+    except UnicodeDecodeError:
+        return None
+
+
+def write_file_verbatim(abspath, text):
+    with open(abspath, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+
+
+def _apply_wikilink_rewrites(abspath, rename_map):
+    """Rewrite one file's wikilinks. `rename_map` maps an old raw token to its
+    replacement; every occurrence the scanner accepts and the map names is
+    spliced in by offset.
+
+    The file is re-scanned here rather than trusting offsets from planning
+    time, so this is correct regardless of what else has already rewritten the
+    file in this run. Splicing by offset — instead of replacing the token
+    string — is what guarantees an identical-looking `[[old]]` inside a fence,
+    an indented block or a comment is never touched: the scanner never returned
+    it, so no offset points at it."""
+    text = read_file_verbatim(abspath)
+    if text is None:
+        sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
+        return
+    out, last = [], 0
+    for rec in parse_wikilinks(text):
+        new_raw = rename_map.get(rec["raw"])
+        if new_raw is None:
+            continue
+        a, b = rec["span"]
+        out.append(text[last:a])
+        out.append(new_raw)
+        last = b
+    out.append(text[last:])
+    write_file_verbatim(abspath, "".join(out))
 
 
 def reindex_tree(root, tp):
@@ -2691,6 +3412,25 @@ def cmd_rename(root, args):
         die("source not found: {}".format(args.old))
     if os.path.basename(old_abs).lower() in RESERVED:
         die("refusing to move a reserved file ({})".format(os.path.basename(old_abs)))
+    if os.path.basename(new_abs).lower() in RESERVED:
+        # A reserved name is not a concept, so nothing can resolve to it: every
+        # inbound wikilink would be rewritten to an address that is dead on
+        # arrival, and the report would still say it succeeded.
+        die("refusing to rename onto a reserved name ({}) — no wikilink can "
+            "resolve to it".format(os.path.basename(new_abs)))
+    new_base_raw = os.path.basename(new_abs)[:-3]
+    if not new_base_raw.strip():
+        die("destination has an empty basename — `[[…]]` would become `[[]]`, "
+            "which no scan can find again")
+    if new_base_raw != new_base_raw.strip():
+        # The scanner strips the page part, the index does not strip filenames,
+        # so the two keys could never meet: the rewritten link would resolve to
+        # nothing while the run reported success.
+        die("destination basename has leading or trailing whitespace — the "
+            "rewritten `[[{}]]` would resolve to nothing".format(new_base_raw))
+    if any(ord(c) < 32 for c in new_base_raw):
+        die("destination basename contains a control character — the rewritten "
+            "link would be unmatchable by any later scan")
     if old_abs == new_abs:
         die("source and destination are identical")
     if os.path.commonpath([old_abs, root]) != root or os.path.commonpath([new_abs, root]) != root:
@@ -2701,12 +3441,54 @@ def cmd_rename(root, args):
     badchars = FILENAME_FORBIDDEN_CHARS & set(os.path.basename(new_abs)[:-3])
     if badchars:
         die("forbidden char(s) in new filename: {}".format("".join(sorted(badchars))))
-    if os.path.exists(new_abs) and args.apply and not args.force:
+    # samefile: on a case-insensitive filesystem a case-only rename has a
+    # destination that "exists" because it IS the source. Refusing that would
+    # make `Foo.md` -> `foo.md` impossible without --force overwriting itself.
+    if (os.path.exists(new_abs) and args.apply and not args.force
+            and not os.path.samefile(old_abs, new_abs)):
         die("destination exists (use --force to overwrite): {}".format(args.new))
+
+    # From here on the source is addressed exactly as the filesystem spells it,
+    # so the two halves of the rename and the self-reference check all compare
+    # the same string. The destination keeps the caller's spelling of its own
+    # basename — that is the rename — but its directory part is canonicalised
+    # for the same reason.
+    old_abs = canonical_case_path(root, old_abs)
+    new_abs = os.path.join(canonical_case_path(root, os.path.dirname(new_abs)),
+                           os.path.basename(new_abs))
 
     plan = plan_rename(root, old_abs, new_abs)
     old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
     new_rel = os.path.relpath(new_abs, root).replace(os.sep, "/")
+
+    wl_rewrite = [r for r in plan["wikilinks"] if r["status"] == "rewrite"]
+    wl_skipped = [r for r in plan["wikilinks"] if r["status"] == "skipped-ambiguous"]
+    collisions = plan["wikilink_collisions"]
+
+    # Every occurrence the plan says loses its unique target, whether or not a
+    # byte of it changes. Derived from resolving each one against the catalogue
+    # before AND after the move, so the tie-break is honoured on both sides:
+    # counting rewrites blindly refused renames that broke nothing, and looking
+    # only at rewrites missed the ones that break without being rewritten.
+    wl_ambiguous = [r for r in plan["wikilinks"] if r.get("turns_ambiguous")]
+
+    def _print_skipped():
+        for r in wl_skipped:
+            print("  skipped-ambiguous  {} [{}]  {}  candidates: {}".format(
+                r["source"], r["region"], r["raw"], ", ".join(r["candidates"])))
+        for c in collisions:
+            print("  wikilink-collision  new basename already taken by {}".format(c))
+        for r in wl_ambiguous:
+            print("  turns-ambiguous  {} [{}]  {}  candidates after the move: {}"
+                  .format(r["source"], r["region"], r["raw"],
+                          ", ".join(r["candidates"])))
+
+    if args.apply and wl_ambiguous and not args.force:
+        die("this move leaves {} inbound wikilink(s) ambiguous: {} — the same "
+            "corruption `skipped-ambiguous` declines to commit, so it may not "
+            "happen by accident either (use --force to proceed)"
+            .format(len(wl_ambiguous),
+                    ", ".join(sorted({r["source"] for r in wl_ambiguous}))))
 
     if not args.apply:
         print("would move   {}  ->  {}".format(old_rel, new_rel))
@@ -2714,12 +3496,23 @@ def cmd_rename(root, args):
             print("  inbound    {}   {}  ->  {}".format(src, oraw, nraw))
         for oraw, nraw in plan["outbound"]:
             print("  outbound   {}  ->  {}".format(oraw, nraw))
+        for r in wl_rewrite:
+            print("  wikilink   {} [{}]   {}  ->  {}".format(
+                r["source"], r["region"], r["raw"], r["new_raw"]))
+        _print_skipped()
         print("  reindex    {}".format(", ".join(plan["bundles"])))
-        print("rename (dry-run): {} inbound, {} outbound link(s), {} bundle(s). "
-              "Re-run with --apply.".format(
-                  len(plan["inbound"]), len(plan["outbound"]), len(plan["bundles"])))
+        print("rename (dry-run): {} inbound, {} outbound link(s), {} wikilink(s) "
+              "({} skipped-ambiguous), {} bundle(s). Re-run with --apply.".format(
+                  len(plan["inbound"]), len(plan["outbound"]), len(wl_rewrite),
+                  len(wl_skipped), len(plan["bundles"])))
         return
 
+    if os.path.exists(new_abs) and not os.path.samefile(old_abs, new_abs):
+        # --force got us here. Say what it costs: the destination's content is
+        # gone and every reference to it now addresses different content.
+        clobbered = build_ref_matrix(root, new_abs)
+        print("overwrote      {}  ({} inbound markdown reference(s) now point at "
+              "different content)".format(new_rel, len(clobbered)))
     os.makedirs(os.path.dirname(new_abs), exist_ok=True)
     moved = _git_mv(root, old_abs, new_abs)
     if plan["outbound"]:
@@ -2729,12 +3522,22 @@ def cmd_rename(root, args):
         by_src.setdefault(src, []).append((oraw, nraw))
     for src, rw in by_src.items():
         _apply_link_rewrites(os.path.join(root, src), _dedupe(rw))
+    wl_by_src = {}
+    for r in wl_rewrite:
+        # A self-reference lives in the file that just moved — rewrite it at its
+        # new location, not at the path it no longer occupies.
+        ap = new_abs if r["source"] == old_rel else os.path.join(root, r["source"])
+        wl_by_src.setdefault(ap, {})[r["raw"]] = r["new_raw"]
+    for ap, rename_map in wl_by_src.items():
+        _apply_wikilink_rewrites(ap, rename_map)
     reidx = []
     for b in plan["bundles"]:
         reidx += reindex_tree(root, os.path.join(root, b))
     print("moved ({})  {}  ->  {}".format("git mv" if moved else "fs", old_rel, new_rel))
     print("rewrote {} inbound link(s) in {} file(s), {} outbound link(s)".format(
         len(plan["inbound"]), len(by_src), len(plan["outbound"])))
+    print("rewrote {} wikilink(s) in {} file(s)".format(len(wl_rewrite), len(wl_by_src)))
+    _print_skipped()
     print("reindexed {} index file(s) across: {}".format(len(reidx), ", ".join(plan["bundles"])))
     print("staged for commit — run `okf-cli.py check` before committing.")
 
@@ -2751,6 +3554,7 @@ COMMAND_DISPATCH = {
     "normalize-tags": cmd_normalize_tags,
     "check": cmd_check, "fix-crosslinks": cmd_fix_crosslinks,
     "fix-xml-tags": cmd_fix_xml_tags,
+    "wikilinks": cmd_wikilinks,
 }
 
 
@@ -2944,7 +3748,9 @@ def build_parser():
     prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)")
     prn.add_argument("new", help="destination path (same or different bundle)")
     prn.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
-    prn.add_argument("--force", action="store_true", help="overwrite an existing destination")
+    prn.add_argument("--force", action="store_true",
+                     help="overwrite an existing destination, and proceed when the new "
+                          "basename is already taken and inbound wikilinks would turn ambiguous")
     prw = _sub(sub, "rewrite-path", "maintenance",
                "literal path-string rewrite across text files")
     prw.add_argument("old", help="literal path string to replace")
@@ -2971,6 +3777,13 @@ def build_parser():
               "write a self-contained viz.html graph for a bundle")
     pv.add_argument("bundle", help="bundle to render the graph for")
     pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
+    pwl = _sub(sub, "wikilinks", "maintenance",
+               "report Obsidian wikilinks ([[…]]) and whether each resolves to a concept")
+    pwl.add_argument("target", nargs="?",
+                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pwl.add_argument("--unresolved", action="store_true",
+                     help="list only unresolved and ambiguous occurrences (summary stays complete)")
+    pwl.add_argument("--json", action="store_true", help="machine-readable output")
     ap.epilog = render_command_overview(sub)
     return ap
 
