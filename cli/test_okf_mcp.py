@@ -285,5 +285,72 @@ class McpDefaultCliPath(unittest.TestCase):
         self.assertTrue(os.path.exists(fresh.OKF_CLI), fresh.OKF_CLI)
 
 
+class _ToolCollector:
+    """Minimal stand-in for the FastMCP server object. _register() only ever
+    calls server.tool() as a decorator factory and returns the server, so
+    collecting the decorated functions is enough to call a tool exactly as the
+    MCP runtime would — without importing fastmcp, which is not a dependency of
+    this repository."""
+
+    def __init__(self):
+        self.tools = {}
+
+    def tool(self):
+        def deco(fn):
+            self.tools[fn.__name__] = fn
+            return fn
+        return deco
+
+
+class McpWikilinksSurface(unittest.TestCase):
+    """REQ-15 — the wikilinks verb is reachable from an agent. A command absent
+    from _COMMANDS is invisible to MCP no matter how well the CLI implements
+    it, and a boolean flag absent from _BOOL_FLAGS is silently dropped."""
+
+    def test_command_is_whitelisted_with_target_and_json(self):
+        self.assertEqual(mcp._COMMANDS["wikilinks"], (["target"], True))
+
+    def test_unresolved_flag_is_marshalled(self):
+        with_flag = mcp.build_argv("/root", "wikilinks",
+                                   {"target": "b", "unresolved": True})
+        self.assertEqual(with_flag,
+                         ["--root", "/root", "wikilinks", "b", "--unresolved", "--json"])
+        without = mcp.build_argv("/root", "wikilinks",
+                                 {"target": "b", "unresolved": False})
+        self.assertNotIn("--unresolved", without)
+
+
+class McpWikilinksBoundary(McpBoundaryTestBase):
+    """REQ-15 / AC-15.3 — the registered tool function, driven over the real
+    subprocess, returns the REQ-08 object."""
+
+    def setUp(self):
+        super().setUp()
+        _w(self.root, "b/three.md",
+           "---\ntype: Runbook\ntitle: Three\ndescription: third\n---\n"
+           "Resolves to [[one]], breaks on [[ghost]].\n")
+
+    def _tool(self, name):
+        return mcp._register(_ToolCollector()).tools[name]
+
+    def test_okf_wikilinks_returns_links_and_by_bundle(self):
+        out = self._tool("okf_wikilinks")(root=self.root)
+        self.assertIsInstance(out, dict)
+        self.assertIn("links", out)
+        self.assertIn("by_bundle", out)
+        self.assertEqual(
+            {(l["page"], l["status"]) for l in out["links"]},
+            {("one", "resolved"), ("ghost", "unresolved")})
+
+    def test_okf_wikilinks_unresolved_filter_reaches_the_cli(self):
+        out = self._tool("okf_wikilinks")(root=self.root, unresolved=True)
+        self.assertEqual([l["page"] for l in out["links"]], ["ghost"])
+
+    def test_okf_wikilinks_target_scopes_the_scan(self):
+        _w(self.root, "other/x.md", "---\ntype: Runbook\n---\nSee [[phantom]].\n")
+        out = self._tool("okf_wikilinks")(root=self.root, target="other")
+        self.assertEqual(sorted(out["by_bundle"]), ["other"])
+
+
 if __name__ == "__main__":
     unittest.main()

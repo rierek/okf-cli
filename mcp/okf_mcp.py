@@ -18,12 +18,13 @@ _COMMANDS = {
     "build-index": ([], False),
     "prime": ([], False),
     "info":  ([], False),
+    "wikilinks": (["target"], True),
 }
 # optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
           "scope": "--scope"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
-_BOOL_FLAGS = {"apply": "--apply", "force": "--force"}
+_BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved"}
 
 
 def build_argv(root, command, params):
@@ -164,6 +165,18 @@ def _register(server):
         reindexes affected bundles. Defaults to a dry-run preview; pass apply=True
         to perform the move (git mv, staged). Reference-integrity step b."""
         return run_okf(root, "rename", {"old": old, "new": new, "apply": apply, "force": force})
+
+    @server.tool()
+    def okf_wikilinks(root: str, target: str = "", unresolved: bool = False) -> dict:
+        """Obsidian wikilinks ([[…]]) in a catalogue, with the resolution status
+        of each. Returns {links, by_bundle, totals}; every link record names its
+        source file, the region it sits in (body or frontmatter), the raw
+        occurrence and one of resolved / ambiguous / unresolved. The markdown
+        link surfaces (okf_refs, okf_check's crosslink-format) are blind to this
+        form — use this one before renaming a concept a wikilink may point at.
+        Pass unresolved=True to list only the broken and ambiguous ones."""
+        return run_okf(root, "wikilinks",
+                       {"target": target, "unresolved": unresolved})
 
     @server.tool()
     def okf_tags(root: str, query: str = "", limit: int = 8) -> str:
