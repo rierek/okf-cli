@@ -4,9 +4,9 @@ Handover for a specialist picking this topic up cold. Written 2026-08-05 against
 
 ## Mission
 
-The feature is done. What remains is one measurement that needs the Obsidian app, one deferred design decision, and the discipline not to reopen the rest.
+The feature is done. What remains is one deferred design decision with no live exposure, and the discipline not to reopen the rest.
 
-Terminal condition is already met on everything the CLI can reach: all 39 mutants KILLED, suite green, live figures holding, D02 deployed, review round 5 closed with zero severity-1 findings.
+Terminal condition met: all 39 mutants KILLED, suite green, live figures holding, D02 deployed and proven armed, review round 5 closed with zero severity-1 findings, ASM-01 confirmed against the app.
 
 ## Verified state
 
@@ -30,19 +30,11 @@ The check gate is armed and proven armed: `check` is byte-identical before and a
 
 ## Open work
 
-### T01 🟣 Falsify or confirm the ASM-01 subtree preference
+### T01 🟢 done — ASM-01 subtree preference confirmed
 
-The only item that needs the Obsidian app. `[[GLOSSARY]]` at `lean-stack-okf/improve-bean-canon-design.md:112` has six candidates catalogue-wide, and `resolve_wikilink` answers `/lean-stack-okf/GLOSSARY.md` through the same-bundle tie-break. If Obsidian shows any other target, or a broken link, the subtree half of ASM-01 is falsified and REQ-03 needs a design decision.
+`[[GLOSSARY]]` at `lean-stack-okf/improve-bean-canon-design.md:112` has six candidates catalogue-wide; `obsidian links path="…"` against the open vault answers `lean-stack-okf/GLOSSARY.md`, the same target `resolve_wikilink` produces. Obsidian prefers the linking note's own subtree.
 
-Blocked on the vault being open: the Obsidian CLI reaches only the app's focused window, and `Knowledge-Catalogue` is not open. Once it is, go through skill `obsidian-tooling`:
-
-```
-just obs-run Knowledge-Catalogue links path="lean-stack-okf/improve-bean-canon-design.md"
-```
-
-Two traps. A plain `find` for the six candidates returns nothing, because `lean-stack-okf` and `devd2-okf` are symlinks and `find` needs `-L` — the previous handover concluded the falsifier was unavailable for exactly this reason. And `just obs` before any call, or the command silently answers for whichever vault happens to be focused.
-
-Record the outcome as an ASM-01 update either way. A confirmed assumption is worth as much as a falsified one here, because Q02 is carried by it.
+What it did NOT settle is Q02: source and winning candidate share folder and bundle, so a same-folder rule and a same-bundle rule predict the same answer. A discriminating occurrence would need differing folders inside one bundle, and the catalogue holds zero of them — so the two rules are indistinguishable here by measurement, not by oversight. Left open deliberately; nothing depends on it until a bundle grows a subdirectory duplicating a basename it already holds.
 
 ### T02 🟣 Decide Q07 — Unicode normalisation
 
