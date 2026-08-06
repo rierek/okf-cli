@@ -59,9 +59,7 @@ Priorität nach Reifegrad-Hebel, nicht nach Aufwand.
 
 ### WS3 — MCP-Parität, gezielt (D05)
 - Nur agent-relevante Lücken brücken (Kandidaten: `check`, `tags`, `refs`).
-- Write/Admin-Verben (`merge-tags`, `normalize-tags`, `fix-*`, `rename`, `log`,
-  `visualize`, `prime`, `info`) bleiben bewusst CLI-only — als Absicht dokumentiert
-  (Safety-Oberfläche klein).
+- Write/Admin-Verben (`merge-tags`, `normalize-tags`, `fix-*`, `rename`, `log`, `recent`, `visualize`, `prime`, `info`) bleiben bewusst CLI-only — als Absicht dokumentiert (Safety-Oberfläche klein). `recent` (2026-08-06) gehört zur history-lesenden Familie um `log` und erbt dessen CLI-only-Status; siehe `docs/okf-recent/SPEC.md`.
 
 ### WS4 — Robustheit
 - Root-Safety: Default-`--root` = Script-Dir entschärfen — Catalogue-Autodetect oder
