@@ -1413,14 +1413,22 @@ def cmd_find(root, args):
         return
     for h in all_hits[: args.limit]:
         print("------")
-        print("score: {}/{}".format(h["score"], max_score))
+        # A semantic hit's number is round(100 * cosine) — a scale the
+        # lexical arm's a/max_score fraction shape would misrepresent as the
+        # same 0..100 ranking (D12: handover, never blend by score). Printed
+        # as its own "cosine X.XX" line so the two are never mistaken for one
+        # sortable column.
+        if h.get("provenance") == "semantic":
+            print("score: cosine {:.2f}".format(h["cosine"]))
+        else:
+            print("score: {}/{}".format(h["score"], max_score))
         print("title: {}".format(h["title"]))
         print("type: {}".format(h["type"]))
         print("path: {}".format(h["path"]))
         print("description: {}".format(h["desc"]))
         print("body-snippet: {}".format(h["snip"]))
         if h.get("provenance") == "semantic":
-            print("provenance: semantic (cosine={:.2f})".format(h["cosine"]))
+            print("provenance: semantic")
         if breakdown:
             if h.get("provenance") == "semantic":
                 print("contrib: semantic-only (cosine={:.2f}, no keyword field match)".format(h["cosine"]))
@@ -1574,11 +1582,13 @@ allowed only once `check` reports zero violations.
 """
 
 _FIND_SCALES_COMPACT = """\
-`score: a/b` names the scale in use, not a confidence: a/100 is the FTS5/BM25
-lexical arm (relative to this run's own top hit) and the semantic arm
-(round(100 * cosine)); a/(6 * n) is the substring fallback used when no FTS
-index is available, over n query terms. `provenance:` names the arm that
-produced the line. Degradations are announced on stderr.
+`score: a/b` names the scale in use for a lexical hit, not a confidence:
+a/100 is the FTS5/BM25 arm (relative to this run's own top hit); a/(6 * n) is
+the substring fallback used when no FTS index is available, over n query
+terms. A semantic hit prints `score: cosine X.XX` instead — its own scale,
+never the same column as a lexical a/b (D12: handover, not blending).
+`provenance:` names the arm that produced the line. Degradations are
+announced on stderr.
 """
 
 
@@ -4070,17 +4080,22 @@ def command_overview(width=96):
 
 _FIND_EPILOG = """\
 score lines:
-  The two arms report on different scales, and `score: a/b` names the scale
-  in use, not a confidence:
-    a/100        the FTS5/BM25 lexical arm (relative to this run's own top
-                 hit) and the semantic arm (round(100 * cosine)).
+  The arms report on different, non-comparable scales, and a hit's line
+  format names which one produced it — never a shared, sortable column:
+    a/100        the FTS5/BM25 lexical arm, relative to this run's own top
+                 hit.
     a/(6 * n)    the substring fallback used when no FTS index is available:
                  per query term 3 for a title hit, 2 for a tag hit, 1 for a
                  body hit, capped at one per field per term — so the maximum
                  is 6 * number of terms.
-  `provenance:` names the arm that produced the line; on a semantic hit it
-  also prints the cosine. Degradations (index absent or stale, embedding
-  backend unavailable) are announced on stderr, one note per degraded arm.
+    cosine X.XX  the semantic arm's raw cosine similarity — printed on its
+                 own line, not folded into an a/100 fraction, because that
+                 shape would invite comparing it against the lexical score
+                 above it (D12: fuse_conditional hands the ranking to
+                 whichever arm owns it, it never blends the two by score).
+  `provenance:` names the arm that produced the line. Degradations (index
+  absent or stale, embedding backend unavailable) are announced on stderr,
+  one note per degraded arm.
 """
 
 

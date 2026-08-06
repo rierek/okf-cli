@@ -2214,6 +2214,20 @@ class SemanticBackstop(unittest.TestCase):
         self.assertIn("path: b/near", out)
         self.assertIn("provenance: semantic", out)
 
+    def test_semantic_hit_score_line_uses_its_own_scale_not_a_fraction(self):
+        """The printed score line must not read like the lexical arm's a/100
+        fraction — a semantic hit's number is round(100 * cosine), a scale
+        incomparable to BM25-relative-to-top, and printing it as 'a/100'
+        invites exactly the cross-arm comparison D12 rejected (fuse_conditional
+        hands over, it never blends by score)."""
+        self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, _err = self._run("zzz-no-keyword-match-zzz")
+        lines = out.splitlines()
+        score_line = lines[1]
+        self.assertTrue(score_line.startswith("score: cosine "), score_line)
+        self.assertNotIn("/100", score_line)
+
     def test_strong_keyword_top_hit_is_never_overridden(self):
         # Backend guarded to raise if ever called — proves the semantic
         # pass does not even fire when the keyword top hit is strong.

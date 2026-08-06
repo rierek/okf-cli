@@ -77,6 +77,28 @@ class ParseFindBlocksTest(unittest.TestCase):
         hits = runner._parse_find_blocks("(no matches for: zzz)\n")
         self.assertEqual(hits, [])
 
+    def test_parses_a_semantic_hits_cosine_score_line(self):
+        """A semantic hit's score line is `score: cosine X.XX`, not the
+        lexical arm's a/b fraction (okf-cli.py cmd_find) — the parser must
+        recognize it rather than crash on int('cosine 0.40', base=10)."""
+        stdout = (
+            "------\n"
+            "score: cosine 0.40\n"
+            "title: Only\n"
+            "type: Concept\n"
+            "path: bundle/only\n"
+            "description: d\n"
+            "body-snippet: s\n"
+            "provenance: semantic\n"
+            "------\n"
+        )
+        hits = runner._parse_find_blocks(stdout)
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["path"], "bundle/only")
+        self.assertAlmostEqual(hits[0]["cosine"], 0.40)
+        self.assertIsNone(hits[0]["score"])
+        self.assertIsNone(hits[0]["max_score"])
+
 
 class AggregateMetricsPureUnitTest(unittest.TestCase):
     """F01 (Prelude 2026-07-25, bean okf-cli-5qmn) — pins the exact

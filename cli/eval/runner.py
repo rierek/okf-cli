@@ -74,9 +74,18 @@ def _parse_find_blocks(stdout):
                 current = {}
             continue
         if line.startswith("score: "):
-            achieved, _, mx = line[len("score: "):].partition("/")
-            current["score"] = int(achieved)
-            current["max_score"] = int(mx) if mx else 0
+            rest = line[len("score: "):]
+            # A semantic hit prints its own scale — `cosine X.XX`, not the
+            # lexical arm's a/b fraction (okf-cli.py cmd_find, D12: the two
+            # arms are never blended into one comparable column).
+            if rest.startswith("cosine "):
+                current["score"] = None
+                current["max_score"] = None
+                current["cosine"] = float(rest[len("cosine "):])
+            else:
+                achieved, _, mx = rest.partition("/")
+                current["score"] = int(achieved)
+                current["max_score"] = int(mx) if mx else 0
         elif line.startswith("path: "):
             current["path"] = line[len("path: "):]
     for i, h in enumerate(hits, start=1):
@@ -89,7 +98,12 @@ def _score_find_row(root, row):
     hits = _parse_find_blocks(out)
     for h in hits:
         if h["path"] == row["expected_path"]:
-            ratio = (h["score"] / h["max_score"]) if h["max_score"] else 0.0
+            # A semantic hit's cosine (0..1) already IS the ratio; only a
+            # lexical a/max_score fraction needs the division.
+            if h.get("cosine") is not None:
+                ratio = h["cosine"]
+            else:
+                ratio = (h["score"] / h["max_score"]) if h["max_score"] else 0.0
             return {"rank": h["rank"], "score_ratio": ratio}
     return {"rank": float("inf"), "score_ratio": 0.0}
 
