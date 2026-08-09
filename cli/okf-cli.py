@@ -3205,6 +3205,20 @@ def parse_wikilinks(text, source=None):
     return out
 
 
+def _apply_archive_precedence(candidates):
+    """R-06's precedence rule as a pure function over one basename's raw,
+    possibly-mixed candidate list: active candidates win outright whenever
+    at least one exists; archived candidates (`/_archive/<bundle>/...`) are
+    the fallback only when none do. Shared by build_concept_basename_index
+    (the real index) and _index_after_move (its move simulation, R-07,
+    docs/okf-archive-lifecycle/SPEC.md) so a change to the rule cannot land
+    in only one of the two — that drift is exactly what R-07 exists to
+    close: a dry run reporting an ambiguity that never materialises, or the
+    reverse."""
+    active = [c for c in candidates if not c.lower().startswith("/_archive/")]
+    return sorted(active) if active else sorted(candidates)
+
+
 def build_concept_basename_index(root):
     """lowercased basename (no .md) -> sorted catalogue-root-absolute paths of
     every non-reserved concept. A wikilink carries no path, so the basename IS
@@ -3250,18 +3264,15 @@ def build_concept_basename_index(root):
                 "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
     archive_root = os.path.join(root, "_archive")
     if os.path.isdir(archive_root):
-        archived = {}
         for b in list_bundles(archive_root):
             for ap in iter_all_md(os.path.join(archive_root, b)):
                 fn = os.path.basename(ap)
                 if fn.lower() in RESERVED:
                     continue
-                archived.setdefault(fn[:-3].lower(), []).append(
+                idx.setdefault(fn[:-3].lower(), []).append(
                     "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
-        for k, v in archived.items():
-            idx.setdefault(k, v)
     for k in idx:
-        idx[k].sort()
+        idx[k] = _apply_archive_precedence(idx[k])
     return idx
 
 
@@ -3696,14 +3707,26 @@ def _index_after_move(index, old_link, new_link, collisions=()):
     `collisions` are folded in because they come from the rename scan's wider
     reach: a same-named draft in staging is invisible to the index but visible
     to Obsidian, so leaving it out made the simulation call an address unique
-    that the app will show as ambiguous."""
+    that the app will show as ambiguous.
+
+    `index` already carries R-06's precedence (it came out of
+    build_concept_basename_index), so every key untouched by the move stays
+    correct by construction. The slot the move LANDS in (`key`) is the one
+    exception: it gains a brand-new candidate (`new_link`, plus any
+    `collisions`) that was never subject to that precedence pass, so it is
+    re-applied here via the same _apply_archive_precedence R-06 uses — this
+    is R-07. Concretely: archiving a concept whose basename an active
+    concept still holds must not leave the freshly archived path sitting
+    next to that survivor as a second candidate; the survivor alone must
+    win, exactly as it would in a freshly rebuilt index."""
     out = {}
     for k, v in index.items():
         kept = [c for c in v if c.lower() != old_link.lower()]
         if kept:
             out[k] = kept
     key = os.path.basename(new_link)[:-3].lower()
-    out[key] = sorted(set(out.get(key, [])) | {new_link} | set(collisions))
+    out[key] = _apply_archive_precedence(
+        set(out.get(key, [])) | {new_link} | set(collisions))
     return out
 
 

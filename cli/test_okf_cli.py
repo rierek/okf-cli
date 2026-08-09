@@ -4038,6 +4038,23 @@ class WikilinkArchiveResolution(WikilinkFixtureMixin, unittest.TestCase):
                          ("ambiguous", ["/a/g.md", "/b/g.md"]))
 
 
+class MoveSimulationArchivePrecedence(WikilinkFixtureMixin, unittest.TestCase):
+    """R-07 (docs/okf-archive-lifecycle/SPEC.md) — _index_after_move applies
+    the same active-before-archived rule build_concept_basename_index applies
+    (R-06), for the basename slot the move lands in. Without it, a dry run
+    can report an ambiguity that never materialises (AC1/AC2/SC-01)."""
+
+    def test_precedence_applied_to_the_slot_the_move_lands_in(self):
+        """Archiving a/old.md while d/old.md stays active must leave "old"
+        resolving to the sole surviving active candidate, not to both the
+        freshly archived path and the active one."""
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        self._w("d/old.md", "---\ntype: Concept\n---\n# D Old\n")
+        index = self._index()
+        after = okf._index_after_move(index, "/a/old.md", "/_archive/a/old.md")
+        self.assertEqual(after["old"], ["/d/old.md"])
+
+
 class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
     """REQ-06..REQ-09 — the `wikilinks` reporting command."""
 
@@ -4900,6 +4917,20 @@ class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
     def test_report_is_zero_when_nothing_links_to_it(self):
         out = self._archive("a/old.md")
         self.assertIn("0 active concept(s)", out)
+
+    # -- R-07/AC2/SC-01: move simulation honours the precedence rule -----
+    def test_archive_does_not_falsely_flag_a_bystander_as_turning_ambiguous(self):
+        """archiving a/old.md, whose basename is also held by the active
+        d/old.md, must not report a/other.md's bystander [[old]] as turning
+        ambiguous: once a/old.md leaves the active tier, [[old]] simply
+        re-resolves to the sole remaining active concept, d/old.md — a
+        retarget, not an ambiguity — so the move must complete without
+        --force."""
+        self._w("d/old.md", "---\ntype: Concept\n---\n# D Old\n")
+        self._w("a/other.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        out = self._archive("a/old.md", apply=True)
+        self.assertNotIn("turns-ambiguous", out)
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
 
 
 class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
