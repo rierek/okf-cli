@@ -1,11 +1,11 @@
 ---
 # okf-cli-fv7y
 title: run the archive round trip against the real catalogue
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-08-09T19:15:18Z
-updated_at: 2026-08-09T19:25:42Z
+updated_at: 2026-08-09T23:04:47Z
 parent: okf-cli-huow
 blocked_by:
     - okf-cli-16rg
