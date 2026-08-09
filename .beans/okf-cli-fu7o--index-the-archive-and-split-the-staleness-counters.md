@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-08-09T19:15:04Z
-updated_at: 2026-08-09T19:35:52Z
+updated_at: 2026-08-09T20:47:34Z
 parent: okf-cli-scd5
 blocked_by:
     - okf-cli-pn72
@@ -44,3 +44,20 @@ A parallel session added a bundle-existence guard to `cmd_index` and `cmd_visual
 - That property is pinned by their test `test_the_gate_is_existence_not_bundle_eligibility`, verified by mutation. Anyone tightening the guard later gets a red test rather than silently breaking this leaf.
 
 What this means for you: if your indexing path needs to accept a path that does **not** exist as a directory (for instance indexing an archive before any concept has been archived into it), the parallel assumption is wrong and their helper needs an exception. Record that in `## Notes` and report it — the supervisor relays it to the other session. If your path only ever indexes an archive directory that exists, nothing to do.
+
+
+
+## 2026-08-09 — incoming guard from the parallel Rust-rewrite session (final)
+
+That session has closed. Its branch `fix/b01-b02-bundle-validation` @ `b5a9f1d` (base `3310656`, suite 559 green) is the only one of theirs that touches `cli/` and will need a rebase onto whatever `main` looks like after this chain. It is not merged yet — the merge gate is mutual and the PO decides.
+
+What it adds, verbatim from their handover:
+
+- Helper `require_bundle_dir(root, bundle)`, placed under `is_bundle_dir`.
+- Called in `cmd_index` and `cmd_visualize`.
+- It checks `os.path.isdir` and deliberately **not** `is_bundle_dir()` — precisely so that `_archive/` paths pass through it.
+- Test class `BundleArgumentIsValidated`.
+
+Consequence for this task: the guard is archive-compatible by design, so indexing `_archive/<bundle>/**` does not have to fight it. But this task and that branch both edit `cmd_index`, in the same file, from different bases. Whoever rebases second resolves the conflict. Keep the edit here as small and as local as it can be, and do not restructure `cmd_index` beyond what R-11 requires — a large refactor here turns their rebase into a rewrite.
+
+They also report that `cmd_archive` (cli/okf-cli.py:4163) already implements `--apply` exactly the way their cross-cutting rules COM-29/COM-30 require, and cite it as precedent in their `log.md`.
