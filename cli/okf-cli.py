@@ -3995,11 +3995,58 @@ def cmd_rename(root, args):
     perform_rename(root, old_abs, new_abs, args.apply, args.force)
 
 
+def cmd_archive(root, args):
+    """R-01..R-03 (okf-cli-16rg): `archive <bundle>/<concept>[.md]` moves a
+    concept to `_archive/<bundle>/<concept>.md`, preserving any subdirectory
+    substructure of the concept id; `archive --restore
+    _archive/<bundle>/<concept>[.md]` moves it back. The destination is
+    derived, never typed (SPEC.md §1) — the three direction guards below are
+    archive's own and run before perform_rename's shared guards, because they
+    are not part of that shared core (SPEC.md §2)."""
+    verb = "archive"
+
+    def die(msg):
+        sys.stderr.write("{}: {}\n".format(verb, msg))
+        sys.exit(2)
+
+    ref = args.path[:-3] if args.path.endswith(".md") else args.path
+    p = ref + ".md"
+    src_abs = os.path.abspath(p if os.path.isabs(p) else os.path.join(root, p))
+    src_rel = os.path.relpath(src_abs, root).replace(os.sep, "/")
+    segs = src_rel.split("/")
+
+    if args.restore:
+        if segs[0] != "_archive":
+            die("--restore source must lie under _archive/, not: {}".format(src_rel))
+        if len(segs) < 3:
+            die("archive path carries no bundle segment — destination is not "
+                "derivable from: {}".format(src_rel))
+        dest_rel = "/".join(segs[1:])
+    else:
+        if segs[0] == "_archive":
+            die("source already lies under _archive/ — use --restore to bring "
+                "it back: {}".format(src_rel))
+        dest_rel = "/".join(["_archive"] + segs)
+
+    dest_abs = os.path.join(root, dest_rel)
+
+    # The inbound-reference count is a report line, not a guard: it must not
+    # gate the move, only disclose what the move leaves behind (SPEC.md §1).
+    # A nonexistent source is left to perform_rename's own "source not found",
+    # so a plan is only built once there is a file to plan a move for.
+    if os.path.isfile(src_abs):
+        plan = plan_rename(root, src_abs, dest_abs)
+        n_concepts = len({src for src, _o, _n in plan["inbound"]})
+        print("{} active concept(s) still link to this concept".format(n_concepts))
+
+    perform_rename(root, src_abs, dest_abs, args.apply, args.force, verb=verb)
+
+
 COMMAND_DISPATCH = {
     "prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
     "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
     "refs": cmd_refs,
-    "rewrite-path": cmd_rewrite_path, "rename": cmd_rename,
+    "rewrite-path": cmd_rewrite_path, "rename": cmd_rename, "archive": cmd_archive,
     "build-index": cmd_build_index,
     "reindex": cmd_reindex, "log": cmd_log, "recent": cmd_recent,
     "tags": cmd_tags,
@@ -4113,6 +4160,17 @@ def build_parser():
     ap.add_argument("--root", help="catalogue root (default: auto-detect from cwd; "
                     "hard-fails if none found)")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    pah = _sub(sub, "archive", "maintenance",
+               "move a concept into _archive/<bundle>/, or back with --restore (dry-run default)")
+    pah.add_argument("path", help="<bundle>/<concept>[.md]; with --restore: "
+                                   "_archive/<bundle>/<concept>[.md]. The other end is derived, "
+                                   "never typed")
+    pah.add_argument("--restore", action="store_true",
+                     help="move the path back out of _archive/ instead of into it")
+    pah.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
+    pah.add_argument("--force", action="store_true",
+                     help="overwrite an existing destination, and proceed when the new "
+                          "basename is already taken and inbound wikilinks would turn ambiguous")
     pbi = _sub(sub, "build-index", "search",
                "(re)build the FTS5 lexical search index at "
                "<root>/.fts/fts.sqlite (local only, no network)")

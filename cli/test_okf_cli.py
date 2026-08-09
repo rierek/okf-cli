@@ -4719,6 +4719,134 @@ class PerformRenameDirectCall(WikilinkFixtureMixin, unittest.TestCase):
         self.assertTrue(err.getvalue().startswith("rename:"))
 
 
+class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
+    """R-01..R-03 (okf-cli-16rg) — `archive`/`archive --restore` as a thin
+    wrapper over perform_rename. The destination is derived, never typed."""
+
+    def setUp(self):
+        super().setUp()
+        self._w("a/index.md", "# A\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n\nBody text.\n")
+
+    def _ap(self, rel):
+        return os.path.join(self.tmp, rel)
+
+    def _archive(self, path, restore=False, apply=False, force=False):
+        import contextlib
+        import io
+        import types
+        args = types.SimpleNamespace(path=path, restore=restore, apply=apply, force=force)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_archive(self.tmp, args)
+        return buf.getvalue()
+
+    def _archive_fails(self, path, message, restore=False, apply=False, force=False):
+        import contextlib
+        import io
+        import types
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                okf.cmd_archive(self.tmp, types.SimpleNamespace(
+                    path=path, restore=restore, apply=apply, force=force))
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn(message, err.getvalue())
+        return err.getvalue()
+
+    # -- A01/SC-01: dry run --------------------------------------------
+    def test_dry_run_prints_the_plan_and_touches_nothing(self):
+        out = self._archive("a/old.md")
+        self.assertIn("would move", out)
+        self.assertIn("_archive/a/old.md", out)
+        self.assertTrue(os.path.isfile(self._ap("a/old.md")))
+        self.assertFalse(os.path.exists(self._ap("_archive")))
+
+    def test_dry_run_accepts_bare_concept_id_without_md_suffix(self):
+        out = self._archive("a/old")
+        self.assertIn("_archive/a/old.md", out)
+
+    # -- A02/SC-02: apply -------------------------------------------------
+    def test_apply_moves_file_under_archive_bundle_dir_fs_fallback(self):
+        out = self._archive("a/old.md", apply=True)
+        self.assertFalse(os.path.isfile(self._ap("a/old.md")))
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
+        self.assertIn("moved (fs)", out)
+
+    def test_apply_moves_file_via_real_git_when_tracked(self):
+        import subprocess
+        subprocess.run(["git", "init", "-q"], cwd=self.tmp, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=self.tmp, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t.de", "-c", "user.name=t",
+                         "commit", "-qm", "seed"], cwd=self.tmp, check=True)
+        out = self._archive("a/old.md", apply=True)
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
+        self.assertIn("moved (git mv)", out)
+
+    # -- A03: restore -------------------------------------------------
+    def test_restore_derives_destination_without_a_second_path(self):
+        self._archive("a/old.md", apply=True)
+        out = self._archive("_archive/a/old.md", restore=True, apply=True)
+        self.assertIn("_archive/a/old.md", out)
+        self.assertTrue(os.path.isfile(self._ap("a/old.md")))
+        self.assertFalse(os.path.exists(self._ap("_archive/a/old.md")))
+
+    def test_restore_preserves_multi_level_concept_id_substructure(self):
+        self._w("a/sub/deep.md", "---\ntype: Concept\n---\n# Deep\n")
+        self._archive("a/sub/deep.md", apply=True)
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/sub/deep.md")))
+        self._archive("_archive/a/sub/deep.md", restore=True, apply=True)
+        self.assertTrue(os.path.isfile(self._ap("a/sub/deep.md")))
+
+    # -- SC-03: round trip, including the links that point at the concept -
+    def test_round_trip_archive_then_restore_is_byte_identical_including_links(self):
+        self._w("b/src.md", "---\ntype: Concept\n---\nSee [Old](/a/old.md) and [[old]].\n")
+        concept_before = self._r("a/old.md")
+        linker_before = self._r("b/src.md")
+
+        self._archive("a/old.md", apply=True)
+        self.assertIn("/_archive/a/old.md", self._r("b/src.md"))
+        self.assertIn("[[old]]", self._r("b/src.md"))
+
+        self._archive("_archive/a/old.md", restore=True, apply=True)
+
+        self.assertEqual(self._r("a/old.md"), concept_before)
+        self.assertEqual(self._r("b/src.md"), linker_before)
+
+    # -- A04/R-03: direction guards ------------------------------------
+    def test_archive_refuses_a_source_already_under_archive(self):
+        self._w("_archive/a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._archive_fails("_archive/a/x.md", "already lies under _archive/")
+
+    def test_restore_refuses_a_source_outside_archive(self):
+        self._archive_fails("a/old.md", "must lie under _archive/", restore=True)
+
+    def test_restore_refuses_an_archive_path_without_a_bundle_segment(self):
+        self._w("_archive/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._archive_fails("_archive/x.md", "no bundle segment", restore=True)
+
+    def test_each_direction_guard_is_distinguishable_by_message(self):
+        """SC-04 — three refusals, three distinct messages, not one shared
+        'refused' string that any of the three could satisfy."""
+        self._w("_archive/a/x.md", "---\ntype: Concept\n---\n# X\n")
+        self._w("_archive/y.md", "---\ntype: Concept\n---\n# Y\n")
+        m1 = self._archive_fails("_archive/a/x.md", "already lies under _archive/")
+        m2 = self._archive_fails("a/old.md", "must lie under _archive/", restore=True)
+        m3 = self._archive_fails("_archive/y.md", "no bundle segment", restore=True)
+        self.assertEqual(len({m1, m2, m3}), 3)
+
+    # -- A07: report of active inbound references -----------------------
+    def test_report_counts_active_concepts_still_linking_to_it(self):
+        self._w("b/src.md", "---\ntype: Concept\n---\nSee [Old](/a/old.md).\n")
+        self._w("c/other.md", "---\ntype: Concept\n---\nAlso [Old](/a/old.md).\n")
+        out = self._archive("a/old.md")
+        self.assertIn("2 active concept(s)", out)
+
+    def test_report_is_zero_when_nothing_links_to_it(self):
+        out = self._archive("a/old.md")
+        self.assertIn("0 active concept(s)", out)
+
+
 class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
     """REQ-13/REQ-14 — the wikilink-resolvable check and its opt-in gate."""
 
