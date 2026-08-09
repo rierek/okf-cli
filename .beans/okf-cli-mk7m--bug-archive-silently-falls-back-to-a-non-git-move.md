@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-08-09T23:06:24Z
-updated_at: 2026-08-09T23:06:24Z
+updated_at: 2026-08-09T23:16:20Z
 parent: okf-cli-huow
 ---
 
@@ -15,7 +15,11 @@ Found by the real-catalogue run (`okf-cli-fv7y`, R-15) — no fixture could have
 
 Every project bundle in the real catalogue is a **symlink** into its project repo: `lean-stack-okf`, `vik-okf`, `devd2-okf`, `bew_BeWiki-Python-Download-okf`, `okf-tools-okf`, `vc-search-okf`.
 
-`_git_mv` (cli/okf-cli.py:4048) runs `git -C <root> mv -f`. Git refuses with `fatal: pathspec "..." is beyond a symbolic link` and the code falls back to `os.rename`, reporting `moved (fs)`.
+`_git_mv` (cli/okf-cli.py:4048) runs `git -C <root> mv -f`. Git refuses and the code falls back to `os.rename`, reporting `moved (fs)`.
+
+The exact git message was mis-attributed in the first draft of this bean: `fatal: pathspec ... is beyond a symbolic link` comes from `git add`, not from `git mv`. A reviewer rebuilt the layout in a temporary fixture — two repos, the bundle committed into the catalogue as mode `120000` — and got `fatal: not under version control, source=bundle/concept.md, destination=bundle/concept2.md` with exit 128. Do not grep for the wrong string when reproducing this.
+
+Worse than either message: `_git_mv` (cli/okf-cli.py:4048-4059) captures `proc.stderr` and never reads it, so git's explanation never reaches the user at all. The caller (cli/okf-cli.py:4199) prints `moved (fs)` versus `moved (git mv)` — not wordless, but nothing says what `(fs)` costs or which repository actually received the write.
 
 The consequence is that the move — and the crosslink rewrites that go with it — lands **untracked in the target project repo**, not in the catalogue repo. During the run, `git -C ~/Obsidian/Knowledge-Catalogue status` showed only `?? _archive/` while `git -C ~/dev/lean-stack status` showed `D`/`M` on three paths. The round trip restored everything byte-identically, so nothing was lost, but the mechanism is wrong.
 
