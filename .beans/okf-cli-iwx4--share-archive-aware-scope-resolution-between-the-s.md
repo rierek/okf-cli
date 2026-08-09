@@ -1,10 +1,11 @@
 ---
 # okf-cli-iwx4
 title: share archive-aware scope resolution between the substring arm and list
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-08-09T19:15:04Z
-updated_at: 2026-08-09T19:15:04Z
+updated_at: 2026-08-09T21:41:23Z
 parent: okf-cli-scd5
 blocked_by:
     - okf-cli-pn72
