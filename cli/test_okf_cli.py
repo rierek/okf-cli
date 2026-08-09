@@ -5460,5 +5460,103 @@ class RecentAgainstRealGit(unittest.TestCase):
         self.assertEqual(why, "no-repo")
 
 
+class BundleArgumentIsValidated(unittest.TestCase):
+    """A bundle argument naming a directory that does not exist must refuse,
+    the same way `check` already does (cmd_check's own comment: "without this
+    a typo'd or renamed bundle scanned nothing and exited 0 — a clean bill of
+    health for a directory that does not exist").
+
+    `index` and `visualize` were the two commands that took a bundle without
+    checking it. `index` printed an empty listing under a `# <typo>` heading
+    and exited 0; `visualize` went further and CREATED <root>/<typo>/assets/
+    to write a 0-node graph into — a typo mutating the catalogue."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        ap = os.path.join(self.tmp, "real", "one.md")
+        os.makedirs(os.path.dirname(ap))
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: One\n---\n# One\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _call(self, fn, args):
+        """Run a command, returning (exit_code_or_None, stdout, stderr)."""
+        import io, contextlib
+        out, err = io.StringIO(), io.StringIO()
+        code = None
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                fn(self.tmp, args)
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue(), err.getvalue()
+
+    def _index_args(self, bundle, json_flag=False):
+        import types
+        return types.SimpleNamespace(bundle=bundle, full=False, json=json_flag)
+
+    def test_index_refuses_a_bundle_that_does_not_exist(self):
+        code, out, err = self._call(okf.cmd_index, self._index_args("nope"))
+        self.assertEqual(code, 1)
+        self.assertIn("nope", err)
+        self.assertNotIn("# nope", out)
+
+    def test_index_json_refuses_too(self):
+        """The --json branch returns before the text branch, so it needs the
+        same gate — otherwise a consumer gets `{"bundle": "nope", ...}` and a
+        zero exit for a bundle that is not there."""
+        code, out, _err = self._call(okf.cmd_index,
+                                     self._index_args("nope", json_flag=True))
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+
+    def test_index_still_prints_an_existing_bundle(self):
+        code, out, _err = self._call(okf.cmd_index, self._index_args("real"))
+        self.assertIsNone(code)
+        self.assertIn("One", out)
+
+    def test_visualize_refuses_a_bundle_that_does_not_exist(self):
+        import types
+        code, _out, err = self._call(
+            okf.cmd_visualize, types.SimpleNamespace(bundle="nope", out=None))
+        self.assertEqual(code, 1)
+        self.assertIn("nope", err)
+
+    def test_visualize_creates_nothing_for_a_bundle_that_does_not_exist(self):
+        """The actual damage: os.makedirs() on a path derived from an
+        unvalidated argument. A typo left a directory behind in the
+        catalogue."""
+        import types
+        self._call(okf.cmd_visualize,
+                   types.SimpleNamespace(bundle="nope", out=None))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "nope")))
+
+    def test_visualize_still_writes_for_an_existing_bundle(self):
+        import types
+        code, out, _err = self._call(
+            okf.cmd_visualize, types.SimpleNamespace(bundle="real", out=None))
+        self.assertIsNone(code)
+        self.assertTrue(os.path.isfile(
+            os.path.join(self.tmp, "real", "assets", "viz.html")))
+        self.assertIn("1 nodes", out)
+
+    def test_the_gate_is_existence_not_bundle_eligibility(self):
+        """The guard must ask "is this a directory", NOT "is this a bundle".
+        `is_bundle_dir()` rejects a `_` prefix, so gating on it would refuse
+        `index _archive` — a directory that is on disk and printable. Tightening
+        the guard to list_bundles()/is_bundle_dir() turns this test red."""
+        ap = os.path.join(self.tmp, "_archive", "old.md")
+        os.makedirs(os.path.dirname(ap))
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: Old\n---\n# Old\n")
+        code, out, _err = self._call(okf.cmd_index, self._index_args("_archive"))
+        self.assertIsNone(code)
+        self.assertIn("Old", out)
+
+
 if __name__ == "__main__":
     unittest.main()
