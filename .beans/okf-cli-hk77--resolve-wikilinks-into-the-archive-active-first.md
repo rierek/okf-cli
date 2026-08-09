@@ -1,11 +1,11 @@
 ---
 # okf-cli-hk77
 title: resolve wikilinks into the archive, active first
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-08-09T19:14:21Z
-updated_at: 2026-08-09T19:25:32Z
+updated_at: 2026-08-09T20:04:15Z
 parent: okf-cli-xlck
 ---
 
