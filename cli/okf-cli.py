@@ -584,7 +584,8 @@ def cmd_list(root, args):
         print("(error: pass --type and/or --tag)", file=sys.stderr)
         sys.exit(1)
     hits = []
-    for _bundle, bp in resolve_scopes(root, args.scope):
+    for _bundle, bp in resolve_scopes(
+            root, args.scope, getattr(args, "include_archive", False)):
         for _cid, ap in iter_concepts(bp):
             t, title, desc = meta_of(ap)
             if args.type and t != args.type:
@@ -1056,7 +1057,7 @@ def _substring_ranking(root, query, terms, limit, filters):
     path. Only the second one is a predicate; dropping it would reopen the
     I01 gap the moment the traversal changes shape."""
     hits = []
-    for _b, bp in resolve_scopes(root, filters.scope):
+    for _b, bp in resolve_scopes(root, filters.scope, filters.include_archive):
         # B04: the path prefix is the SCOPE's position under root, not the
         # bundle name. iter_concepts() yields cids relative to `bp`, so with
         # --scope b/sub the old "{bundle}/{cid}" form printed `b/y` for a
@@ -3015,9 +3016,26 @@ def cmd_fix_crosslinks(root, args):
         len(touched), verb, len(unresolved)))
 
 
-def resolve_scopes(root, target):
+def resolve_scopes(root, target, include_archive=False):
     """[(bundle, bundle_path), ...] for `target` (<bundle> or <bundle>/<subdir>),
-    or every bundle in the catalogue when target is None."""
+    or every bundle in the catalogue when target is None.
+
+    R-12 (okf-cli-iwx4): the ONE function `cmd_list` and `_substring_ranking`
+    both traverse through — AC1 is that the answer does not depend on which
+    of the two called it. When include_archive is set, each resolved scope's
+    archived counterpart is appended too, labelled `_archive/<bundle>[...]`
+    and pointing at the real `_archive/...` directory below root — a caller
+    that walks the returned pairs reaches the archive without a second
+    traversal shape, and a hit's path stays its true position below root
+    (AC3: `okf-cli read` on it resolves, SC-02). Unscoped, every bundle
+    registered under `_archive/` is reached this way too, including one with
+    no active counterpart — the same discovery R-05/R-06's wikilink basename
+    index already does for the archive
+    (build_concept_basename_index, above). Scoped, the archived counterpart
+    is derived WITHOUT an existence check, same as the active side already
+    does for a scoped target: a directory that turns out not to exist yields
+    no concepts from iter_concepts()'s os.walk, silently, the same contract
+    as always — no special-casing needed here for that."""
     if target:
         # An absolute target addresses a directory directly and must keep doing
         # so — os.path.join(root, "/x") discards root, and normalising it into a
@@ -3026,15 +3044,34 @@ def resolve_scopes(root, target):
         if os.path.isabs(target):
             tp = os.path.normpath(target)
             rel = os.path.relpath(tp, root).replace(os.sep, "/")
-            return [("" if rel.startswith("..") else rel.split("/")[0], tp)]
-        # normpath otherwise: an unnormalised `./a` yielded bundle "." and
-        # silently defeated every bundle-name-keyed rule (the wikilink opt-in
-        # gate found it) while the scan still ran over the right directory.
-        norm = os.path.normpath(target).replace(os.sep, "/").strip("/")
-        if norm in (".", ""):
-            return [(b, os.path.join(root, b)) for b in list_bundles(root)]
-        return [(norm.split("/")[0], os.path.join(root, norm))]
-    return [(b, os.path.join(root, b)) for b in list_bundles(root)]
+            if rel.startswith(".."):
+                return [("", tp)]
+            scopes = [(rel.split("/")[0], tp)]
+            norm = rel
+        else:
+            # normpath otherwise: an unnormalised `./a` yielded bundle "." and
+            # silently defeated every bundle-name-keyed rule (the wikilink
+            # opt-in gate found it) while the scan still ran over the right
+            # directory.
+            norm = os.path.normpath(target).replace(os.sep, "/").strip("/")
+            if norm in (".", ""):
+                scopes = [(b, os.path.join(root, b)) for b in list_bundles(root)]
+                norm = None
+            else:
+                scopes = [(norm.split("/")[0], os.path.join(root, norm))]
+    else:
+        scopes = [(b, os.path.join(root, b)) for b in list_bundles(root)]
+        norm = None
+    if not include_archive:
+        return scopes
+    archive_root = os.path.join(root, "_archive")
+    if norm is None:
+        if not os.path.isdir(archive_root):
+            return scopes
+        return scopes + [("_archive/" + b, os.path.join(archive_root, b))
+                         for b in list_bundles(archive_root)]
+    return scopes + [("_archive/" + norm.split("/")[0],
+                      os.path.join(archive_root, norm))]
 
 
 # --- wikilinks -------------------------------------------------------------
@@ -4356,6 +4393,10 @@ def build_parser():
     pls.add_argument("--tag", help="filter by tag (exact match)")
     pls.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+    pls.add_argument("--include-archive", action="store_true",
+                    help="also list _archive/<bundle>/<cid>; excluded by "
+                         "default (combine with --scope to reach the "
+                         "archived concepts of one bundle)")
     pls.add_argument("--json", action="store_true", help="machine-readable output")
     pl = _sub(sub, "log", "navigation",
               "render git history for the catalogue or a bundle as a SPEC §7 changelog")

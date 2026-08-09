@@ -2214,6 +2214,227 @@ class FindScopeLikeEscaping(unittest.TestCase):
         self.assertNotIn("Xarchive/my_bundle/hidden2", paths)
 
 
+class ResolveScopesArchive(unittest.TestCase):
+    """R-12 (okf-cli-iwx4) — resolve_scopes() is the ONE function `cmd_list`
+    and `_substring_ranking` both traverse through; this class pins its
+    include_archive behaviour directly, at the primitive level, the same way
+    ResolveScopesTargets above pins the non-archive target forms."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "alpha", "sub"), exist_ok=True)
+        os.makedirs(os.path.join(self.tmp, "beta"), exist_ok=True)
+        os.makedirs(os.path.join(self.tmp, "_archive", "alpha"), exist_ok=True)
+        # archive-only bundle: no active "gamma" directory exists at all —
+        # R-05/R-06's basename index already discovers bundles this way
+        # (build_concept_basename_index), so the shared scope resolution
+        # must too.
+        os.makedirs(os.path.join(self.tmp, "_archive", "gamma"), exist_ok=True)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_default_is_unchanged_by_the_new_parameter(self):
+        self.assertEqual(
+            okf.resolve_scopes(self.tmp, None),
+            [("alpha", os.path.join(self.tmp, "alpha")),
+             ("beta", os.path.join(self.tmp, "beta"))],
+        )
+
+    def test_unscoped_include_archive_appends_every_archive_bundle(self):
+        got = okf.resolve_scopes(self.tmp, None, include_archive=True)
+        self.assertEqual(got, [
+            ("alpha", os.path.join(self.tmp, "alpha")),
+            ("beta", os.path.join(self.tmp, "beta")),
+            ("_archive/alpha", os.path.join(self.tmp, "_archive", "alpha")),
+            ("_archive/gamma", os.path.join(self.tmp, "_archive", "gamma")),
+        ])
+
+    def test_scoped_include_archive_appends_only_that_bundles_archive_dir(self):
+        got = okf.resolve_scopes(self.tmp, "alpha", include_archive=True)
+        self.assertEqual(got, [
+            ("alpha", os.path.join(self.tmp, "alpha")),
+            ("_archive/alpha", os.path.join(self.tmp, "_archive", "alpha")),
+        ])
+        got_other = okf.resolve_scopes(self.tmp, "beta", include_archive=True)
+        self.assertNotIn(("_archive/alpha",
+                          os.path.join(self.tmp, "_archive", "alpha")),
+                          got_other)
+
+    def test_scoped_subdir_include_archive_appends_nested_archive_dir(self):
+        """AC3's easiest way to break: losing or re-deriving the prefix
+        during traversal. `alpha/sub` must map to the NESTED
+        `_archive/alpha/sub`, not `_archive/alpha` or `_archive/sub`."""
+        got = okf.resolve_scopes(self.tmp, "alpha/sub", include_archive=True)
+        self.assertEqual(got, [
+            ("alpha", os.path.join(self.tmp, "alpha", "sub")),
+            ("_archive/alpha",
+             os.path.join(self.tmp, "_archive", "alpha", "sub")),
+        ])
+
+    def test_no_archive_directory_at_all_does_not_crash(self):
+        tmp2 = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(tmp2, "solo"))
+            got = okf.resolve_scopes(tmp2, None, include_archive=True)
+            self.assertEqual(got, [("solo", os.path.join(tmp2, "solo"))])
+        finally:
+            shutil.rmtree(tmp2, ignore_errors=True)
+
+
+class ListIncludeArchive(unittest.TestCase):
+    """R-12/AC1-AC3 (okf-cli-iwx4) — `list` reaches the archive through the
+    SAME resolve_scopes() `_substring_ranking` uses (SubstringRankingArchive
+    below), not a second implementation of the same rule."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._w("bundle-a/active.md", "Runbook", "Active")
+        self._w("_archive/bundle-a/hidden.md", "Runbook", "Hidden")
+        self._w("_archive/bundle-b/other.md", "Concept", "Other")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, typ, title):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: {}\ntitle: {}\ndescription: d\ntags: []\n"
+                    "---\n# {}\n".format(typ, title, title))
+
+    def _run(self, **kw):
+        import io, contextlib, types
+        args = types.SimpleNamespace(type=None, tag=None, scope=None,
+                                     json=False, include_archive=False)
+        for k, v in kw.items():
+            setattr(args, k, v)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_list(self.tmp, args)
+        return buf.getvalue()
+
+    def test_sc01_default_excludes_archived_concept(self):
+        out = self._run(type="Runbook")
+        self.assertIn("path: bundle-a/active", out)
+        self.assertNotIn("path: _archive/bundle-a/hidden", out)
+
+    def test_sc01_flag_includes_archived_concept_of_matching_type(self):
+        out = self._run(type="Runbook", include_archive=True)
+        self.assertIn("path: bundle-a/active", out)
+        self.assertIn("path: _archive/bundle-a/hidden", out)
+        self.assertNotIn("path: _archive/bundle-b/other", out)  # type Concept
+
+    def test_list_parser_has_include_archive_flag(self):
+        parsers = okf.subcommand_parsers(okf.build_parser())
+        dests = {a.dest for a in okf.parser_actions(parsers["list"])}
+        self.assertIn("include_archive", dests)
+
+
+class SubstringRankingArchive(unittest.TestCase):
+    """R-12/AC2-AC4 (okf-cli-iwx4) — the substring fallback (no FTS index)
+    reaches the archive the same way `list` does, through resolve_scopes(),
+    and matches_loaded() keeps discriminating every hit the widened
+    traversal now surfaces (AC4 — the I01 regression guard: a changed
+    traversal shape must not silently drop the per-hit predicate)."""
+
+    LITERAL = "zqxsubarch"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        body = "{} appears in every fixture body.\n".format(self.LITERAL)
+        self._w("bundle-a/active.md", "Runbook", "Active", body)
+        self._w("_archive/bundle-a/hidden.md", "Runbook", "Hidden", body)
+        self._w("_archive/bundle-b/other.md", "Concept", "Other", body)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, typ, title, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: {}\ntitle: {}\ndescription: d\ntags: []\n"
+                    "---\n# {}\n\n{}".format(typ, title, title, body))
+
+    def _paths(self, **kw):
+        out = _run_find(self.tmp, self.LITERAL, **kw)
+        return [l[len("path: "):] for l in out.splitlines()
+                if l.startswith("path: ")]
+
+    def test_sc01_default_excludes_archived_concept(self):
+        paths = self._paths()
+        self.assertIn("bundle-a/active", paths)
+        self.assertNotIn("_archive/bundle-a/hidden", paths)
+        self.assertNotIn("_archive/bundle-b/other", paths)
+
+    def test_ac2_ac3_flag_reaches_archive_under_its_true_path(self):
+        paths = self._paths(include_archive=True)
+        self.assertIn("_archive/bundle-a/hidden", paths)
+        self.assertIn("_archive/bundle-b/other", paths)
+
+    def test_ac4_matches_loaded_still_discriminates_every_hit(self):
+        paths = self._paths(include_archive=True, type="Runbook")
+        self.assertIn("bundle-a/active", paths)
+        self.assertIn("_archive/bundle-a/hidden", paths)
+        self.assertNotIn("_archive/bundle-b/other", paths)  # type Concept
+
+
+class ArchiveHitPathResolvesViaRead(unittest.TestCase):
+    """SC-02 (R-12, okf-cli-iwx4) — end to end: the path an archive hit
+    prints under --include-archive is not just A path, it is the path
+    `okf-cli read` resolves to the same file. Exercised through both
+    surfaces this bean touches, not a unit test on path arithmetic."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.body_marker = "zqxread body marker for SC-02."
+        self._w("bundle-a/active.md", "Concept", "Active", "filler")
+        self._w("_archive/bundle-a/hidden.md", "Concept", "Hidden",
+                self.body_marker)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, typ, title, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: {}\ntitle: {}\ndescription: d\ntags: []\n"
+                    "---\n# {}\n\n{}\n".format(typ, title, title, body))
+
+    def _read_path(self, path):
+        import io, contextlib, types
+        args = types.SimpleNamespace(path=path)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_read(self.tmp, args)
+        return buf.getvalue()
+
+    def test_list_archive_hit_path_resolves_via_read(self):
+        import io, contextlib, types
+        args = types.SimpleNamespace(type="Concept", tag=None, scope=None,
+                                     json=False, include_archive=True)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_list(self.tmp, args)
+        lines = buf.getvalue().splitlines()
+        path_line = next(l for l in lines if l == "path: _archive/bundle-a/hidden")
+        path = path_line[len("path: "):]
+        self.assertIn(self.body_marker, self._read_path(path))
+
+    def test_substring_find_archive_hit_path_resolves_via_read(self):
+        marker = "zqxfindread"
+        self._w("_archive/bundle-a/needle.md", "Concept", "Needle",
+                "{} {}".format(marker, self.body_marker))
+        out = _run_find(self.tmp, marker, include_archive=True)
+        lines = out.splitlines()
+        path_line = next(l for l in lines if l.startswith("path: "))
+        path = path_line[len("path: "):]
+        self.assertEqual(path, "_archive/bundle-a/needle")
+        self.assertIn(self.body_marker, self._read_path(path))
+
+
 class FindScoreBreakdown(unittest.TestCase):
     """P8/8b (okf-cli-8uaf, SCO03) — --breakdown lists which field(s)/term(s)
     contributed to each hit's score; without it, output is byte-identical."""
