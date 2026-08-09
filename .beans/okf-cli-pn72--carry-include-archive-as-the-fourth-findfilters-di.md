@@ -1,11 +1,11 @@
 ---
 # okf-cli-pn72
 title: carry include_archive as the fourth FindFilters dimension
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-08-09T19:14:21Z
-updated_at: 2026-08-09T21:32:15Z
+updated_at: 2026-08-09T21:37:16Z
 parent: okf-cli-scd5
 ---
 
@@ -189,3 +189,55 @@ Corrected against the file as it stands after this fix round: `_substring_rankin
 ### Gate evidence (fix round)
 
 Commit `ba079cd` (`fix(cli): escape scope value in FindFilters LIKE patterns`). `just test` → `Ran 583 tests … OK`. Two mutation cycles against B01's fix, both correctly reddened and reverted, `git diff --stat` clean after each. Bean-close commit follows this one.
+
+
+
+## Fix round 3, 2026-08-09 — review CHANGES_REQUIRED, B01 (rest)
+
+Reviewer verdict: **CHANGES_REQUIRED**, one blocking finding, narrowly scoped. Round 1/2 findings (cross-bundle leak via `self.scope`, ESCAPE order, `=`-vs-`LIKE`, ERRATA (4), line numbers) confirmed closed/accepted without reservation — untouched this round. Bean reopened at commit `05df044`.
+
+### B01 (rest) — the 4th OR branch bound `_ARCHIVE_PREFIX` itself unescaped
+
+`sql_where()`'s scope OR-chain's fourth (archive-scope LIKE) branch bound `self._ARCHIVE_PREFIX + esc_scope + "/%"` — `esc_scope` (the user's scope value) was escaped, but the constant `_ARCHIVE_PREFIX` prepended to it was not, so its own leading `_` acted as a single-char wildcard inside that same bound, `ESCAPE '\''`-evaluated pattern. The NOT-LIKE exclusion predicate two lines below already escaped the same constant correctly (`_like_escape(self._ARCHIVE_PREFIX)`) — the same constant was treated inconsistently within one method.
+
+Reproduced exactly as the reviewer described: `scope="my_bundle", include_archive=True` against a fixture with `my_bundle/active`, `_archive/my_bundle/hidden`, `Xarchive/my_bundle/hidden2` returned all three — the third, an unrelated top-level bundle (any single char standing in for `_`, here `X`) whose own sub-concept happens to be named `my_bundle`, should not have matched.
+
+**Fix — precomputed shared constant instead of two independent `_like_escape()` calls:** added `_ARCHIVE_PREFIX_ESC = _like_escape(_ARCHIVE_PREFIX)` once as a class attribute (next to `_ARCHIVE_PREFIX`'s own definition), used at both LIKE call sites (the 4th OR branch, and the NOT-LIKE exclusion predicate, replacing its ad-hoc `_like_escape(self._ARCHIVE_PREFIX)` call). Chose "escape once" over "escape at every call site" per the reviewer's suggestion: two independent call sites is exactly how the previous round's fix already missed one of them — a single computed value removes the possibility of a third call site forgetting the wrapper.
+
+**RED (verbatim, new test against pre-fix code):**
+
+```
+test_archive_prefix_itself_unescaped_does_not_leak_prefix_lookalike ... FAIL
+AssertionError: 'Xarchive/my_bundle/hidden2' unexpectedly found in
+['_archive/my_bundle/hidden', 'my_bundle/active', 'Xarchive/my_bundle/hidden2']
+
+Ran 4 tests in 0.033s
+FAILED (failures=1)
+```
+
+The other 3 `FindScopeLikeEscaping` tests stayed green with the new fixture files added (no interference).
+
+**New test:** `FindScopeLikeEscaping.test_archive_prefix_itself_unescaped_does_not_leak_prefix_lookalike` (`cli/test_okf_cli.py`), fixture extended in the same class's `setUp` with `Xarchive/my_bundle/hidden2.md` (an ordinary bundle, no leading `_`, so `build_fts_index()` indexes it on its own — no manual FTS row needed).
+
+**Mutation table:**
+
+| Mutation | Roter Test | Warum |
+|---|---|---|
+| 4th OR branch reverted to `self._ARCHIVE_PREFIX + esc_scope + "/%"` (bypass `_ARCHIVE_PREFIX_ESC`) | `test_archive_prefix_itself_unescaped_does_not_leak_prefix_lookalike` | the constant's own `_` is unescaped again in that one branch, `Xarchive/my_bundle/hidden2` re-leaks |
+| Umkehrmutation: `_ARCHIVE_PREFIX_ESC = _ARCHIVE_PREFIX` (degrade the enforcement line itself to a no-op) | same test **and**, collaterally-but-correctly, `FindIncludeArchive.test_sc04_bundle_named_xarchive_stays_visible_without_the_flag` | both LIKE call sites now share the one degraded constant, so both the round-3 leak and the original round-1 AC4 (`xarchive`) regression reopen together — stronger evidence the constant is genuinely shared, not two coincidentally-identical fixes |
+
+Both mutations run, observed red for the stated reason, reverted via targeted `Edit`. `git diff --stat cli/okf-cli.py` after both cycles showed only the net intended fix (8 insertions / 2 deletions), no residue.
+
+No pre-existing test was edited or weakened this round; none turned red as a side effect of the fix (`just test` stayed green throughout) — no PO escalation needed.
+
+### Full suite
+
+`just test` → `Ran 584 tests in 54.192s` → `OK` (583 round-2 baseline + 1 new test).
+
+### Read-only smoke against the real catalogue
+
+`find "retry" --scope dev-wiki --include-archive` against `~/Obsidian/Knowledge-Catalogue`, no `--apply`. `git -C ~/Obsidian/Knowledge-Catalogue status --short` empty afterward.
+
+### Gate evidence (round 3)
+
+Commit `e0d0f87` (`fix(cli): escape archive prefix in the 4th scope LIKE branch`). `just test` → `Ran 584 tests … OK`. Two mutation cycles, both correctly reddened (one with useful collateral confirmation) and reverted, `git diff --stat` clean after each. Bean-close commit follows this one.
