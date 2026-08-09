@@ -3983,6 +3983,61 @@ class WikilinkResolve(WikilinkFixtureMixin, unittest.TestCase):
             shutil.rmtree(ext, ignore_errors=True)
 
 
+class WikilinkArchiveResolution(WikilinkFixtureMixin, unittest.TestCase):
+    """R-05/R-06 (docs/okf-archive-lifecycle/SPEC.md) — build_concept_basename_index
+    picks up _archive/<bundle>/** as a resolution target, active candidates
+    take precedence over archived ones, and existing ambiguity among active
+    candidates is unaffected by the archive being resolvable at all."""
+
+    # -- A05/AC1/AC3: archive as a resolution target ---------------------
+    def test_archived_concept_is_a_resolution_target(self):
+        """A link into a concept that only exists under _archive/ must not go
+        unresolved the moment archiving moves the file there."""
+        self._w("_archive/a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        self.assertEqual(self._status("b/x.md", "old"),
+                         ("resolved", ["/_archive/a/old.md"]))
+
+    def test_archived_candidate_used_only_when_no_active_one_exists(self):
+        """AC3 — with no active candidate, resolution falls back to the
+        archived candidate(s)."""
+        self._w("_archive/z/old.md", "---\ntype: Concept\n---\n# Archived Old\n")
+        self.assertEqual(self._status("b/x.md", "old"),
+                         ("resolved", ["/_archive/z/old.md"]))
+
+    def test_two_archived_candidates_with_no_active_are_ambiguous(self):
+        """Symmetric to AC4 in the archived tier: no active candidate at all
+        and two archived ones of the same basename stay ambiguous rather than
+        one being picked arbitrarily."""
+        self._w("_archive/a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("_archive/b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self.assertEqual(self._status("c/x.md", "g"),
+                         ("ambiguous", ["/_archive/a/g.md", "/_archive/b/g.md"]))
+
+    # -- A06/AC2/SC-02: precedence — active wins over archived ------------
+    def test_active_candidate_wins_over_an_archived_one_of_the_same_name(self):
+        """SC-02/SC-03 — with an active AND an archived concept sharing a
+        basename, the link resolves to the active one rather than reporting
+        ambiguity. This is also the guard-reversal test named by SC-03:
+        removing the active-before-archived precedence from
+        build_concept_basename_index turns this assertion red."""
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Active Old\n")
+        self._w("_archive/z/old.md", "---\ntype: Concept\n---\n# Archived Old\n")
+        self.assertEqual(self._status("b/x.md", "old"),
+                         ("resolved", ["/a/old.md"]))
+
+    # -- A07/AC4/SC-04 (Gate-B finding F01): active ambiguity unchanged ---
+    def test_two_active_candidates_stay_ambiguous_even_with_an_archived_third(self):
+        """SC-04 — two active concepts sharing a basename still report
+        ambiguous once archive resolution is in place; a same-named archived
+        concept must not silently join the candidate set or defuse the
+        ambiguity."""
+        self._w("a/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("b/g.md", "---\ntype: Concept\n---\n# G\n")
+        self._w("_archive/z/g.md", "---\ntype: Concept\n---\n# Archived G\n")
+        self.assertEqual(self._status("c/x.md", "g"),
+                         ("ambiguous", ["/a/g.md", "/b/g.md"]))
+
+
 class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
     """REQ-06..REQ-09 — the `wikilinks` reporting command."""
 
@@ -4881,6 +4936,14 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         self._optin("a")
         self._w("a/index.md", "# A\n\nIntro.\n\nSee [[ghost]].\n")
         self.assertEqual([f[1] for f in self._findings()], ["a/index.md"])
+
+    def test_link_into_the_archive_does_not_warn(self):
+        """SC-01 — archiving a concept that an active concept links to must
+        not turn a clean check into a violation in a file nobody touched."""
+        self._optin("a")
+        self._w("a/x.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        self._w("_archive/z/old.md", "---\ntype: Concept\n---\n# Old\n")
+        self.assertEqual(self._findings(), [])
 
     def test_symlinked_bundle_participates(self):
         import tempfile

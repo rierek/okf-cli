@@ -3228,7 +3228,18 @@ def build_concept_basename_index(root):
     into `_`-prefixed staging directories, which would make a draft a valid
     link target that no surface ever reports on. Walks per bundle because
     os.walk does not descend into symlinked subdirectories and five catalogue
-    bundles are symlinks."""
+    bundles are symlinks.
+
+    `_archive/<bundle>/**` is folded in as a second, lower-priority tier
+    (docs/okf-archive-lifecycle/SPEC.md R-05/R-06): without it, archiving a
+    concept turns every inbound `[[x]]` unresolved in files the archiver never
+    touched. Existing at least one ACTIVE candidate for a basename means the
+    archived candidates of that basename are dropped entirely, never merged
+    in — otherwise archive-then-recreate-under-the-same-name would turn a
+    clean resolution into `ambiguous` against a copy nobody meant to address,
+    and two active concepts sharing a basename would stop being `ambiguous`
+    the moment either one grew an archived namesake. Only a basename with NO
+    active candidate falls through to its archived candidate(s)."""
     idx = {}
     for b in list_bundles(root):
         for ap in iter_all_md(os.path.join(root, b)):
@@ -3237,6 +3248,18 @@ def build_concept_basename_index(root):
                 continue
             idx.setdefault(fn[:-3].lower(), []).append(
                 "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
+    archive_root = os.path.join(root, "_archive")
+    if os.path.isdir(archive_root):
+        archived = {}
+        for b in list_bundles(archive_root):
+            for ap in iter_all_md(os.path.join(archive_root, b)):
+                fn = os.path.basename(ap)
+                if fn.lower() in RESERVED:
+                    continue
+                archived.setdefault(fn[:-3].lower(), []).append(
+                    "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
+        for k, v in archived.items():
+            idx.setdefault(k, v)
     for k in idx:
         idx[k].sort()
     return idx
