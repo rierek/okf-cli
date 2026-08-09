@@ -1,11 +1,11 @@
 ---
 # okf-cli-h12o
 title: cmd_archive computes the rename plan twice
-status: draft
+status: todo
 type: task
 priority: low
 created_at: 2026-08-09T20:04:06Z
-updated_at: 2026-08-09T20:04:06Z
+updated_at: 2026-08-09T20:07:41Z
 ---
 
 Found by the review of `okf-cli-16rg` (2026-08-09, finding I01) — non-blocking, deliberately not fixed inside that leaf.
