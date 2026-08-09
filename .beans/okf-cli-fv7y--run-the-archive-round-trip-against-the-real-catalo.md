@@ -26,13 +26,15 @@ A green suite proves the fixtures. This proves the catalogue. `~/Obsidian/Knowle
 1. THE operator SHALL archive one concept in `~/Obsidian/Knowledge-Catalogue` and record the command output.
 2. THE operator SHALL run `check` over the five bundles opted into the wikilink rule and record the result.
 3. THE operator SHALL run the same `find` query with and without `--include-archive` and record both results.
-4. THE operator SHALL restore the concept and confirm that the working tree is clean afterwards.
+4. THE operator SHALL run `find --scope <bundle> --include-archive` against the concept's own bundle while it is archived and record the result.
+5. THE operator SHALL restore the concept and confirm that the working tree is clean afterwards.
 
 #### Success Criteria
 
 - SC-01: `check` reports zero violations across the five opted-in bundles while the concept is archived.
 - SC-02: The query without the flag omits the archived concept and the query with the flag returns it.
-- SC-03: `git status` in the catalogue is clean after the restore.
+- SC-03: `find --scope <bundle> --include-archive` returns only archived concepts of that bundle — the archived concept under test appears, and no archived concept from a foreign bundle appears.
+- SC-04: `git status` in the catalogue is clean after the restore.
 
 _Requirements: R-15_
 
