@@ -4661,6 +4661,64 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self.assertIn("1 wikilink(s) (1 skipped-ambiguous)", out)
 
 
+class PerformRenameDirectCall(WikilinkFixtureMixin, unittest.TestCase):
+    """R-04 — perform_rename is the callable core cmd_rename delegates to.
+    okf-cli-16rg's cmd_archive calls it directly with already-resolved
+    paths and its own verb, so the function must work without an argparse
+    namespace and must prefix error messages with the given verb."""
+
+    def setUp(self):
+        super().setUp()
+        self._w("a/index.md", "# A\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+
+    def _ap(self, rel):
+        return os.path.join(self.tmp, rel)
+
+    def test_apply_moves_the_file_and_rewrites_inbound_links(self):
+        self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.perform_rename(self.tmp, self._ap("a/old.md"), self._ap("a/new.md"),
+                                apply=True, force=False)
+        self.assertTrue(os.path.isfile(self._ap("a/new.md")))
+        self.assertIn("[[new]]", self._r("a/src.md"))
+
+    def test_dry_run_makes_no_change_and_reports_it_would_move(self):
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.perform_rename(self.tmp, self._ap("a/old.md"), self._ap("a/new.md"),
+                                apply=False, force=False)
+        self.assertTrue(os.path.isfile(self._ap("a/old.md")))
+        self.assertFalse(os.path.isfile(self._ap("a/new.md")))
+        self.assertIn("would move", buf.getvalue())
+
+    def test_explicit_verb_prefixes_the_error_message(self):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                okf.perform_rename(self.tmp, self._ap("a/old.md"), self._ap("a/y.txt"),
+                                    apply=False, force=False, verb="archive")
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertTrue(err.getvalue().startswith("archive:"))
+
+    def test_default_verb_is_rename(self):
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit):
+                okf.perform_rename(self.tmp, self._ap("a/old.md"), self._ap("a/y.txt"),
+                                    apply=False, force=False)
+        self.assertTrue(err.getvalue().startswith("rename:"))
+
+
 class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
     """REQ-13/REQ-14 — the wikilink-resolvable check and its opt-in gate."""
 
