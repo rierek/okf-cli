@@ -3,8 +3,9 @@
 title: run the archive round trip against the real catalogue
 status: todo
 type: task
+priority: normal
 created_at: 2026-08-09T19:15:18Z
-updated_at: 2026-08-09T19:15:18Z
+updated_at: 2026-08-09T19:25:42Z
 parent: okf-cli-huow
 blocked_by:
     - okf-cli-16rg
@@ -38,3 +39,10 @@ _Requirements: R-15_
 ## Recommended Skills
 
 - `superpowers:verification-before-completion`
+
+
+## 2026-08-09 — Prelude from Gate B (ce-verify-operationalization, finding F02)
+
+`docs/okf-archive-lifecycle/SPEC.md:181` asks the real-catalogue run to replay A05 and A08 through A10. The acceptance criteria above cover A08 and A09; the scoped run A10 is missing.
+
+Do this first, in this task: add an acceptance criterion and a success criterion for `find --scope <bundle> --include-archive` against `~/Obsidian/Knowledge-Catalogue`, proving that only that bundle's archived concepts come back. Record the command and its output like the other runs.

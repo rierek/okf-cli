@@ -3,8 +3,9 @@
 title: resolve wikilinks into the archive, active first
 status: todo
 type: task
+priority: normal
 created_at: 2026-08-09T19:14:21Z
-updated_at: 2026-08-09T19:14:21Z
+updated_at: 2026-08-09T19:25:32Z
 parent: okf-cli-xlck
 ---
 
@@ -32,3 +33,10 @@ _Requirements: R-05, R-06_
 ## Recommended Skills
 
 - `superpowers:test-driven-development`
+
+
+## 2026-08-09 — Prelude from Gate B (ce-verify-operationalization, finding F01)
+
+AC4 ("WHEN a basename has two or more active candidates THE okf-cli SHALL report it as ambiguous, unchanged from today", spec A07, `docs/okf-archive-lifecycle/SPEC.md:159`) carries no success criterion. SC-01 … SC-03 only cover AC1 … AC3.
+
+Do this first, in this task, not in a follow-up: add an SC-04 that asserts a basename with two active candidates is still reported as ambiguous once archive resolution is in place, and cover it with a named test. Adding a test that secures an existing acceptance criterion is not a plan deviation and needs no escalation.
