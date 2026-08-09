@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-08-09T19:15:04Z
-updated_at: 2026-08-09T22:34:57Z
+updated_at: 2026-08-09T22:51:35Z
 parent: okf-cli-scd5
 blocked_by:
     - okf-cli-pn72
@@ -90,3 +90,15 @@ All three mutations run, observed red for the stated reason, reverted via target
 ## Gate evidence
 
 Commit `e73dd36` (`feat(cli): announce include-archive misses semantic arm (R-13)`).
+
+
+
+## 2026-08-10 — Q01 from review: when exactly does the note fire?
+
+The gate is `filters.include_archive and semantic_hits` (cli/okf-cli.py:1532). It tests whether the semantic arm produced raw candidates — not whether any of them survives `fuse_conditional`'s dedup into the answer actually printed.
+
+The reviewer reproduced the gap: with an identical path in both arms and a lexical hit count below `--limit`, the semantic candidate is discarded as a duplicate, yet the note still fires. The printed answer then shows no recognisably semantic hit while claiming the flag missed the semantic arm.
+
+AC1 says "the semantic arm contributes hits", which the current reading satisfies. SC-01 says "whose answer contains semantic hits", which it does not, strictly read. No damage either way — the statement stays factually true, since embeddings never cover the archive regardless of what survived dedup.
+
+**Open for the PO:** is the current reading intended (announce whenever the semantic arm ran at all) or should the note be gated on a semantic hit surviving into the printed answer? The first is the more honest limit announcement; the second matches SC-01's wording. Deferred, not decided — this bean stays closed either way, and a change would be its own leaf.

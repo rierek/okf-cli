@@ -3,8 +3,11 @@
 title: archive-aware retrieval
 status: todo
 type: feature
+priority: normal
+tags:
+    - to-review
 created_at: 2026-08-09T19:13:45Z
-updated_at: 2026-08-09T19:13:45Z
+updated_at: 2026-08-09T22:51:36Z
 parent: okf-cli-huow
 ---
 
