@@ -1,11 +1,11 @@
 ---
 # okf-cli-pn72
 title: carry include_archive as the fourth FindFilters dimension
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-08-09T19:14:21Z
-updated_at: 2026-08-09T21:17:12Z
+updated_at: 2026-08-09T21:24:49Z
 parent: okf-cli-scd5
 ---
 
@@ -109,9 +109,9 @@ Each of the four mutations above *is* the reverse-mutation proof required by Gat
 
 ## Notes for T(n+1)
 
-**`okf-cli-iwx4`** (resolve_scopes → `_substring_ranking` (:969) → `cmd_list` (:582)): the visibility/scope-strip predicate is already the single named place — `FindFilters.path_in_scope(self, path) -> bool` — and `_substring_ranking`'s existing call `filters.matches_loaded("{}/{}".format(prefix, cid), fm, text)` (line ~994) already routes through it, unchanged, needing **no** edit. What iwx4 actually needs to add is upstream of that: `resolve_scopes(root, target)` (:2940) itself never yields an `_archive/<bundle>` directory to traverse (bundle discovery excludes `_`-prefixed dirs via `is_bundle_dir`), so today no archived file is ever *read* by the substring arm regardless of the predicate. Extend `resolve_scopes`'s signature (e.g. `resolve_scopes(root, target, include_archive=False)`) to additionally yield the matching `_archive/<bundle>` directory/directories when set, and have `_substring_ranking` pass `filters.include_archive` into it. `cmd_list` needs its own `pls.add_argument("--include-archive", ...)` (not yet present) plus `FindFilters(..., include_archive=...)` construction and the same widened `resolve_scopes` call — `cmd_list` does not currently use `FindFilters` at all per SPEC §Nicht-Ziele ("Keine Umstellung von cmd_list auf FindFilters über das hinaus, was die geteilte Scope-Auflösung verlangt"), so check that boundary before wiring more than the scope-resolution call.
+**`okf-cli-iwx4`** (resolve_scopes → `_substring_ranking` (`cli/okf-cli.py:1040`) → `cmd_list` (`cli/okf-cli.py:582`)): the visibility/scope-strip predicate is already the single named place — `FindFilters.path_in_scope(self, path) -> bool` — and `_substring_ranking`'s existing call `filters.matches_loaded("{}/{}".format(prefix, cid), fm, text)` (`cli/okf-cli.py:1065`) already routes through it, unchanged, needing **no** edit. What iwx4 actually needs to add is upstream of that: `resolve_scopes(root, target)` (`cli/okf-cli.py:3012`) itself never yields an `_archive/<bundle>` directory to traverse (bundle discovery excludes `_`-prefixed dirs via `is_bundle_dir`), so today no archived file is ever *read* by the substring arm regardless of the predicate. Extend `resolve_scopes`'s signature (e.g. `resolve_scopes(root, target, include_archive=False)`) to additionally yield the matching `_archive/<bundle>` directory/directories when set, and have `_substring_ranking` pass `filters.include_archive` into it. `cmd_list` needs its own `pls.add_argument("--include-archive", ...)` (not yet present) plus `FindFilters(..., include_archive=...)` construction and the same widened `resolve_scopes` call — `cmd_list` does not currently use `FindFilters` at all per SPEC §Nicht-Ziele ("Keine Umstellung von cmd_list auf FindFilters über das hinaus, was die geteilte Scope-Auflösung verlangt"), so check that boundary before wiring more than the scope-resolution call.
 
-**`okf-cli-6dsl`** (semantic arm's non-coverage of `--include-archive` made ansagbar): `cmd_find` (`cli/okf-cli.py:1348+`) already has the `semantic_hits` local and the `filters` object in scope at the point it decides ownership (~line 1450, next to the existing `"note: semantic arm owns this ranking"` stderr print). The condition to gate the new note on is `filters.include_archive and semantic_hits` — SPEC §4.3 (PF-4: one note per degraded arm per invocation) — write it to stderr exactly once per `cmd_find` call, not per hit.
+**`okf-cli-6dsl`** (semantic arm's non-coverage of `--include-archive` made ansagbar): `cmd_find` (`cli/okf-cli.py:1419`) already has the `semantic_hits` local and the `filters` object in scope at the point it decides ownership (`cli/okf-cli.py:1476`, next to the existing `"note: semantic arm owns this ranking"` stderr print). The condition to gate the new note on is `filters.include_archive and semantic_hits` — SPEC §4.3 (PF-4: one note per degraded arm per invocation) — write it to stderr exactly once per `cmd_find` call, not per hit.
 
 **`okf-cli-9e2b`** (MCP passthrough): `mcp/okf_mcp.py:27` `_BOOL_FLAGS` — add `"include_archive"` there and to the parameter lists of `okf_find`/`okf_list` only (SPEC §5, R-14: no other command gets the flag). `FindFilters` itself needs no MCP-side change; the MCP layer's job is purely `build_argv` emitting `--include-archive` when the tool parameter is true, mirroring how the existing bool flags already round-trip.
 
@@ -120,8 +120,72 @@ Each of the four mutations above *is* the reverse-mutation proof required by Gat
 1. `__bool__` was NOT extended with `include_archive` (a plausible first design, tried and reverted — see Summary) because it collides with `_fts_ranking`'s `assert not residual`. Documented in the method's own docstring/comment so a future reader doesn't reintroduce the same break.
 2. SC-02 and SC-04 are green even in the pre-change RED run (see RED output). This is expected and explained there, not a hidden gap — SC-01 and SC-03 are the two that meaningfully RED, and the mutation table separately proves SC-02's and SC-04's underlying predicates.
 3. Added a third test class, `PathInScopeArchiveRule` (3 tests), beyond the five named SC — justified in "Test-per-SC" above: without it, `path_in_scope`'s archive-exclusion branch is presently unreachable through any production call site (no scope creep into iwx4/6dsl's traversal work, purely a direct unit-level guard on code this bean adds).
-4. Did not touch the pre-existing, unescaped `self.scope + "/%"` LIKE pattern in the same `sql_where()` (a bundle name containing `_` has the identical wildcard exposure AC4 fixes for the archive predicate). Out of scope for R-08/R-09/R-10, which name only the archive-exclusion predicate; flagging it here rather than silently fixing or silently ignoring it. Candidate for a follow-up bean if the PO wants it filed.
+4. **Superseded by the 2026-08-09 fix round below.** Original wording: "Did not touch the pre-existing, unescaped `self.scope + \"/%\"` LIKE pattern in the same `sql_where()` ... Out of scope for R-08/R-09/R-10 ... Candidate for a follow-up bean." Review finding B01 corrected this misjudgment: the pre-existing arm carries the identical wildcard exposure, but the two ARCHIVE arms this bean itself added (`_archive/<scope>`, `_archive/<scope>/%`) share the exact same unescaped `self.scope` value and are squarely R-09/AC3 — not out of scope, but a defect in this bean's own delivered code. The insight worth keeping: "out of scope" was true for the *pre-existing* arm in isolation, false the moment a fix touches only *some* branches of one shared OR-chain — a half-escaped predicate is a worse, more confusing bug than the original fully-unescaped one (see fix-round rationale below), which is why the PO/reviewer decision was to fix all branches together rather than file the pre-existing one separately.
 
 ## Gate evidence
 
 `just test` → `Ran 580 tests in 64.546s` → `OK`. Four targeted mutations against the acceptance criteria (table above), each independently reddened the correct test for the stated reason, each reverted via targeted `Edit`, `git diff --stat cli/okf-cli.py` confirmed no residue after every cycle. Read-only smoke against the real catalogue, byte-identical, `git status --short` clean there. Commit `5d5fc76`.
+
+
+
+## Fix round 2026-08-09 — review CHANGES_REQUIRED (B01/Q01/I01)
+
+Reviewer verdict: **CHANGES_REQUIRED**, one blocking finding (B01), two non-blocking (Q01, I01). Bean reopened at commit `9bb1d7d`.
+
+### B01 (blocking) — scope value unescaped in LIKE patterns
+
+`sql_where()`'s scope OR-chain binds the raw `self.scope` value into a LIKE pattern on **three** branches: the pre-existing active-scope arm (`self.scope + "/%"`, unescaped since before this bean) and the **two archive arms this bean itself added** (`_archive/<scope>`, `_archive/<scope>/%`). `_` and `%` are LIKE wildcards unless escaped — an unescaped `scope="my_bundle"` also matched a foreign bundle `myXbundle` (and `scope="c%d"` matched `cZZd`), across all three branches. `path_in_scope()` (the Python-side arm) does not have this weakness, since it compares strings literally rather than via SQL LIKE — confirmed by inspection, not assumed.
+
+Fix: added `_like_escape(value)` (`cli/okf-cli.py`, just above `class FindFilters`) — escapes `\`, `%`, `_` in that order (backslash first, so the escaping of `%`/`_` doesn't re-escape the backslashes just introduced). Applied at both LIKE-pattern call sites that embed a value derived from `self.scope`: the scope OR-chain's two LIKE branches (now `LIKE ? ESCAPE '\\'` bound to `_like_escape(self.scope) + "/%"`), and — for consistency, one helper for the whole class rather than one ad-hoc `.replace()` — the pre-existing default-exclusion predicate's constant `_archive/` prefix, previously escaped by hand-rolled `.replace("_", "\\_")`, now `_like_escape(self._ARCHIVE_PREFIX)`. The `=` (exact-equality) branches were left on the raw value; equality never interprets wildcards.
+
+Per reviewer instruction 4: escaping the pre-existing arm was checked against the full suite for any test that depended on unescaped wildcard behaviour in scope matching — none exists; `just test` stayed green (see below), so no PO escalation was needed.
+
+**RED (verbatim, new tests against pre-fix code):**
+
+```
+test_percent_scope_excludes_lookalike_bundle ... FAIL
+  AssertionError: 'cZZd/leak' unexpectedly found in ['c%d/active', 'cZZd/leak']
+test_underscore_scope_with_include_archive_excludes_lookalike ... FAIL
+  AssertionError: 'myXbundle/leak' unexpectedly found in
+  ['_archive/my_bundle/hidden', 'myXbundle/leak', 'my_bundle/active',
+   '_archive/myXbundle/hidden']
+test_underscore_scope_without_include_archive_excludes_lookalike ... FAIL
+  AssertionError: 'myXbundle/leak' unexpectedly found in
+  ['myXbundle/leak', 'my_bundle/active']
+
+Ran 3 tests in 0.110s
+FAILED (failures=3)
+```
+
+All three reddened for the predicted reason before any production change — including the pre-existing arm's own test (`..._without_include_archive...`), proving the pre-existing bug was real and not merely a theoretical risk named in ERRATA (4).
+
+**New test class:** `FindScopeLikeEscaping` (`cli/test_okf_cli.py`, after `PathInScopeArchiveRule`) — 3 tests: `test_underscore_scope_without_include_archive_excludes_lookalike` (pre-existing arm), `test_underscore_scope_with_include_archive_excludes_lookalike` (the two archive arms, R-09/AC3), `test_percent_scope_excludes_lookalike_bundle` (the `%` vector, requested by the reviewer independently of the underscore case).
+
+**Mutation table (fix round):**
+
+| Mutation | Roter Test(s) | Warum |
+|---|---|---|
+| `_like_escape` degraded to identity (`return value`) | all 3 `FindScopeLikeEscaping` tests | every LIKE branch now binds the raw scope value again, all three leak vectors (pre-existing, two archive arms) reopen simultaneously |
+| Umkehrmutation: `esc_scope = _like_escape(self.scope)` → `esc_scope = self.scope` (bypass the call, `ESCAPE '\\'` keyword left in place in SQL) | all 3 `FindScopeLikeEscaping` tests | proves the vulnerability is closed by *calling* the helper, not merely by the SQL keyword's presence — a future edit that forgets to call `_like_escape` reopens the exact same bug even with `ESCAPE` still declared |
+
+Both mutations run, observed red for the stated reason, reverted via targeted `Edit`. `git diff --stat cli/okf-cli.py` after both cycles showed only the net intended fix (26 insertions / 5 deletions), no residue.
+
+### Q01 (non-blocking) — ERRATA (4) reformulated
+
+ERRATA (4) originally scoped the unescaped-LIKE weakness out of R-08/R-09/R-10 for the pre-existing arm. That framing did not extend to the two archive arms this bean added under the same review round — those are R-09/AC3, core to the leaf. ERRATA (4) rewritten in place (superseded, not deleted) to state that distinction explicitly; see the entry above.
+
+### I01 (non-blocking) — stale line numbers in `## Notes for T(n+1)`
+
+Corrected against the file as it stands after this fix round: `_substring_ranking` `cli/okf-cli.py:1040` (was cited `:969`), the `matches_loaded` call site `cli/okf-cli.py:1065` (was `~994`), `resolve_scopes` `cli/okf-cli.py:3012` (was `:2940`), `cmd_find` `cli/okf-cli.py:1419` (was `:1348+`), the "semantic arm owns this ranking" print `cli/okf-cli.py:1476` (was `~1450`). `cmd_list` stayed at `:582`, unaffected by this round's edits (all additions land after it in the file).
+
+### Full suite
+
+`just test` → `Ran 583 tests in 47.760s` → `OK` (580 post-round-1 + 3 new `FindScopeLikeEscaping` tests).
+
+### Read-only smoke against the real catalogue
+
+`find "retry"` and `find "retry" --scope dev-wiki` against `~/Obsidian/Knowledge-Catalogue` unchanged (no `--apply` used). `git -C ~/Obsidian/Knowledge-Catalogue status --short` empty afterward.
+
+### Gate evidence (fix round)
+
+Commit `ba079cd` (`fix(cli): escape scope value in FindFilters LIKE patterns`). `just test` → `Ran 583 tests … OK`. Two mutation cycles against B01's fix, both correctly reddened and reverted, `git diff --stat` clean after each. Bean-close commit follows this one.
