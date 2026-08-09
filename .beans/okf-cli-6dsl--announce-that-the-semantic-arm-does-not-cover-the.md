@@ -1,10 +1,11 @@
 ---
 # okf-cli-6dsl
 title: announce that the semantic arm does not cover the archive
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-08-09T19:15:04Z
-updated_at: 2026-08-09T19:15:04Z
+updated_at: 2026-08-09T22:29:47Z
 parent: okf-cli-scd5
 blocked_by:
     - okf-cli-pn72

@@ -1,11 +1,11 @@
 ---
 # okf-cli-9e2b
 title: pass include_archive through the MCP layer
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-08-09T19:15:18Z
-updated_at: 2026-08-09T19:15:51Z
+updated_at: 2026-08-09T22:29:47Z
 parent: okf-cli-scd5
 blocked_by:
     - okf-cli-iwx4
