@@ -110,7 +110,41 @@ Damit das keine stille Lücke wird: steuert der semantische Arm bei gesetztem `-
 
 `include_archive` kommt in `_BOOL_FLAGS` (`mcp/okf_mcp.py:27`) und als Parameter an `okf_find` und `okf_list` — und nur dort. Ein Kommando, das das Flag nicht kennt, quittiert es mit einem argparse-Fehler; die Tool-Signatur ist die Stelle, an der das entschieden wird.
 
-## 6. Akzeptanz
+## 6. Requirements
+
+Die Nummerierung ist der Bezugspunkt der beans-Leaves (`_Requirements: R-##_`) und der Coverage-Tabelle. In Klammern die Akzeptanzkriterien, die den jeweiligen Nachweis führen.
+
+**R-01 — Archivieren.** `archive <bundle>/<cid>` verschiebt das Konzept nach `_archive/<bundle>/<cid>.md`, git-getrackt, mit Dry-run als Default und `--apply` als Ausführung. (A01, A02)
+
+**R-02 — Zurückholen.** `archive --restore _archive/<bundle>/<cid>.md` stellt den aktiven Pfad wieder her, ohne dass ein zweiter Pfad getippt wird. (A03)
+
+**R-03 — Richtungs-Guards.** Eine Quelle, die bereits im Archiv liegt, wird ohne `--restore` abgelehnt; eine Quelle außerhalb des Archivs wird mit `--restore` abgelehnt; ein Archivpfad ohne Bundle-Segment wird abgelehnt. (A04)
+
+**R-04 — `perform_rename`.** Der Rumpf von `cmd_rename` wird zu einer aufrufbaren Funktion, die `cmd_rename` und `cmd_archive` gemeinsam nutzen; das Verhalten von `rename` bleibt unverändert. (A15)
+
+**R-05 — Archiv als Wikilink-Ziel.** `build_concept_basename_index` nimmt `_archive/<bundle>/**` auf, sodass ein Inbound-Wikilink nach der Archivierung weiter auflöst. (A05)
+
+**R-06 — Vorrang aktiv vor archiviert.** Existiert zu einem Basename mindestens ein aktiver Kandidat, zählen ausschließlich die aktiven; bestehende Ambiguität unter aktiven Kandidaten bleibt unverändert. (A06, A07)
+
+**R-07 — Dieselbe Regel in der Move-Simulation.** `_index_after_move` wendet die Vorrangregel an, damit der Dry-Run keine Ambiguität meldet, die nicht entsteht. (A06)
+
+**R-08 — Default-Ausschluss.** `include_archive` wird das vierte Feld von `FindFilters`; ohne das Flag liefert `find` kein archiviertes Konzept, obwohl es im Index steht. (A08, A09)
+
+**R-09 — Scope meint Herkunft.** Der Scope-Vergleich läuft gegen den Pfad ohne führendes `_archive/`-Segment, sodass `--scope <bundle> --include-archive` archivierte Konzepte genau dieses Bundles liefert. (A10)
+
+**R-10 — `ESCAPE` im LIKE-Prädikat.** Der SQL-Ausschluss maskiert den Unterstrich, sodass ein Bundle namens `xarchive` nicht mit ausgeschlossen wird. (A11)
+
+**R-11 — Index und Staleness.** Der FTS-Index erfasst `_archive/<bundle>/<cid>`, und `fts_meta` führt getrennte Zähler für aktiv und archiviert, die beide verglichen werden. (A13)
+
+**R-12 — Substring-Arm und `list`.** Beide teilen sich eine Scope-Auflösung, die bei gesetztem Flag zusätzlich die Archiv-Scopes liefert. (A12)
+
+**R-13 — Note des semantischen Arms.** Steuert der semantische Arm bei gesetztem `--include-archive` Treffer bei, erscheint genau eine erklärende Zeile auf stderr. (A14)
+
+**R-14 — MCP-Durchreichung.** `okf_find` und `okf_list` nehmen `include_archive` entgegen; kein anderes Kommando erhält das Flag. (A16)
+
+**R-15 — Lauf gegen den echten Katalog.** Die Archiv-Strecke wird einmal gegen `~/Obsidian/Knowledge-Catalogue` gefahren und vollständig zurückgerollt.
+
+## 7. Akzeptanz
 
 Jede Zeile ist ein ausführbarer Nachweis, nicht eine Absicht.
 
@@ -146,6 +180,6 @@ Beide Proben bleiben als Tests im Repo, nicht als vorgeführter Zustand.
 
 Nach grüner Suite einmal gegen `~/Obsidian/Knowledge-Catalogue`: ein Konzept archivieren, A05 und A08 bis A10 dort nachfahren, mit `--restore` zurückrollen, `git status` muss sauber sein. Der Katalog hat heute kein `_archive/` — dieser Lauf legt es an und entfernt es wieder.
 
-## 7. Kopplung nach außen
+## 8. Kopplung nach außen
 
 `just okf-archive-exclusion` in lean-stack endet mit Exit 1, sobald okf-cli von R09 abweicht. Dieses Vorhaben ändert R09 nicht: der Guard misst ein `_archive/` **innerhalb** eines Bundles, gebaut wird auf Katalog-Ebene. Der separat zu fixende T15 wird ihn auslösen, und das ist gewollt — er meldet dann, dass DESIGN Abschnitt 4 nachzulesen ist.
