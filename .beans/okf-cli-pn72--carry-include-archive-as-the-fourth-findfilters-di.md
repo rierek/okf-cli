@@ -1,11 +1,11 @@
 ---
 # okf-cli-pn72
 title: carry include_archive as the fourth FindFilters dimension
-status: completed
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-08-09T19:14:21Z
-updated_at: 2026-08-09T21:24:49Z
+updated_at: 2026-08-09T21:32:15Z
 parent: okf-cli-scd5
 ---
 
