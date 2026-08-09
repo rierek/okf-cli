@@ -82,6 +82,8 @@ Begründungen gehören deshalb **nicht in die Tabelle**, sondern in einen Fließ
 - `the` ist frei, weil jedes Requirement `THE okf binary` enthält.
 - `when`, `if`, `where`, `while`, `then` sind **nicht** frei. Ein `WHERE`-Requirement, das im Fließtext „when the index is stale" schreibt, fällt durch. Umformulieren („with a stale index"), nicht großschreiben — ein zweites Muster-Keyword mitten im Satz macht die Zeile unlesbar.
 
+**Ein Flagname mit Bindestrich zerfällt in Tokens.** Der Validator matcht auf Wortgrenze (`\bif\b`), nicht auf Substring — „specifies" und „whenever" schlagen deshalb nicht an. Ein Bindestrich *ist* aber eine Wortgrenze, und damit enthält `--if-stale` ein freistehendes `if`. Betroffen ist jeder Flagname, dessen Bestandteile ein EARS-Keyword treffen. Lösung: die Zelle in einfache Anführungszeichen setzen (`'--if-stale'`), denn der Validator blendet `'…'` und `"…"` aus. **Backticks reichen nicht** — sie werden nicht ausgeblendet.
+
 **Der Präzedenzfall ist nicht validator-konform.** `dev-cli-conformance` fällt mit 16 von 16 Requirements durch (`The dev-CLI SHALL …` statt `THE … SHALL`). Die Tabellenform von dort ist übernommen, die Schreibweise der Statements **nicht** — hier gilt die Validator-Form, weil hier ein Gate läuft. Wer die beiden nebeneinander liest, sollte das wissen und nicht die dortige Schreibweise kopieren.
 
 **Ein Requirement, eine Aussage.** Ein `AND` in der Systemantwort ist fast immer zwei Requirements. Der Präzedenzfall hat genau daran eine Zeile gespalten, nachdem ein Feld-Audit zeigte, dass die beiden Hälften unabhängig voneinander verletzt werden.

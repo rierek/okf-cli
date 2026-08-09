@@ -59,7 +59,7 @@ Today `cmd_index()` carries no existence gate on `args.bundle` — a typo prints
 | Bundle-Positional bekommt eine Existenzprüfung vor der Ausgabe, Exit 2 statt Exit 0 | B01, COM-23 |
 | Getippte, aber existierende `_`-Verzeichnisse bleiben adressierbar | B01 |
 | Store als Bundle-Modus | D06 |
-| `--full` mit Bundle-Argument wird zum eigenen Flag `--summary` | I08 |
+| `--full` mit Bundle-Argument wird zum eigenen Flag `--summary` | I08, D08 |
 | Envelope statt eigenem JSON-Objekt | I04, COM-26 |
 
 ## Anmerkungen

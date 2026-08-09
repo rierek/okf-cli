@@ -1,6 +1,6 @@
 ---
 type: Spec
-title: "mcp — EARS-Requirements MCP-1..MCP-12"
+title: "mcp — EARS-Requirements MCP-1..MCP-14"
 description: "The MCP server as an in-process subcommand of the same binary: tool surface, mutation polarity, schema and degradation contract for the agent-facing interface."
 tags:
   - okf-cli
@@ -9,7 +9,7 @@ tags:
   - spec
 ---
 
-# mcp — EARS-Requirements MCP-1..MCP-12
+# mcp — EARS-Requirements MCP-1..MCP-14
 
 The MCP server is the agent-facing surface of the okf binary, delivered alongside it rather than as a separate Python process (R1 in AUDIT.md). It exposes a subset of the command directory as MCP tools over stdio. Today it is a thin subprocess wrapper (`mcp/okf_mcp.py`) that shells out to `okf-cli.py` per call and re-marshals its text/JSON output back into a tool result; the rewrite folds it into the same binary and the same in-process call path the CLI itself uses.
 
@@ -31,6 +31,8 @@ The cross-cutting rules apply unchanged; this file states only what the MCP surf
 |----|------------------|
 | MCP-4 | THE okf binary SHALL expose an MCP tool for every read command of the command directory. |
 | MCP-5 | THE okf binary SHALL name each exposed tool `okf_<command>`, replacing a hyphen in the command name with an underscore. |
+| MCP-13 | WHERE a command carries subcommands, THE okf binary SHALL expose one tool per subcommand and SHALL join the names with an underscore. |
+| MCP-14 | THE okf binary SHALL expose no tool for `mcp serve`. |
 
 ### Mutations-Polarität (I03)
 
@@ -82,12 +84,15 @@ Output ceiling as a hard error (I14): `MAX_OUTPUT_CHARS` (`mcp/okf_mcp.py:66-70`
 | Degradation als Feld (`notes`) statt vorangestellter Text | COM-19 |
 | Truncation vor der vollständigen Ausgabe, mit `truncated`-Flag statt Fehler danach | I14 |
 | Kein geteiltes `_FLAGS`/`_BOOL_FLAGS`-Kollisionsrisiko | I12 |
+| Tool-Namen für Subkommandos definiert (`tags` zerfällt nach I01 in vier) | I01, MCP-13 |
 
 ## Anmerkungen
 
 **MCP-6/MCP-7 schließen `okf_reindex` namentlich ein.** Heute ist `apply` nur bei `okf_rename` ein Parameter; `okf_reindex` schreibt ohne Vorschau. Das ist derselbe A3-Befund, den I03 „ohne Ausnahme" schließt — die beiden Zeilen gelten für jedes schreibende Tool, nicht nur für die, die den Parameter heute schon tragen.
 
 **MCP-8 macht COM-25 bis COM-28 an der MCP-Grenze wirksam, ohne sie zu wiederholen.** Ein Tool-Call kennt kein `--json`-Flag zum Setzen — er verlangt strukturierte Ausgabe durch die Natur der Schnittstelle. Die Envelope-Regeln (COM-26/COM-27/COM-28) greifen deshalb bei jedem Call, nicht optional; MCP-9 spezifiziert nur, wohin eine Degradation innerhalb dieses Envelopes wandert.
+
+**MCP-13 und MCP-14 stammen aus dem Konsistenz-Abgleich mit [tags.md](./tags.md), nicht aus dem Audit.** MCP-5 vergibt Tool-Namen als `okf_<command>` und setzt damit ein flaches Kommando-Verzeichnis voraus — das trifft heute zu, aber I01 zerlegt `tags` in `tags list`, `tags find`, `tags register` und `tags validate`, und D07 fügt mit `mcp serve` ein weiteres Subkommando hinzu. Ohne MCP-13 ist der Name von `tags register` als Tool undefiniert; ohne MCP-14 zöge MCP-13 den Server als Tool in seine eigene Oberfläche. Beide Dateien meldeten die Lücke unabhängig von je einer Seite.
 
 ## Offene Fragen
 

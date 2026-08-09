@@ -1,6 +1,6 @@
 ---
 type: Spec
-title: "Querschnitt — EARS-Requirements COM-1..COM-41"
+title: "Querschnitt — EARS-Requirements COM-1..COM-45"
 description: "Store-Erkennung, Profile, Streams, Exit-Codes, JSON-Envelope, Mutations-Polarität, Flag-Vokabular und Selbstdokumentation — die Regeln, die für jedes Kommando gelten."
 tags:
   - okf-cli
@@ -9,7 +9,7 @@ tags:
   - spec
 ---
 
-# Querschnitt — EARS-Requirements COM-1..COM-41
+# Querschnitt — EARS-Requirements COM-1..COM-45
 
 Diese Regeln gelten für **jedes** Kommando. Eine Kommando-Datei wiederholt sie nicht, sondern verweist auf die COM-Nummer und spezifiziert nur, was bei ihr davon abweicht oder darüber hinausgeht.
 
@@ -43,6 +43,8 @@ Systemname in allen Requirements ist `THE okf binary`.
 | COM-15 | WHERE the store is a catalogue and `.okf.toml` names no profile, THE okf binary SHALL apply the `catalogue` profile. |
 | COM-16 | IF `.okf.toml` names an unknown profile or an unknown switch, THEN THE okf binary SHALL exit 2 and SHALL list the names it accepts. |
 | COM-17 | WHERE a profile is named on the command line, THE okf binary SHALL apply it in place of the profile from `.okf.toml`. |
+| COM-43 | WHERE a switch is disabled and a command corrects what that switch governs, THE okf binary SHALL correct nothing under that rule. |
+| COM-44 | WHERE a command corrects nothing under a rule because the switch of that rule is disabled, THE okf binary SHALL announce the skip on stderr. |
 
 ### Streams und Diagnose
 
@@ -65,10 +67,11 @@ Systemname in allen Requirements ist `THE okf binary`.
 
 | ID | EARS-Requirement |
 |----|------------------|
-| COM-25 | THE okf binary SHALL accept `--json` as a global flag on every read command. |
+| COM-25 | THE okf binary SHALL accept `--json` as a global flag on every command. |
 | COM-26 | WHERE JSON output is requested, THE okf binary SHALL emit one object carrying `schema_version`, `command`, `data` and `notes`. |
 | COM-27 | WHERE JSON output is requested, THE okf binary SHALL emit into `notes` every diagnostic it writes to stderr. |
 | COM-28 | WHERE JSON output is requested and a command finds nothing, THE okf binary SHALL emit an empty `data` collection. |
+| COM-42 | WHERE a command reports intended writes and JSON output is requested, THE okf binary SHALL carry that report in the `data` collection of the envelope. |
 
 ### Mutations-Polarität (I03)
 
@@ -92,6 +95,7 @@ Systemname in allen Requirements ist `THE okf binary`.
 | COM-39 | THE okf binary SHALL follow every error with a line starting `hint: ` that names a remedy. |
 | COM-40 | THE okf binary SHALL name itself `okf` in every message, help text and hint it emits. |
 | COM-41 | WHERE a command narrows its work to part of the store, THE okf binary SHALL accept that part as an optional positional argument. |
+| COM-45 | THE okf binary SHALL use `--force` on every command to proceed past a refusal that the command raises for safety. |
 
 ## Grounding
 
@@ -119,12 +123,23 @@ Selbstdokumentation: `_sub()` (`cli/okf-cli.py:4031`) und `render_command_overvi
 | Programmname `okf` statt `okf-cli` und `okf-cli.py` gemischt | I10 |
 | Scope als Positional statt vier Mechanismen | I02 |
 | Kein Verzeichnis für ein nicht existierendes Argument | B02, COM-32 |
+| `--json` auch auf schreibenden Kommandos, für deren Vorschau | I04, COM-42 |
+| Ein abgeschalteter Schalter unterdrückt auch die Korrektur, nicht nur die Prüfung | D05, COM-43, COM-44 |
+| `--force` mit einer Bedeutung über alle Kommandos | COM-36, COM-45 |
 
 ## Anmerkungen
 
 **COM-29 bis COM-31 sind drei Zeilen, nicht eine.** Der Präzedenzfall hat dieselbe Spaltung an DC-10/DC-11 vorgenommen, nachdem ein Feld-Audit zeigte, dass die Hälften unabhängig voneinander verletzt werden. Hier gilt dasselbe: ein Kommando kann die Vorschau korrekt erzeugen und trotzdem schreiben, oder korrekt nicht schreiben und den Folgebefehl verschweigen. Heute ist genau der zweite Fall real — `rename` nennt den Folgebefehl (`cli/okf-cli.py:3950`), die drei Tag-Kommandos nicht.
 
 **COM-38 und COM-39 sind zwei Zeilen** aus demselben Grund: das Präfix ist billig und wird zuerst umgesetzt, der Remedy-Hinweis verlangt pro Fehlerklasse eine inhaltliche Entscheidung. Eine gemeinsame Zeile wäre auf Dauer halb erfüllt und damit als Audit-Zelle wertlos.
+
+**COM-42 bis COM-45 stammen aus dem Fan-out, nicht aus dem Audit.** Zehn Agenten haben die Kommando-SPECs unabhängig voneinander geschrieben; wo mehrere von ihnen dieselbe Lücke meldeten, lag sie nicht beim Kommando, sondern hier. Das ist der eigentliche Ertrag des parallelen Schreibens: eine Querschnitts-Regel, die sich an fünf Kommandos gleichzeitig als unvollständig erweist, ist nachweislich unvollständig — ein einzelner Autor hätte dieselbe Lücke fünfmal umschifft, ohne sie zu bemerken.
+
+**COM-42 korrigiert eine zu enge Formulierung.** COM-25 vergab `--json` ursprünglich nur auf Lese-Kommandos. Eine Mutations-Vorschau ist aber genau das — sie liest den Store und beschreibt, was geschähe — und für einen Agenten ist sie der interessantere Teil, weil er daraus den Folgebefehl ableitet. Vier Tag- und Struktur-Kommandos meldeten die Lücke unabhängig.
+
+**COM-43 und COM-44 schließen eine Asymmetrie zwischen Prüfen und Korrigieren.** CHECK-8 regelt den abgeschalteten Schalter für `check`: keine Datei wird gegen die Regel bewertet. Für ein korrigierendes Kommando war offen, ob es still nichts tut oder mit Exit 2 abbricht. Still nichts zu tun ist die richtige Wahl — ein Schalter ist eine Aussage darüber, welche Regeln für diesen Store gelten, keine Aussage über die Zulässigkeit des Aufrufs. COM-44 hält die Untätigkeit sichtbar, aus demselben Grund wie CHECK-10.
+
+**COM-45 löst einen scheinbaren COM-36-Verstoß auf.** `--force` bedeutet auf `rename` „Ziel überschreiben und bei mehrdeutig werdenden Wikilinks fortfahren", auf `reindex` „mit `--init` auch eine reine Multi-Section-Liste flachklopfen". Das liest sich wie zwei Bedeutungen, ist aber eine: über eine Verweigerung hinweggehen, die das Kommando aus Vorsicht erhebt. Die Zeile hält das fest, damit niemand die beiden Flags auseinanderbenennt.
 
 ## Offene Fragen
 
