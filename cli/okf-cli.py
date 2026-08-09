@@ -1523,6 +1523,16 @@ def cmd_find(root, args):
         semantic_hits = _semantic_hit_dicts(root, args.query, args.limit,
                                             filters)
 
+    # R-13: the embedding build stays on the active catalogue by design
+    # (cli/embeddings/build_tagvec.py:174) — an unannounced limit is a trap,
+    # so tell the searcher when --include-archive did not reach the arm
+    # that just shaped the answer. Gated on the conjunction (flag set AND
+    # the semantic arm actually contributed hits), not the flag alone, and
+    # printed at most once per invocation (PF-4).
+    if filters.include_archive and semantic_hits:
+        print("note: --include-archive covers the lexical arm only; "
+              "embeddings stay on the active catalogue", file=sys.stderr)
+
     all_hits, lexical_owned = fuse_conditional(hits, semantic_hits, args.limit)
     if not lexical_owned and semantic_hits:
         print("note: semantic arm owns this ranking (lexical top-1 lacked a "

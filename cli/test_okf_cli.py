@@ -2879,6 +2879,115 @@ class SemanticBackstop(unittest.TestCase):
     # invariant is gone by design, not narrowed.
 
 
+class SemanticArmArchiveNote(unittest.TestCase):
+    """R-13 (okf-cli-6dsl) — the embedding build (build_tagvec.py:174) stays
+    on the active catalogue by design; --include-archive only widens the
+    lexical/substring traversal (R-12) and cmd_list. An unannounced limit is
+    a trap: a searcher who set --include-archive and got an answer shaped by
+    the semantic arm would read an empty archive slice as an absence, not as
+    an arm that never looked. AC1's conjunction is the risk: the note fires
+    only when the flag is set AND the semantic arm actually contributed
+    hits, not on the flag alone (PF-4: at most one note per invocation)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._orig_embed = okf._embed_query_voyage
+        self._orig_cosine = okf._cosine
+        okf._QUERY_VEC_CACHE.clear()
+
+    def tearDown(self):
+        import shutil
+        okf._embed_query_voyage = self._orig_embed
+        okf._cosine = self._orig_cosine
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, title, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: Concept\ntitle: {}\ntags: []\ndescription: d\n---\n"
+                "# Untitled\n\n{}".format(title, body)
+            )
+
+    def _make_tagvec(self, rows):
+        db = os.path.join(self.tmp, ".tagvec", "tag_vectors.sqlite")
+        os.makedirs(os.path.dirname(db), exist_ok=True)
+        import sqlite3, struct
+        conn = sqlite3.connect(db)
+        conn.execute(
+            "CREATE TABLE concept_emb(key TEXT PRIMARY KEY, path TEXT, "
+            "model TEXT, dim INT, vec BLOB)"
+        )
+        for key, path, vec in rows:
+            conn.execute(
+                "INSERT INTO concept_emb VALUES (?,?,?,?,?)",
+                (key, path, "voyage-3-large", len(vec),
+                 struct.pack("<{}f".format(len(vec)), *vec)),
+            )
+        conn.commit()
+        conn.close()
+        return db
+
+    def _run(self, query, **kw):
+        import io, contextlib, types
+        args = types.SimpleNamespace(
+            query=query, limit=10, type=None, tag=None, scope=None,
+            breakdown=False, include_archive=False,
+        )
+        for k, v in kw.items():
+            setattr(args, k, v)
+        out_buf, err_buf = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+            okf.cmd_find(self.tmp, args)
+        return out_buf.getvalue(), err_buf.getvalue()
+
+    def test_sc01_flag_set_and_semantic_hits_present_notes_once(self):
+        """AC1/SC-01: flag set, semantic arm contributes -> exactly one note,
+        naming the lexical arm as the flag's actual reach."""
+        self._w("b/near.md", "Near Concept", "alpha beta near-body prose.\n")
+        self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, err = self._run("zzz-no-keyword-match-zzz", include_archive=True)
+        self.assertIn("path: b/near", out)  # sanity: semantic arm contributed
+        notes = [l for l in err.splitlines()
+                 if "archive" in l.lower() and "lexical" in l.lower()]
+        self.assertEqual(notes, [
+            "note: --include-archive covers the lexical arm only; "
+            "embeddings stay on the active catalogue"])
+
+    def test_sc02_flag_not_set_writes_no_note(self):
+        """AC2/SC-02: same query, no flag -> no such note at all."""
+        self._w("b/near.md", "Near Concept", "alpha beta near-body prose.\n")
+        self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, err = self._run("zzz-no-keyword-match-zzz", include_archive=False)
+        self.assertIn("path: b/near", out)
+        self.assertNotIn("include-archive covers the lexical arm only", err)
+
+    def test_ac1_conjunction_flag_set_but_no_semantic_hits_writes_no_note(self):
+        """AC1's conjunction: flag alone is not enough. No tagvec cache at
+        all -> semantic arm is skipped, contributes zero hits, so the note
+        must stay silent even though --include-archive is set."""
+        out, err = self._run("zzz-no-keyword-match-zzz", include_archive=True)
+        self.assertIn("(no matches", out)
+        self.assertNotIn("include-archive covers the lexical arm only", err)
+
+    def test_ac3_note_appears_at_most_once_with_multiple_semantic_hits(self):
+        """AC3: several semantic hits in one answer still yield one note."""
+        self._w("b/near.md", "Near Concept", "alpha beta near-body prose.\n")
+        self._w("b/far.md", "Far Concept", "alpha beta far-body prose.\n")
+        self._make_tagvec([
+            ("k1", "b/near", [1.0, 0.0]),
+            ("k2", "b/far", [0.9, 0.1]),
+        ])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, err = self._run("zzz-no-keyword-match-zzz", include_archive=True)
+        notes = [l for l in err.splitlines()
+                 if "include-archive covers the lexical arm only" in l]
+        self.assertEqual(len(notes), 1)
+
+
 class VoyageQueryEmbedding(unittest.TestCase):
     """D13/D16 — the query path speaks voyage-3-large with input_type=query
     (the asymmetric form the measurement used, eval/hybrid_eval.py:73-80),
