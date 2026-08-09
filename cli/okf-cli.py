@@ -3843,18 +3843,20 @@ def _git_mv(root, old_abs, new_abs):
     return False
 
 
-def cmd_rename(root, args):
-    old_abs = os.path.abspath(args.old if os.path.isabs(args.old) else os.path.join(root, args.old))
-    new_abs = os.path.abspath(args.new if os.path.isabs(args.new) else os.path.join(root, args.new))
+def perform_rename(root, old_abs, new_abs, apply, force, verb="rename"):
+    """The validation, planning and application core shared by `rename` and
+    (per okf-cli-16rg) `archive`/`archive --restore`. Callers pass already
+    resolved absolute paths; `verb` only steers the prefix of error messages
+    ("rename: " vs "archive: ") — every other line of output is unchanged."""
 
     def die(msg):
-        sys.stderr.write("rename: {}\n".format(msg))
+        sys.stderr.write("{}: {}\n".format(verb, msg))
         sys.exit(2)
 
     if not old_abs.endswith(".md") or not new_abs.endswith(".md"):
         die("both paths must be .md concept files")
     if not os.path.isfile(old_abs):
-        die("source not found: {}".format(args.old))
+        die("source not found: {}".format(old_abs))
     if os.path.basename(old_abs).lower() in RESERVED:
         die("refusing to move a reserved file ({})".format(os.path.basename(old_abs)))
     if os.path.basename(new_abs).lower() in RESERVED:
@@ -3889,9 +3891,9 @@ def cmd_rename(root, args):
     # samefile: on a case-insensitive filesystem a case-only rename has a
     # destination that "exists" because it IS the source. Refusing that would
     # make `Foo.md` -> `foo.md` impossible without --force overwriting itself.
-    if (os.path.exists(new_abs) and args.apply and not args.force
+    if (os.path.exists(new_abs) and apply and not force
             and not os.path.samefile(old_abs, new_abs)):
-        die("destination exists (use --force to overwrite): {}".format(args.new))
+        die("destination exists (use --force to overwrite): {}".format(new_abs))
 
     # From here on the source is addressed exactly as the filesystem spells it,
     # so the two halves of the rename and the self-reference check all compare
@@ -3928,14 +3930,14 @@ def cmd_rename(root, args):
                   .format(r["source"], r["region"], r["raw"],
                           ", ".join(r["candidates"])))
 
-    if args.apply and wl_ambiguous and not args.force:
+    if apply and wl_ambiguous and not force:
         die("this move leaves {} inbound wikilink(s) ambiguous: {} — the same "
             "corruption `skipped-ambiguous` declines to commit, so it may not "
             "happen by accident either (use --force to proceed)"
             .format(len(wl_ambiguous),
                     ", ".join(sorted({r["source"] for r in wl_ambiguous}))))
 
-    if not args.apply:
+    if not apply:
         print("would move   {}  ->  {}".format(old_rel, new_rel))
         for src, oraw, nraw in plan["inbound"]:
             print("  inbound    {}   {}  ->  {}".format(src, oraw, nraw))
@@ -3985,6 +3987,12 @@ def cmd_rename(root, args):
     _print_skipped()
     print("reindexed {} index file(s) across: {}".format(len(reidx), ", ".join(plan["bundles"])))
     print("staged for commit — run `okf-cli.py check` before committing.")
+
+
+def cmd_rename(root, args):
+    old_abs = os.path.abspath(args.old if os.path.isabs(args.old) else os.path.join(root, args.old))
+    new_abs = os.path.abspath(args.new if os.path.isabs(args.new) else os.path.join(root, args.new))
+    perform_rename(root, old_abs, new_abs, args.apply, args.force)
 
 
 COMMAND_DISPATCH = {
