@@ -4,8 +4,10 @@ title: okf-cli archive capability
 status: todo
 type: milestone
 priority: normal
+tags:
+    - to-review
 created_at: 2026-08-09T19:13:36Z
-updated_at: 2026-08-09T21:41:19Z
+updated_at: 2026-08-09T23:16:26Z
 ---
 
 Give the CLI the archive half of the knowledge lifecycle: move a concept out of the active catalogue without losing it, keep every inbound link working, and let `find`/`list` reach back into the archive on request.
