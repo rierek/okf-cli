@@ -805,6 +805,12 @@ class FindFilters:
     __slots__ = ("scope", "type", "tag", "include_archive")
 
     _ARCHIVE_PREFIX = "_archive/"
+    # Escaped once here rather than re-derived at each of the two LIKE call
+    # sites (review B01 round 3, okf-cli-pn72): the constant's own leading
+    # `_` is exactly as much a wildcard inside a bound LIKE pattern as a
+    # user's scope value is, and two independent `_like_escape(...)` call
+    # sites is how the first fix already missed one of them.
+    _ARCHIVE_PREFIX_ESC = _like_escape(_ARCHIVE_PREFIX)
 
     def __init__(self, scope=None, type=None, tag=None, include_archive=False):
         # Normalize "" to None once, here: cmd_find reads these off argparse
@@ -859,7 +865,7 @@ class FindFilters:
             params.extend([
                 self.scope, esc_scope + "/%",
                 self._ARCHIVE_PREFIX + self.scope,
-                self._ARCHIVE_PREFIX + esc_scope + "/%",
+                self._ARCHIVE_PREFIX_ESC + esc_scope + "/%",
             ])
             covered.add("scope")
         if self.type and "type" in columns:
@@ -880,7 +886,7 @@ class FindFilters:
             # single-char wildcard, so an unescaped pattern would also
             # exclude a bundle literally named "xarchive".
             sql += " AND {} NOT LIKE '{}%' ESCAPE '\\'".format(
-                columns["scope"], _like_escape(self._ARCHIVE_PREFIX))
+                columns["scope"], self._ARCHIVE_PREFIX_ESC)
         residual = FindFilters(
             scope=None if "scope" in covered else self.scope,
             type=None if "type" in covered else self.type,

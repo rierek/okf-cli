@@ -2125,6 +2125,17 @@ class FindScopeLikeEscaping(unittest.TestCase):
         # scope="c%d" would also match "cZZd".
         self._w("c%d/active.md", "Concept", "Percent Active", ["k"], body)
         self._w("cZZd/leak.md", "Concept", "Percent Leak", ["k"], body)
+        # review round 3, B01 (rest): the `_archive/<scope>/%` LIKE branch
+        # itself binds `_ARCHIVE_PREFIX` unescaped, so its own leading `_`
+        # acts as a single-char wildcard THERE — a top-level bundle whose
+        # name is any single character followed by "archive" (here
+        # "Xarchive") with a sub-concept matching the scope name leaks into
+        # a `--scope my_bundle --include-archive` answer. "Xarchive" is an
+        # ordinary bundle (no leading `_`), so build_fts_index() indexes it
+        # on its own — no manual FTS row needed, unlike the `_archive/...`
+        # fixtures above.
+        self._w("Xarchive/my_bundle/hidden2.md", "Concept",
+                "Prefix Leak", ["k"], body)
         okf.build_fts_index(self.tmp)
         self._insert_fts_row("_archive/my_bundle/hidden", "Concept",
                               "Hidden", "k", body)
@@ -2187,6 +2198,20 @@ class FindScopeLikeEscaping(unittest.TestCase):
         paths = self._paths(self.LITERAL, scope="c%d")
         self.assertIn("c%d/active", paths)
         self.assertNotIn("cZZd/leak", paths)
+
+    def test_archive_prefix_itself_unescaped_does_not_leak_prefix_lookalike(self):
+        """Review round 3, B01 (rest): the 4th OR branch bound
+        `self._ARCHIVE_PREFIX + esc_scope + "/%"` — `_ARCHIVE_PREFIX`'s own
+        leading `_` went into the same LIKE pattern unescaped, so a
+        top-level dir named e.g. "Xarchive" (any char standing in for `_`)
+        with a "my_bundle" sub-concept leaked into the scoped archive
+        answer. Line 883's NOT-LIKE exclusion already escaped this same
+        constant correctly; this closes the same gap on line 862."""
+        paths = self._paths(self.LITERAL, scope="my_bundle",
+                            include_archive=True)
+        self.assertIn("my_bundle/active", paths)
+        self.assertIn("_archive/my_bundle/hidden", paths)
+        self.assertNotIn("Xarchive/my_bundle/hidden2", paths)
 
 
 class FindScoreBreakdown(unittest.TestCase):
