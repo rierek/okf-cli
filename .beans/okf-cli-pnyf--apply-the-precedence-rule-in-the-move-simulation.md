@@ -1,10 +1,11 @@
 ---
 # okf-cli-pnyf
 title: apply the precedence rule in the move simulation
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-08-09T19:14:39Z
-updated_at: 2026-08-09T19:14:39Z
+updated_at: 2026-08-09T20:20:15Z
 parent: okf-cli-xlck
 blocked_by:
     - okf-cli-hk77
