@@ -3,8 +3,11 @@
 title: wikilink resolution into the archive
 status: todo
 type: feature
+priority: normal
+tags:
+    - to-review
 created_at: 2026-08-09T19:13:45Z
-updated_at: 2026-08-09T19:13:45Z
+updated_at: 2026-08-09T20:45:58Z
 parent: okf-cli-huow
 ---
 
