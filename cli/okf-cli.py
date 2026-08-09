@@ -758,6 +758,19 @@ def cmd_build_index(root, args):
     print("indexed {} concept(s) -> {}".format(n, db))
 
 
+def _like_escape(value):
+    """Escape a value for safe use inside a SQL LIKE pattern bound with
+    `ESCAPE '\\'`. `\\`, `%` and `_` are the three characters LIKE gives
+    special meaning to (backslash because it is about to become the escape
+    character itself); every one of them is a literal, user-controlled byte
+    that must survive verbatim, or a scope value collides with a
+    similarly-named foreign bundle (I01/B01, again, one level down: inside a
+    single arm's own pattern rather than between arms). Backslash MUST be
+    escaped first, or escaping `%`/`_` afterwards would double-escape the
+    backslashes those two steps just introduced."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class FindFilters:
     """--scope/--type/--tag/--include-archive as ONE value, with the
     predicate defined once.
@@ -833,12 +846,20 @@ class FindFilters:
             # `_archive/<scope>[/...]`, not `<scope>[/...]` — match both
             # forms here; visibility of the archived form is decided below,
             # by the include_archive predicate, not by this OR-chain.
-            sql += (" AND ({0} = ? OR {0} LIKE ? OR {0} = ? OR {0} LIKE ?)"
-                    .format(col))
+            #
+            # Every LIKE branch binds an ESCAPED copy of the scope value
+            # (review B01, okf-cli-pn72): scope is user-controlled, and an
+            # unescaped `_`/`%` in it is a LIKE wildcard, not a literal — a
+            # scope of "my_bundle" would otherwise also match a foreign
+            # bundle "myXbundle". The `=` branches stay on the raw value;
+            # exact equality never interprets wildcards.
+            esc_scope = _like_escape(self.scope)
+            sql += (" AND ({0} = ? OR {0} LIKE ? ESCAPE '\\'"
+                    " OR {0} = ? OR {0} LIKE ? ESCAPE '\\')".format(col))
             params.extend([
-                self.scope, self.scope + "/%",
+                self.scope, esc_scope + "/%",
                 self._ARCHIVE_PREFIX + self.scope,
-                self._ARCHIVE_PREFIX + self.scope + "/%",
+                self._ARCHIVE_PREFIX + esc_scope + "/%",
             ])
             covered.add("scope")
         if self.type and "type" in columns:
@@ -859,7 +880,7 @@ class FindFilters:
             # single-char wildcard, so an unescaped pattern would also
             # exclude a bundle literally named "xarchive".
             sql += " AND {} NOT LIKE '{}%' ESCAPE '\\'".format(
-                columns["scope"], self._ARCHIVE_PREFIX.replace("_", "\\_"))
+                columns["scope"], _like_escape(self._ARCHIVE_PREFIX))
         residual = FindFilters(
             scope=None if "scope" in covered else self.scope,
             type=None if "type" in covered else self.type,

@@ -2096,6 +2096,99 @@ class PathInScopeArchiveRule(unittest.TestCase):
         self.assertFalse(f.path_in_scope("_archive/bundle-b/other-hidden"))
 
 
+class FindScopeLikeEscaping(unittest.TestCase):
+    """okf-cli-pn72 review B01 — sql_where()'s scope OR-chain binds the raw
+    scope value into a LIKE pattern on every branch (the pre-existing active
+    arm AND the two archive arms this bean added). LIKE's `_`/`%` are
+    single-char/any-sequence wildcards unless escaped, so an unescaped scope
+    value leaks matches from a similarly-named foreign bundle — the exact
+    I01/B01 divergence class FindFilters exists to prevent, this time inside
+    one arm's own OR-chain rather than between arms. path_in_scope() (the
+    Python-side arm) does NOT have this weakness — it compares literally —
+    which is why only the SQL arm needs the fix."""
+
+    LITERAL = "zqxesc"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        body = "{} appears in every fixture body.\n".format(self.LITERAL)
+        # underscore leak vector: unescaped `_` in a LIKE pattern matches
+        # ANY single character, so scope="my_bundle" would also match
+        # "myXbundle" (X standing in for the wildcard slot).
+        self._w("my_bundle/active.md", "Concept", "Active", ["k"], body)
+        self._w("myXbundle/leak.md", "Concept", "Leak", ["k"], body)
+        self._w("_archive/my_bundle/hidden.md", "Concept", "Hidden", ["k"],
+                body)
+        self._w("_archive/myXbundle/hidden.md", "Concept", "Archived Leak",
+                ["k"], body)
+        # percent leak vector: unescaped `%` matches ANY sequence, so
+        # scope="c%d" would also match "cZZd".
+        self._w("c%d/active.md", "Concept", "Percent Active", ["k"], body)
+        self._w("cZZd/leak.md", "Concept", "Percent Leak", ["k"], body)
+        okf.build_fts_index(self.tmp)
+        self._insert_fts_row("_archive/my_bundle/hidden", "Concept",
+                              "Hidden", "k", body)
+        self._insert_fts_row("_archive/myXbundle/hidden", "Concept",
+                              "Archived Leak", "k", body)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, typ, title, tags, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: {}\ntitle: {}\ntags: [{}]\ndescription: d\n---\n"
+                "# {}\n\n{}".format(typ, title, ", ".join(tags), title, body)
+            )
+
+    def _insert_fts_row(self, path, typ, title, tag, body):
+        conn = sqlite3.connect(okf._fts_db_path(self.tmp))
+        conn.execute(
+            "INSERT INTO docs(path, ctype, title, tags, body)"
+            " VALUES (?, ?, ?, ?, ?)", (path, typ, title, tag, body))
+        conn.commit()
+        conn.close()
+
+    def _paths(self, query, **kw):
+        import io, contextlib, types
+        args = types.SimpleNamespace(
+            query=query, limit=10, type=None, tag=None, scope=None,
+            breakdown=False, include_archive=False,
+        )
+        for k, v in kw.items():
+            setattr(args, k, v)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), \
+                contextlib.redirect_stderr(io.StringIO()):
+            okf.cmd_find(self.tmp, args)
+        return [l[len("path: "):] for l in buf.getvalue().splitlines()
+                if l.startswith("path: ")]
+
+    def test_underscore_scope_without_include_archive_excludes_lookalike(self):
+        """Covers the PRE-EXISTING arm (self.scope + "/%"), unescaped since
+        before this bean — CHANGES_REQUIRED review decided to fix it here
+        rather than leave a half-escaped OR-chain."""
+        paths = self._paths(self.LITERAL, scope="my_bundle")
+        self.assertIn("my_bundle/active", paths)
+        self.assertNotIn("myXbundle/leak", paths)
+
+    def test_underscore_scope_with_include_archive_excludes_lookalike(self):
+        """Covers the two archive arms this bean added (R-09/AC3)."""
+        paths = self._paths(self.LITERAL, scope="my_bundle",
+                            include_archive=True)
+        self.assertIn("my_bundle/active", paths)
+        self.assertIn("_archive/my_bundle/hidden", paths)
+        self.assertNotIn("myXbundle/leak", paths)
+        self.assertNotIn("_archive/myXbundle/hidden", paths)
+
+    def test_percent_scope_excludes_lookalike_bundle(self):
+        paths = self._paths(self.LITERAL, scope="c%d")
+        self.assertIn("c%d/active", paths)
+        self.assertNotIn("cZZd/leak", paths)
+
+
 class FindScoreBreakdown(unittest.TestCase):
     """P8/8b (okf-cli-8uaf, SCO03) — --breakdown lists which field(s)/term(s)
     contributed to each hit's score; without it, output is byte-identical."""
