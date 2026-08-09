@@ -1984,6 +1984,118 @@ class FindFilterComposition(unittest.TestCase):
         self.assertNotIn("path: wrong/three", out)
 
 
+class FindIncludeArchive(unittest.TestCase):
+    """R-08/R-09/R-10 (okf-cli-pn72) — include_archive as FindFilters'
+    fourth dimension, default excluded, one flag away, scope-aware.
+
+    build_fts_index() itself never indexes _archive/ (is_bundle_dir excludes
+    `_`-prefixed dirs, and teaching the index about the archive is R-11 /
+    okf-cli-iwx4's sibling scope, not this bean's). So the archived rows are
+    inserted directly into the docs table here, exactly the shape the index
+    will carry once that lands — this bean tests the FILTER, not the build."""
+
+    LITERAL = "zqxarch"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        body = "{} appears in every fixture body.\n".format(self.LITERAL)
+        self._w("bundle-a/active.md", "Concept", "Active", ["k"], body)
+        self._w("_archive/bundle-a/hidden.md", "Concept", "Hidden", ["k"],
+                body)
+        self._w("_archive/bundle-b/other-hidden.md", "Concept",
+                "Other Hidden", ["k"], body)
+        # AC4's regression target: a bundle whose name literally starts with
+        # "archive" preceded by an ordinary character must not be caught by
+        # an unescaped `_archive/%` LIKE pattern (`_` is a 1-char wildcard).
+        self._w("xarchive/visible.md", "Concept", "Visible", ["k"], body)
+        okf.build_fts_index(self.tmp)
+        self._insert_fts_row("_archive/bundle-a/hidden", "Concept", "Hidden",
+                              "k", body)
+        self._insert_fts_row("_archive/bundle-b/other-hidden", "Concept",
+                              "Other Hidden", "k", body)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, typ, title, tags, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(
+                "---\ntype: {}\ntitle: {}\ntags: [{}]\ndescription: d\n---\n"
+                "# {}\n\n{}".format(typ, title, ", ".join(tags), title, body)
+            )
+
+    def _insert_fts_row(self, path, typ, title, tag, body):
+        conn = sqlite3.connect(okf._fts_db_path(self.tmp))
+        conn.execute(
+            "INSERT INTO docs(path, ctype, title, tags, body)"
+            " VALUES (?, ?, ?, ?, ?)", (path, typ, title, tag, body))
+        conn.commit()
+        conn.close()
+
+    def _paths(self, query, **kw):
+        import io, contextlib, types
+        args = types.SimpleNamespace(
+            query=query, limit=10, type=None, tag=None, scope=None,
+            breakdown=False, include_archive=False,
+        )
+        for k, v in kw.items():
+            setattr(args, k, v)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), \
+                contextlib.redirect_stderr(io.StringIO()):
+            okf.cmd_find(self.tmp, args)
+        return [l[len("path: "):] for l in buf.getvalue().splitlines()
+                if l.startswith("path: ")]
+
+    def test_sc01_default_excludes_archived_concept_present_in_index(self):
+        paths = self._paths(self.LITERAL)
+        self.assertIn("bundle-a/active", paths)
+        self.assertNotIn("_archive/bundle-a/hidden", paths)
+        self.assertNotIn("_archive/bundle-b/other-hidden", paths)
+
+    def test_sc02_include_archive_flag_returns_it_under_its_archive_path(self):
+        paths = self._paths(self.LITERAL, include_archive=True)
+        self.assertIn("_archive/bundle-a/hidden", paths)
+
+    def test_sc03_scoped_include_archive_reaches_only_that_bundle(self):
+        paths = self._paths(self.LITERAL, scope="bundle-a",
+                            include_archive=True)
+        self.assertIn("_archive/bundle-a/hidden", paths)
+        self.assertNotIn("_archive/bundle-b/other-hidden", paths)
+
+    def test_sc04_bundle_named_xarchive_stays_visible_without_the_flag(self):
+        paths = self._paths(self.LITERAL)
+        self.assertIn("xarchive/visible", paths)
+
+
+class PathInScopeArchiveRule(unittest.TestCase):
+    """path_in_scope() directly — the one named, reusable primitive R-08/R-09
+    live in (okf-cli-pn72). No arm routes an archived path through it TODAY
+    (resolve_scopes()/is_bundle_dir() never yield `_archive/...`, and the
+    substring/semantic arms never see one either, until okf-cli-iwx4/6dsl
+    wire the traversal side to it) — the FTS arm above proves it end to end
+    because SC-01/02/03 stage archived rows directly in the docs table. This
+    class proves the primitive itself is correct standalone, so a future
+    caller that starts feeding it archived paths inherits correct behaviour
+    immediately, not a silently-dead branch."""
+
+    def test_archived_path_excluded_by_default(self):
+        f = okf.FindFilters()
+        self.assertFalse(f.path_in_scope("_archive/bundle-a/hidden"))
+        self.assertTrue(f.path_in_scope("bundle-a/active"))
+
+    def test_archived_path_included_when_flagged(self):
+        f = okf.FindFilters(include_archive=True)
+        self.assertTrue(f.path_in_scope("_archive/bundle-a/hidden"))
+
+    def test_scope_compares_against_archive_stripped_path(self):
+        f = okf.FindFilters(scope="bundle-a", include_archive=True)
+        self.assertTrue(f.path_in_scope("_archive/bundle-a/hidden"))
+        self.assertFalse(f.path_in_scope("_archive/bundle-b/other-hidden"))
+
+
 class FindScoreBreakdown(unittest.TestCase):
     """P8/8b (okf-cli-8uaf, SCO03) — --breakdown lists which field(s)/term(s)
     contributed to each hit's score; without it, output is byte-identical."""

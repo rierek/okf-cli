@@ -759,43 +759,60 @@ def cmd_build_index(root, args):
 
 
 class FindFilters:
-    """--scope/--type/--tag as ONE value, with the predicate defined once.
+    """--scope/--type/--tag/--include-archive as ONE value, with the
+    predicate defined once.
 
     I01, the architectural finding behind B01: the same three filters used to
     be implemented three times — SQL in the FTS arm, a Python scan in the
     substring arm, nothing at all in the semantic arm — and travelled as three
     loose positional arguments through five signatures. Nothing made an arm
     apply them, so the semantic arm silently answered unfiltered and a scoped
-    query returned concepts from other bundles entirely.
+    query returned concepts from other bundles entirely. R-08 adds a fourth
+    dimension deliberately INTO this object rather than beside it, on pain of
+    repeating exactly that finding.
 
     The filters describe the ANSWER, not one arm of it. Whichever arm ends up
     owning the ranking (fuse_conditional decides per query), the same
     predicate holds:
 
-      scope  path is the scope itself or lives beneath it
-      type   exact equality on the concept's frontmatter `type`
-      tag    WHOLE-tag membership — a "tail" query must never hit "tailscale"
+      scope            path is the scope itself or lives beneath it
+      type             exact equality on the concept's frontmatter `type`
+      tag              WHOLE-tag membership — "tail" must never hit "tailscale"
+      include_archive  a path under `_archive/` is no match unless set (R-08);
+                        while it IS set, scope compares against the path with
+                        its leading `_archive/` segment stripped, so a scoped
+                        query reaches the archived concepts of that same
+                        bundle and no other (R-09)
 
     Arms consume it one of two ways, and both hand back what they did NOT
     cover so that skipping a dimension is visible instead of silent:
     sql_where() for arms that filter in the database, matches()/matches_loaded()
     for arms that walk the file tree."""
 
-    __slots__ = ("scope", "type", "tag")
+    __slots__ = ("scope", "type", "tag", "include_archive")
 
-    def __init__(self, scope=None, type=None, tag=None):
+    _ARCHIVE_PREFIX = "_archive/"
+
+    def __init__(self, scope=None, type=None, tag=None, include_archive=False):
         # Normalize "" to None once, here: cmd_find reads these off argparse
         # and the MCP layer passes empty strings for "unset".
         self.scope = (scope or "").rstrip("/") or None
         self.type = type or None
         self.tag = tag or None
+        self.include_archive = bool(include_archive)
 
     def __bool__(self):
+        # Deliberately NOT include_archive: this reports whether scope/type/
+        # tag hold a restriction, which is what sql_where()'s residual
+        # assertions and callers reason about. include_archive's own default
+        # (False) is a restriction too, but path_in_scope() enforces it
+        # unconditionally in matches()/matches_loaded() regardless of this
+        # value, so nothing needs it folded in here.
         return bool(self.scope or self.type or self.tag)
 
     def __repr__(self):
-        return "FindFilters(scope={!r}, type={!r}, tag={!r})".format(
-            self.scope, self.type, self.tag)
+        return "FindFilters(scope={!r}, type={!r}, tag={!r}, include_archive={!r})".format(
+            self.scope, self.type, self.tag, self.include_archive)
 
     def sql_where(self, columns):
         """(sql_fragment, params, residual) for a table that natively carries
@@ -812,8 +829,17 @@ class FindFilters:
         covered = set()
         if self.scope and "scope" in columns:
             col = columns["scope"]
-            sql += " AND ({0} = ? OR {0} LIKE ?)".format(col)
-            params.extend([self.scope, self.scope + "/%"])
+            # R-09: an archived concept of this scope lives at
+            # `_archive/<scope>[/...]`, not `<scope>[/...]` — match both
+            # forms here; visibility of the archived form is decided below,
+            # by the include_archive predicate, not by this OR-chain.
+            sql += (" AND ({0} = ? OR {0} LIKE ? OR {0} = ? OR {0} LIKE ?)"
+                    .format(col))
+            params.extend([
+                self.scope, self.scope + "/%",
+                self._ARCHIVE_PREFIX + self.scope,
+                self._ARCHIVE_PREFIX + self.scope + "/%",
+            ])
             covered.add("scope")
         if self.type and "type" in columns:
             sql += " AND {} = ?".format(columns["type"])
@@ -826,16 +852,38 @@ class FindFilters:
                 columns["tag"])
             params.append(self.tag)
             covered.add("tag")
+        if not self.include_archive and "scope" in columns:
+            # R-08's default exclusion, on the same column scope uses — only
+            # a table carrying `path` can tell an archived concept from an
+            # active one. ESCAPE is not optional (R-10): `_` is a LIKE
+            # single-char wildcard, so an unescaped pattern would also
+            # exclude a bundle literally named "xarchive".
+            sql += " AND {} NOT LIKE '{}%' ESCAPE '\\'".format(
+                columns["scope"], self._ARCHIVE_PREFIX.replace("_", "\\_"))
         residual = FindFilters(
             scope=None if "scope" in covered else self.scope,
             type=None if "type" in covered else self.type,
             tag=None if "tag" in covered else self.tag,
+            include_archive=self.include_archive,
         )
         return sql, params, residual
 
     def path_in_scope(self, path):
-        return (not self.scope or path == self.scope
-                or path.startswith(self.scope + "/"))
+        """R-08/R-09 live here, next to scope, because they are the same
+        predicate: a path under `_archive/` is invisible unless
+        include_archive is set, and once it IS set, scope is compared
+        against the path with that leading segment stripped — so
+        `--scope <bundle> --include-archive` reaches the archived concepts
+        of exactly that bundle, never another's. This is the one named,
+        reusable spot: any future caller that walks paths in Python (not
+        SQL) gets both rules by calling this, not by re-deriving them."""
+        archived = path.startswith(self._ARCHIVE_PREFIX)
+        if archived and not self.include_archive:
+            return False
+        if not self.scope:
+            return True
+        compared = path[len(self._ARCHIVE_PREFIX):] if archived else path
+        return compared == self.scope or compared.startswith(self.scope + "/")
 
     def matches_loaded(self, path, fm, text):
         """Full predicate for a concept whose file the caller already read.
@@ -852,9 +900,11 @@ class FindFilters:
     def matches(self, root, path):
         """Same predicate, reading the concept file when needed. Checks scope
         first so a filtered-out path costs no disk read. A path that no longer
-        resolves fails — _hydrate_hit drops it anyway."""
-        if not self:
-            return True
+        resolves fails — _hydrate_hit drops it anyway.
+
+        No `if not self: return True` shortcut here (there used to be one):
+        include_archive's default is itself a restriction, so even an
+        otherwise "empty" FindFilters() must still run path_in_scope()."""
         if not self.path_in_scope(path):
             return False
         if not (self.type or self.tag):
@@ -1362,6 +1412,7 @@ def cmd_find(root, args):
         scope=getattr(args, "scope", None),
         type=getattr(args, "type", None),
         tag=getattr(args, "tag", None),
+        include_archive=getattr(args, "include_archive", False),
     )
     hits, max_score = _rank_lexically(root, args.query, terms, args.limit,
                                       filters)
@@ -4240,6 +4291,10 @@ def build_parser():
     pf.add_argument("--tag", help="filter by tag (exact match)")
     pf.add_argument("--scope", metavar="TARGET",
                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+    pf.add_argument("--include-archive", action="store_true",
+                    help="also search _archive/<bundle>/<cid>; excluded by "
+                         "default (combine with --scope to reach the "
+                         "archived concepts of one bundle)")
     pf.add_argument("--breakdown", action="store_true",
                     help="print per-hit contributing field(s)/term(s); "
                          "output is byte-identical to today without this flag")
