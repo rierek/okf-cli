@@ -1988,11 +1988,12 @@ class FindIncludeArchive(unittest.TestCase):
     """R-08/R-09/R-10 (okf-cli-pn72) — include_archive as FindFilters'
     fourth dimension, default excluded, one flag away, scope-aware.
 
-    build_fts_index() itself never indexes _archive/ (is_bundle_dir excludes
-    `_`-prefixed dirs, and teaching the index about the archive is R-11 /
-    okf-cli-iwx4's sibling scope, not this bean's). So the archived rows are
-    inserted directly into the docs table here, exactly the shape the index
-    will carry once that lands — this bean tests the FILTER, not the build."""
+    build_fts_index() indexes _archive/ for real since R-11 (okf-cli-fu7o)
+    landed, so the fixture files below are indexed by the ordinary
+    build_fts_index(self.tmp) call — no manual docs-table insert needed or
+    wanted (a manual insert alongside the real one would just duplicate the
+    row); this class stays about the FILTER, R-11's own leaf tests the
+    build."""
 
     LITERAL = "zqxarch"
 
@@ -2009,10 +2010,6 @@ class FindIncludeArchive(unittest.TestCase):
         # an unescaped `_archive/%` LIKE pattern (`_` is a 1-char wildcard).
         self._w("xarchive/visible.md", "Concept", "Visible", ["k"], body)
         okf.build_fts_index(self.tmp)
-        self._insert_fts_row("_archive/bundle-a/hidden", "Concept", "Hidden",
-                              "k", body)
-        self._insert_fts_row("_archive/bundle-b/other-hidden", "Concept",
-                              "Other Hidden", "k", body)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -2025,14 +2022,6 @@ class FindIncludeArchive(unittest.TestCase):
                 "---\ntype: {}\ntitle: {}\ntags: [{}]\ndescription: d\n---\n"
                 "# {}\n\n{}".format(typ, title, ", ".join(tags), title, body)
             )
-
-    def _insert_fts_row(self, path, typ, title, tag, body):
-        conn = sqlite3.connect(okf._fts_db_path(self.tmp))
-        conn.execute(
-            "INSERT INTO docs(path, ctype, title, tags, body)"
-            " VALUES (?, ?, ?, ?, ?)", (path, typ, title, tag, body))
-        conn.commit()
-        conn.close()
 
     def _paths(self, query, **kw):
         import io, contextlib, types
@@ -2072,14 +2061,12 @@ class FindIncludeArchive(unittest.TestCase):
 
 class PathInScopeArchiveRule(unittest.TestCase):
     """path_in_scope() directly — the one named, reusable primitive R-08/R-09
-    live in (okf-cli-pn72). No arm routes an archived path through it TODAY
-    (resolve_scopes()/is_bundle_dir() never yield `_archive/...`, and the
-    substring/semantic arms never see one either, until okf-cli-iwx4/6dsl
-    wire the traversal side to it) — the FTS arm above proves it end to end
-    because SC-01/02/03 stage archived rows directly in the docs table. This
-    class proves the primitive itself is correct standalone, so a future
-    caller that starts feeding it archived paths inherits correct behaviour
-    immediately, not a silently-dead branch."""
+    live in (okf-cli-pn72). The FTS arm above (FindIncludeArchive) proves it
+    end to end against a real build_fts_index() over real `_archive/...`
+    fixture files (R-11, okf-cli-fu7o) — this class proves the primitive
+    itself is correct standalone, independent of any one caller's traversal
+    shape, so a future caller that starts feeding it archived paths
+    inherits correct behaviour immediately, not a silently-dead branch."""
 
     def test_archived_path_excluded_by_default(self):
         f = okf.FindFilters()
@@ -2132,15 +2119,11 @@ class FindScopeLikeEscaping(unittest.TestCase):
         # "Xarchive") with a sub-concept matching the scope name leaks into
         # a `--scope my_bundle --include-archive` answer. "Xarchive" is an
         # ordinary bundle (no leading `_`), so build_fts_index() indexes it
-        # on its own — no manual FTS row needed, unlike the `_archive/...`
-        # fixtures above.
+        # on its own, same as the `_archive/...` fixtures above since R-11
+        # (okf-cli-fu7o) — no manual FTS row needed for any of them.
         self._w("Xarchive/my_bundle/hidden2.md", "Concept",
                 "Prefix Leak", ["k"], body)
         okf.build_fts_index(self.tmp)
-        self._insert_fts_row("_archive/my_bundle/hidden", "Concept",
-                              "Hidden", "k", body)
-        self._insert_fts_row("_archive/myXbundle/hidden", "Concept",
-                              "Archived Leak", "k", body)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -2153,14 +2136,6 @@ class FindScopeLikeEscaping(unittest.TestCase):
                 "---\ntype: {}\ntitle: {}\ntags: [{}]\ndescription: d\n---\n"
                 "# {}\n\n{}".format(typ, title, ", ".join(tags), title, body)
             )
-
-    def _insert_fts_row(self, path, typ, title, tag, body):
-        conn = sqlite3.connect(okf._fts_db_path(self.tmp))
-        conn.execute(
-            "INSERT INTO docs(path, ctype, title, tags, body)"
-            " VALUES (?, ?, ?, ?, ?)", (path, typ, title, tag, body))
-        conn.commit()
-        conn.close()
 
     def _paths(self, query, **kw):
         import io, contextlib, types
@@ -3089,6 +3064,124 @@ class FtsIndexBuild(unittest.TestCase):
             f.write("---\ntype: Konzept\ntitle: Three\ndescription: d\n"
                     "tags: []\n---\nbody\n")
         conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            self.assertTrue(okf._fts_index_stale(self.root, conn))
+        finally:
+            conn.close()
+
+
+class FtsIndexArchive(unittest.TestCase):
+    """R-11 (okf-cli-fu7o) — the FTS index knows the archive, and its
+    staleness check tracks active/archived as two separate counters rather
+    than one sum. A sum would stay constant across `git mv` (mtime
+    preserved), so an archive move would never surface as stale — the
+    exact regression AC2/AC3 exist to close."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        self._w("b/one.md", "Runbook", "One", "active body one.\n")
+        self._w("_archive/b/two.md", "Konzept", "Two",
+                "archived body two.\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _w(self, rel, typ, title, body):
+        ap = os.path.join(self.root, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: {}\ntitle: {}\ndescription: d\ntags: []\n"
+                     "---\n{}".format(typ, title, body))
+
+    def test_archived_concept_is_indexed_at_its_archive_path(self):
+        """AC1 — build_fts_index() indexes `_archive/<bundle>/<cid>` under
+        that exact path, not silently dropped by is_bundle_dir()."""
+        okf.build_fts_index(self.root)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        rows = dict(conn.execute("SELECT path, ctype FROM docs").fetchall())
+        conn.close()
+        self.assertEqual(rows, {"b/one": "Runbook", "_archive/b/two": "Konzept"})
+
+    def test_meta_records_separate_active_and_archived_counts(self):
+        """AC2 — fts_meta carries two counters, not one sum."""
+        okf.build_fts_index(self.root)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        meta = dict(conn.execute("SELECT k, v FROM fts_meta").fetchall())
+        conn.close()
+        self.assertEqual(meta["n_concepts"], "1")
+        self.assertEqual(meta["n_archived"], "1")
+
+    def test_sc02_fresh_build_with_archive_present_is_current(self):
+        """SC-02 — immediately after a build, staleness reports current,
+        with archived concepts present in the index."""
+        okf.build_fts_index(self.root)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            self.assertFalse(okf._fts_index_stale(self.root, conn))
+            rows = [r[0] for r in conn.execute("SELECT path FROM docs")]
+        finally:
+            conn.close()
+        self.assertIn("_archive/b/two", rows)
+
+    def test_sc01_archiving_with_preserved_mtime_makes_index_stale(self):
+        """SC-01/AC3 — the move-and-detect case. `git mv` preserves mtime,
+        so this test moves the file with os.rename() (also a metadata-only
+        rename on the same filesystem, mtime untouched) and asserts the
+        move is caught anyway — through the count split, not through a
+        changed timestamp."""
+        okf.build_fts_index(self.root)
+        src = os.path.join(self.root, "b", "one.md")
+        before_mtime = os.path.getmtime(src)
+        dst = os.path.join(self.root, "_archive", "b", "one.md")
+        os.rename(src, dst)
+        after_mtime = os.path.getmtime(dst)
+        self.assertEqual(before_mtime, after_mtime,
+                          "test setup invalid: the move changed mtime, so "
+                          "it would not exercise the mtime-preserved case "
+                          "SC-01 requires")
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            self.assertTrue(okf._fts_index_stale(self.root, conn))
+        finally:
+            conn.close()
+
+    def test_staleness_check_never_reads_a_concept_body(self):
+        """AC4 — stat-only, even with an archive present. Monkeypatches
+        read_file() to explode; a passing test with no exception proves
+        the check path (active AND archived) never calls it."""
+        okf.build_fts_index(self.root)
+        original_read_file = okf.read_file
+
+        def _boom(ap):
+            raise AssertionError(
+                "staleness check read a concept body: {}".format(ap))
+
+        okf.read_file = _boom
+        try:
+            conn = sqlite3.connect(okf._fts_db_path(self.root))
+            try:
+                okf._fts_index_stale(self.root, conn)  # must not raise
+            finally:
+                conn.close()
+        finally:
+            okf.read_file = original_read_file
+
+    def test_pre_split_index_is_treated_as_stale_not_crashed(self):
+        """Migration decision: an index built before this bean landed only
+        ever wrote 'n_concepts'/'newest_mtime' to fts_meta — no
+        'n_archived' key exists. _fts_index_stale() must not crash on that
+        legacy schema; it must report stale (clean "please rebuild"), the
+        same outcome an absent/corrupt meta table already gets."""
+        db_path = okf._fts_db_path(self.root)
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        conn = sqlite3.connect(db_path)
+        conn.execute(okf.FTS_SCHEMA)
+        conn.execute(okf.FTS_META_SCHEMA)
+        conn.executemany(
+            "INSERT OR REPLACE INTO fts_meta(k, v) VALUES (?, ?)",
+            [("n_concepts", "1"), ("newest_mtime", repr(0.0))])
+        conn.commit()
         try:
             self.assertTrue(okf._fts_index_stale(self.root, conn))
         finally:

@@ -676,22 +676,34 @@ def _fts_db_path(root):
 
 def build_fts_index(root, db_path=None):
     """(Re)build the FTS5 lexical index from the catalogue. Returns
-    (n_concepts, db_path). Local I/O only — no network, stdlib sqlite3.
-    Builds into a .tmp sibling and os.replace()s it, so an interrupted build
-    never leaves a half-written index in place of a working one."""
+    (n_concepts, db_path) where n_concepts is active + archived combined.
+    Local I/O only — no network, stdlib sqlite3. Builds into a .tmp sibling
+    and os.replace()s it, so an interrupted build never leaves a
+    half-written index in place of a working one.
+
+    Also indexes `_archive/<bundle>/<cid>` at that exact path (R-11) —
+    without it `--include-archive` is a decoration, since FTS is the
+    default retrieval arm and no predicate can surface a concept the index
+    never saw. Active and archived counts are recorded separately in
+    fts_meta (see _fts_index_stale) rather than summed, because a summed
+    counter stays constant across an archive move — `git mv` preserves the
+    file's mtime, so neither signal alone would catch the move."""
     db_path = db_path or _fts_db_path(root)
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     tmp = db_path + ".tmp"
     if os.path.exists(tmp):
         os.remove(tmp)
     conn = sqlite3.connect(tmp)
-    n = 0
+    n_active = 0
+    n_archived = 0
     newest = 0.0
     try:
         conn.execute(FTS_SCHEMA)
         conn.execute(FTS_META_SCHEMA)
-        for b in list_bundles(root):
-            bp = os.path.join(root, b)
+
+        def _index_bundle(b, bp, path_prefix):
+            nonlocal newest
+            count = 0
             for cid, ap in iter_concepts(bp):
                 raw = read_file(ap)
                 fm, body = split_frontmatter(raw)
@@ -699,42 +711,75 @@ def build_fts_index(root, db_path=None):
                 conn.execute(
                     "INSERT INTO docs(path, ctype, title, tags, body)"
                     " VALUES (?, ?, ?, ?, ?)",
-                    ("{}/{}".format(b, cid), fm.get("type", ""), title,
-                     " ".join(extract_tags(raw)), body))
-                n += 1
+                    ("{}{}/{}".format(path_prefix, b, cid), fm.get("type", ""),
+                     title, " ".join(extract_tags(raw)), body))
+                count += 1
                 mt = os.path.getmtime(ap)
                 if mt > newest:
                     newest = mt
+            return count
+
+        for b in list_bundles(root):
+            n_active += _index_bundle(b, os.path.join(root, b), "")
+
+        archive_root = os.path.join(root, "_archive")
+        if os.path.isdir(archive_root):
+            for b in list_bundles(archive_root):
+                n_archived += _index_bundle(
+                    b, os.path.join(archive_root, b), "_archive/")
+
         conn.executemany(
             "INSERT OR REPLACE INTO fts_meta(k, v) VALUES (?, ?)",
-            [("n_concepts", str(n)), ("newest_mtime", repr(newest))])
+            [("n_concepts", str(n_active)), ("n_archived", str(n_archived)),
+             ("newest_mtime", repr(newest))])
         conn.commit()
     finally:
         conn.close()
     os.replace(tmp, db_path)
-    return n, db_path
+    return n_active + n_archived, db_path
 
 
 def _fts_index_stale(root, conn):
-    """True when the catalogue gained/lost concepts or any concept file is
-    newer than the newest one seen at build time. stat()-only — it never
-    reads a concept body, which is exactly what makes it cheaper than the
-    full scan it replaces. An unreadable/missing meta table counts as stale."""
+    """True when the catalogue gained/lost concepts (active OR archived) or
+    any concept file is newer than the newest one seen at build time.
+    stat()-only — it never reads a concept body, which is exactly what
+    makes it cheaper than the full scan it replaces. An unreadable/missing
+    meta table counts as stale — this also covers an index built before
+    R-11 landed, whose fts_meta has no 'n_archived' key: the KeyError below
+    is caught the same way a missing table already is, so an old index is
+    reported stale (clean rebuild) rather than crashing this check.
+
+    Active and archived are compared as two separate counters, not their
+    sum (R-11/AC2-AC3). A summed counter would stay constant across an
+    archive move: `git mv` preserves the file's mtime, so the move would
+    be invisible to both signals at once and the index would keep serving
+    the concept under its stale, active path."""
     try:
         meta = dict(conn.execute("SELECT k, v FROM fts_meta").fetchall())
-        n_idx = int(meta["n_concepts"])
+        n_active_idx = int(meta["n_concepts"])
+        n_archived_idx = int(meta["n_archived"])
         newest_idx = float(meta["newest_mtime"])
     except (sqlite3.DatabaseError, KeyError, ValueError, TypeError):
         return True
-    n = 0
+    n_active = 0
+    n_archived = 0
     newest = 0.0
     for b in list_bundles(root):
         for _cid, ap in iter_concepts(os.path.join(root, b)):
-            n += 1
+            n_active += 1
             mt = os.path.getmtime(ap)
             if mt > newest:
                 newest = mt
-    return n != n_idx or newest > newest_idx
+    archive_root = os.path.join(root, "_archive")
+    if os.path.isdir(archive_root):
+        for b in list_bundles(archive_root):
+            for _cid, ap in iter_concepts(os.path.join(archive_root, b)):
+                n_archived += 1
+                mt = os.path.getmtime(ap)
+                if mt > newest:
+                    newest = mt
+    return (n_active != n_active_idx or n_archived != n_archived_idx
+            or newest > newest_idx)
 
 
 def cmd_build_index(root, args):
