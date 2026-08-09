@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-08-09T19:14:20Z
-updated_at: 2026-08-09T19:34:17Z
+updated_at: 2026-08-09T20:11:42Z
 parent: okf-cli-ubxk
 ---
 
@@ -93,3 +93,11 @@ For `okf-cli-16rg` (archive/`archive --restore` as a thin wrapper):
 - On refusal, `perform_rename` calls `sys.exit(2)` directly (via its internal `die()`) — it does not raise/return an error object. A wrapper that wants to catch-and-translate has to intercept `SystemExit`, same as `cmd_rename` always implicitly relied on argparse/the CLI entry point to do.
 - Guard ordering inside `perform_rename` (all before any filesystem mutation): `.md` extension → source exists → reserved source basename → reserved destination basename → empty/whitespace/control-char destination basename → identical source/destination → both paths under `root` → both paths inside a bundle → forbidden filename chars → destination-exists-without-force (samefile-aware) → [canonicalise case] → plan → ambiguity-without-force. `archive`'s own guards (SPEC.md §1: "archive --restore verweigert eine Quelle, die nicht unter _archive/ liegt") must run in `cmd_archive` *before* calling `perform_rename`, since they are not part of this shared core.
 - Known pre-existing gap you inherit unchanged: there is no test in `RenameWikilinks`/`RenameConcept` asserting the exact text of the "source not found" or "destination exists" messages — only that *some* refusal with exit code 2 happens. If `archive`'s tests want to pin exact wording, write it fresh; don't assume it's covered.
+
+
+
+## 2026-08-09 — PO decision D01: error-message wording is not protected
+
+AC4 ("leave the observable behaviour of `rename` unchanged") does not extend to the literal wording of the `die()` messages. The refactor made two of them report the resolved absolute path (`rename: source not found: /abs/root/a/nope.md`) where the old inline body echoed the raw CLI string (`rename: source not found: a/nope.md`). No test pinned either form; the 60 existing rename tests — the operational definition of SC-01 — stay green.
+
+The PO accepts the resolved path: for an agent consumer it is the more useful message, and restoring the old wording would cost an extra raw-string parameter that `SPEC.md` §2 does not know. Message wording under `perform_rename` is therefore explicitly out of AC4 scope; a future change to it is not a regression against this task.
