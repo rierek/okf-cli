@@ -346,6 +346,69 @@ class McpPrimeIsCompact(unittest.TestCase):
         self.assertEqual(argvs, [["--root", "/root", "prime", "--compact"]])
 
 
+class McpIncludeArchiveFlag(unittest.TestCase):
+    """R-14 (okf-cli-9e2b) — _BOOL_FLAGS is shared across every command, so
+    the tool SIGNATURE decides who can reach the flag: a command whose
+    Python signature never accepts `include_archive` can never put it in
+    `params`, and build_argv only emits `--include-archive` for a key that
+    is actually present and truthy in `params`. AC3/SC-02 is the real risk
+    (shared dict, easy to leak): tested over EVERY other command, not a
+    sample of two."""
+
+    def test_sc01_find_carries_the_flag_when_set_and_omits_it_when_unset(self):
+        with_flag = mcp.build_argv("/root", "find",
+                                    {"query": "q", "include_archive": True})
+        self.assertIn("--include-archive", with_flag)
+        without = mcp.build_argv("/root", "find",
+                                  {"query": "q", "include_archive": False})
+        self.assertNotIn("--include-archive", without)
+
+    def test_sc01_list_carries_the_flag_when_set_and_omits_it_when_unset(self):
+        with_flag = mcp.build_argv("/root", "list", {"include_archive": True})
+        self.assertIn("--include-archive", with_flag)
+        without = mcp.build_argv("/root", "list", {"include_archive": False})
+        self.assertNotIn("--include-archive", without)
+
+    def test_ac3_sc02_no_other_command_emits_the_flag(self):
+        others = sorted(set(mcp._COMMANDS) - {"find", "list"})
+        self.assertTrue(others)  # sanity: the exclusion set is non-empty
+        for command in others:
+            argv = mcp.build_argv("/root", command, {"include_archive": True})
+            self.assertNotIn(
+                "--include-archive", argv,
+                "command {!r} must never emit --include-archive".format(command))
+
+    def test_ac1_okf_find_tool_accepts_include_archive_and_reaches_build_argv(self):
+        argvs = []
+        real = mcp.run_okf
+
+        def spy(root, command, params):
+            argvs.append(mcp.build_argv(root, command, params))
+            return ""
+        mcp.run_okf = spy
+        try:
+            mcp._register(_ToolCollector()).tools["okf_find"](
+                "/root", "q", include_archive=True)
+        finally:
+            mcp.run_okf = real
+        self.assertIn("--include-archive", argvs[0])
+
+    def test_ac1_okf_list_tool_accepts_include_archive_and_reaches_build_argv(self):
+        argvs = []
+        real = mcp.run_okf
+
+        def spy(root, command, params):
+            argvs.append(mcp.build_argv(root, command, params))
+            return ""
+        mcp.run_okf = spy
+        try:
+            mcp._register(_ToolCollector()).tools["okf_list"](
+                "/root", include_archive=True)
+        finally:
+            mcp.run_okf = real
+        self.assertIn("--include-archive", argvs[0])
+
+
 class McpWikilinksBoundary(McpBoundaryTestBase):
     """REQ-15 / AC-15.3 — the registered tool function, driven over the real
     subprocess, returns the REQ-08 object."""

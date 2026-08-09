@@ -25,7 +25,15 @@ _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit":
           "scope": "--scope"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
-               "compact": "--compact"}
+               "compact": "--compact", "include_archive": "--include-archive"}
+# _BOOL_FLAGS is shared across every command's params dict, but okf-cli's own
+# argparse only defines --include-archive on the find/list subparsers (R-14,
+# okf-cli-9e2b) — any OTHER command handed that flag would fail at the
+# subprocess boundary with an argparse error. Command-scope it explicitly
+# rather than relying on no other tool function ever populating the key:
+# a key absent from this map stays as unrestricted as before (apply/force/
+# unresolved/compact are untouched, out of this task's scope).
+_BOOL_FLAG_COMMANDS = {"include_archive": {"find", "list"}}
 
 
 def build_argv(root, command, params):
@@ -49,6 +57,9 @@ def build_argv(root, command, params):
         if params.get(key) not in (None, ""):
             argv += [flag, str(params[key])]
     for key, flag in _BOOL_FLAGS.items():
+        allowed = _BOOL_FLAG_COMMANDS.get(key)
+        if allowed is not None and command not in allowed:
+            continue
         if params.get(key):
             argv.append(flag)
     if supports_json:
@@ -101,7 +112,8 @@ def run_okf(root, command, params):
 def _register(server):
     @server.tool()
     def okf_find(root: str, query: str, limit: int = 10, type: str = "",
-                 tag: str = "", scope: str = "") -> list:
+                 tag: str = "", scope: str = "",
+                 include_archive: bool = False) -> list:
         """Ranked search across a catalogue/repo root, composable with
         exact-match type/tag filters and a bundle/subdir scope.
 
@@ -117,10 +129,16 @@ def _register(server):
         writes them to stderr, which run_okf folds into this tool's return
         value): a missing or stale lexical index falls back to a substring
         scan (fix it with okf_build_index), and an unavailable embedding
-        backend leaves lexical results only."""
+        backend leaves lexical results only.
+
+        Pass include_archive=True to also search archived material
+        (`archive`-verb output). The lexical arm honours it fully; the
+        semantic arm's embeddings are built only for the active catalogue
+        (a deliberate cost limit), so a call that hands over to the
+        semantic arm carries an extra note saying so (R-13)."""
         return run_okf(root, "find", {
             "query": query, "limit": limit, "type": type, "tag": tag,
-            "scope": scope,
+            "scope": scope, "include_archive": include_archive,
         })
 
     @server.tool()
@@ -139,9 +157,13 @@ def _register(server):
         return run_okf(root, "index", {"bundle": bundle})
 
     @server.tool()
-    def okf_list(root: str, type: str = "", tag: str = "") -> dict:
-        """Concepts filtered by frontmatter type and/or tag."""
-        return run_okf(root, "list", {"type": type, "tag": tag})
+    def okf_list(root: str, type: str = "", tag: str = "",
+                 include_archive: bool = False) -> dict:
+        """Concepts filtered by frontmatter type and/or tag. Pass
+        include_archive=True to also list archived concepts."""
+        return run_okf(root, "list", {
+            "type": type, "tag": tag, "include_archive": include_archive,
+        })
 
     @server.tool()
     def okf_check(root: str, target: str = "") -> dict:
