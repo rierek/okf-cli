@@ -4267,6 +4267,33 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename"):
 def cmd_rename(root, args):
     old_abs = os.path.abspath(args.old if os.path.isabs(args.old) else os.path.join(root, args.old))
     new_abs = os.path.abspath(args.new if os.path.isabs(args.new) else os.path.join(root, args.new))
+
+    # D02 (okf-cli-tk33, PO decision on Q02): a rename whose source lies
+    # under _archive/ reproduces, through this command, the invisible
+    # empty-directory residue okf-cli-gqss closed for `archive --restore`.
+    # Guarded HERE, not in perform_rename: that function is also
+    # `archive --restore`'s own path back OUT of _archive/ (AC5) — a shared
+    # guard would refuse the operation this message points users at
+    # (SPEC.md §2 placement rule, same as the direction guards in
+    # cmd_archive). Runs unconditionally, before the apply/dry-run branch,
+    # so a preview never promises a move --apply would then decline (AC2).
+    #
+    # "Resolved source" (AC1): os.path.realpath, the same idiom
+    # _prune_empty_archive_dirs (:4286-4288) and _git_mv (:4084-4087) already
+    # use for a root/_archive boundary check. os.path.abspath alone already
+    # collapses a `..`-traversal argument lexically, but only realpath also
+    # follows a symlink whose target lands inside _archive/ even though
+    # neither the argument nor old_abs ever spells "_archive/" — a prefix
+    # match on the raw argument string would miss both.
+    archive_root = os.path.realpath(os.path.join(root, "_archive"))
+    resolved_old = os.path.realpath(old_abs)
+    if resolved_old == archive_root or resolved_old.startswith(archive_root + os.sep):
+        old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
+        sys.stderr.write(
+            "rename: source lies under _archive/ — use archive --restore to "
+            "bring it back: {}\n".format(old_rel))
+        sys.exit(2)
+
     perform_rename(root, old_abs, new_abs, args.apply, args.force)
 
 

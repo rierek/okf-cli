@@ -5463,6 +5463,25 @@ class PerformRenameDirectCall(WikilinkFixtureMixin, unittest.TestCase):
             "rename: source not found: {}\n".format(self._ap("a/old.md")),
             err.getvalue())
 
+    # -- AC4 (okf-cli-tk33): the "source under _archive/" refusal is
+    # cmd_rename's guard, not perform_rename's — that shared function is
+    # also `archive --restore`'s own path back OUT of _archive/ (AC5), so a
+    # guard placed here would refuse the very move the refusal's own message
+    # points users at. Every other test in this bean reaches perform_rename
+    # through cmd_rename, where the guard already ran by the time control
+    # gets here — only a DIRECT call proves the check has not migrated into
+    # the shared core (the okf-cli-5436 review's exact trap, same shape).
+    def test_ac4_direct_call_with_source_under_archive_is_not_refused(self):
+        self._w("_archive/a/deep.md", "---\ntype: Concept\n---\n# Deep\n")
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.perform_rename(self.tmp, self._ap("_archive/a/deep.md"),
+                                self._ap("a/deep.md"), apply=True, force=False)
+        self.assertFalse(os.path.isfile(self._ap("_archive/a/deep.md")))
+        self.assertTrue(os.path.isfile(self._ap("a/deep.md")))
+
 
 class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
     """R-01..R-03 (okf-cli-16rg) — `archive`/`archive --restore` as a thin
@@ -5692,6 +5711,123 @@ class ArchiveMissingSourcePointsAtCounterpart(WikilinkFixtureMixin, unittest.Tes
             "archive: source not found: {} — the active copy already "
             "exists at a/old.md\n".format(self._ap("_archive/a/old.md")),
             err)
+
+
+class RenameSourceUnderArchiveRefuses(WikilinkFixtureMixin, unittest.TestCase):
+    """okf-cli-tk33 — D02 (PO decision on Q02): a `rename` whose RESOLVED
+    source lies under _archive/ reproduces, through a different command, the
+    invisible empty-directory residue okf-cli-gqss closed for
+    `archive --restore`. The guard lives in cmd_rename (AC4/AC5), not
+    perform_rename — that function is `archive --restore`'s own path back
+    OUT of _archive/, so a shared guard would refuse the very move this
+    refusal's message points users at. See
+    PerformRenameDirectCall.test_ac4_direct_call_with_source_under_archive_is_not_refused
+    for the placement proof."""
+
+    def setUp(self):
+        super().setUp()
+        self._w("a/index.md", "# A\n")
+        self._w("b/index.md", "# B\n")
+
+    def _ap(self, rel):
+        return os.path.join(self.tmp, rel)
+
+    def _rename(self, old, new, apply=False):
+        import contextlib
+        import io
+        import types
+        args = types.SimpleNamespace(old=old, new=new, apply=apply, force=False)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_rename(self.tmp, args)
+        return buf.getvalue()
+
+    def _rename_fails(self, old, new, apply=False):
+        import contextlib
+        import io
+        import types
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                okf.cmd_rename(self.tmp, types.SimpleNamespace(
+                    old=old, new=new, apply=apply, force=False))
+        self.assertEqual(ctx.exception.code, 2)
+        return out.getvalue(), err.getvalue()
+
+    # -- SC-03 regression, written first: both untouched paths must keep
+    # behaving exactly as before the refusal exists. ----------------------
+    def test_sc03_ordinary_rename_between_active_paths_is_unchanged(self):
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        out = self._rename("a/old.md", "a/new.md", apply=True)
+        self.assertIn("moved (fs)", out)
+        self.assertTrue(os.path.isfile(self._ap("a/new.md")))
+        self.assertFalse(os.path.isfile(self._ap("a/old.md")))
+
+    def test_sc03_rename_with_destination_under_archive_is_unchanged(self):
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        out = self._rename("a/old.md", "_archive/a/old.md", apply=True)
+        self.assertIn("moved (fs)", out)
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
+        self.assertFalse(os.path.isfile(self._ap("a/old.md")))
+
+    # -- SC-04/AC5: archive --restore, the operation this refusal points
+    # users at, keeps working through the same shared perform_rename. -----
+    def test_sc04_archive_restore_of_a_deep_path_still_works(self):
+        import types
+        import contextlib
+        import io
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        okf.cmd_archive(self.tmp, types.SimpleNamespace(
+            path="a/old.md", restore=False, apply=True, force=False))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_archive(self.tmp, types.SimpleNamespace(
+                path="_archive/a/old.md", restore=True, apply=True, force=False))
+        self.assertTrue(os.path.isfile(self._ap("a/old.md")))
+        self.assertFalse(os.path.isfile(self._ap("_archive/a/old.md")))
+
+    # -- AC1/AC2/SC-01/SC-02: the refusal itself ---------------------------
+    def test_sc01_apply_refuses_and_names_archive_restore(self):
+        self._w("_archive/a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        out, err = self._rename_fails("_archive/a/old.md", "a/old.md", apply=True)
+        self.assertIn("archive --restore", err)
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
+        self.assertFalse(os.path.isfile(self._ap("a/old.md")))
+
+    def test_sc02_dry_run_refuses_identically_not_a_would_move_line(self):
+        self._w("_archive/a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        out, err = self._rename_fails("_archive/a/old.md", "a/old.md", apply=False)
+        self.assertIn("archive --restore", err)
+        self.assertNotIn("would move", out)
+
+    def test_ac2_dry_run_and_apply_refuse_with_the_identical_message(self):
+        """AC2: the refusal is not a preview --apply would later decline to
+        honour — dry-run and --apply must produce the SAME message, not
+        merely both exit non-zero."""
+        self._w("_archive/a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        _, err_dry = self._rename_fails("_archive/a/old.md", "a/old.md", apply=False)
+        self._w("_archive/a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        _, err_apply = self._rename_fails("_archive/a/old.md", "a/old.md", apply=True)
+        self.assertEqual(err_dry, err_apply)
+
+    # -- AC1: the RESOLVED source, not the raw argument string -------------
+    def test_ac1_traversal_argument_that_resolves_into_archive_is_refused(self):
+        """A raw prefix check on args.old would miss this: the argument
+        string itself never starts with "_archive/"."""
+        self._w("_archive/a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        _, err = self._rename_fails("b/../_archive/a/old.md", "a/old.md", apply=True)
+        self.assertIn("archive --restore", err)
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
+
+    def test_ac1_symlink_resolving_into_archive_is_refused(self):
+        """A symlink living OUTSIDE _archive/ whose target resolves inside
+        it — the raw path the user typed never mentions _archive/ at all,
+        so only resolving the source catches this."""
+        self._w("_archive/a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        os.symlink(self._ap("_archive/a/old.md"), self._ap("b/alias.md"))
+        _, err = self._rename_fails("b/alias.md", "a/moved.md", apply=True)
+        self.assertIn("archive --restore", err)
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
 
 
 class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
