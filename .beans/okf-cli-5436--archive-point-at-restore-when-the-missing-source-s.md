@@ -5,7 +5,7 @@ status: todo
 type: feature
 priority: high
 created_at: 2026-08-10T06:45:10Z
-updated_at: 2026-08-10T09:16:25Z
+updated_at: 2026-08-10T10:11:46Z
 parent: okf-cli-0xkj
 ---
 
@@ -59,3 +59,14 @@ _Requirements: PO review 2026-08-10, side finding on US-04_
 ## Recommended Skills
 
 - `superpowers:test-driven-development` — SC-02 is a regression guard on an existing message, so it has to exist before the new branch is written.
+
+
+## Prelude 2026-08-10 — carried over from the review of `okf-cli-gqss`
+
+Two non-blocking findings from the `ce-specs-reviewer` verdict on `okf-cli-gqss` (APPROVED). Neither is work on this leaf's behaviour; carry them as obligations on your own work, no separate commit.
+
+**I01 — commit subject soft target, again.** `1bbcfe3` came in at 51 bytes against the 50-byte soft target. The hard limit of 72 is hook-enforced and held; this is a miss, not a violation. It is the second leaf in a row that overshoots by a hair — count the subject before committing.
+
+**I02 — a broad `except` can recreate the residue this epic is closing.** `_prune_empty_archive_dirs` (`cli/okf-cli.py:4293-4294`) catches every `OSError` subclass and breaks, not only `ENOTEMPTY`. On a permission error or a race the prune aborts silently and leaves exactly the invisible empty-directory state that `okf-cli-gqss` was written to eliminate. The reviewer confirmed this matches the codebase idiom (`cli/okf-cli.py:3739`, `:4077` catch equally broadly) and that AC1-AC3 of that bean demand no error diagnostics, so it was correctly left alone there. It is recorded here so the next person touching that function knows the silent-abort path exists.
+
+**Prelude items still in force from the mk7m review:** every commit carries a `Refs: okf-cli-5436` footer (style, not hook-enforced, which is why it gets dropped), and mutation proofs cite `file:line` plus the mutated expression verbatim rather than the semantic name of the branch.

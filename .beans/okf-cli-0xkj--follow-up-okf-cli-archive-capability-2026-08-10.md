@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: normal
 created_at: 2026-08-10T06:45:07Z
-updated_at: 2026-08-10T09:52:40Z
+updated_at: 2026-08-10T10:11:46Z
 parent: okf-cli-huow
 ---
 
@@ -37,3 +37,26 @@ A single `git mv` cannot span two repositories. That is a property of git, not a
 The stronger reading of AC1 — always manufacture a tracked move via two-sided `git rm --cached` / `git add` staging whenever a real repo is resolvable — was NOT implemented. Neither the bean's real-catalogue narrative nor `docs/okf-archive-lifecycle/SPEC.md` section 2 describes such a mechanism, so building it would have been an implementer-invented scope extension.
 
 **Open for the PO:** is the shipped reading the intended one, or should the cross-repo archive case produce a staged, tracked move on both sides? If the shipped reading stands, this section is the record and no further work follows. If not, it becomes a new leaf — the current leaf stays correct either way, since it reports honestly rather than degrading silently.
+
+
+## Q02 2026-08-10 — the residue is still reachable through `rename`, for the PO
+
+Raised by the `ce-specs-reviewer` on `okf-cli-gqss` as decision D01 of that review, status 🟡 — needs a PO decision. The leaf itself was APPROVED; this is about whether a further leaf follows.
+
+`okf-cli-gqss` prunes the emptied `_archive/<bundle>/` and `_archive/` directories, but the prune lives in `cmd_archive` only. The reviewer verified by his own smoke run that a direct call reproduces the original defect:
+
+```
+okf-cli.py rename _archive/<bundle>/old.md <bundle>/old.md --apply
+```
+
+leaves `_archive/<bundle>/` and `_archive/` standing — the same invisible residue, reached through a different command.
+
+**Why it was left alone, and why that was right.** `docs/okf-archive-lifecycle/SPEC.md` section 2 requires (R-04/A15) that `rename` stay byte-identical, and section 1 makes `archive --restore` the only documented restore interface. Moving the prune into `perform_rename` would have broken an explicit, separate spec requirement in order to close a gap that lies outside the documented interface. Both the implementer and the reviewer took the same position, independently.
+
+**Open for the PO — three readings, no default:**
+
+1. Leave it. The guarantee is scoped to the documented restore interface, and `rename` out of `_archive/` is an operator going around the front door.
+2. Extend the guarantee to be command-independent: `cmd_rename` gets the same prune. Costs the byte-identical-`rename` promise and needs a SPEC section 2 amendment.
+3. Refuse the path: a `rename` whose source lies under `_archive/` errors and names `archive --restore`. Keeps `rename` semantics for every other path and turns the bypass into a signpost — shape-wise a sibling of `okf-cli-5436`.
+
+Reading 3 is the one I would put first if the PO wants the gap closed at all: it fixes the surprise without touching what R-04/A15 protects.
