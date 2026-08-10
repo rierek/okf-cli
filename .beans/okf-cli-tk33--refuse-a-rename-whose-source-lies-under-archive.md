@@ -1,11 +1,11 @@
 ---
 # okf-cli-tk33
 title: refuse a rename whose source lies under _archive
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-08-10T10:22:51Z
-updated_at: 2026-08-10T10:23:07Z
+updated_at: 2026-08-10T10:28:40Z
 parent: okf-cli-0xkj
 ---
 
@@ -66,3 +66,17 @@ _Requirements: PO decision on Q02, 2026-08-10; reviewer finding D01 on `okf-cli-
 ## Note on the residue
 
 This leaf does not add pruning to `rename`. It removes the only way to reach the residue through `rename`. If a future change ever makes a source under `_archive/` renameable again, the prune question of `okf-cli-gqss` returns with it — record that here rather than discovering it twice.
+
+
+## Prelude 2026-08-10 — carried over from the review of `okf-cli-5436`
+
+**I01 — the third commit escapes the subject count.** `4e74677` came in at 51 bytes against the 50-byte soft target, and the leaf's own ERRATA section checked only the two code commits (47 and 55 bytes), not the bean-closing one. Three leaves in a row have now overshot by one or five bytes. The pattern is not the length, it is that the closing commit is written after the gate is green and skips the discipline the same report demands. Count every subject, including the one that closes the bean.
+
+Still in force from the earlier reviews: every commit carries a `Refs: okf-cli-tk33` footer (style, not hook-enforced, which is why it gets dropped), and mutation proofs cite `file:line` plus the mutated expression verbatim rather than the semantic name of the branch.
+
+## Worked precedent — read `okf-cli-5436` before starting
+
+That leaf is closed, APPROVED, and structurally identical to this one: a guard placed in the archive-specific caller rather than in the shared `perform_rename`, turning a silent or misleading outcome into a signpost. Two things from its review transfer directly:
+
+1. **The placement guard needs its own test in `PerformRenameDirectCall`.** In `okf-cli-5436` the first attempt was silently green under the AC4 mutation — moving the check into the shared function broke nothing, because every test reached it through the specific caller. The fix was a test that calls `perform_rename` DIRECTLY, so it fails if archive/rename-specific knowledge migrates into the shared core. AC4 of this bean has the same shape and needs the same kind of test.
+2. **Reuse the existing message phrasing.** The reviewer confirmed `okf-cli-5436` was right to lift `use --restore to bring it back" verbatim from the existing direction guard (`cli/okf-cli.py:4329-4330`) instead of inventing new terminology. Your refusal message names the same verb — match the established wording rather than coining a variant.
