@@ -1426,11 +1426,12 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _prime(self, full=False, compact=False):
+    def _prime(self, full=False, compact=False, check_semantic=False):
         import io, contextlib, types
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            okf.cmd_prime(self.tmp, types.SimpleNamespace(full=full, compact=compact))
+            okf.cmd_prime(self.tmp, types.SimpleNamespace(
+                full=full, compact=compact, check_semantic=check_semantic))
         return buf.getvalue()
 
     def test_guide_renders_without_claude_md(self):
@@ -1489,19 +1490,23 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         self.assertRegex(out, r"(?i)tag vocabulary:\s*closed")
 
     def _make_tagvec(self, paths):
-        """A .tagvec carrying one concept vector per given path."""
-        import sqlite3, struct
-        db = os.path.join(self.tmp, ".tagvec", "tag_vectors.sqlite")
-        os.makedirs(os.path.dirname(db), exist_ok=True)
-        conn = sqlite3.connect(db)
-        conn.execute("CREATE TABLE concept_emb(key TEXT PRIMARY KEY, path TEXT, "
-                     "model TEXT, dim INT, vec BLOB)")
-        for i, p in enumerate(paths):
-            conn.execute("INSERT INTO concept_emb VALUES (?,?,?,?,?)",
-                         ("k{}".format(i), p, okf.SEMANTIC_MODEL, 2,
-                          struct.pack("<2f", 1.0, 0.0)))
-        conn.commit()
-        conn.close()
+        """A .tagvec carrying one CURRENT-content vector per given path.
+        The key is computed with the production concept_cache_key() (via
+        split_frontmatter/read_file/concept_text(), the same functions
+        plan_concept_delta() uses per concept) so 'covered' here means
+        exactly what it means to the real detector, not a stand-in key."""
+        bt = okf._load_build_tagvec()
+        db = okf._tagvec_db_path(self.tmp)
+        rows = []
+        for p in paths:
+            b, cid = p.split("/", 1)
+            ap = os.path.join(self.tmp, b, cid + ".md")
+            fm, body = okf.split_frontmatter(okf.read_file(ap))
+            title = okf._dequote(fm.get("title", "")) or cid
+            text = bt.concept_text(title, body)
+            key = bt.concept_cache_key(okf.SEMANTIC_MODEL, p, text)
+            rows.append((key, p, okf.SEMANTIC_MODEL, 2, bt.pack_vec([1.0, 0.0])))
+        bt.write_concept_rows(db, rows)
 
     def test_state_reports_absent_semantic_index(self):
         """Modus-B: the semantic arm degraded silently for 4.4 % of the live
@@ -1512,12 +1517,14 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
 
     def test_state_reports_an_incomplete_semantic_index(self):
         """The failure mode that actually occurred: an index that is PRESENT
-        and silently partial. Two concepts, one vector."""
+        and silently partial. Two concepts, one vector. --check-semantic runs
+        the exact (content-hash) count; see the two gating tests below for the
+        cheap default."""
         ap = os.path.join(self.tmp, "b", "two.md")
         with open(ap, "w", encoding="utf-8") as f:
             f.write("---\ntype: Concept\ntitle: Two\n---\n# Two\n")
         self._make_tagvec(["b/one"])
-        out = self._prime()
+        out = self._prime(check_semantic=True)
         self.assertRegex(out, r"(?i)semantic index:.*1 of 2")
         self.assertIn("build_tagvec", out)
 
@@ -1525,9 +1532,32 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         """Counter-mutation: a covered catalogue must NOT be reported as
         partial, or the notice degenerates into noise nobody reads."""
         self._make_tagvec(["b/one"])
-        out = self._prime()
+        out = self._prime(check_semantic=True)
         self.assertRegex(out, r"(?i)semantic index:\s*complete")
         self.assertNotIn("build_tagvec", out)
+
+    def test_default_prime_skips_the_expensive_content_check(self):
+        """B: the content-hash pass reads and hashes every concept body
+        (~2.2s over 2590 concepts on the live catalogue) -- too slow for a
+        call that runs on every session start. Bare `prime` must not run it;
+        it reports presence only, honestly, rather than an unchecked count."""
+        self._make_tagvec(["b/one"])
+        out = self._prime()
+        self.assertRegex(out, r"(?i)semantic index:\s*present")
+        self.assertNotRegex(out, r"(?i)semantic index:\s*(complete|partial)")
+
+    def test_check_semantic_flag_runs_the_exact_content_check(self):
+        self._make_tagvec(["b/one"])
+        out = self._prime(check_semantic=True)
+        self.assertRegex(out, r"(?i)semantic index:\s*complete")
+
+    def test_check_semantic_flag_is_documented(self):
+        ap = okf.build_parser()
+        parsers = okf.subcommand_parsers(ap)
+        actions = okf.parser_actions(parsers["prime"])
+        flag = next((a for a in actions if a.dest == "check_semantic"), None)
+        self.assertIsNotNone(flag, "prime has no --check-semantic option")
+        self.assertTrue((flag.help or "").strip())
 
     def test_guide_is_catalogue_agnostic(self):
         """The old CLAUDE.md hardcoded one operator's catalogue path into every
@@ -3582,6 +3612,57 @@ class CmdBuildIndexIfStale(unittest.TestCase):
         self.assertTrue((flag.help or "").strip())
 
 
+class SemanticCoverageSharesTheProducersDetector(unittest.TestCase):
+    """OKFT-9wk6 — semantic_coverage() used to compare PATH sets against
+    concept_emb only, so a concept whose body changed after embedding still
+    counted as covered: its old row's path still matched. The producer,
+    plan_concept_delta(), already carries the correct detector -- a
+    content-hash comparison via concept_cache_key(model, path, text). This
+    is the OKF concept detector-and-autofixer-must-share-the-same-scan: the
+    checker and the producer must run the same scan, not two.
+
+    Each test builds its embedded row through split_frontmatter/read_file/
+    concept_text()/concept_cache_key() -- the exact sequence
+    plan_concept_delta() runs per concept -- never a hand-rolled sha1, so a
+    passing test proves the shared detector, not a re-implementation of it."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.ap = os.path.join(self.root, "b", "one.md")
+        os.makedirs(os.path.dirname(self.ap))
+        self._write("original body")
+        self.bt = okf._load_build_tagvec()
+        self.db = okf._tagvec_db_path(self.root)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _write(self, body):
+        with open(self.ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: One\n---\n{}\n".format(body))
+
+    def _embed_current_content(self):
+        fm, body = okf.split_frontmatter(okf.read_file(self.ap))
+        title = okf._dequote(fm.get("title", "")) or "one"
+        text = self.bt.concept_text(title, body)
+        key = self.bt.concept_cache_key(okf.SEMANTIC_MODEL, "b/one", text)
+        self.bt.write_concept_rows(
+            self.db,
+            [(key, "b/one", okf.SEMANTIC_MODEL, 2, self.bt.pack_vec([1.0, 0.0]))])
+
+    def test_covered_when_the_embedded_key_matches_current_content(self):
+        self._embed_current_content()
+        self.assertEqual(okf.semantic_coverage(self.root, ["b/one"]), (1, 1))
+
+    def test_stale_after_a_body_edit_though_the_path_is_still_present(self):
+        """The regression this closes: the OLD implementation returned (1, 1)
+        here, because b/one's PATH was still in concept_emb -- the row just
+        carried a key for content that no longer exists on disk."""
+        self._embed_current_content()
+        self._write("changed body")
+        self.assertEqual(okf.semantic_coverage(self.root, ["b/one"]), (0, 1))
+
+
 class CmdBuildSemanticIndex(unittest.TestCase):
     """OKFT-wsne — `build-semantic-index [--if-stale]`: the trigger the
     concept_emb producer lacked (SC-001/EARS "brought up to date without a
@@ -3677,6 +3758,23 @@ class CmdBuildSemanticIndex(unittest.TestCase):
         self._w("b/three.md", "Three", "three body")
         out, err = self._run(if_stale=True)
         self.assertIn("embedded 1 concept(s)", out)
+
+    def test_if_stale_embeds_when_a_body_changed_without_reembedding(self):
+        """The regression this fix closes (OKFT-9wk6): semantic_coverage()
+        used to compare PATH sets only, so a changed concept body left the
+        OLD key's row sitting in concept_emb and --if-stale reported the
+        index complete -- skipping the rebuild that the changed content
+        actually needed. The probe now shares plan_concept_delta()'s
+        content-hash detection, so an edited body -- same path, same row
+        count, different key -- must trigger exactly one re-embed."""
+        self.bt.embed_voyage = self._fake_embed
+        self._run(if_stale=False)
+        self._w("b/one.md", "One", "one body CHANGED")
+        calls = []
+        self.bt.embed_voyage = lambda texts: calls.append(texts) or self._fake_embed(texts)
+        out, err = self._run(if_stale=True)
+        self.assertIn("embedded 1 concept(s)", out)
+        self.assertTrue(calls, "changed body must reach embed_voyage, not be skipped")
 
     def test_if_stale_embeds_when_index_is_absent(self):
         self.bt.embed_voyage = self._fake_embed

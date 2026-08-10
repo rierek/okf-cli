@@ -1846,31 +1846,50 @@ def semantic_coverage(root, paths):
     """(embedded, total) for the concepts named in `paths`, or None when the
     catalogue carries no `.tagvec` at all.
 
-    Counted by comparing PATH SETS, not row totals: the producer leaves rows
-    behind for deleted concepts (74 orphans in the live catalogue on
-    2026-08-10), so a row count can exceed the concept count while concepts
-    are still unembedded — a total-vs-total check would report a gap of zero
-    at the exact moment the gap matters."""
+    Delegates to plan_concept_delta() — the same content-hash comparison
+    (concept_cache_key over title+body) the producer uses to decide what to
+    re-embed — rather than running a second, weaker detector next to it. A
+    PATH-SET-only comparison used to pass here: a concept whose body changed
+    after embedding kept its old row's path, so the gap between "coverage
+    thinks it's done" and "the producer still has 40 concepts queued"
+    (measured live, 2026-08-10) went unreported. `paths` is intersected with
+    the delta rather than trusted verbatim, so a caller passing a subset
+    still gets an answer scoped to what it asked about.
+
+    Costs ~2.2s over ~2600 concepts (offline, one read+hash per concept) —
+    call sparingly on a hot path; see _semantic_coverage_line()'s `thorough`
+    gate for the default-prime case."""
     db = _tagvec_db_path(root)
     if not os.path.isfile(db):
         return None
     try:
-        conn = sqlite3.connect(db)
-        try:
-            embedded = {r[0] for r in conn.execute(
-                "SELECT path FROM concept_emb WHERE model = ?", (SEMANTIC_MODEL,))}
-        finally:
-            conn.close()
+        bt = _load_build_tagvec()
+        delta = bt.plan_concept_delta(root, SEMANTIC_MODEL, db)
     except sqlite3.Error:
         return None
-    return len(set(paths) & embedded), len(paths)
+    stale = {path for path, _text, _key in delta} & set(paths)
+    return len(paths) - len(stale), len(paths)
 
 
-def _semantic_coverage_line(root, paths):
+def _semantic_coverage_line(root, paths, thorough=False):
     """The onboarding statement about the semantic arm's reach. The lexical
     index announces its absence and its staleness; before this, an incomplete
     `concept_emb` said nothing at all, and the arm simply did not see the
-    concepts it lacked (Modus-B, 2026-08-10: 4.4 % of the live catalogue)."""
+    concepts it lacked (Modus-B, 2026-08-10: 4.4 % of the live catalogue).
+
+    `thorough=False` (prime's default) reports presence only: semantic_coverage()
+    now does a real content-hash pass and costs ~2.2s over the live catalogue,
+    too slow for a call on every session start. Presence-only is an honest
+    "don't know", not a diluted count — the one counting method lives in
+    semantic_coverage() and only runs when `thorough=True` (`prime
+    --check-semantic`)."""
+    db = _tagvec_db_path(root)
+    if not os.path.isfile(db):
+        return ("semantic index: absent — `find` runs its lexical arm only")
+    if not thorough:
+        return ("semantic index: present — staleness not checked by default "
+                 "(costs ~2s on a large catalogue); run `prime --check-semantic` "
+                 "for an exact count")
     cov = semantic_coverage(root, paths)
     if cov is None:
         return ("semantic index: absent — `find` runs its lexical arm only")
@@ -1882,7 +1901,7 @@ def _semantic_coverage_line(root, paths):
             "build_tagvec.py --target concepts)".format(embedded, total))
 
 
-def render_catalogue_state(root):
+def render_catalogue_state(root, thorough=False):
     """The live half of the onboarding: facts read off this catalogue rather
     than asserted in prose, so they cannot go stale. Retrieval quality depends
     on the FTS index being there, and a write attempt depends on whether the
@@ -1898,7 +1917,7 @@ def render_catalogue_state(root):
     else:
         lines.append("fts index: absent — `find` degrades to a substring scan; "
                      "run `build-index`")
-    lines.append(_semantic_coverage_line(root, paths))
+    lines.append(_semantic_coverage_line(root, paths, thorough=thorough))
     registered = load_tags(root)
     if registered is None:
         lines.append("tag vocabulary: open — no TAGS.md, any tag passes")
@@ -1934,7 +1953,7 @@ def cmd_prime(root, args):
         print("## find — the entry point, in full\n")
         print(subcommand_parsers(build_parser())["find"].format_help().strip())
     print()
-    print(render_catalogue_state(root))
+    print(render_catalogue_state(root, thorough=getattr(args, "check_semantic", False)))
     print()
     print("## Bundles\n")
     print("The catalogue TOC, as `index` renders it. Each name is a path: "
@@ -4820,6 +4839,10 @@ def build_parser():
     pp.add_argument("--compact", action="store_true",
                      help="list bundles as name+count one-liners instead of the "
                           "`index` blocks (description+directories)")
+    pp.add_argument("--check-semantic", action="store_true",
+                     help="run the exact content-hash semantic coverage check "
+                          "(~2s on a large catalogue) instead of reporting only "
+                          "whether the semantic index is present")
     pr = _sub(sub, "read", "navigation", "print one concept page")
     pr.add_argument("path", help="<bundle>/<concept-id> of the page to print")
     prc = _sub(sub, "recent", "navigation",
