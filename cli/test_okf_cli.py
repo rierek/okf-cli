@@ -5443,6 +5443,26 @@ class PerformRenameDirectCall(WikilinkFixtureMixin, unittest.TestCase):
                                     apply=False, force=False)
         self.assertTrue(err.getvalue().startswith("rename:"))
 
+    # -- AC4 (okf-cli-5436): the missing-source/existing-counterpart signal
+    # is cmd_archive's, not perform_rename's. `rename` has no archive
+    # semantics, so a missing source with a file already sitting at the
+    # destination — an everyday rename collision, not an archive move —
+    # must keep the plain "source not found" message unchanged.
+    def test_ac4_missing_source_with_file_at_destination_stays_plain(self):
+        import contextlib
+        import io
+        self._w("a/new.md", "---\ntype: Concept\n---\n# New\n")
+        os.remove(self._ap("a/old.md"))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                okf.perform_rename(self.tmp, self._ap("a/old.md"), self._ap("a/new.md"),
+                                    apply=False, force=False)
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(
+            "rename: source not found: {}\n".format(self._ap("a/old.md")),
+            err.getvalue())
+
 
 class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
     """R-01..R-03 (okf-cli-16rg) — `archive`/`archive --restore` as a thin
