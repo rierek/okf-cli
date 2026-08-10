@@ -5607,6 +5607,73 @@ class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
         self.assertTrue(os.path.isdir(self._ap("_archive")))
 
 
+class ArchiveMissingSourcePointsAtCounterpart(WikilinkFixtureMixin, unittest.TestCase):
+    """okf-cli-5436 — a missing source whose derived counterpart exists is a
+    navigation signal, not a bare miss: name the counterpart and the verb
+    that reaches it. AC1-AC4. The check lives in cmd_archive, not
+    perform_rename (AC4) — SPEC.md §2 reasoning, same as the three existing
+    direction guards."""
+
+    def setUp(self):
+        super().setUp()
+        self._w("a/index.md", "# A\n")
+
+    def _ap(self, rel):
+        return os.path.join(self.tmp, rel)
+
+    def _archive_fails(self, path, restore=False, apply=False, force=False):
+        import contextlib
+        import io
+        import types
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                okf.cmd_archive(self.tmp, types.SimpleNamespace(
+                    path=path, restore=restore, apply=apply, force=force))
+        self.assertEqual(ctx.exception.code, 2)
+        return err.getvalue()
+
+    # -- SC-02: regression guard on the untouched path, written first ----
+    # A missing source with no counterpart anywhere must keep the CURRENT
+    # "source not found" message, asserted against the literal string —
+    # this has to exist and pass BEFORE the new branch is written, or there
+    # is no way to tell whether the untouched path stayed untouched.
+    def test_sc02_missing_source_with_no_counterpart_keeps_current_message(self):
+        err = self._archive_fails("a/ghost.md")
+        self.assertEqual(
+            "archive: source not found: {}\n".format(self._ap("a/ghost.md")),
+            err)
+
+    # -- AC1/SC-01: missing source, an archived counterpart exists -------
+    # A substring check alone is not enough here: the source path itself
+    # already contains "old.md", so both required tokens are asserted, and
+    # the full message is pinned so a future edit cannot silently drop the
+    # active-path/--restore wording while still matching a loose assertion.
+    def test_sc01_missing_source_with_archived_counterpart_names_restore(self):
+        self._w("_archive/a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        err = self._archive_fails("a/old.md")
+        self.assertIn("_archive/a/old.md", err)
+        self.assertIn("--restore", err)
+        self.assertEqual(
+            "archive: source not found: {} — already archived at "
+            "_archive/a/old.md (use --restore to bring it back)\n"
+            .format(self._ap("a/old.md")),
+            err)
+
+    # -- AC2: mirrored case on the --restore path -------------------------
+    # "a/old.md" is trivially a substring of the unmodified message (it is
+    # the tail of ".../_archive/a/old.md"), so a bare assertIn would pass
+    # against the OLD, unchanged code — pin the full message instead, which
+    # only the new branch produces.
+    def test_ac2_missing_restore_source_with_active_counterpart_names_it(self):
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        err = self._archive_fails("_archive/a/old.md", restore=True)
+        self.assertEqual(
+            "archive: source not found: {} — the active copy already "
+            "exists at a/old.md\n".format(self._ap("_archive/a/old.md")),
+            err)
+
+
 class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
     """REQ-13/REQ-14 — the wikilink-resolvable check and its opt-in gate."""
 

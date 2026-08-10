@@ -4332,10 +4332,24 @@ def cmd_archive(root, args):
 
     dest_abs = os.path.join(root, dest_rel)
 
+    # okf-cli-5436 (AC1/AC2/AC4): a missing source whose derived counterpart
+    # exists is not a bare miss — the tool already holds `dest_rel` at this
+    # point, so a reader following a stale reference gets pointed at where
+    # the concept actually is, instead of just being told it is gone. This
+    # is archive-specific knowledge, not perform_rename's: it lives here,
+    # same reasoning as the three direction guards above (SPEC.md §2).
+    if not os.path.isfile(src_abs) and os.path.isfile(dest_abs):
+        if args.restore:
+            die("source not found: {} — the active copy already exists at "
+                "{}".format(src_abs, dest_rel))
+        die("source not found: {} — already archived at {} (use --restore "
+            "to bring it back)".format(src_abs, dest_rel))
+
     # The inbound-reference count is a report line, not a guard: it must not
     # gate the move, only disclose what the move leaves behind (SPEC.md §1).
-    # A nonexistent source is left to perform_rename's own "source not found",
-    # so a plan is only built once there is a file to plan a move for.
+    # A nonexistent source with no archived counterpart is left to
+    # perform_rename's own "source not found", so a plan is only built once
+    # there is a file to plan a move for.
     if os.path.isfile(src_abs):
         plan = plan_rename(root, src_abs, dest_abs)
         n_concepts = len({src for src, _o, _n in plan["inbound"]})
