@@ -1,11 +1,11 @@
 ---
 # okf-cli-gqss
 title: archive leaves an empty _archive directory behind
-status: todo
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-08-10T09:15:35Z
-updated_at: 2026-08-10T09:52:40Z
+updated_at: 2026-08-10T09:52:45Z
 parent: okf-cli-0xkj
 ---
 
