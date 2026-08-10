@@ -5,9 +5,9 @@ status: todo
 type: milestone
 priority: normal
 tags:
-    - to-review
+    - accepted
 created_at: 2026-08-09T19:13:36Z
-updated_at: 2026-08-09T23:16:26Z
+updated_at: 2026-08-10T08:05:29Z
 ---
 
 Give the CLI the archive half of the knowledge lifecycle: move a concept out of the active catalogue without losing it, keep every inbound link working, and let `find`/`list` reach back into the archive on request.
@@ -61,3 +61,22 @@ The PO approved staggering the cycle rather than running every leaf at full dept
 
 - `okf-cli-h12o` — `cmd_archive` computes the rename plan twice.
 - `okf-cli-yixf` — sharpen the archive precedence tests (weak E2E assertion, two unpinned edge cases).
+
+
+## Review 2026-08-10 — PO acceptance
+
+Fourteen stories across five rounds, all accepted. Story-to-leaf mapping and per-story evidence live on the three feature beans (`okf-cli-ubxk`, `okf-cli-xlck`, `okf-cli-scd5`); this section carries only what belongs to the milestone itself.
+
+- US-14 · the archive round trip runs against the real catalogue, restores byte-identically, and leaves `git status` empty · a
+
+The PO reviewed against a throwaway fixture catalogue with committed files rather than against the production store, after the first round exposed why that matters: an untracked test file makes `git mv` decline and the tool report `moved (fs)`, which is indistinguishable at the surface from the symlink defect. Only US-12 and US-14 needed the real catalogue — US-12 because the embedding cache exists nowhere else, US-14 because its whole point is the shape of the real store.
+
+Two leaves carry no story of their own and were declared out of review scope rather than left unmentioned: `okf-cli-2lj0` (extracting `perform_rename`, no observable behaviour change, evidence is A15) and `okf-cli-iwx4` (the shared scope resolution, which surfaces through US-09 and US-10 rather than on its own).
+
+### What stays open under this acceptance
+
+- `okf-cli-mk7m` (bug, high) — the silent non-git fallback on symlinked bundles. Accepting US-14 accepts the *run* as sound work, not the defect it found. In this reviewer's reading the defect blocks recommending `archive` for productive use on the real catalogue, since A02 asks for a tracked move and symlinked bundles do not get one.
+- `okf-cli-0xkj` — follow-up epic opened during this review, currently holding `okf-cli-5436` (archive should point at `--restore` when the missing source sits in the archive; raised by the PO from lived experience).
+- `okf-cli-h12o`, `okf-cli-yixf` — parked before the review, unchanged by it.
+
+Acceptance covers the work, not a merge. The merge decision to `main` stays with the PO, as does the mutual gate with the parallel Rust-rewrite session.
