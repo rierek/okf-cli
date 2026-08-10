@@ -1,13 +1,13 @@
 ---
 # OKFT-ubxk
 title: archive command
-status: todo
+status: completed
 type: feature
 priority: normal
 tags:
     - accepted
 created_at: 2026-08-09T19:13:45Z
-updated_at: 2026-08-10T08:05:29Z
+updated_at: 2026-08-10T12:01:29Z
 parent: OKFT-huow
 ---
 

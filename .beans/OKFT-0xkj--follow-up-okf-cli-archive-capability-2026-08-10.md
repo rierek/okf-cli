@@ -1,13 +1,13 @@
 ---
 # OKFT-0xkj
 title: Follow-up okf-cli archive capability 2026-08-10
-status: todo
+status: completed
 type: epic
 priority: normal
 tags:
     - accepted
 created_at: 2026-08-10T06:45:07Z
-updated_at: 2026-08-10T12:00:08Z
+updated_at: 2026-08-10T12:01:29Z
 parent: OKFT-huow
 ---
 

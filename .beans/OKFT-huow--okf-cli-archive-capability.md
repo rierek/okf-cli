@@ -1,13 +1,13 @@
 ---
 # OKFT-huow
 title: okf-cli archive capability
-status: todo
+status: completed
 type: milestone
 priority: normal
 tags:
     - accepted
 created_at: 2026-08-09T19:13:36Z
-updated_at: 2026-08-10T08:05:29Z
+updated_at: 2026-08-10T12:01:29Z
 ---
 
 Give the CLI the archive half of the knowledge lifecycle: move a concept out of the active catalogue without losing it, keep every inbound link working, and let `find`/`list` reach back into the archive on request.
