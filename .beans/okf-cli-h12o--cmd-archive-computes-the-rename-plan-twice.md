@@ -1,11 +1,11 @@
 ---
 # okf-cli-h12o
 title: cmd_archive computes the rename plan twice
-status: todo
+status: in-progress
 type: task
 priority: low
 created_at: 2026-08-09T20:04:06Z
-updated_at: 2026-08-10T10:46:23Z
+updated_at: 2026-08-10T11:21:08Z
 parent: okf-cli-0xkj
 ---
 
@@ -91,3 +91,8 @@ both as `archive_root = os.path.realpath(os.path.join(root, "_archive"))` follow
 **This is an invitation, not an instruction.** A helper such as `_is_under(path, boundary)` or `_archive_root(root)` would remove the duplication, and the segment-boundary correctness that `okf-cli-tk33`'s review probed (a bundle named `my_archive` must NOT match) would then live in one place instead of three. But it is NOT part of this bean's acceptance, and AC3 of this bean requires the existing `rename` behaviour and its test set to stay unchanged. If you fold it in, it is a separate commit with its own mutation proof, and any doubt means you leave it and note it in `## Notes for T(n+1)` instead.
 
 Still in force from the earlier reviews: `Refs: okf-cli-h12o` footer on EVERY commit including the bean-closing one, the 50-byte subject soft target counted on every subject, and mutation proofs citing `file:line` plus the mutated expression verbatim.
+
+
+## Prelude addendum 2026-08-10 — from the review of `okf-cli-yixf`
+
+**I02 — the 50-byte subject soft target was missed a fourth time**, on BOTH commits of that leaf (65 and 54 bytes), in the leaf whose own prelude names this exact recurrence. The 72-byte hard limit is hook-enforced and held every time, so nothing ever fails mechanically — which is precisely why the soft target keeps slipping. You are the last leaf of this epic. Count both subjects.

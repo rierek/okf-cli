@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: normal
 created_at: 2026-08-10T06:45:07Z
-updated_at: 2026-08-10T10:23:02Z
+updated_at: 2026-08-10T11:21:08Z
 parent: okf-cli-huow
 ---
 
@@ -75,3 +75,24 @@ Readings 1 (leave it) and 2 (extend the prune into `cmd_rename`) are hereby clos
 **Operationalized as a sixth leaf: `okf-cli-tk33`.** The epic grows from five leaves to six. The guard goes in `cmd_rename`, not in `perform_rename` — `archive --restore` legitimately moves a source out of `_archive/` through that same shared function, so a guard placed there would refuse the very operation the PO is pointing users at. Same placement rule as the three direction guards and the `okf-cli-5436` counterpart check, per SPEC section 2.
 
 No open question remains from Q02.
+
+
+## Q03 2026-08-10 — SC-03 of `okf-cli-yixf` is unsatisfiable as written, for the PO
+
+Raised by the implementer of `okf-cli-yixf` as a disclosed deviation, independently confirmed by the `ce-specs-reviewer` (verdict APPROVED — explicitly not a reason to withhold approval).
+
+SC-03 of that bean reads: "Both new edge cases fail when the precedence rule is removed from the code path they exercise."
+
+For AC3 (a `collisions` set holding an archived namesake next to an active candidate) this holds and was proven. For AC2 (an existing-but-empty `_archive/` directory) it cannot hold, and the reason is arithmetic rather than a gap in the work: an empty archive tier yields zero archived candidates, so the active/archived split in `_apply_archive_precedence` is a no-op for that fixture under ANY mutation of that function. The reviewer traced this himself against the fixture and agrees the criterion is unsatisfiable as written.
+
+The test was written to the bean's literal wording as a geometry pin. The reviewer then probed whether it is pure decoration and found it is not, but only just: replacing `for b in list_bundles(archive_root):` (`cli/okf-cli.py:3436`) with `for b in [list_bundles(archive_root)[0]]:` raises `IndexError` and turns it red. Every natural mutation of the guard itself — deleting the `os.path.isdir` check, inverting it — leaves it green, because an empty archive tier contributes nothing however the branch falls.
+
+**What the test therefore is:** a cheap crash-guard against an "assumes non-empty" indexing bug. **What it is not:** evidence that the precedence rule is exercised, which is what SC-03's wording promises.
+
+**Open for the PO — the leaf is approved either way; this is about wording, not rework:**
+
+1. Accept as shipped and amend SC-03 in the bean to name AC2's coverage as crash-safety rather than precedence-sensitivity. My recommendation — it costs one appended sentence and stops the criterion from reading as a guarantee it never had.
+2. Drop the AC2 test. Not recommended: it is cheap, it does kill one real bug class, and the epic's own lesson is that removing a weak guard is only right when it protects nothing at all.
+3. Replace AC2's fixture with one that has archived content, so precedence genuinely applies. That is a different edge case than the one `okf-cli-yixf` was written to pin, and would be a new leaf rather than a correction.
+
+Independent of the choice: the phrase "both edge cases fail when X is removed" should not be reused in this epic without checking that each named case can actually fail that way.
