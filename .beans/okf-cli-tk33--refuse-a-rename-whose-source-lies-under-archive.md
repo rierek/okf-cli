@@ -1,11 +1,11 @@
 ---
 # okf-cli-tk33
 title: refuse a rename whose source lies under _archive
-status: draft
+status: todo
 type: task
 priority: normal
 created_at: 2026-08-10T10:22:51Z
-updated_at: 2026-08-10T10:22:51Z
+updated_at: 2026-08-10T10:23:07Z
 parent: okf-cli-0xkj
 ---
 
