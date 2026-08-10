@@ -1,11 +1,12 @@
 ---
 # okf-cli-yixf
-title: task sharpen the archive precedence tests
+title: sharpen the archive precedence and staleness tests
 status: todo
 type: task
 priority: low
 created_at: 2026-08-09T20:46:14Z
-updated_at: 2026-08-09T22:29:47Z
+updated_at: 2026-08-10T09:16:25Z
+parent: okf-cli-0xkj
 ---
 
 Two non-blocking findings from the review of `okf-cli-pnyf` (2026-08-09). Both are test-strength gaps, not behaviour defects — the current code is correct, it is just less protected than it looks.
@@ -49,3 +50,27 @@ Reviewer's recommendation: patch at module level for the duration of the test (e
 ### Added acceptance
 
 3. THE test suite SHALL enforce the no-body-read property of the staleness check against any read path, not only against the named `read_file` helper.
+
+
+### Requirement 1: The precedence and staleness guards actually guard
+
+**Objective:** As a maintainer of this test suite, I want each of the three named guards to fail when the property it protects is broken, so that a green suite is evidence rather than decoration.
+
+#### Acceptance Criteria
+
+1. THE test suite SHALL assert the resolved target of the bystander wikilink after an archive, not merely the absence of the `turns-ambiguous` line.
+2. THE test suite SHALL cover an existing-but-empty `_archive/` directory.
+3. THE test suite SHALL cover a `collisions` set holding an archived namesake alongside an active candidate.
+4. THE test suite SHALL enforce the no-body-read property of the staleness check against any read path, not only against the named `read_file` helper.
+
+#### Success Criteria
+
+- SC-01: Inverting the precedence direction in `_apply_archive_precedence` turns the E2E bystander test red on its own, without relying on `MoveSimulationArchivePrecedence`.
+- SC-02: Adding a raw `open(...).read()` of a concept body inside the active branch of `_fts_index_stale` turns the AC4 guard red.
+- SC-03: Both new edge cases fail when the precedence rule is removed from the code path they exercise.
+
+_Requirements: reviews of `okf-cli-pnyf` (I01, T01) and `okf-cli-fu7o` (I03), 2026-08-09/10_
+
+## Recommended Skills
+
+- `superpowers:test-driven-development` — every success criterion here is a mutation that must turn a named test red; writing the mutation first is the only way to know which test that is.
