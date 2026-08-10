@@ -94,7 +94,13 @@ def _parse_find_blocks(stdout):
 
 
 def _score_find_row(root, row):
-    out = _run_cli(root, ["find", row["query"], "--limit", str(FIND_LIMIT)])
+    # --breakdown: OKFT-3rb6 moved the arm's raw score/cosine (what
+    # mean_score_ratio needs) out of find's default output into the
+    # --breakdown block; the headline column there is now `rank: N`, which
+    # this row scoring does not consume (rank is the 1-based output
+    # position, already recovered positionally in _parse_find_blocks).
+    out = _run_cli(root, ["find", row["query"], "--limit", str(FIND_LIMIT),
+                          "--breakdown"])
     hits = _parse_find_blocks(out)
     for h in hits:
         if h["path"] == row["expected_path"]:

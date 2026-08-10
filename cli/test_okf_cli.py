@@ -2570,20 +2570,26 @@ class FindScoreBreakdown(unittest.TestCase):
         self.assertIn("title=[zqxbrk]", out)
         self.assertIn("tags=[zqxbrk]", out)
         self.assertNotIn("body=[zqxbrk]", out)  # term not in body prose
+        # D01 (OKFT-3rb6) — the raw lexical score moved into this block.
+        self.assertIn("score: 5/6", out)
 
     def test_default_output_unchanged_without_breakdown(self):
         out_flag_false = self._run(breakdown=False)
         self.assertNotIn("contrib:", out_flag_false)
+        self.assertNotIn("score:", out_flag_false)
         # F04 (post-review) — SC-002 says "byte-identical to today"; pin the
         # FULL exact output, not just the absence of a "contrib:" substring
         # (a weaker check could miss e.g. a stray blank line or reordering).
         # The `provenance:` line joined this block with Modus-B B01: it is
         # attribution, present on every hit, and stays independent of the
-        # opt-in `--score-breakdown` detail this test guards.
+        # opt-in `--score-breakdown` detail this test guards. D01 (OKFT-3rb6)
+        # replaced the raw `score: a/b` headline with `rank: N` — the one
+        # scale comparable across a mixed-arm list — and moved the raw score
+        # into --breakdown (see test_breakdown_lists_contributing_fields).
         self.assertEqual(
             out_flag_false,
             "------\n"
-            "score: 5/6\n"
+            "rank: 1\n"
             "title: Zqxbrk One\n"
             "type: Runbook\n"
             "path: b/one\n"
@@ -2773,14 +2779,23 @@ class SemanticBackstop(unittest.TestCase):
         fraction — a semantic hit's number is round(100 * cosine), a scale
         incomparable to BM25-relative-to-top, and printing it as 'a/100'
         invites exactly the cross-arm comparison D12 rejected (fuse_conditional
-        hands over, it never blends by score)."""
+        hands over, it never blends by score). D01 (OKFT-3rb6) moved this raw
+        value out of the default headline (now `rank: N`) into --breakdown,
+        so the default output must carry neither scale at all, and the
+        --breakdown output must still carry the semantic arm's own one."""
         self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
         okf._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, _err = self._run("zzz-no-keyword-match-zzz")
-        lines = out.splitlines()
-        score_line = lines[1]
-        self.assertTrue(score_line.startswith("score: cosine "), score_line)
-        self.assertNotIn("/100", score_line)
+        out_default, _err = self._run("zzz-no-keyword-match-zzz")
+        self.assertNotIn("score:", out_default)
+        self.assertNotIn("cosine", out_default)
+        out_breakdown, _err = self._run("zzz-no-keyword-match-zzz",
+                                        breakdown=True)
+        score_lines = [l for l in out_breakdown.splitlines()
+                       if l.startswith("score: ")]
+        self.assertEqual(len(score_lines), 1)
+        self.assertTrue(score_lines[0].startswith("score: cosine "),
+                        score_lines[0])
+        self.assertNotIn("/100", score_lines[0])
 
     def test_strong_keyword_top_hit_is_never_overridden(self):
         # Backend guarded to raise if ever called — proves the semantic
@@ -2821,6 +2836,25 @@ class SemanticBackstop(unittest.TestCase):
         self.assertIn("provenance: lexical", out)
         self.assertIn("provenance: semantic", out)
         self.assertEqual(out.count("path: "), out.count("provenance: "))
+
+    def test_mixed_arm_query_uses_one_rank_scale(self):
+        """SC-001/D01 (OKFT-3rb6) — a result list that provably mixes both
+        arms carries one comparable scale, `rank: N` (the 1-based list
+        position), and NEITHER raw arm scale in the default output. Same
+        fixture as test_every_hit_of_a_mixed_list_names_its_arm (proven
+        mixed: b/far is semantic-only, b/noise and b/near are lexical
+        substring hits, all three present in one list) so this is a proof
+        over a genuinely mixed-arm result, not a single-arm one."""
+        self._w("b/noise.md", "Unrelated Note", [], "alpha once in passing.\n")
+        self._make_tagvec([("k1", "b/far", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, _err = self._run("alpha")
+        self.assertIn("provenance: lexical", out)
+        self.assertIn("provenance: semantic", out)
+        self.assertNotIn("score:", out)
+        self.assertNotIn("cosine", out)
+        rank_lines = [l for l in out.splitlines() if l.startswith("rank: ")]
+        self.assertEqual(rank_lines, ["rank: 1", "rank: 2", "rank: 3"])
 
     def test_noise_single_hit_still_fires_backstop(self):
         """P12 re-measure finding (8c EARS, S3 rescue): a paraphrase query
@@ -2956,14 +2990,17 @@ class SemanticBackstop(unittest.TestCase):
         okf.build_fts_index(self.tmp)
         self._make_tagvec([("k1", "b/ambc", [1.0, 0.0])])
         okf._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, err = self._run("zqxambig")
+        # D01 (OKFT-3rb6) moved the raw lexical score this assertion needs
+        # out of the default output into --breakdown; ask for it explicitly
+        # rather than reading the (now rank-only) default block.
+        out, err = self._run("zqxambig", breakdown=True)
         lines = out.splitlines()
         lex_top1, lex_top2 = None, None
         for i, l in enumerate(lines):
             if l == "path: b/amba":
-                lex_top1 = int(lines[i - 3].split("score: ")[1].split("/")[0])
+                lex_top1 = int(lines[i + 4].split("score: ")[1].split("/")[0])
             if l == "path: b/ambb":
-                lex_top2 = int(lines[i - 3].split("score: ")[1].split("/")[0])
+                lex_top2 = int(lines[i + 4].split("score: ")[1].split("/")[0])
         self.assertIsNotNone(lex_top1)
         self.assertIsNotNone(lex_top2)
         self.assertTrue(
@@ -3683,7 +3720,7 @@ class FindDegradesWithoutIndex(unittest.TestCase):
                 f.write("# B\n")
             out = _run_find(root, "tunnel")
             self.assertIn("path: b/one", out)
-            self.assertIn("score: 3/6", out)
+            self.assertIn("rank: 1", out)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

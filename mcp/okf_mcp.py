@@ -228,11 +228,13 @@ def _register(server):
     @server.tool()
     def okf_prime(root: str) -> str:
         """One-shot onboarding for a fresh session: what the store is, how to
-        retrieve from it, the full command directory, `find`'s options and score
-        scales, this catalogue's live state (index, tag vocabulary) and its
-        bundle TOC. Start here before searching a catalogue you have not worked
-        with in this session. Rendered compact — bundle descriptions come from
-        okf_index, find's full option help from the CLI."""
+        retrieve from it, the full command directory, `find`'s options and its
+        rank/score scales (rank: N is the headline, the arms' own raw scores
+        surface only under --breakdown), this catalogue's live state (index,
+        tag vocabulary) and its bundle TOC. Start here before searching a
+        catalogue you have not worked with in this session. Rendered compact —
+        bundle descriptions come from okf_index, find's full option help from
+        the CLI."""
         return run_okf(root, "prime", {"compact": True})
 
     @server.tool()
