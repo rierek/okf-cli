@@ -5712,6 +5712,47 @@ class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
         self.assertTrue(os.path.isdir(self._ap("_archive")))
 
 
+class ArchiveComputesPlanOnce(WikilinkFixtureMixin, unittest.TestCase):
+    """okf-cli-h12o — SC-01: a single `archive` invocation performs exactly
+    one build_ref_matrix scan. cmd_archive built a plan for its AC7 report
+    line and perform_rename used to recompute the same plan internally,
+    doubling the scan cost with catalogue size. Counted, not timed: a
+    timing assertion would be flaky and would not prove the count."""
+
+    def setUp(self):
+        super().setUp()
+        self._w("a/index.md", "# A\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n")
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n\nBody text.\n")
+
+    def _archive(self, path, restore=False, apply=False, force=False):
+        import contextlib
+        import io
+        import types
+        args = types.SimpleNamespace(path=path, restore=restore, apply=apply, force=force)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_archive(self.tmp, args)
+        return buf.getvalue()
+
+    def test_sc01_single_archive_run_scans_the_ref_matrix_once(self):
+        """Exercised through cmd_archive, not a direct perform_rename call —
+        a direct call would not pin the wiring between the two plans."""
+        from unittest import mock
+        with mock.patch.object(okf, "build_ref_matrix",
+                                wraps=okf.build_ref_matrix) as spy:
+            self._archive("a/old.md", apply=True)
+        self.assertEqual(spy.call_count, 1)
+
+    def test_ac2_inbound_report_line_is_byte_identical(self):
+        """AC2 — the report line built from cmd_archive's own plan, ahead of
+        perform_rename, must not change at all. Pinned as a literal string,
+        not the "N active concept(s)" substring the pre-existing tests use,
+        which would not catch a change to the trailing wording."""
+        self._w("b/src.md", "---\ntype: Concept\n---\nSee [Old](/a/old.md).\n")
+        out = self._archive("a/old.md")
+        self.assertIn("1 active concept(s) still link to this concept\n", out)
+
+
 class ArchiveMissingSourcePointsAtCounterpart(WikilinkFixtureMixin, unittest.TestCase):
     """okf-cli-5436 — a missing source whose derived counterpart exists is a
     navigation signal, not a bare miss: name the counterpart and the verb

@@ -4103,11 +4103,18 @@ def _git_mv(root, old_abs, new_abs):
     return False, foreign_repo, reason
 
 
-def perform_rename(root, old_abs, new_abs, apply, force, verb="rename"):
+def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
+                   plan=None):
     """The validation, planning and application core shared by `rename` and
     (per okf-cli-16rg) `archive`/`archive --restore`. Callers pass already
     resolved absolute paths; `verb` only steers the prefix of error messages
-    ("rename: " vs "archive: ") — every other line of output is unchanged."""
+    ("rename: " vs "archive: ") — every other line of output is unchanged.
+
+    `plan` (okf-cli-h12o, D01): an already-computed plan_rename() result, so
+    a caller that built one for its own reporting (cmd_archive's AC7 inbound
+    count) does not pay for a second build_ref_matrix scan here. Absent, this
+    recomputes exactly as before — cmd_rename's call site is unchanged,
+    which is what keeps AC3 (rename byte-identical) cheap to satisfy."""
 
     def die(msg):
         sys.stderr.write("{}: {}\n".format(verb, msg))
@@ -4164,7 +4171,8 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename"):
     new_abs = os.path.join(canonical_case_path(root, os.path.dirname(new_abs)),
                            os.path.basename(new_abs))
 
-    plan = plan_rename(root, old_abs, new_abs)
+    if plan is None:
+        plan = plan_rename(root, old_abs, new_abs)
     old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
     new_rel = os.path.relpath(new_abs, root).replace(os.sep, "/")
 
@@ -4377,12 +4385,14 @@ def cmd_archive(root, args):
     # A nonexistent source with no archived counterpart is left to
     # perform_rename's own "source not found", so a plan is only built once
     # there is a file to plan a move for.
+    plan = None
     if os.path.isfile(src_abs):
         plan = plan_rename(root, src_abs, dest_abs)
         n_concepts = len({src for src, _o, _n in plan["inbound"]})
         print("{} active concept(s) still link to this concept".format(n_concepts))
 
-    perform_rename(root, src_abs, dest_abs, args.apply, args.force, verb=verb)
+    perform_rename(root, src_abs, dest_abs, args.apply, args.force, verb=verb,
+                   plan=plan)
 
     # okf-cli-gqss (AC1/AC2): only a restore can empty an _archive/ directory
     # — `archive` in the other direction only ever adds to one. perform_rename
