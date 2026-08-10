@@ -54,6 +54,14 @@ Alles, was `archive` damit erbt, ohne es zu duplizieren: `git mv -f` mit fs-Fall
 
 Verhalten von `rename` bleibt byte-identisch. Das ist prüfbar: die bestehende `rename`-Testmenge läuft unverändert.
 
+### Addendum 2026-08-10 — `perform_rename` gewinnt einen optionalen `plan`-Parameter (`okf-cli-h12o`, D01)
+
+Die oben stehende Signatur `perform_rename(root, old_abs, new_abs, apply, force, verb="rename")` ist unverändert das, was der Meilenstein ausgeliefert hat — dieser Absatz ergänzt sie, er ersetzt sie nicht. `cmd_archive` rief `plan_rename(root, src_abs, dest_abs)` für seine AC7-Meldezeile ("N active concept(s) still link to this concept") auf, und `perform_rename` berechnete denselben Plan intern ein zweites Mal, weil es keinen entgegennahm — ein zweiter `build_ref_matrix`-Scan pro `archive`-Aufruf, dessen Kosten mit der Katalog-Größe wachsen.
+
+Die Signatur wird deshalb um einen nachgestellten optionalen Parameter erweitert: `perform_rename(root, old_abs, new_abs, apply, force, verb="rename", plan=None)`. Fehlt `plan`, rechnet die Funktion wie bisher — genau der Pfad, den `cmd_rename` weiterhin nimmt, unverändert an seiner Aufrufstelle, was R-04/A15 (byte-identisches `rename`-Verhalten, geprüft durch die unveränderte `rename`-Testmenge) ohne Zusatzaufwand erhält. `cmd_archive` reicht den bereits für die Meldezeile berechneten Plan durch (`plan=plan`) und spart damit den zweiten Scan.
+
+Verworfen wurde eine Aufspaltung von `perform_rename` in eine Planungs- und eine Anwendungshälfte: sauberer getrennt, aber ein größerer Schnitt durch eine Funktion, die `rename` und `archive` teilen — zu viel Regressionsfläche für eine niedrigpriore Scan-Zahl-Optimierung.
+
 ## 3. Wikilink-Auflösung ins Archiv
 
 `build_concept_basename_index` (`cli/okf-cli.py:3208`) traversiert heute `list_bundles(root)`, und `is_bundle_dir` (:69) schließt `_`-Präfixe aus. Ein archiviertes Konzept ist damit kein Auflösungsziel mehr, jeder Inbound-Wikilink `[[x]]` wird unresolved, und in den fünf per `.okf.toml` opt-in geschalteten Bundles meldet `check_wikilink_resolvable` (:3326) das als Violation — in Dateien, die der Archivierende nie angefasst hat. Der Kommentar im `.okf.toml` des Katalogs erklärt jede Warnung von dort ausdrücklich zur echten Regression.
