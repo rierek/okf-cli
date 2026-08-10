@@ -3256,25 +3256,35 @@ class FtsIndexArchive(unittest.TestCase):
             conn.close()
 
     def test_staleness_check_never_reads_a_concept_body(self):
-        """AC4 — stat-only, even with an archive present. Monkeypatches
-        read_file() to explode; a passing test with no exception proves
-        the check path (active AND archived) never calls it."""
+        """AC4/SC-02 (okf-cli-yixf) — stat-only, even with an archive
+        present. Patches builtins.open AND io.open for the call's duration,
+        not only the named okf.read_file() helper: a bare `open(ap).read()`
+        added directly inside _fts_index_stale's active-tier loop stayed
+        invisible to a read_file()-only patch (pathlib.Path.open() and
+        Path.read_text() go through io.open, not builtins.open — codecs.open
+        delegates to builtins.open — so both names are patched to close
+        both routes). Neither patch is scoped to concept-body paths; nothing
+        is allow-listed through, because the property under test is that
+        NOTHING gets read, not that one particular path doesn't."""
         okf.build_fts_index(self.root)
-        original_read_file = okf.read_file
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        import builtins
+        import io
+        original_builtins_open = builtins.open
+        original_io_open = io.open
 
-        def _boom(ap):
+        def _boom(file, *args, **kwargs):
             raise AssertionError(
-                "staleness check read a concept body: {}".format(ap))
+                "staleness check opened a file: {}".format(file))
 
-        okf.read_file = _boom
+        builtins.open = _boom
+        io.open = _boom
         try:
-            conn = sqlite3.connect(okf._fts_db_path(self.root))
-            try:
-                okf._fts_index_stale(self.root, conn)  # must not raise
-            finally:
-                conn.close()
+            okf._fts_index_stale(self.root, conn)  # must not raise
         finally:
-            okf.read_file = original_read_file
+            builtins.open = original_builtins_open
+            io.open = original_io_open
+            conn.close()
 
     def test_pre_split_index_is_treated_as_stale_not_crashed(self):
         """Migration decision: an index built before this bean landed only
@@ -4666,6 +4676,29 @@ class WikilinkArchiveResolution(WikilinkFixtureMixin, unittest.TestCase):
         self.assertEqual(self._status("c/x.md", "g"),
                          ("ambiguous", ["/_archive/a/g.md", "/_archive/b/g.md"]))
 
+    # -- T01/AC2 (okf-cli-yixf): existing-but-empty _archive/ -------------
+    def test_existing_but_empty_archive_directory_does_not_crash_or_contribute(self):
+        """AC2 — _archive/ can exist while holding no bundle at all (e.g. a
+        hand-created directory, or a race with an external mkdir):
+        list_bundles(archive_root) then returns [], the
+        `if os.path.isdir(archive_root):` branch (cli/okf-cli.py:3436) is
+        taken, and its loop body never runs. Geometry only: build must not
+        crash, and resolution of an unrelated active concept must be
+        unaffected — a bogus empty _archive/ must not itself become a
+        candidate or otherwise perturb the index.
+
+        Not a precedence-sensitive test: with zero archived candidates for
+        any basename here, _apply_archive_precedence's active/archived
+        filter is a no-op regardless of whether it runs at all — mutating or
+        removing it cannot change this test's outcome. See this leaf's
+        closing report (okf-cli-yixf) for that reading, flagged rather than
+        silently claimed as SC-03 coverage."""
+        os.makedirs(os.path.join(self.tmp, "_archive"))
+        self._w("a/old.md", "---\ntype: Concept\n---\n# Old\n")
+        idx = self._index()
+        self.assertEqual(idx.get("old"), ["/a/old.md"])
+        self.assertEqual(self._status("b/x.md", "old"), ("resolved", ["/a/old.md"]))
+
     # -- A06/AC2/SC-02: precedence — active wins over archived ------------
     def test_active_candidate_wins_over_an_archived_one_of_the_same_name(self):
         """SC-02/SC-03 — with an active AND an archived concept sharing a
@@ -5186,6 +5219,30 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(self.tmp, "b/old.md")))
         self.assertIn("turns-ambiguous", self._rename("b/old.md", "c/old.md"))
 
+    # -- AC3/SC-03 (okf-cli-yixf): a rename-scan collision that is itself
+    # archived must not defeat the active-before-archived precedence. -----
+    def test_rename_into_a_basename_held_by_an_archived_namesake_stays_resolved(self):
+        """iter_rename_scan_md walks _archive/ too — _prune_walk_dirs
+        (cli/okf-cli.py:1872-1874) excludes only node_modules and dot-dirs,
+        not `_`-prefixed staging/archive dirs — so an archived concept
+        sharing the move's destination basename lands in
+        plan_wikilink_rewrites' `collisions` set (cli/okf-cli.py:3826-3830)
+        next to the move's own fresh active candidate.
+        _index_after_move (cli/okf-cli.py:3892-3899) merges `collisions`
+        with the new active link and re-applies precedence to that slot: a
+        bystander already resolving to the archived concept must re-resolve
+        to the moved-in active one, not degrade into ambiguous merely
+        because both now share a basename."""
+        self._w("_archive/z/target.md", "---\ntype: Concept\n---\n# Archived Target\n")
+        self._w("b/x.md", "---\ntype: Concept\n---\nsee [[target]].\n")
+        self.assertEqual(self._status("b/x.md", "target"),
+                         ("resolved", ["/_archive/z/target.md"]))
+        out = self._rename("a/old.md", "a/target.md")  # dry-run
+        self.assertNotIn("turns-ambiguous", out)
+        self._rename("a/old.md", "a/target.md", apply=True)
+        self.assertEqual(self._status("b/x.md", "target"),
+                         ("resolved", ["/a/target.md"]))
+
     def test_whitespace_destination_basename_is_refused(self):
         """The scanner strips the page part, the index does not strip filenames,
         so the rewritten link could never meet its target."""
@@ -5623,6 +5680,15 @@ class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
         out = self._archive("a/old.md", apply=True)
         self.assertNotIn("turns-ambiguous", out)
         self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
+        # AC1/SC-01 (okf-cli-yixf) — the absence of "turns-ambiguous" is a
+        # necessary, not a sufficient, condition: under an inverted
+        # precedence direction the result also stays a single candidate, just
+        # the wrong one (the freshly archived path). Assert the RESOLVED
+        # TARGET the bystander actually re-addresses.
+        after_index = okf.build_concept_basename_index(self.tmp)
+        self.assertEqual(
+            okf.resolve_wikilink(after_index, "a/other.md", "old"),
+            ("resolved", ["/d/old.md"]))
 
     # -- SC-01 (okf-cli-gqss): restore of the last concept in a bundle
     # removes both _archive/<bundle>/ and, once that empties it, _archive/
