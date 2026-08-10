@@ -4046,17 +4046,61 @@ def reindex_tree(root, tp):
 
 
 def _git_mv(root, old_abs, new_abs):
-    """History-preserving, staged move. Falls back to a plain fs rename when the
-    file is untracked or git is unavailable. Returns True if git handled it."""
+    """History-preserving, staged move.
+
+    Tries `git mv` at `root` first. When that fails because the source lies
+    beyond a symlinked bundle boundary — its real path leaves root's own
+    tree, into the foreign project repo the bundle links to — it resolves
+    that real repository and retries `git mv` there; that only succeeds when
+    the destination ALSO resolves into that same repo, i.e. an ordinary
+    rename that stays inside the bundle (AC1, okf-cli-mk7m). `archive`'s
+    destination never does: `_archive/<bundle>/…` lives in the catalogue
+    root, so the two repositories differ and a single `git mv` cannot span
+    them. That case, and a plain untracked file where git declines for an
+    unrelated reason (PO review 2026-08-10), both fall back to a plain fs
+    rename.
+
+    Returns (moved_via_git, repo, reason):
+      moved_via_git — True once a `git mv` staged the move, at `root` or at
+                      a resolved foreign repository.
+      repo          — the real repository that received the write, whenever
+                      it differs from `root` (AC2); None when it is the
+                      same, or when none could be resolved.
+      reason        — git's own stderr explaining why it declined, verbatim
+                      (proc.stderr was captured and never read before this
+                      fix); None when git succeeded or the git binary itself
+                      is unavailable.
+    """
     try:
         proc = subprocess.run(["git", "-C", root, "mv", "-f", old_abs, new_abs],
                               capture_output=True, text=True)
-        if proc.returncode == 0:
-            return True
     except OSError:
-        pass
+        os.rename(old_abs, new_abs)
+        return False, None, None
+    if proc.returncode == 0:
+        return True, None, None
+
+    reason = proc.stderr.strip() or None
+    real_root = os.path.realpath(root)
+    real_old = os.path.realpath(old_abs)
+    foreign_repo = None
+    if not (real_old == real_root or real_old.startswith(real_root + os.sep)):
+        top, why = _git_toplevel(os.path.dirname(real_old))
+        if why is None and os.path.realpath(top) != real_root:
+            foreign_repo = os.path.realpath(top)
+            real_new_dir = os.path.realpath(os.path.dirname(new_abs))
+            if (real_new_dir == foreign_repo
+                    or real_new_dir.startswith(foreign_repo + os.sep)):
+                real_new = os.path.join(real_new_dir, os.path.basename(new_abs))
+                proc2 = subprocess.run(
+                    ["git", "-C", foreign_repo, "mv", "-f", real_old, real_new],
+                    capture_output=True, text=True)
+                if proc2.returncode == 0:
+                    return True, foreign_repo, None
+                reason = proc2.stderr.strip() or reason
+
     os.rename(old_abs, new_abs)
-    return False
+    return False, foreign_repo, reason
 
 
 def perform_rename(root, old_abs, new_abs, apply, force, verb="rename"):
@@ -4177,7 +4221,7 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename"):
         print("overwrote      {}  ({} inbound markdown reference(s) now point at "
               "different content)".format(new_rel, len(clobbered)))
     os.makedirs(os.path.dirname(new_abs), exist_ok=True)
-    moved = _git_mv(root, old_abs, new_abs)
+    moved, git_repo, git_reason = _git_mv(root, old_abs, new_abs)
     if plan["outbound"]:
         _apply_link_rewrites(new_abs, plan["outbound"])
     by_src = {}
@@ -4197,6 +4241,21 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename"):
     for b in plan["bundles"]:
         reidx += reindex_tree(root, os.path.join(root, b))
     print("moved ({})  {}  ->  {}".format("git mv" if moved else "fs", old_rel, new_rel))
+    if moved:
+        if git_repo:
+            print("  tracked in {} (repository differs from --root)".format(git_repo))
+    else:
+        # AC3 (okf-cli-mk7m, widened by the PO review 2026-08-10): never say
+        # this looks tracked, whichever of the two causes git declined for —
+        # a symlinked-bundle boundary or a plain untracked file. Always name
+        # git's own reason (point 4 of the gate: proc.stderr read, not
+        # dropped) and, only when a different repository actually received
+        # part of the write, name it (AC2).
+        print("  untracked — git declined: {}".format(
+            git_reason if git_reason else "git binary unavailable"))
+        if git_repo:
+            print("  the untracked change also touches {} (repository "
+                  "differs from --root)".format(git_repo))
     print("rewrote {} inbound link(s) in {} file(s), {} outbound link(s)".format(
         len(plan["inbound"]), len(by_src), len(plan["outbound"])))
     print("rewrote {} wikilink(s) in {} file(s)".format(len(wl_rewrite), len(wl_by_src)))

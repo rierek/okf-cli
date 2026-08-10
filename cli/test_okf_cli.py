@@ -6335,5 +6335,153 @@ class RecentAgainstRealGit(unittest.TestCase):
         self.assertEqual(why, "no-repo")
 
 
+@unittest.skipUnless(shutil.which("git"), "git not installed")
+class GitMvBeyondSymlink(unittest.TestCase):
+    """okf-cli-mk7m, SC-02. Two real git repos: `foreign` tracks a project
+    bundle's real content, `catalogue` tracks only the symlink (mode 120000)
+    that reaches it — the layout of every project bundle in the real
+    catalogue. `git -C <catalogue> mv` on a path beyond that symlink refuses
+    with `fatal: not under version control, source=…, destination=…` (exit
+    128) — NOT the `git add`-only "beyond a symbolic link" pathspec message
+    an earlier draft of the bean mis-attributed (point 2 of the gate)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _env(self, when):
+        env = dict(os.environ)
+        env.update({
+            "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
+            "HOME": self.tmp, "GIT_TERMINAL_PROMPT": "0",
+            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
+            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e",
+            "GIT_AUTHOR_DATE": "@{} +0000".format(when),
+            "GIT_COMMITTER_DATE": "@{} +0000".format(when),
+        })
+        return env
+
+    def _git(self, repo, *argv, when=1785000000):
+        import subprocess
+        base = ["git", "-C", repo, "-c", "init.defaultBranch=main",
+                "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
+                "-c", "user.name=t", "-c", "user.email=t@e"]
+        return subprocess.run(base + list(argv), capture_output=True, text=True,
+                              env=self._env(when))
+
+    def _repo(self, name):
+        repo = os.path.join(self.tmp, name)
+        os.makedirs(repo)
+        r = self._git(repo, "init", "-q")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return repo
+
+    def _write(self, repo, rel, text="---\ntype: Concept\n---\n# x\n"):
+        ap = os.path.join(repo, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+        return ap
+
+    def _catalogue_with_symlinked_bundle(self, bundle="proj-okf", concept="concept.md"):
+        """Bean's SC-02 layout: `catalogue` and `foreign` are separate git
+        repos; `foreign` tracks the bundle's real content, `catalogue` tracks
+        only the symlink (mode 120000) that reaches it."""
+        catalogue = self._repo("catalogue")
+        foreign = self._repo("foreign")
+        self._write(foreign, "docs/{}/{}".format(bundle, concept))
+        r = self._git(foreign, "add", "-A", when=1785900000)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        r = self._git(foreign, "commit", "-qm", "add", when=1785900000)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        bundle_target = os.path.join(foreign, "docs", bundle)
+        os.symlink(bundle_target, os.path.join(catalogue, bundle))
+        r = self._git(catalogue, "add", "-A", when=1785000000)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        r = self._git(catalogue, "commit", "-qm", "link", when=1785000000)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return catalogue, foreign, bundle_target
+
+    def test_fixture_reproduces_the_cited_git_message(self):
+        """Ground truth for point 2 of the gate: `git mv` beyond the symlink
+        says `not under version control`, never `beyond a symbolic link` —
+        that phrase is `git add`'s, not `git mv`'s."""
+        import subprocess
+        catalogue, _foreign, _bt = self._catalogue_with_symlinked_bundle()
+        old = os.path.join(catalogue, "proj-okf", "concept.md")
+        new = os.path.join(catalogue, "proj-okf", "concept2.md")
+        proc = subprocess.run(["git", "-C", catalogue, "mv", "-f", old, new],
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 128)
+        self.assertIn("not under version control", proc.stderr)
+        self.assertNotIn("beyond a symbolic link", proc.stderr)
+
+    # -- AC1, first branch: destination stays inside the SAME foreign repo --
+    def test_rename_fully_inside_a_symlinked_bundle_is_tracked_in_the_foreign_repo(self):
+        import subprocess
+        catalogue, foreign, _bt = self._catalogue_with_symlinked_bundle()
+        old = os.path.join(catalogue, "proj-okf", "concept.md")
+        new = os.path.join(catalogue, "proj-okf", "renamed.md")
+        moved, repo, reason = okf._git_mv(catalogue, old, new)
+        self.assertTrue(moved, reason)
+        self.assertEqual(repo, os.path.realpath(foreign))
+        self.assertIsNone(reason)
+        self.assertTrue(os.path.isfile(new))
+        status = subprocess.run(["git", "-C", foreign, "status", "--porcelain"],
+                                capture_output=True, text=True).stdout
+        self.assertIn("R  docs/proj-okf/concept.md -> docs/proj-okf/renamed.md",
+                       status)
+
+    # -- AC1 second branch + AC2 + AC3: archive's cross-repo case (SC-01) --
+    def test_archive_across_repos_states_the_fallback_and_names_the_repo(self):
+        import contextlib
+        import io
+        import types
+        catalogue, foreign, _bt = self._catalogue_with_symlinked_bundle()
+        args = types.SimpleNamespace(path="proj-okf/concept.md", restore=False,
+                                     apply=True, force=False)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_archive(catalogue, args)
+        out = buf.getvalue()
+
+        self.assertIn("moved (fs)", out)
+        self.assertNotIn("moved (git mv)", out)
+        self.assertIn("not under version control", out)  # point 4: stderr surfaced
+        self.assertIn(os.path.realpath(foreign), out)  # AC2: names the repo
+        self.assertIn("repository differs from --root", out)
+        self.assertTrue(os.path.isfile(
+            os.path.join(catalogue, "_archive", "proj-okf", "concept.md")))
+
+    # -- widened AC3: the untracked-but-not-symlinked cause, PO 2026-08-10 --
+    def test_untracked_file_in_an_ordinary_bundle_also_states_git_declined(self):
+        import contextlib
+        import io
+        import types
+        catalogue = self._repo("catalogue")
+        self._write(catalogue, "a/seed.md")
+        r = self._git(catalogue, "add", "-A")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        r = self._git(catalogue, "commit", "-qm", "seed")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self._write(catalogue, "a/untracked.md")  # never git-added
+
+        args = types.SimpleNamespace(path="a/untracked.md", restore=False,
+                                     apply=True, force=False)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_archive(catalogue, args)
+        out = buf.getvalue()
+
+        self.assertIn("moved (fs)", out)
+        self.assertIn("not under version control", out)
+        # Same repository as --root: unlike the symlinked-bundle cause above,
+        # there is no second repository to name — the report must not claim
+        # one (point 3: the two causes share a surface but not a report).
+        self.assertNotIn("repository differs from --root", out)
+
+
 if __name__ == "__main__":
     unittest.main()
