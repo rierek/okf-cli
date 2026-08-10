@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-08-10T09:15:35Z
-updated_at: 2026-08-10T09:16:25Z
+updated_at: 2026-08-10T09:52:40Z
 parent: okf-cli-0xkj
 ---
 
@@ -43,3 +43,14 @@ _Requirements: PO review 2026-08-10, second finding of the R-15 run_
 ## Recommended Skills
 
 - `superpowers:test-driven-development` — the assertion has to be a filesystem check, and a test written after the fix would pass against `git status` alone.
+
+
+## Prelude 2026-08-10 — carried over from the review of `okf-cli-mk7m`
+
+Three non-blocking findings from the `ce-specs-reviewer` verdict on `okf-cli-mk7m` (APPROVED). None of them is work on this leaf's behaviour; they are process obligations for whoever implements next. Handle them as part of your ordinary work, not as a separate commit.
+
+**I02 — commits carry a `Refs:` footer.** Neither `bf2b5d2` nor `49ea46f` had one. The convention is documented in the OKF concept `claude-code-wiki/git-workflow/git-conventions` ("Footer: `Refs: <issue/bean-id>`") and is style-only, not hook-enforced — which is exactly why it gets dropped. Every commit of this leaf carries `Refs: okf-cli-gqss`.
+
+**I01 — commit subject soft target.** `bf2b5d2` ran to 55 characters. The hard limit of 72 held and the hook did not fire, so this is a miss against the 50-character soft target, not a violation. Aim for 50.
+
+**I03 — mutation proofs cite the exact line, not the branch name.** The mk7m report described its AC1 mutation as "disabled the foreign-repo retry branch". Two different `if` lines answer to that description: mutating the inner condition (`cli/okf-cli.py:4092`) turns exactly one test red, mutating the outer one (`cli/okf-cli.py:4087`) turns two red — a wider collateral failure that the report did not disclose. The reviewer reproduced the narrow one and had to discover the discrepancy himself. State `file:line` and the mutated expression verbatim, so a reviewer reproduces your proof rather than a neighbouring one.
