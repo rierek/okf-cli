@@ -1,11 +1,11 @@
 ---
 # OKFT-wvgb
 title: find hides which arm carried a hit
-status: draft
+status: completed
 type: bug
 priority: normal
 created_at: 2026-08-10T12:58:43Z
-updated_at: 2026-08-10T12:58:43Z
+updated_at: 2026-08-10T13:14:03Z
 parent: OKFT-hkze
 ---
 
@@ -22,3 +22,16 @@ As an agent consuming `find` output, I want every result line to state which ret
 ## Success Criteria
 - SC-001: a mixed-arm result set prints an explicit arm on every line; asserted by a test over a query that provably mixes both arms.
 - SC-002: `just test` green; the eval runner's `path:` parsing (docs/okf-retrieval-architecture/eval/remeasure.py:33) still works unchanged.
+
+
+## Done 2026-08-10 (commit 633648e)
+
+`cmd_find` now prints `provenance:` on every result line, taking the value from the hit itself (`lexical` as the default when a hit carries none). The banner keeps its separate job of naming the owning arm.
+
+Two tests, both RED before the change: `test_lexical_hit_names_its_own_arm` (a purely lexical list is attributed) and `test_every_hit_of_a_mixed_list_names_its_arm` (the case the banner actually obscures — one hit per arm, each named). Both assert `count("path: ") == count("provenance: ")`, so a regression that drops the line on one branch fails.
+
+`FindScoreBreakdown.test_default_output_unchanged_without_breakdown` pins the exact default block and was updated deliberately: the provenance line is attribution and belongs in the default output, independent of the opt-in `--score-breakdown` detail that test guards.
+
+`mcp/okf_mcp.py` docstring corrected in the same commit — it told MCP consumers that a line without a marker came from the lexical arm. LESSONS-LEARNED.md:91 records an earlier plan being rejected for promising exactly the behaviour that now exists; the promise is now kept rather than removed.
+
+Full suite: 637 tests, OK.
