@@ -1739,21 +1739,63 @@ def render_find_compact():
         usage, _FIND_SCALES_COMPACT)
 
 
+def semantic_coverage(root, paths):
+    """(embedded, total) for the concepts named in `paths`, or None when the
+    catalogue carries no `.tagvec` at all.
+
+    Counted by comparing PATH SETS, not row totals: the producer leaves rows
+    behind for deleted concepts (74 orphans in the live catalogue on
+    2026-08-10), so a row count can exceed the concept count while concepts
+    are still unembedded — a total-vs-total check would report a gap of zero
+    at the exact moment the gap matters."""
+    db = _tagvec_db_path(root)
+    if not os.path.isfile(db):
+        return None
+    try:
+        conn = sqlite3.connect(db)
+        try:
+            embedded = {r[0] for r in conn.execute(
+                "SELECT path FROM concept_emb WHERE model = ?", (SEMANTIC_MODEL,))}
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+    return len(set(paths) & embedded), len(paths)
+
+
+def _semantic_coverage_line(root, paths):
+    """The onboarding statement about the semantic arm's reach. The lexical
+    index announces its absence and its staleness; before this, an incomplete
+    `concept_emb` said nothing at all, and the arm simply did not see the
+    concepts it lacked (Modus-B, 2026-08-10: 4.4 % of the live catalogue)."""
+    cov = semantic_coverage(root, paths)
+    if cov is None:
+        return ("semantic index: absent — `find` runs its lexical arm only")
+    embedded, total = cov
+    if embedded >= total:
+        return ("semantic index: complete — all {} concept(s) embedded".format(total))
+    return ("semantic index: partial — {} of {} concept(s) embedded; the rest is "
+            "invisible to the semantic arm (rebuild: cli/embeddings/"
+            "build_tagvec.py --target concepts)".format(embedded, total))
+
+
 def render_catalogue_state(root):
     """The live half of the onboarding: facts read off this catalogue rather
     than asserted in prose, so they cannot go stale. Retrieval quality depends
     on the FTS index being there, and a write attempt depends on whether the
     tag vocabulary is closed — an agent needs both before its first call."""
     bundles = list_bundles(root)
-    concepts = sum(sum(1 for _ in iter_concepts(os.path.join(root, b))) for b in bundles)
+    paths = ["{}/{}".format(b, cid) for b in bundles
+             for cid, _ap in iter_concepts(os.path.join(root, b))]
     lines = ["## This catalogue", "",
              "root: {}".format(root),
-             "bundles: {} · concepts: {}".format(len(bundles), concepts)]
+             "bundles: {} · concepts: {}".format(len(bundles), len(paths))]
     if os.path.isfile(_fts_db_path(root)):
         lines.append("fts index: present — `find` runs its lexical arm")
     else:
         lines.append("fts index: absent — `find` degrades to a substring scan; "
                      "run `build-index`")
+    lines.append(_semantic_coverage_line(root, paths))
     registered = load_tags(root)
     if registered is None:
         lines.append("tag vocabulary: open — no TAGS.md, any tag passes")

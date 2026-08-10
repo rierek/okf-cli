@@ -1418,6 +1418,47 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         self.assertRegex(out, r"(?i)fts index:\s*present")
         self.assertRegex(out, r"(?i)tag vocabulary:\s*closed")
 
+    def _make_tagvec(self, paths):
+        """A .tagvec carrying one concept vector per given path."""
+        import sqlite3, struct
+        db = os.path.join(self.tmp, ".tagvec", "tag_vectors.sqlite")
+        os.makedirs(os.path.dirname(db), exist_ok=True)
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE concept_emb(key TEXT PRIMARY KEY, path TEXT, "
+                     "model TEXT, dim INT, vec BLOB)")
+        for i, p in enumerate(paths):
+            conn.execute("INSERT INTO concept_emb VALUES (?,?,?,?,?)",
+                         ("k{}".format(i), p, okf.SEMANTIC_MODEL, 2,
+                          struct.pack("<2f", 1.0, 0.0)))
+        conn.commit()
+        conn.close()
+
+    def test_state_reports_absent_semantic_index(self):
+        """Modus-B: the semantic arm degraded silently for 4.4 % of the live
+        catalogue because nothing ever said how much of it was embedded. An
+        onboarding agent has to learn that the same way it learns about .fts."""
+        out = self._prime()
+        self.assertRegex(out, r"(?i)semantic index:\s*absent")
+
+    def test_state_reports_an_incomplete_semantic_index(self):
+        """The failure mode that actually occurred: an index that is PRESENT
+        and silently partial. Two concepts, one vector."""
+        ap = os.path.join(self.tmp, "b", "two.md")
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Two\n---\n# Two\n")
+        self._make_tagvec(["b/one"])
+        out = self._prime()
+        self.assertRegex(out, r"(?i)semantic index:.*1 of 2")
+        self.assertIn("build_tagvec", out)
+
+    def test_state_reports_a_complete_semantic_index(self):
+        """Counter-mutation: a covered catalogue must NOT be reported as
+        partial, or the notice degenerates into noise nobody reads."""
+        self._make_tagvec(["b/one"])
+        out = self._prime()
+        self.assertRegex(out, r"(?i)semantic index:\s*complete")
+        self.assertNotIn("build_tagvec", out)
+
     def test_guide_is_catalogue_agnostic(self):
         """The old CLAUDE.md hardcoded one operator's catalogue path into every
         example. The CLI ships to any catalogue; it speaks of --root."""
