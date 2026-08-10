@@ -2453,6 +2453,9 @@ class FindScoreBreakdown(unittest.TestCase):
         # F04 (post-review) — SC-002 says "byte-identical to today"; pin the
         # FULL exact output, not just the absence of a "contrib:" substring
         # (a weaker check could miss e.g. a stray blank line or reordering).
+        # The `provenance:` line joined this block with Modus-B B01: it is
+        # attribution, present on every hit, and stays independent of the
+        # opt-in `--score-breakdown` detail this test guards.
         self.assertEqual(
             out_flag_false,
             "------\n"
@@ -2462,6 +2465,7 @@ class FindScoreBreakdown(unittest.TestCase):
             "path: b/one\n"
             "description: d\n"
             "body-snippet: # Untitled Heading body prose only.…\n"
+            "provenance: lexical\n"
             "------\n",
         )
 
@@ -2666,6 +2670,33 @@ class SemanticBackstop(unittest.TestCase):
         lines = out.splitlines()
         self.assertEqual(lines[4], "path: b/strong")  # Top-1
         self.assertNotIn("provenance: semantic", out)
+
+    def test_lexical_hit_names_its_own_arm(self):
+        """Modus-B B01: a consumer must not have to infer provenance from the
+        ABSENCE of a marker. The `semantic arm owns this ranking` banner spans
+        the whole list, so a lexical hit inside a semantic-owned list carried
+        no attribution at all — in the live run the answering hit sat at rank 5
+        with no provenance line while four semantic hits above it had one.
+        Every result line names its arm."""
+        self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
+
+        def _must_not_be_called(_text):
+            raise AssertionError("semantic backstop must not fire on a strong hit")
+        okf._embed_query_voyage = _must_not_be_called
+        out, _err = self._run("zqxstrong")
+        self.assertIn("provenance: lexical", out)
+        self.assertEqual(out.count("path: "), out.count("provenance: "))
+
+    def test_every_hit_of_a_mixed_list_names_its_arm(self):
+        """The mixed case the banner actually obscures: one lexical hit and one
+        semantic hit in the same list, each attributed on its own line."""
+        self._w("b/noise.md", "Unrelated Note", [], "alpha once in passing.\n")
+        self._make_tagvec([("k1", "b/far", [1.0, 0.0])])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        out, _err = self._run("alpha")
+        self.assertIn("provenance: lexical", out)
+        self.assertIn("provenance: semantic", out)
+        self.assertEqual(out.count("path: "), out.count("provenance: "))
 
     def test_noise_single_hit_still_fires_backstop(self):
         """P12 re-measure finding (8c EARS, S3 rescue): a paraphrase query

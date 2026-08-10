@@ -121,8 +121,10 @@ def _register(server):
         embedding arm. Exactly one of them owns the ranking per query — the
         lexical arm when its top hit has a clear margin, otherwise the
         semantic one — and the other arm's hits are appended behind, never in
-        front. A semantic-arm result line carries `provenance: semantic
-        (cosine=…)`; a line with no such marker came from the lexical arm.
+        front. Every result line names its own arm: `provenance: semantic`
+        on a semantic hit, `provenance: lexical` on a lexical one — the
+        owning arm of the ranking is a separate statement, made once in the
+        note above the list.
 
         Degradations never fail the call and are announced as a note
         prepended to the returned text (okf-cli-2o39, D01 — the CLI itself

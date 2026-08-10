@@ -1561,8 +1561,11 @@ def cmd_find(root, args):
         print("path: {}".format(h["path"]))
         print("description: {}".format(h["desc"]))
         print("body-snippet: {}".format(h["snip"]))
-        if h.get("provenance") == "semantic":
-            print("provenance: semantic")
+        # Every line names its own arm. The banner above says who OWNS the
+        # ranking, which is not the same statement — a lexical hit can sit
+        # inside a semantic-owned list, and leaving it unmarked made its
+        # provenance derivable only from a missing marker (Modus-B B01).
+        print("provenance: {}".format(h.get("provenance", "lexical")))
         if breakdown:
             if h.get("provenance") == "semantic":
                 print("contrib: semantic-only (cosine={:.2f}, no keyword field match)".format(h["cosine"]))
