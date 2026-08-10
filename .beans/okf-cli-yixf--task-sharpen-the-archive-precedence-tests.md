@@ -1,11 +1,11 @@
 ---
 # okf-cli-yixf
 title: sharpen the archive precedence and staleness tests
-status: todo
+status: in-progress
 type: task
 priority: low
 created_at: 2026-08-09T20:46:14Z
-updated_at: 2026-08-10T10:46:23Z
+updated_at: 2026-08-10T10:46:26Z
 parent: okf-cli-0xkj
 ---
 
