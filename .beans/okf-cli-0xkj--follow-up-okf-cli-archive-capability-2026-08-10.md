@@ -4,8 +4,10 @@ title: Follow-up okf-cli archive capability 2026-08-10
 status: todo
 type: epic
 priority: normal
+tags:
+    - to-review
 created_at: 2026-08-10T06:45:07Z
-updated_at: 2026-08-10T11:21:08Z
+updated_at: 2026-08-10T11:37:40Z
 parent: okf-cli-huow
 ---
 
@@ -96,3 +98,35 @@ The test was written to the bean's literal wording as a geometry pin. The review
 3. Replace AC2's fixture with one that has archived content, so precedence genuinely applies. That is a different edge case than the one `okf-cli-yixf` was written to pin, and would be a new leaf rather than a correction.
 
 Independent of the choice: the phrase "both edge cases fail when X is removed" should not be reused in this epic without checking that each named case can actually fail that way.
+
+
+## Realization closed 2026-08-10 — all six leaves gated, epic to PO review
+
+Six leaves, each closed by its implementer after a green full gate and each independently verified by a `ce-specs-reviewer` who reran the mutation proofs himself rather than trusting the implementer's transcript. Every verdict was `APPROVED` on the first round — no leaf needed a `CHANGES_REQUIRED` cycle.
+
+| Leaf | Type | What shipped | Commits |
+| --- | --- | --- | --- |
+| `okf-cli-mk7m` | bug | `_git_mv` resolves the real repository beyond a symlinked bundle, retries a tracked move where both endpoints allow it, and otherwise names git's own reason and the repository that received the write | `bf2b5d2`, `49ea46f` |
+| `okf-cli-gqss` | bug | a restore prunes the emptied `_archive/<bundle>/` and `_archive/`, asserted by a filesystem check rather than by `git status` | `20b42c0`, `1bbcfe3` |
+| `okf-cli-5436` | feature | a missing source whose archive counterpart exists errors with that path and `--restore`; the mirrored restore case too; the no-counterpart message unchanged | `34a2a1a`, `5547511`, `4e74677` |
+| `okf-cli-tk33` | task | a `rename` whose resolved source lies under `_archive/` is refused and names `archive --restore` — from PO decision D02 | `21dae3f`, `a1ffc4e` |
+| `okf-cli-yixf` | task | three weak guards strengthened; `cli/okf-cli.py` byte-identical, test strength only | `e7d9f41`, `e7ef441` |
+| `okf-cli-h12o` | task | one `build_ref_matrix` scan per `archive` run via the PO-decided optional `plan` parameter (D01), plus the SPEC section 2 addendum | `e0b785a`, `d697d1e`, `0f3e9a7` |
+
+**Test substrate:** `just test` grew from 612 to 635 tests, green. Full validation rerun after the last leaf: `Ran 635 tests in 27.014s / OK`, working tree clean.
+
+**Spec:** one authorised amendment — `docs/okf-archive-lifecycle/SPEC.md` section 2 carries a dated addendum for the widened `perform_rename` signature, appended, with the original paragraph intact as what the milestone shipped. No other spec text changed.
+
+**Scope grew by one leaf during realization.** `okf-cli-tk33` did not exist when this epic was operationalized; it came from PO decision D02 on question Q02, which a reviewer raised on `okf-cli-gqss`. That is the intended path — a reviewer finding became a question, the PO decided, the decision became a leaf.
+
+### Open for the PO at acceptance — three questions, none blocking
+
+None of these affects the correctness of what shipped; each is recorded in full above.
+
+- **Q01** — the cross-repo reading of AC1 in `okf-cli-mk7m`. Is the shipped reading (tracked retry only where both endpoints share a repository, honest reporting otherwise) the intended one, or should the cross-repo archive case manufacture a staged tracked move on both sides?
+- **Q03** — SC-03 of `okf-cli-yixf` promises that both new edge cases fail when the precedence rule is removed. For the empty-`_archive/` case that is unsatisfiable as written, confirmed independently by implementer and reviewer. Recommended: accept as shipped and amend the wording to name that case's coverage as crash-safety rather than precedence-sensitivity.
+- **I01 (open improvement)** — the "is this path under that directory" idiom is now duplicated verbatim at `cli/okf-cli.py:4296` and `:4321`, with a structurally similar third instance in `_git_mv`. Deliberately not folded into a helper: it was outside every leaf's acceptance, and `okf-cli-h12o`'s AC3 required the `rename` path to stay untouched. A candidate for its own leaf.
+
+### Repo convention file — supervisor note, not a finding
+
+`okf-tools` has no repo-local `CLAUDE.md`. The non-derivable facts of this repo — the `just` recipe set, the catalogue root, the cwd-dependence of the beans CLI, the declared test substrate and which interpreter it resolves to — were carried into every dispatch prompt by hand this session. That worked and is the reason `LL-32` exists. It does not scale, and the PO has not been asked to decide it. Raising it here so it is decided rather than repeated.
