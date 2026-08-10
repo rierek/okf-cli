@@ -1,11 +1,11 @@
 ---
 # okf-cli-mk7m
 title: archive silently falls back to a non-git move
-status: todo
+status: in-progress
 type: bug
 priority: high
 created_at: 2026-08-09T23:06:24Z
-updated_at: 2026-08-10T09:15:27Z
+updated_at: 2026-08-10T09:31:52Z
 parent: okf-cli-0xkj
 ---
 

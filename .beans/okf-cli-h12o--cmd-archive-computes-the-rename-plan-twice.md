@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: low
 created_at: 2026-08-09T20:04:06Z
-updated_at: 2026-08-10T09:16:25Z
+updated_at: 2026-08-10T09:31:48Z
 parent: okf-cli-0xkj
 ---
 
@@ -45,3 +45,33 @@ The duplication follows from the `perform_rename` signature fixed in `docs/okf-a
 ## Recommended Skills
 
 - `superpowers:test-driven-development` — SC-01 needs a call-counting assertion that exists before the refactor, otherwise there is nothing to prove the second scan is gone.
+
+
+## D01 — PO decision 2026-08-10: optional `plan` parameter
+
+The bean states that the shape of this fix is a planner/PO decision because it touches the `perform_rename` signature fixed in `docs/okf-archive-lifecycle/SPEC.md` section 2. The PO decided on 2026-08-10, before any implementer was dispatched.
+
+**Decision:** `perform_rename` gains a trailing optional parameter and recomputes only when it is absent.
+
+```python
+def perform_rename(root, old_abs, new_abs, apply, force,
+                   verb="rename", plan=None):
+    if plan is None:
+        plan = plan_rename(root, old_abs, new_abs)
+    ...
+```
+
+`cmd_archive` passes the plan it already computed for the AC7 report line:
+
+```python
+plan = plan_rename(root, src_abs, dest_abs)
+print(f"{len(plan.inbound)} active concept(s) still link ...")
+perform_rename(root, src_abs, dest_abs, args.apply,
+               args.force, verb="archive", plan=plan)
+```
+
+`cmd_rename` keeps its call site unchanged, which is what keeps AC3 ("rename behaviour and its test set unchanged") cheap to satisfy.
+
+**Rejected alternative:** splitting `perform_rename` into a planning and an applying half. Cleaner separation, but a larger cut into a function that `rename` and `archive` share — too much regression surface for a low-priority scan-count optimization.
+
+**Spec obligation:** the implementer of this leaf appends a dated section to `docs/okf-archive-lifecycle/SPEC.md` section 2 recording the widened signature. Append, do not rewrite the existing paragraph — the original signature stays readable as what the milestone shipped.
