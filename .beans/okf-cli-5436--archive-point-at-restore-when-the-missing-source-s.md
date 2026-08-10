@@ -1,11 +1,11 @@
 ---
 # okf-cli-5436
 title: 'archive: point at --restore when the missing source sits in the archive'
-status: todo
+status: in-progress
 type: feature
 priority: high
 created_at: 2026-08-10T06:45:10Z
-updated_at: 2026-08-10T10:11:46Z
+updated_at: 2026-08-10T10:11:49Z
 parent: okf-cli-0xkj
 ---
 
