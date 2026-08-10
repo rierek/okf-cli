@@ -5,8 +5,8 @@ status: draft
 type: bug
 priority: high
 created_at: 2026-08-10T14:21:48Z
-updated_at: 2026-08-10T14:21:48Z
-parent: OKFT-hkze
+updated_at: 2026-08-10T15:11:31Z
+parent: OKFT-wuiv
 ---
 
 ## Objective (User Story)
