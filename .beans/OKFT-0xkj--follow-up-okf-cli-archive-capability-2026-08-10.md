@@ -7,7 +7,7 @@ priority: normal
 tags:
     - to-review
 created_at: 2026-08-10T06:45:07Z
-updated_at: 2026-08-10T11:37:40Z
+updated_at: 2026-08-10T11:59:25Z
 parent: OKFT-huow
 ---
 
@@ -130,3 +130,15 @@ None of these affects the correctness of what shipped; each is recorded in full 
 ### Repo convention file — supervisor note, not a finding
 
 `okf-tools` has no repo-local `CLAUDE.md`. The non-derivable facts of this repo — the `just` recipe set, the catalogue root, the cwd-dependence of the beans CLI, the declared test substrate and which interpreter it resolves to — were carried into every dispatch prompt by hand this session. That worked and is the reason `LL-32` exists. It does not scale, and the PO has not been asked to decide it. Raising it here so it is decided rather than repeated.
+
+
+## Review 2026-08-10
+
+PO review of the six realized leaves, conducted with `ce-po-review`. One line per user story, in the order presented.
+
+US-01 · Archiving a concept inside a symlinked project bundle names git's own reason for declining and the repository that actually received the write, instead of a bare `moved (fs)` · a
+US-02 · Restoring the last archived concept of a bundle leaves no empty `_archive/<bundle>/` or `_archive/` behind on disk; a sibling concept still in the bundle keeps the directory · a
+
+### Interruption during this review — bean prefix migration
+
+Between round 1 and its recording, the repository's bean ids changed from `okf-cli-*` to `OKFT-*`, arriving in the working tree from outside this session and half applied. The PO decided to accept and complete the migration; it is closed in commits `f7433bb` and `1b69c22`, and the citations still carrying old ids outside `.beans/` are filed as `OKFT-eil9`. Every id in this review section is the post-migration spelling. The realization commits of this epic, and the leaves' own bodies before this section, name the same beans by their pre-migration ids.
