@@ -16,6 +16,7 @@ _COMMANDS = {
     "rename": (["old", "new"], False),
     "tags":  (["query"], False),
     "build-index": ([], False),
+    "build-semantic-index": ([], False),
     "prime": ([], False),
     "info":  ([], False),
     "wikilinks": (["target"], True),
@@ -224,6 +225,20 @@ def _register(server):
         okf_find reports the lexical index as absent or stale — that note
         names this command, and this tool is how you act on it."""
         return run_okf(root, "build-index", {})
+
+    @server.tool()
+    def okf_build_semantic_index(root: str) -> str:
+        """Fill <root>/.tagvec/tag_vectors.sqlite's concept_emb table for
+        every concept still missing a voyage-3-large embedding. NETWORK —
+        calls the Voyage AI embedding API and requires VOYAGE_API_KEY in
+        the CLI process's environment; without it (or on a failed call)
+        this degrades to a `note: ...` on stderr (folded into this tool's
+        return value, D01) instead of raising. The CLI's own --if-stale
+        flag is not exposed here (mirrors okf_build_index, which does not
+        expose FTS's --if-stale either) — every call here is an
+        unconditional delta fill; run this when okf_prime or okf_find
+        reports the semantic index as absent or partial."""
+        return run_okf(root, "build-semantic-index", {})
 
     @server.tool()
     def okf_prime(root: str) -> str:

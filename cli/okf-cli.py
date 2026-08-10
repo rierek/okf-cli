@@ -822,6 +822,74 @@ def cmd_build_index(root, args):
     print("indexed {} concept(s) -> {}".format(n, db))
 
 
+def cmd_build_semantic_index(root, args):
+    """Fill .tagvec/tag_vectors.sqlite's concept_emb table for every concept
+    still missing a voyage-3-large embedding (OKFT-wsne) -- the trigger the
+    producer (cli/embeddings/build_tagvec.py) never had. Offline half is
+    plan_concept_delta(); network half is embed_voyage(), run batch-by-batch
+    through embed_resilient() so one bad batch (LL-08) does not throw away
+    an already-embedded run.
+
+    With --if-stale, skip the whole call when semantic_coverage()'s PATH-SET
+    probe already reports every on-disk concept embedded -- same D02 shape
+    as cmd_build_index's --if-stale: skip only when the artefact both
+    exists and is current, absent/partial still gets the full run, and
+    omitting the flag stays unconditional exactly as before the flag
+    existed. The probe is semantic_coverage(), not a row count, because
+    concept_emb keeps orphan rows for deleted concepts (OKFT-3520) that
+    would let a row-count check report complete while paths are missing.
+
+    Never raises: a missing VOYAGE_API_KEY or an exhausted-retries network
+    failure degrades to a stderr `note: ...` (same shape as the existing
+    lexical-index degradation notices) and a clean return, because this is
+    meant to run unattended from a SessionStart hook, detached, and must
+    never surface a traceback into a session transcript. The query path
+    (`find`) is untouched by any of this -- it never calls this producer
+    itself (D13/D16)."""
+    db_path = _tagvec_db_path(root)
+    if getattr(args, "if_stale", False):
+        bundles = list_bundles(root)
+        paths = ["{}/{}".format(b, cid) for b in bundles
+                 for cid, _ap in iter_concepts(os.path.join(root, b))]
+        cov = semantic_coverage(root, paths)
+        if cov is not None and cov[0] >= cov[1]:
+            print("semantic index is current, skipping rebuild -> {}".format(db_path))
+            return
+    if not os.environ.get("VOYAGE_API_KEY"):
+        print("note: semantic index build skipped (VOYAGE_API_KEY not set) "
+              "-- run again once it is set, or set it before the next "
+              "SessionStart hook run", file=sys.stderr)
+        return
+    bt = _load_build_tagvec()
+    try:
+        delta = bt.plan_concept_delta(root, SEMANTIC_MODEL, db_path)
+        written = 0
+        incomplete = False
+        max_items, max_chars = bt.BATCH_LIMITS[SEMANTIC_MODEL]
+        for batch in bt.batches(delta, max_items, max_chars):
+            vectors = bt.embed_resilient(
+                bt.embed_voyage, [t for _path, t, _key in batch],
+                "voyage concepts {}..".format(batch[0][0]))
+            if vectors is None:
+                incomplete = True
+                continue
+            rows = [
+                (key, path, SEMANTIC_MODEL, bt.MODELS[SEMANTIC_MODEL]["dim"],
+                 bt.pack_vec(vec))
+                for (path, _text, key), vec in zip(batch, vectors)
+            ]
+            bt.write_concept_rows(db_path, rows)
+            written += len(rows)
+        print("embedded {} concept(s) -> {}".format(written, db_path))
+        if incomplete:
+            print("note: semantic index build incomplete -- {} concept(s) "
+                  "left unembedded after retries; rerun to pick up the "
+                  "rest".format(len(delta) - written), file=sys.stderr)
+    except Exception as exc:
+        print("note: semantic index build failed ({}: {}) -- lexical arm "
+              "unaffected".format(type(exc).__name__, exc), file=sys.stderr)
+
+
 def _like_escape(value):
     """Escape a value for safe use inside a SQL LIKE pattern bound with
     `ESCAPE '\\'`. `\\`, `%` and `_` are the three characters LIKE gives
@@ -4476,6 +4544,7 @@ COMMAND_DISPATCH = {
     "refs": cmd_refs,
     "rewrite-path": cmd_rewrite_path, "rename": cmd_rename, "archive": cmd_archive,
     "build-index": cmd_build_index,
+    "build-semantic-index": cmd_build_semantic_index,
     "reindex": cmd_reindex, "log": cmd_log, "recent": cmd_recent,
     "tags": cmd_tags,
     "merge-tags": cmd_merge_tags,
@@ -4609,6 +4678,14 @@ def build_parser():
     pbi.add_argument("--if-stale", action="store_true",
                       help="skip the rebuild when the existing index is "
                            "already current (default: always rebuild)")
+    pbs = _sub(sub, "build-semantic-index", "search",
+               "fill <root>/.tagvec/tag_vectors.sqlite's concept_emb table "
+               "for every concept still missing a voyage-3-large embedding "
+               "(NETWORK, requires VOYAGE_API_KEY)")
+    pbs.add_argument("--if-stale", action="store_true",
+                      help="skip the run when semantic_coverage() already "
+                           "reports every on-disk concept embedded "
+                           "(default: always fill the delta)")
     pc = _sub(sub, "check", "maintenance",
               "conformance scan: §9 hard rules + local invariants")
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")

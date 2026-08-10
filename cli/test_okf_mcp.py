@@ -212,6 +212,22 @@ class McpAgentRemedyBoundary(McpBoundaryTestBase):
     def test_info_reaches_the_cli(self):
         self.assertTrue(mcp.run_okf(self.root, "info", {}).strip())
 
+    def test_build_semantic_index_reaches_the_cli_and_degrades_without_key(self):
+        """OKFT-wsne. Real subprocess -> real CLI, same as
+        test_build_index_reaches_the_cli_and_writes_the_index above, but
+        VOYAGE_API_KEY is popped for the call so this never makes a network
+        call regardless of what the host environment carries — the CLI's
+        own degradation note (D01) must still reach this tool's return
+        value, exit 0, no raise."""
+        saved = os.environ.pop("VOYAGE_API_KEY", None)
+        try:
+            out = mcp.run_okf(self.root, "build-semantic-index", {})
+        finally:
+            if saved is not None:
+                os.environ["VOYAGE_API_KEY"] = saved
+        self.assertIn("note: semantic index build skipped", out)
+        self.assertIn("VOYAGE_API_KEY", out)
+
 
 class McpFindDegradationNoteBoundary(McpBoundaryTestBase):
     """SC-01 (okf-cli-2o39, D01): a degradation note the CLI writes to stderr
@@ -467,6 +483,31 @@ class McpWikilinksBoundary(McpBoundaryTestBase):
         _w(self.root, "other/x.md", "---\ntype: Runbook\n---\nSee [[phantom]].\n")
         out = self._tool("okf_wikilinks")(root=self.root, target="other")
         self.assertEqual(sorted(out["by_bundle"]), ["other"])
+
+
+class McpBuildSemanticIndexSurface(unittest.TestCase):
+    """OKFT-wsne — okf_build_semantic_index is analog to okf_build_index:
+    whitelisted with no positional/flag params, wired straight through to
+    run_okf. No real subprocess here (that boundary is covered by
+    McpAgentRemedyBoundary above); this class only pins the wiring."""
+
+    def test_command_is_whitelisted_with_no_positionals_and_no_json(self):
+        self.assertEqual(mcp._COMMANDS["build-semantic-index"], ([], False))
+
+    def test_the_registered_tool_reaches_run_okf_with_no_extra_params(self):
+        argvs = []
+        real = mcp.run_okf
+
+        def spy(root, command, params):
+            argvs.append(mcp.build_argv(root, command, params))
+            return ""
+        mcp.run_okf = spy
+        try:
+            mcp._register(_ToolCollector()).tools["okf_build_semantic_index"]("/root")
+        finally:
+            mcp.run_okf = real
+        self.assertEqual(
+            argvs, [["--root", "/root", "build-semantic-index"]])
 
 
 if __name__ == "__main__":
