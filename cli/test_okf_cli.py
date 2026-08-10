@@ -5585,6 +5585,27 @@ class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
         self.assertNotIn("turns-ambiguous", out)
         self.assertTrue(os.path.isfile(self._ap("_archive/a/old.md")))
 
+    # -- SC-01 (okf-cli-gqss): restore of the last concept in a bundle
+    # removes both _archive/<bundle>/ and, once that empties it, _archive/
+    # itself — a filesystem check, not a git-status check, because git does
+    # not track empty directories and the whole point of this bean is that
+    # `git status` staying clean hides the residue.
+    def test_sc01_restore_of_last_concept_removes_empty_archive_dirs(self):
+        self._archive("a/old.md", apply=True)
+        self._archive("_archive/a/old.md", restore=True, apply=True)
+        self.assertFalse(os.path.isdir(self._ap("_archive/a")))
+        self.assertFalse(os.path.isdir(self._ap("_archive")))
+
+    # -- AC3/SC-02: a sibling concept left in the bundle keeps the dir --
+    def test_sc02_restore_with_sibling_concept_keeps_the_directory(self):
+        self._w("a/other.md", "---\ntype: Concept\n---\n# Other\n")
+        self._archive("a/old.md", apply=True)
+        self._archive("a/other.md", apply=True)
+        self._archive("_archive/a/old.md", restore=True, apply=True)
+        self.assertTrue(os.path.isdir(self._ap("_archive/a")))
+        self.assertTrue(os.path.isfile(self._ap("_archive/a/other.md")))
+        self.assertTrue(os.path.isdir(self._ap("_archive")))
+
 
 class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
     """REQ-13/REQ-14 — the wikilink-resolvable check and its opt-in gate."""

@@ -4270,6 +4270,33 @@ def cmd_rename(root, args):
     perform_rename(root, old_abs, new_abs, args.apply, args.force)
 
 
+def _prune_empty_archive_dirs(root, freed_dir):
+    """okf-cli-gqss (AC1/AC2): after a restore vacates `freed_dir` — the
+    directory that held the concept before the move — remove every directory
+    from there up to and including `_archive/` that the move has left empty.
+    Stops at the first directory that still holds something (AC3, including a
+    sibling concept's now-empty subdirectory of its own) and never touches
+    anything outside `_archive/`.
+
+    Git does not track empty directories, so a leftover here is invisible to
+    `git status` — the defect this bean exists to close. This is why the walk
+    is a plain `os.listdir`/`os.rmdir` filesystem operation, not a git one:
+    there is nothing for git to be told, the directory was never tracked in
+    the first place."""
+    archive_root = os.path.realpath(os.path.join(root, "_archive"))
+    d = os.path.realpath(freed_dir)
+    while d == archive_root or d.startswith(archive_root + os.sep):
+        try:
+            if os.listdir(d):
+                break
+            os.rmdir(d)
+        except OSError:
+            break
+        if d == archive_root:
+            break
+        d = os.path.dirname(d)
+
+
 def cmd_archive(root, args):
     """R-01..R-03 (okf-cli-16rg): `archive <bundle>/<concept>[.md]` moves a
     concept to `_archive/<bundle>/<concept>.md`, preserving any subdirectory
@@ -4315,6 +4342,13 @@ def cmd_archive(root, args):
         print("{} active concept(s) still link to this concept".format(n_concepts))
 
     perform_rename(root, src_abs, dest_abs, args.apply, args.force, verb=verb)
+
+    # okf-cli-gqss (AC1/AC2): only a restore can empty an _archive/ directory
+    # — `archive` in the other direction only ever adds to one. perform_rename
+    # already exited on failure above, so reaching here means the move
+    # happened; freed_dir is the directory the concept just vacated.
+    if args.restore and args.apply:
+        _prune_empty_archive_dirs(root, os.path.dirname(src_abs))
 
 
 COMMAND_DISPATCH = {
