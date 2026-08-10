@@ -498,6 +498,15 @@ def render_bundle_line(root, b):
     return "{} ({} concepts)".format(b, n)
 
 
+def render_bundle_compact(root, b):
+    """One-liner for `index`'s catalogue-wide default: name + one-line
+    description (okf-cli-t2w8, I03). Distinct from render_bundle_line
+    (prime's compact, name+count) — picking the right bundle out of a
+    catalogue TOC needs to know what it's about, not how big it is."""
+    bp = os.path.join(root, b)
+    return "{}: {}".format(b, _collapse(bundle_description(bp)))
+
+
 def render_bundle_block(root, b, full=False):
     bp = os.path.join(root, b)
     n = sum(1 for _ in iter_concepts(bp))
@@ -517,18 +526,19 @@ def render_bundle_block(root, b, full=False):
     return "\n".join(lines)
 
 
-def _bundle_summary_json(root, b):
-    """The machine-readable twin of render_bundle_block: what the text
-    catalogue TOC shows, nothing more (okf-cli-7u5z). Enumerating concepts
-    here turned the catalogue-wide TOC into a 794 KB dump that no MCP
-    consumer could accept — the per-bundle branch is where concepts live."""
+def _bundle_summary_json(root, b, full=False):
+    """The machine-readable twin of the catalogue TOC (okf-cli-7u5z, revised
+    okf-cli-t2w8): compact by default (bundle + one-line description, the
+    same shape the text form defaults to now), concepts/directories added
+    only under full=True. Enumerating concepts unconditionally once turned
+    the catalogue-wide TOC into a 794 KB dump no MCP consumer could accept
+    — full stays opt-in for the same reason (SC-002)."""
     bp = os.path.join(root, b)
-    return {
-        "bundle": b,
-        "description": _collapse(bundle_description(bp)),
-        "concepts": sum(1 for _ in iter_concepts(bp)),
-        "directories": bundle_top_dirs(bp),
-    }
+    summary = {"bundle": b, "description": _collapse(bundle_description(bp))}
+    if full:
+        summary["concepts"] = sum(1 for _ in iter_concepts(bp))
+        summary["directories"] = bundle_top_dirs(bp)
+    return summary
 
 
 def _concepts_json(bp):
@@ -547,7 +557,7 @@ def cmd_index(root, args):
             bp = os.path.join(root, args.bundle)
             print(json.dumps({"bundle": args.bundle, "concepts": _concepts_json(bp)}))
             return
-        print(json.dumps({"bundles": [_bundle_summary_json(root, b)
+        print(json.dumps({"bundles": [_bundle_summary_json(root, b, full=args.full)
                                       for b in list_bundles(root)]}))
         return
     if args.bundle:
@@ -566,9 +576,17 @@ def cmd_index(root, args):
             t, title, desc = meta_of(ap)
             print("* [{}]({}.md) [{}]{}".format(title, cid, t, " - " + desc if desc else ""))
         return
-    # catalogue TOC — structured per-bundle blocks
+    # catalogue TOC — compact by default (name + one-line description,
+    # okf-cli-t2w8/I03: a wrong-bundle guess against the full block left
+    # almost no budget for a second call). --full restores the structured
+    # per-bundle block (description/concepts/directories, plus types/tags)
+    # that used to be the only form.
+    if not args.full:
+        for b in list_bundles(root):
+            print(render_bundle_compact(root, b))
+        return
     for b in list_bundles(root):
-        print(render_bundle_block(root, b, full=args.full))
+        print(render_bundle_block(root, b, full=True))
         print("-----")
 
 
@@ -4621,13 +4639,16 @@ def build_parser():
     pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
     pi = _sub(sub, "index", "navigation",
-              "catalogue TOC (bundles, descriptions, concept counts), or one "
+              "catalogue TOC (bundle names + one-line descriptions), or one "
               "bundle's index.md")
     pi.add_argument("bundle", nargs="?",
                     help="bundle to print (default: the whole catalogue TOC)")
     pi.add_argument("--full", action="store_true",
-                    help="add per-bundle types+tags used (catalogue TOC), or print the "
-                         "structured bundle summary instead of the raw index.md (with a bundle arg)")
+                    help="catalogue TOC: print the structured per-bundle block "
+                         "(description, concept count, directories, types, tags) "
+                         "instead of the default one-line name+description "
+                         "listing; with a bundle arg: print the structured "
+                         "bundle summary instead of the raw index.md")
     pi.add_argument("--json", action="store_true", help="machine-readable output")
     _sub(sub, "info", "navigation",
          "print catalogue schema docs (TYPES.md + PROPERTIES.md)")

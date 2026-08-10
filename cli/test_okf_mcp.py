@@ -90,6 +90,21 @@ class McpIndexListBoundary(McpBoundaryTestBase):
         self.assertEqual(out["bundle"], "b")
         self.assertEqual(len(out["concepts"]), 2)
 
+    def test_index_json_over_subprocess_no_bundle_defaults_to_compact(self):
+        """okf-cli-t2w8 SC-002 — the MCP surface offers the same
+        compact/full split `index` does: bundle+description by default,
+        no concepts/directories keys without full=True."""
+        out = mcp.run_okf(self.root, "index", {"bundle": ""})
+        entry = out["bundles"][0]
+        self.assertNotIn("concepts", entry)
+        self.assertNotIn("directories", entry)
+
+    def test_index_json_over_subprocess_no_bundle_full_includes_concepts(self):
+        out = mcp.run_okf(self.root, "index", {"bundle": "", "full": True})
+        entry = out["bundles"][0]
+        self.assertEqual(entry["concepts"], 2)
+        self.assertIn("directories", entry)
+
 
 class McpCheckRefsBoundary(McpBoundaryTestBase):
     """SC-002: check + refs (already --json-valid pre-P1) locked at the
@@ -122,6 +137,19 @@ class BuildArgvBundlePositionalGuard(unittest.TestCase):
         argv = mcp.build_argv("/root", "index", {"bundle": "b"})
         self.assertEqual(argv, ["--root", "/root", "index", "b", "--json"])
         self.assertNotIn("--bundle", argv)
+
+
+class BuildArgvIndexFullFlag(unittest.TestCase):
+    """okf-cli-t2w8 SC-002 — `full` marshals to --full on `index` only,
+    scoped the same way include_archive is scoped to find/list."""
+
+    def test_full_true_adds_the_flag(self):
+        argv = mcp.build_argv("/root", "index", {"bundle": "", "full": True})
+        self.assertIn("--full", argv)
+
+    def test_full_false_omits_the_flag(self):
+        argv = mcp.build_argv("/root", "index", {"bundle": ""})
+        self.assertNotIn("--full", argv)
 
 
 class McpFindFilterBoundary(McpBoundaryTestBase):

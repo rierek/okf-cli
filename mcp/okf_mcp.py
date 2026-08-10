@@ -25,15 +25,19 @@ _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit":
           "scope": "--scope"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
-               "compact": "--compact", "include_archive": "--include-archive"}
+               "compact": "--compact", "include_archive": "--include-archive",
+               "full": "--full"}
 # _BOOL_FLAGS is shared across every command's params dict, but okf-cli's own
 # argparse only defines --include-archive on the find/list subparsers (R-14,
 # okf-cli-9e2b) — any OTHER command handed that flag would fail at the
 # subprocess boundary with an argparse error. Command-scope it explicitly
 # rather than relying on no other tool function ever populating the key:
 # a key absent from this map stays as unrestricted as before (apply/force/
-# unresolved/compact are untouched, out of this task's scope).
-_BOOL_FLAG_COMMANDS = {"include_archive": {"find", "list"}}
+# unresolved/compact are untouched, out of this task's scope). `full` gets
+# the same treatment (okf-cli-t2w8, SC-002): argparse only defines --full on
+# index/prime, and okf_prime never populates the key, so scoping to index
+# alone is enough.
+_BOOL_FLAG_COMMANDS = {"include_archive": {"find", "list"}, "full": {"index"}}
 
 
 def build_argv(root, command, params):
@@ -154,9 +158,12 @@ def _register(server):
         return run_okf(root, "toc", {"path": path})
 
     @server.tool()
-    def okf_index(root: str, bundle: str = "") -> dict:
-        """Catalogue/bundle TOC."""
-        return run_okf(root, "index", {"bundle": bundle})
+    def okf_index(root: str, bundle: str = "", full: bool = False) -> dict:
+        """Catalogue/bundle TOC. Without `bundle`, defaults to one entry per
+        bundle with just its name + one-line description — pass full=True
+        for the structured per-bundle summary (description, concept count,
+        directories) instead. With `bundle`, unaffected by `full`."""
+        return run_okf(root, "index", {"bundle": bundle, "full": full})
 
     @server.tool()
     def okf_list(root: str, type: str = "", tag: str = "",

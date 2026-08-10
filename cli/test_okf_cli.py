@@ -1242,6 +1242,76 @@ class RenderBundleLine(unittest.TestCase):
         self.assertEqual(line, "empty (0 concepts)")
 
 
+class RenderBundleCompact(unittest.TestCase):
+    """okf-cli-t2w8 — compact one-liner for `index`'s catalogue-wide default:
+    name + one-line description (not prime's name+count, I03 needs the
+    *topic* to pick the right bundle, not its size)."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_line_has_bundle_name_and_description(self):
+        os.makedirs(os.path.join(self.tmp, "b"))
+        with open(os.path.join(self.tmp, "b", "index.md"), "w", encoding="utf-8") as f:
+            f.write("# B\n\nA tidy one-line summary of bundle b.\n")
+        line = okf.render_bundle_compact(self.tmp, "b")
+        self.assertEqual(line, "b: A tidy one-line summary of bundle b.")
+
+    def test_missing_description_still_renders(self):
+        os.makedirs(os.path.join(self.tmp, "empty"))
+        line = okf.render_bundle_compact(self.tmp, "empty")
+        self.assertEqual(line, "empty: ")
+
+
+class CmdIndexCatalogueCompactDefault(unittest.TestCase):
+    """okf-cli-t2w8 (OKFT-t2w8) — the catalogue-wide `index` (no bundle arg)
+    defaults to one line per bundle (name + one-line description); the
+    always-on block (description:/concepts:/directories:[/types:/tags:])
+    moves behind --full. --json makes the same default/--full split
+    (SC-001/SC-002); the per-bundle form (`index <bundle>`) is untouched."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "b", "sub"))
+        with open(os.path.join(self.tmp, "b", "index.md"), "w", encoding="utf-8") as f:
+            f.write("# B\n\nA tidy one-line summary of bundle b.\n")
+        with open(os.path.join(self.tmp, "b", "one.md"), "w", encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: One\ntags: [t]\n---\n# One\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, full=False, json_flag=False):
+        import io, contextlib, types
+        args = types.SimpleNamespace(bundle=None, full=full, json=json_flag)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_index(self.tmp, args)
+        return buf.getvalue()
+
+    def test_default_text_is_one_line_name_plus_description(self):
+        out = self._run()
+        self.assertEqual(out.strip(), "b: A tidy one-line summary of bundle b.")
+        self.assertNotIn("description:", out)
+        self.assertNotIn("concepts:", out)
+        self.assertNotIn("directories:", out)
+
+    def test_full_flag_restores_the_structured_block(self):
+        out = self._run(full=True)
+        self.assertIn("description: A tidy one-line summary of bundle b.", out)
+        self.assertIn("concepts: 1", out)
+        self.assertIn("directories:", out)
+        self.assertIn("types: Runbook", out)
+        self.assertIn("tags: t", out)
+
+
 class CmdPrimeBundleListing(unittest.TestCase):
     """T-okf-cli-dwcq, revised by okf-cli-3hjr — the three listing depths.
 
@@ -1718,23 +1788,36 @@ class CmdIndexJson(unittest.TestCase):
         self.assertIn("* [One]", out_json_false)
         self.assertNotIn("{", out_json_false)
 
-    def test_json_without_bundle_reports_a_concept_count_not_the_list(self):
-        """okf-cli-7u5z (D01) — the catalogue-wide shape mirrors the text
-        branch, which prints a count. Enumerating every concept of every
-        bundle produced 794 KB against the real catalogue."""
+    def test_json_full_without_bundle_reports_a_concept_count_not_the_list(self):
+        """okf-cli-7u5z (D01), revised okf-cli-t2w8 — the catalogue-wide
+        shape mirrors the text block once --full asks for it. Enumerating
+        every concept of every bundle produced 794 KB against the real
+        catalogue; concepts/directories now sit behind --full for the same
+        reason the compact default exists (SC-002)."""
         import json
-        entry = json.loads(self._run(bundle=None, json_flag=True))["bundles"][0]
+        entry = json.loads(self._run(bundle=None, json_flag=True, full=True))["bundles"][0]
         self.assertEqual(entry["concepts"], 1)
 
-    def test_json_without_bundle_carries_description_and_directories(self):
-        """okf-cli-7u5z (D01) — the other two fields the text block shows."""
+    def test_json_full_without_bundle_carries_description_and_directories(self):
+        """okf-cli-7u5z (D01), revised okf-cli-t2w8 — the other two fields
+        the full text block shows, now gated the same way."""
         import json
         os.makedirs(os.path.join(self.tmp, "b", "sub"))
         with open(os.path.join(self.tmp, "b", "index.md"), "w", encoding="utf-8") as f:
             f.write("# B\n\nthe b bundle\n")
-        entry = json.loads(self._run(bundle=None, json_flag=True))["bundles"][0]
+        entry = json.loads(self._run(bundle=None, json_flag=True, full=True))["bundles"][0]
         self.assertEqual(entry["description"], "the b bundle")
         self.assertEqual(entry["directories"], ["sub"])
+
+    def test_json_without_bundle_defaults_to_compact_fields(self):
+        """okf-cli-t2w8 SC-001/SC-002 — default catalogue-wide --json shrinks
+        to bundle+description, same distinction the text form makes; no
+        --full means no concepts/directories keys at all."""
+        import json
+        entry = json.loads(self._run(bundle=None, json_flag=True))["bundles"][0]
+        self.assertEqual(entry, {"bundle": "b", "description": ""})
+        self.assertNotIn("concepts", entry)
+        self.assertNotIn("directories", entry)
 
 
 class RootSafety(unittest.TestCase):
