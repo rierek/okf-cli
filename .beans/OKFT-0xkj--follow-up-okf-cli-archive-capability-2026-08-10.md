@@ -5,9 +5,9 @@ status: todo
 type: epic
 priority: normal
 tags:
-    - to-review
+    - accepted
 created_at: 2026-08-10T06:45:07Z
-updated_at: 2026-08-10T11:59:25Z
+updated_at: 2026-08-10T12:00:08Z
 parent: OKFT-huow
 ---
 
@@ -142,3 +142,10 @@ US-02 · Restoring the last archived concept of a bundle leaves no empty `_archi
 ### Interruption during this review — bean prefix migration
 
 Between round 1 and its recording, the repository's bean ids changed from `okf-cli-*` to `OKFT-*`, arriving in the working tree from outside this session and half applied. The PO decided to accept and complete the migration; it is closed in commits `f7433bb` and `1b69c22`, and the citations still carrying old ids outside `.beans/` are filed as `OKFT-eil9`. Every id in this review section is the post-migration spelling. The realization commits of this epic, and the leaves' own bodies before this section, name the same beans by their pre-migration ids.
+
+US-03 · Archiving a concept that already sits in the archive errors with the archived path and the `--restore` verb; the mirrored restore case names the active path; a source that exists nowhere keeps the literal old message · a
+US-04 · A `rename` whose resolved source lies under `_archive/` is refused and points at `archive --restore`, identically with and without `--apply`; an ordinary rename, a rename into `_archive/` and `archive --restore` itself stay unaffected · a
+
+Not presented as stories, no observable behaviour change: OKFT-yixf (three guards sharpened, `cli/okf-cli.py` byte-identical) and OKFT-h12o (one reference-matrix scan per `archive` run instead of two, visible only as runtime on a large catalogue). Both listed to the PO, neither requested for demonstration.
+
+**Verdict: 4 accepted, 0 rejected.** Epic accepted.
