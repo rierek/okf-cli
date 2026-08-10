@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: low
 created_at: 2026-08-09T20:04:06Z
-updated_at: 2026-08-10T11:29:22Z
+updated_at: 2026-08-10T11:35:53Z
 parent: okf-cli-0xkj
 ---
 
@@ -151,3 +151,19 @@ None from D01's prescribed shape. Two additions beyond the bean's literal SC lis
 ## Notes for T(n+1)
 
 I01 from the `okf-cli-tk33` review (duplicated path-boundary idiom at `cli/okf-cli.py:4288` and `4313`, structurally echoed a third time in `_git_mv`) remains unaddressed — still an invitation, not an instruction, and this leaf's diff stayed minimal on purpose. This closes the last leaf of epic `okf-cli-0xkj`; the epic itself is not touched by this commit (container close is a PO/tag action, not an implementer status change).
+
+
+## ERRATA 2026-08-10 — the AC3 mutation is not a behaviour-preservation proof
+
+Recorded by the supervisor after the `ce-specs-reviewer` verdict (APPROVED, finding Q01). Appended rather than corrected in place, per bean rule 5.
+
+The `## Mutation proofs` section above presents `cli/okf-cli.py:4174` (`if plan is None:` → `if False:`) as the proof of AC3 ("keep the existing `rename` behaviour and its test set unchanged"). It is not. That mutation makes 43 tests fail with `TypeError: 'NoneType' object is not subscriptable` — it proves that `plan` is consumed downstream, not that `rename`'s output is preserved. A crash is not a behaviour comparison.
+
+AC3 is nevertheless satisfied, by two things the reviewer verified independently:
+
+1. `cmd_rename`'s call site has zero diff hunks across `60c0617..0f3e9a7`. It is provably still the unconditional `plan = plan_rename(...)` path by construction, not by assertion.
+2. The full pre-existing `rename` and `archive` test sets pass unmodified — `git diff` on `cli/test_okf_cli.py` is pure addition, no existing test body was edited.
+
+For a preservation criterion that is adequate: the guarantee comes from the absence of a change plus an unmodified suite, which is the strongest form available when the requirement is "nothing moved". What was wrong was the label, not the outcome.
+
+**Forward-guard:** a mutation that makes tests ERROR rather than FAIL is evidence about wiring, not about behaviour. When an acceptance criterion promises preservation, the proof is an untouched call site plus an unmodified suite — say that, instead of reaching for a mutation that cannot express it.
