@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: low
 created_at: 2026-08-09T20:04:06Z
-updated_at: 2026-08-10T09:31:48Z
+updated_at: 2026-08-10T10:46:23Z
 parent: okf-cli-0xkj
 ---
 
@@ -75,3 +75,19 @@ perform_rename(root, src_abs, dest_abs, args.apply,
 **Rejected alternative:** splitting `perform_rename` into a planning and an applying half. Cleaner separation, but a larger cut into a function that `rename` and `archive` share — too much regression surface for a low-priority scan-count optimization.
 
 **Spec obligation:** the implementer of this leaf appends a dated section to `docs/okf-archive-lifecycle/SPEC.md` section 2 recording the widened signature. Append, do not rewrite the existing paragraph — the original signature stays readable as what the milestone shipped.
+
+
+## Prelude 2026-08-10 — carried over from the review of `okf-cli-tk33`
+
+**I01 — the "is this path under that directory" idiom is now duplicated verbatim.** The `ce-specs-reviewer` flagged it as non-blocking on `okf-cli-tk33` (verdict APPROVED) and routed it here, because this is the leaf that touches code structure rather than tests.
+
+Two places now compute the same boundary the same way:
+
+- `cli/okf-cli.py:4288` — the new `rename` refusal guard
+- `cli/okf-cli.py:4313` — `_prune_empty_archive_dirs`
+
+both as `archive_root = os.path.realpath(os.path.join(root, "_archive"))` followed by `x == archive_root or x.startswith(archive_root + os.sep)`. A third, structurally similar instance sits in `_git_mv`, comparing against `root` instead. The reviewer was explicit that this leaf extended a pre-existing pattern rather than introducing it, and that the implementer named the precedent in a code comment instead of hiding it.
+
+**This is an invitation, not an instruction.** A helper such as `_is_under(path, boundary)` or `_archive_root(root)` would remove the duplication, and the segment-boundary correctness that `okf-cli-tk33`'s review probed (a bundle named `my_archive` must NOT match) would then live in one place instead of three. But it is NOT part of this bean's acceptance, and AC3 of this bean requires the existing `rename` behaviour and its test set to stay unchanged. If you fold it in, it is a separate commit with its own mutation proof, and any doubt means you leave it and note it in `## Notes for T(n+1)` instead.
+
+Still in force from the earlier reviews: `Refs: okf-cli-h12o` footer on EVERY commit including the bean-closing one, the 50-byte subject soft target counted on every subject, and mutation proofs citing `file:line` plus the mutated expression verbatim.

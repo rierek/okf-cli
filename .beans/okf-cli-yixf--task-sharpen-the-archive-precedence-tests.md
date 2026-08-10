@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: low
 created_at: 2026-08-09T20:46:14Z
-updated_at: 2026-08-10T09:16:25Z
+updated_at: 2026-08-10T10:46:23Z
 parent: okf-cli-0xkj
 ---
 
@@ -74,3 +74,14 @@ _Requirements: reviews of `okf-cli-pnyf` (I01, T01) and `okf-cli-fu7o` (I03), 20
 ## Recommended Skills
 
 - `superpowers:test-driven-development` — every success criterion here is a mutation that must turn a named test red; writing the mutation first is the only way to know which test that is.
+
+
+## Prelude 2026-08-10 — conventions carried through this epic
+
+No behavioural findings route into this leaf. Three process obligations do, established by the reviews of `okf-cli-mk7m`, `okf-cli-gqss`, `okf-cli-5436` and `okf-cli-tk33`:
+
+1. **`Refs: okf-cli-yixf` on every commit**, including the one that closes the bean. It is style, not hook-enforced, which is exactly why three leaves in this epic dropped it before it became a prelude.
+2. **Count every commit subject against the 50-byte soft target**, including the bean-closing one — that is the commit that escaped the count three times, because it gets written after the gate is already green. The 72-byte hard limit is hook-enforced and is not the issue.
+3. **Mutation proofs cite `file:line` and the mutated expression verbatim**, not the semantic name of a branch. In `okf-cli-mk7m` a mutation described as "the foreign-repo retry branch" matched two different `if` lines with different blast radii, and the reviewer had to work out which one had actually been run.
+
+**Relevant precedent for this leaf specifically.** Every leaf of this epic so far produced at least one mutation that left the suite silently GREEN — and in each case the defect was in the proof, not in the production code. That is precisely what this bean is about: three named guards that are weaker than they look. Expect your own new assertions to be subject to the same failure mode, and mutate them too.
