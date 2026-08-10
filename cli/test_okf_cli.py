@@ -7159,5 +7159,112 @@ class GitMvBeyondSymlink(unittest.TestCase):
         self.assertNotIn("repository differs from --root", out)
 
 
+class FindSupersededByField(unittest.TestCase):
+    """OKFT-gpcx — a hit carrying frontmatter `superseded_by` surfaces it in
+    the printed hit block itself (not only under --breakdown); a hit without
+    the field stays byte-identical to the pre-existing block shape."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_hit_without_superseded_by_is_byte_identical(self):
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: Tunnel\ndescription: d\n"
+                    "tags: [net]\n---\nbody\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+        out = _run_find(self.root, "tunnel")
+        expected = (
+            "------\n"
+            "rank: 1\n"
+            "title: Tunnel\n"
+            "type: Runbook\n"
+            "path: b/one\n"
+            "description: d\n"
+            "body-snippet: body…\n"
+            "provenance: lexical\n"
+            "------\n"
+        )
+        self.assertEqual(out, expected)
+        self.assertNotIn("superseded_by", out)
+
+    def test_hit_with_superseded_by_shows_the_relation(self):
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "new.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Decision\ntitle: New\n---\n# New\n")
+        with open(os.path.join(self.root, "b", "old.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Decision\ntitle: Tunnel decision\n"
+                    "description: d\nsuperseded_by: /b/new.md\n---\nbody\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+        out = _run_find(self.root, "tunnel")
+        self.assertIn("type: Decision\nsuperseded_by: /b/new.md\npath: b/old",
+                       out)
+
+
+class CheckSupersededBy(unittest.TestCase):
+    """OKFT-gpcx / D01 — two new check rules: a `superseded_by` target that
+    does not resolve is an ERROR (same class as a dead crosslink); a
+    `superseded_by` on a concept whose own `type` is not `Decision` is a
+    WARNING (the scope guard, not a failure)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _names(self, entries):
+        return [e[0] for e in entries]
+
+    def test_dangling_superseded_by_target_is_error(self):
+        self._w("b/x.md", "---\ntype: Decision\ntitle: X\n"
+                          "superseded_by: /b/nope.md\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("superseded-by-resolves", self._names(errors))
+
+    def test_resolving_superseded_by_target_is_clean(self):
+        self._w("b/y.md", "---\ntype: Decision\ntitle: Y\n---\n# Y\n")
+        self._w("b/x.md", "---\ntype: Decision\ntitle: X\n"
+                          "superseded_by: /b/y.md\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("superseded-by-resolves", self._names(errors))
+
+    def test_superseded_by_on_non_decision_concept_is_warning(self):
+        self._w("b/y.md", "---\ntype: Decision\ntitle: Y\n---\n# Y\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n"
+                          "superseded_by: /b/y.md\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("superseded-by-scope", self._names(warnings))
+
+    def test_superseded_by_on_decision_concept_has_no_scope_warning(self):
+        self._w("b/y.md", "---\ntype: Decision\ntitle: Y\n---\n# Y\n")
+        self._w("b/x.md", "---\ntype: Decision\ntitle: X\n"
+                          "superseded_by: /b/y.md\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("superseded-by-scope", self._names(warnings))
+
+    def test_absent_superseded_by_is_clean(self):
+        self._w("b/x.md", "---\ntype: Decision\ntitle: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("superseded-by-resolves", self._names(errors))
+        self.assertNotIn("superseded-by-scope", self._names(warnings))
+
+
 if __name__ == "__main__":
     unittest.main()

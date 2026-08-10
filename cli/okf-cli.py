@@ -1170,6 +1170,9 @@ def _hydrate_hit(root, path, terms, score, provenance, cosine=None):
         "snip": make_snippet(body, terms),
         "provenance": provenance,
     }
+    sb = _dequote(fm.get("superseded_by", ""))
+    if sb:
+        hit["superseded_by"] = sb
     if cosine is not None:
         hit["cosine"] = cosine
     return hit
@@ -1220,13 +1223,17 @@ def _substring_ranking(root, query, terms, limit, filters):
                     score += 1
                     contrib["body"].append(term)
             if score:
-                hits.append({
+                hit = {
                     "score": score, "path": "{}/{}".format(prefix, cid),
                     "title": title, "type": t,
                     "desc": _dequote(fm.get("description", "")),
                     "snip": make_snippet(body, terms), "contrib": contrib,
                     "provenance": "lexical",
-                })
+                }
+                sb = _dequote(fm.get("superseded_by", ""))
+                if sb:
+                    hit["superseded_by"] = sb
+                hits.append(hit)
     hits.sort(key=lambda h: -h["score"])
     return hits[:limit]
 
@@ -1643,6 +1650,11 @@ def cmd_find(root, args):
         print("rank: {}".format(i))
         print("title: {}".format(h["title"]))
         print("type: {}".format(h["type"]))
+        # Present only when the concept's frontmatter carries the relation
+        # (D01, OKFT-gpcx) — a hit without it stays byte-identical to the
+        # pre-existing block shape (this is asserted, not assumed).
+        if h.get("superseded_by"):
+            print("superseded_by: {}".format(h["superseded_by"]))
         print("path: {}".format(h["path"]))
         print("description: {}".format(h["desc"]))
         print("body-snippet: {}".format(h["snip"]))
@@ -2967,6 +2979,38 @@ def check_crosslink_format(ctx):
     return msgs
 
 
+def check_superseded_by_resolves(ctx):
+    """D01 (OKFT-gpcx) — `superseded_by` is a pointer, and a pointer to
+    nothing is the same violation class as a dead crosslink: ERROR, part of
+    the `0 violations` commit gate. Same catalogue-root-absolute resolution
+    check_crosslink_format uses (leading `/` = catalogue root)."""
+    if ctx["is_reserved"] or not ctx["has_fm"]:
+        return []
+    sb = _dequote(ctx["fm"].get("superseded_by", "").strip())
+    if not sb:
+        return []
+    if os.path.isfile(os.path.join(ctx["root"], sb.lstrip("/"))):
+        return []
+    return ["superseded_by target does not resolve: {}".format(sb)]
+
+
+def check_superseded_by_scope(ctx):
+    """D01 (OKFT-gpcx) — the scope guard: `superseded_by` is defined only for
+    `type: Decision` concepts. A concept of another type carrying the field
+    is not a hard failure (it may be an intentional early use or a schema
+    typo an author can fix at leisure) — WARNING, not ERROR."""
+    if ctx["is_reserved"] or not ctx["has_fm"]:
+        return []
+    sb = _dequote(ctx["fm"].get("superseded_by", "").strip())
+    if not sb:
+        return []
+    t = ctx["fm"].get("type", "").strip()
+    if t == "Decision":
+        return []
+    return ["superseded_by used on non-Decision concept (type={})".format(
+        t or "<empty>")]
+
+
 _TAG = r"</?[A-Za-z][\w:-]*>"
 XML_TAG_CHAIN_RE = re.compile(r"{t}(?:\.(?:{t}|[A-Za-z0-9_-]+))*".format(t=_TAG))
 SAFE_HTML_TAGS = {"br", "hr", "sub", "sup", "kbd", "mark", "code", "wbr"}
@@ -3761,6 +3805,8 @@ def run_checks(root, target, types_source=None):
         ("tag-registered", "warning", lambda c: check_tag_registered(c, tags_set)),
         ("english-keys", "warning", check_english_keys),
         ("crosslink-format", "warning", check_crosslink_format),
+        ("superseded-by-resolves", "error", check_superseded_by_resolves),
+        ("superseded-by-scope", "warning", check_superseded_by_scope),
         ("tags-block-form", "warning", check_tags_block_form),
         ("xml-like-tags", "warning", check_xml_like_tags),
         ("wikilink-resolvable", "warning",
