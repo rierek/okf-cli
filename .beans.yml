@@ -1,6 +1,20 @@
+# Beans configuration
+# See: https://github.com/hmans/beans
 beans:
+    # Directory where bean files are stored
     path: .beans
-    prefix: okf-cli-
+    # Prefix for bean IDs (e.g., "myproject-abc1")
+    prefix: OKFT-
+    # Length of the random ID suffix
     id_length: 4
+    # Default status for new beans
     default_status: draft
+    # Default type for new beans
     default_type: task
+worktree:
+    # Shell command to run inside a worktree after creation (e.g. "pnpm install")
+    setup: ""
+    # Shell command to run the project (adds a "Run" button to workspace toolbar)
+    run: ""
+    # Integration strategy: "local" (squash-merge locally) or "pr" (push and create PRs)
+    integrate: local
