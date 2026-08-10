@@ -1,3 +1,12 @@
+---
+type: Plan
+title: "PLAN — okf-revision"
+description: "Implementation plan for raising okf-cli and okf-mcp to maturity across four phases: measurement correctness, optimization, success gate and documentation."
+tags:
+  - tpic
+  - okf-revision
+timestamp: 2026-07-25T17:56:03Z
+---
 # okf-cli + okf-mcp Reifegraderhöhung — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

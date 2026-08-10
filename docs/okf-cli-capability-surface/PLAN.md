@@ -1,3 +1,12 @@
+---
+type: Plan
+title: "PLAN — okf-cli-capability-surface"
+description: "Implementation plan for making argparse the single source of truth of the okf-cli command surface, with a flat and a grouped help view rendered from it."
+tags:
+  - tpic
+  - okf-cli-capability-surface
+timestamp: 2026-07-26T12:43:03Z
+---
 # okf-cli Capability Surface — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

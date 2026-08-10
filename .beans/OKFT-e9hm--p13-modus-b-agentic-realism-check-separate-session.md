@@ -7,7 +7,7 @@ priority: normal
 tags:
     - separate-session
 created_at: 2026-07-25T18:13:10Z
-updated_at: 2026-07-25T21:00:17Z
+updated_at: 2026-08-10T12:37:49Z
 parent: OKFT-s3ee
 blocked_by:
     - OKFT-6gq6
@@ -31,3 +31,8 @@ Commit: `docs(eval): Modus B agentic realism task set`
 ## Prelude 2026-07-25 — Steps 1-2 done inline (PF-1), Step 3 stays SEPARATE
 
 cli/eval/modus-b-tasks.md authored + committed: 5 task prompts (>=1 paraphrase per S1-S4 + 1 literal control), rubric (outcome/calls/verbatim query/provenance/friction), preconditions (seed + concept_emb swap-in + teardown/restore), reporting format. Execution (Step 3) MUST run in a separate agentic session with only mcp__okf__* tools — this bean stays open until that session records outcomes here. Watch item from P12: S2/S4 paraphrase not mechanically rescued — agent reformulation/browsing success there is the key Modus-B signal.
+
+
+## Pointer update 2026-08-10
+
+The task set moved out of `cli/` (repo convention: all markdown lives under /docs) and is now `docs/okf-revision/modus-b-tasks.md`. Content unchanged, git rename, frontmatter added.

@@ -1,3 +1,12 @@
+---
+type: TPIC
+title: "QUESTIONS — okf-retrieval-architecture"
+description: "Open questions of the retrieval-architecture think session; resolved ones move to DECISIONS as a D with a back-reference left here."
+tags:
+  - tpic
+  - okf-retrieval-architecture
+timestamp: 2026-07-25T22:43:35Z
+---
 # QUESTIONS — okf-retrieval-architecture
 
 Offene Fragen ohne Verbindlichkeit. Aufgelöste Fragen wandern als `D` nach DECISIONS.md (Verweis bleibt hier stehen).

@@ -1,3 +1,12 @@
+---
+type: TPIC
+title: "REFERENCES — okf-revision"
+description: "Code and document references the maturity revision rests on."
+tags:
+  - tpic
+  - okf-revision
+timestamp: 2026-07-25T22:43:35Z
+---
 # REFERENCES — okf-cli + okf-mcp Reifegraderhöhung
 
 ## Code

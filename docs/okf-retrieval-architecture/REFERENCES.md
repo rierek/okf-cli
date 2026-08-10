@@ -1,3 +1,12 @@
+---
+type: TPIC
+title: "REFERENCES — okf-retrieval-architecture"
+description: "Verified evidence the retrieval-architecture collection rests on — each line checked against the source rather than carried over from a bean."
+tags:
+  - tpic
+  - okf-retrieval-architecture
+timestamp: 2026-07-25T22:43:35Z
+---
 # REFERENCES — okf-retrieval-architecture
 
 Belege, auf die sich Aussagen dieser Sammlung stützen. Jede Zeile verifiziert (nicht aus dem Bean übernommen, sondern live nachgeprüft), Datum wo relevant.
@@ -13,9 +22,9 @@ Belege, auf die sich Aussagen dieser Sammlung stützen. Jede Zeile verifiziert (
 | R05 | `cli/okf-cli.py:742-762` | Backstop liest `concept_emb` aus `.tagvec`; fehlende Datei/Tabelle oder fehlendes Embedding-Backend → `note: semantic backstop skipped`, nie Hard-Fail. Query-Embedding per lokalem Ollama-Call (`bge-m3`, `SEMANTIC_MODEL`). |
 | R05b | `cli/okf-cli.py:758-762` | **Kein absoluter Cosine-Floor**: `semantic_backstop` sortiert alle Kandidaten und schneidet nach `limit` ab. Was auch immer vorhanden ist, wird zurückgegeben — bei 10 befüllten Vektoren also zwangsläufig 10 „Treffer", unabhängig von deren Güte. |
 | R05c | `cli/okf-cli.py:781` | Semantik-Score = `round(cosine * max_score)` — direkte Umrechnung ohne Kalibrierung; ein Cosine von 0.44 wird damit zu einem Score, der neben Keyword-Scores gerankt wird. |
-| R06 | `cli/embeddings/README.md:27-35` | **Präzedenzfall Kontamination:** frühere Tag-Embeddings mit Titel/Description-Anreicherung ließen unabhängige Tags ~0.9 scoren (`task-brief ↔ superwhisper` 0.92) — gemessen wurde Ko-Okkurrenz, nicht Label-Bedeutung. Fix: Slug-only. |
-| R07 | `cli/embeddings/README.md` (Teil 2, „since P8/8c") | `concept_emb(key, path, model, dim, vec)` embeddet **ein** Vektor pro Konzept aus `title + "\n\n" + body` (`concept_text()`). |
-| R08 | `cli/embeddings/README.md` (Teil 2, Begründung) | Fixture **S3** ist die Existenzberechtigung von `concept_emb`: Konzept mit `tags=[]`, Query-Token nur im Body — strukturell unauffindbar für einen tag-gekeyten Backstop. |
+| R06 | `docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md:27-35` | **Präzedenzfall Kontamination:** frühere Tag-Embeddings mit Titel/Description-Anreicherung ließen unabhängige Tags ~0.9 scoren (`task-brief ↔ superwhisper` 0.92) — gemessen wurde Ko-Okkurrenz, nicht Label-Bedeutung. Fix: Slug-only. |
+| R07 | `docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md` (Teil 2, „since P8/8c") | `concept_emb(key, path, model, dim, vec)` embeddet **ein** Vektor pro Konzept aus `title + "\n\n" + body` (`concept_text()`). |
+| R08 | `docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md` (Teil 2, Begründung) | Fixture **S3** ist die Existenzberechtigung von `concept_emb`: Konzept mit `tags=[]`, Query-Token nur im Body — strukturell unauffindbar für einen tag-gekeyten Backstop. |
 
 ## R — Live-Katalog (gemessen 2026-07-25, `~/Obsidian/Knowledge-Catalogue`)
 

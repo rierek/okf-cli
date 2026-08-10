@@ -5,7 +5,7 @@ status: in-progress
 type: epic
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T21:01:02Z
+updated_at: 2026-08-10T12:37:49Z
 parent: OKFT-wuiv
 ---
 
@@ -22,3 +22,8 @@ Plan detail: `docs/okf-revision/PLAN.md` Phase 3 (Tasks 12,13).
 ## Epic status note (2026-07-25)
 
 P12 completed inline (gate PASS, hybrid-39d6c0a.json committed). P13 deliberately open: task set + rubric shipped (cli/eval/modus-b-tasks.md), execution requires a SEPARATE agentic session by design (D12/Q07) — epic not tagged to-review until that run records outcomes.
+
+
+## Pointer update 2026-08-10
+
+`cli/eval/modus-b-tasks.md` is now `docs/okf-revision/modus-b-tasks.md` (git rename, content unchanged).

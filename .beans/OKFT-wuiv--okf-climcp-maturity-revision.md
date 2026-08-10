@@ -5,7 +5,7 @@ status: in-progress
 type: milestone
 priority: normal
 created_at: 2026-07-25T18:13:09Z
-updated_at: 2026-07-25T22:16:14Z
+updated_at: 2026-08-10T12:37:49Z
 ---
 
 Raise okf-cli + okf-mcp maturity at its three weak edges — retrieval semantics, MCP->subprocess correctness, root-safety — with every retrieval change measured as a delta against a keyword baseline frozen BEFORE any optimization.
@@ -114,3 +114,8 @@ D02 (Q02) 🟢 -- --bundle bei find wird ENTFERNT, --scope bleibt einziger Filte
 D04 (Q04) 🟢 -- P15 (OKFT-cfgj) gestrichen. P14 ist akzeptierter Endstand (20/20 Verben), kein Beleg fuer wiederkehrende Verb-Drift, die einen Generator rechtfertigt. Folge-Task T02: Bean OKFT-cfgj auf scrapped setzen.
 
 Q03 bleibt gesondert offen (Design-Groesse Chunk-vs-Dokument-Embedding, nicht Teil dieser Grilling-Runde).
+
+
+## Pointer update 2026-08-10
+
+The producer documentation cited above as `cli/embeddings/README.md` is now the OKF runbook `docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md`; the cited section on title/description contamination is unchanged.

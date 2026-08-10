@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Producer for .tagvec/tag_vectors.sqlite — see cli/embeddings/README.md.
+"""Producer for .tagvec/tag_vectors.sqlite — see docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md.
 
 Brought in-repo from the ad-hoc offline SOP
 (Knowledge-Catalogue/okf-meta-wiki/extensions/embedding-based-tag-consolidation.md,
@@ -12,7 +12,7 @@ unchanged/regression-safe):
 - concepts (`concept_emb` table, P8/8c, bean okf-cli-8uaf): one row per
   concept's title+body — added because tag embeddings alone cannot rescue
   a body-only-token, zero-tag concept (fixture S3); see
-  cli/embeddings/README.md "Embedded scope" for the full finding. This is
+  docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md "Embedded scope" for the full finding. This is
   a SEPARATE table — producing concepts never touches `emb`'s rows/schema.
 --target concepts also accepts --concept-path-prefix (scope candidates to
 one bundle/prefix) and --concept-limit (cap count) — both exist to keep a
@@ -322,7 +322,7 @@ def build_parser():
         prog="build_tagvec.py",
         description=(
             "Offline producer for .tagvec/tag_vectors.sqlite (emb schema, RET10). "
-            "NOT a runtime dependency of okf-cli.py find — see cli/embeddings/README.md. "
+            "NOT a runtime dependency of okf-cli.py find — see docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md. "
             "Without --produce this only plans the delta; no network, no writes."
         ),
     )

@@ -1,3 +1,12 @@
+---
+type: TPIC
+title: "QUESTIONS — okf-revision"
+description: "Open questions of the maturity revision; convergence to a plan required the plan-relevant ones to be resolved first."
+tags:
+  - tpic
+  - okf-revision
+timestamp: 2026-07-25T22:43:35Z
+---
 # QUESTIONS — okf-cli + okf-mcp Reifegraderhöhung
 
 Konvergenz zu Plan erst, wenn die planrelevanten Qs aufgelöst sind. Grounds: `06-retrieval-quality.yaml`, `07-tests-and-usage.yaml`.

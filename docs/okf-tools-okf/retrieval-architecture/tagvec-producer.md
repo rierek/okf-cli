@@ -1,3 +1,13 @@
+---
+type: Runbook
+title: "The .tagvec producer runs offline and is not a runtime dependency"
+description: "build_tagvec.py regenerates the tag-similarity cache that find's semantic backstop reads at query time; the pass is offline, batched, resumable, and embeds slugs only because title/description enrichment made independent tags look similar."
+tags:
+  - okf-cli
+  - embeddings
+  - hybrid-search
+timestamp: 2026-07-25T19:26:42Z
+---
 # `.tagvec` — offline embedding producer
 
 `build_tagvec.py` regenerates `.tagvec/tag_vectors.sqlite`: the tag-similarity

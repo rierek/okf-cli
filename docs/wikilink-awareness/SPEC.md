@@ -1,3 +1,12 @@
+---
+type: DesignSpec
+title: "SPEC — wikilink-awareness"
+description: "Accepted specification of wikilink awareness in okf-cli, amended during implementation by decisions D06 to D13 and the ASM assumptions."
+tags:
+  - tpic
+  - wikilink-awareness
+timestamp: 2026-08-05T06:07:14Z
+---
 # Wikilink Awareness in okf-cli
 
 - Status: accepted; amended 2026-08-05 during implementation — see D06 to D13, C07, C08 and the ASM-01/ASM-02/C03 verdicts. Every amendment records a measurement, not a preference; where an earlier draft of an amendment was itself a rationalisation, D07 and C07 say so and record what replaced it.

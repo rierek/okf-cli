@@ -1,3 +1,12 @@
+---
+type: Tasks
+title: "TASKS — okf-retrieval-architecture"
+description: "Latent convergence of the retrieval-architecture session: units that became concrete and actionable, without an order or blockers yet."
+tags:
+  - tpic
+  - okf-retrieval-architecture
+timestamp: 2026-07-25T22:43:35Z
+---
 # TASKS — okf-retrieval-architecture
 
 Latente Konvergenz: konkret gewordene, umsetzbare Einheiten. Noch **kein** Plan — Reihenfolge/Blocker erst bei Konvergenz.

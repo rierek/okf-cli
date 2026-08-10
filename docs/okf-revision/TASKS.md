@@ -1,3 +1,12 @@
+---
+type: Tasks
+title: "TASKS — okf-revision"
+description: "Actionable units of the maturity revision at full scope, aimed at a grounded plan."
+tags:
+  - tpic
+  - okf-revision
+timestamp: 2026-07-25T22:43:35Z
+---
 # TASKS — okf-cli + okf-mcp Reifegraderhöhung
 
 Scope: full. Ziel = fundierter Plan. Grounds: `00`, `06`, `07`.yaml.

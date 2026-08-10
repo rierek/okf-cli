@@ -1,3 +1,12 @@
+---
+type: Plan
+title: "PLAN — okf-cli-dwcq-cli-okf-prime-optimieren"
+description: "Implementation plan for progressive disclosure in okf-cli prime, so agent onboarding output scales with what the agent actually needs."
+tags:
+  - tpic
+  - okf-cli-dwcq-cli-okf-prime-optimieren
+timestamp: 2026-07-18T12:50:09Z
+---
 # okf-cli prime — Progressive Disclosure Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

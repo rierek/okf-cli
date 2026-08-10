@@ -1,3 +1,12 @@
+---
+type: Tasks
+title: "Modus B — Agentic Realism Check (Task Set + Rubric)"
+description: "Task prompts and scoring rubric for the Modus-B retrieval check, to be run in a separate agentic session with only the okf MCP tools and no repo access."
+tags:
+  - tpic
+  - okf-revision
+timestamp: 2026-07-25T21:00:17Z
+---
 # Modus B — Agentic Realism Check (Task Set + Rubric)
 
 **Execution contract (D12/Q07, bean `okf-cli-e9hm`):** run in a SEPARATE

@@ -1,3 +1,12 @@
+---
+type: Report
+title: "eval — Messgrundlage der Retrieval-Architektur-Session"
+description: "Experiment code and raw results of the retrieval think session — throwaway code whose measurements carry the decisions that followed."
+tags:
+  - tpic
+  - okf-retrieval-architecture
+timestamp: 2026-07-25T22:43:35Z
+---
 # eval — Messgrundlage der Retrieval-Architektur-Session (2026-07-25/26)
 
 Experiment-Code und Rohergebnisse der Think-Session. **Wegwerf-Code mit bleibendem Wert**: die Scripts waren als Einweg-Werkzeug gebaut, die Query-Sätze und Ergebnisse sind die erste unverzerrte Messgrundlage des Projekts und dürfen nicht verlorengehen.

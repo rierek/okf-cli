@@ -4,7 +4,7 @@
 Network-free by construction: every test here exercises parsing, the
 sha1 cache-key scheme, and the delta-plan against a real (tmp) sqlite —
 none of it calls Ollama or Voyage. The --produce network path is exercised
-manually only (see cli/embeddings/README.md); it must never run under test
+manually only (see docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md); it must never run under test
 or at import time.
 
 Run: python3 -m unittest cli.test_embeddings_tagvec -v

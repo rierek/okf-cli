@@ -1,3 +1,12 @@
+---
+type: Report
+title: "Failure taxonomy — residual zero-hits (Task 12)"
+description: "Classification of the queries that still return nothing after the hybrid arms shipped, derived from the regenerated shipped_v2.json run."
+tags:
+  - tpic
+  - okf-retrieval-architecture
+timestamp: 2026-07-26T09:30:40Z
+---
 # Failure taxonomy — residual zero-hits (Task 12)
 
 Based on: `docs/okf-retrieval-architecture/eval/shipped_v2.json`, regenerated

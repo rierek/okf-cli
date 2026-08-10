@@ -1,3 +1,12 @@
+---
+type: TPIC
+title: "NSP — wikilink-awareness"
+description: "Handover for a specialist picking up wikilink awareness cold, written against verified state and replacing an earlier note whose claims did not hold."
+tags:
+  - tpic
+  - wikilink-awareness
+timestamp: 2026-08-05T06:07:14Z
+---
 # NSP — wikilink-awareness
 
 Handover for a specialist picking this topic up cold. Written 2026-08-05 against verified state, replacing a version whose "verified state" had drifted in seven places.
