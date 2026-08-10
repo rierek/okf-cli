@@ -5,7 +5,7 @@ status: draft
 type: bug
 priority: high
 created_at: 2026-08-10T13:11:08Z
-updated_at: 2026-08-10T13:11:08Z
+updated_at: 2026-08-10T13:16:58Z
 parent: OKFT-hkze
 ---
 
@@ -29,3 +29,14 @@ The cost is not theoretical: the R1 miss of the Modus-B run was exactly such a c
 
 ## Note
 Related but distinct: OKFT-3520 (stale rows on content change — after the 2026-08-10 run no duplicate-per-path rows remain, verify there) and OKFT-uumj (make a stale concept_emb visible, the announcement half of SC-002). The 74 orphan rows for deleted files were NOT cleaned by the producer run and belong to OKFT-3520.
+
+
+## Partially addressed 2026-08-10
+
+Two of three halves are done; the trigger itself is not.
+
+Done — the gap was closed once: the producer ran over 166 concepts (`--target concepts --model voyage-3-large --produce`), live coverage is now 2590 of 2590. The R1 query that found nothing returns its target at rank 1.
+
+Done — the gap is no longer silent (commit b7d43a9): `prime` reports `semantic index: complete | partial — N of M | absent`, mirroring what `fts index:` already stated. Counted by comparing PATH SETS rather than row totals, because the 74 orphan rows for deleted concepts would otherwise let a row count mask a real gap — a guard that passes at the moment it matters is not a guard. Three tests, RED before the change, including a counter-mutation asserting a complete index is NOT reported as partial.
+
+Open — nothing still triggers the producer. SC-001 is only half met: staleness is observable through `prime`, not yet at `find` time, and no mechanism updates the index when concepts are added. The FTS analogue is a Stop hook (OKFT-iaxj); the equivalent here needs a network call and an API key, which is why it is a decision rather than a copy. That decision is what remains in this bean.
