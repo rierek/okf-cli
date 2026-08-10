@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: normal
 created_at: 2026-08-10T06:45:07Z
-updated_at: 2026-08-10T10:11:46Z
+updated_at: 2026-08-10T10:23:02Z
 parent: okf-cli-huow
 ---
 
@@ -60,3 +60,18 @@ leaves `_archive/<bundle>/` and `_archive/` standing — the same invisible resi
 3. Refuse the path: a `rename` whose source lies under `_archive/` errors and names `archive --restore`. Keeps `rename` semantics for every other path and turns the bypass into a signpost — shape-wise a sibling of `okf-cli-5436`.
 
 Reading 3 is the one I would put first if the PO wants the gap closed at all: it fixes the surprise without touching what R-04/A15 protects.
+
+
+## D02 2026-08-10 — PO decision on Q02: `rename` out of the archive is refused
+
+The PO answered Q02 the same day, verbatim:
+
+> ein rename, dessen Quelle unter _archive/ liegt, verweigert und verweist auf archive --restore
+
+That is reading 3 of the three put forward. Interpretation: a `rename` whose resolved source lies under `_archive/` exits non-zero and names `archive --restore`; every other `rename` path stays untouched. The residue of `okf-cli-gqss` becomes unreachable through `rename` without any pruning logic entering the shared `perform_rename` — so R-04/A15 (`rename` byte-identical, provable by the unchanged `rename` test set) survives intact, which is what ruled out reading 2.
+
+Readings 1 (leave it) and 2 (extend the prune into `cmd_rename`) are hereby closed, not deferred.
+
+**Operationalized as a sixth leaf: `okf-cli-tk33`.** The epic grows from five leaves to six. The guard goes in `cmd_rename`, not in `perform_rename` — `archive --restore` legitimately moves a source out of `_archive/` through that same shared function, so a guard placed there would refuse the very operation the PO is pointing users at. Same placement rule as the three direction guards and the `okf-cli-5436` counterpart check, per SPEC section 2.
+
+No open question remains from Q02.
