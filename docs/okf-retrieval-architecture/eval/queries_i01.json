@@ -1,0 +1,14 @@
+[
+ {"query": "linkes Fenster im Notizprogramm mit Hierarchie meiner Sammlungen, per Ziehen umsortieren", "target": "general-knowledge-wiki/personal-knowledge-mgmt/file-explorer", "source": "i01"},
+ {"query": "Suchlauf gebündelt statt einzeln, jetzt purzelt mein Protokoll durcheinander, ist das schlimm", "target": "agent-memory/loop-inversion-changes-output-order", "source": "i01"},
+ {"query": "neuartige Militärtechnik ohne Atomsprengkopf, die mit Strahlen oder enormem Tempo zerstört", "target": "general-knowledge-wiki/defense-and-geopolitics/hochenergie-systeme-konventionell", "source": "i01"},
+ {"query": "Anleitung einer Software verrät nichts dazu, besser das Programm selbst anschauen statt mutmaßen", "target": "agent-memory/code-over-docs-when-readme-incomplete", "source": "i01"},
+ {"query": "welche Kapitel meiner Vortragsmappe fielen weg, wohin wanderten sie, was fehlt noch", "target": "km-wiki/wissensmanagement-slide-deck-changelog-v2-2", "source": "i01"},
+ {"query": "Womit halte ich offene Punkte als Textnotizen im Projektordner, damit mein Helfer sie liest", "target": "agent-memory/beans-agent-native-issue-tracker", "source": "i01"},
+ {"query": "Regelwerk für den Aufbau meiner Musterbeschreibungen von Präsentationsbausteinen, damit Helfer sie einheitlich bauen", "target": "linear-design-system/about/slide-template-spec", "source": "i01"},
+ {"query": "Vorlage die zeigt wo ein Interessent uns begegnet und wie zufrieden er jeweils ist", "target": "linear-design-system/templates/slides/customer-journey-map", "source": "i01"},
+ {"query": "Womit schicke ich mir Alarme aufs Handy wenn nachts eine Automatisierung scheitert", "target": "general-knowledge-wiki/ai-agentic-coding/pushover", "source": "i01"},
+ {"query": "Welches KI-Werkzeug macht aus meinen Worten bedienbare Oberflächen samt fertigem Quelltext", "target": "ai-wiki/google-stitch", "source": "i01"},
+ {"query": "Wie halte ich die Funktionsübersicht meines Dienstes automatisch aktuell, ohne ihn hochzufahren", "target": "agent-memory/mcp-tool-introspection-via-monkeypatched-recorder", "source": "i01"},
+ {"query": "Kann mein Assistent eine skizzenhafte Ablaufgrafik malen und selbst auf Richtigkeit nachprüfen", "target": "general-knowledge-wiki/ai-agentic-coding/excalidraw", "source": "i01"}
+]

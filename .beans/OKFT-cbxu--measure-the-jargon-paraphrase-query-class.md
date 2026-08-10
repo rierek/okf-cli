@@ -1,11 +1,11 @@
 ---
 # OKFT-cbxu
 title: Measure the jargon-paraphrase query class
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-08-10T12:59:26Z
-updated_at: 2026-08-10T12:59:26Z
+updated_at: 2026-08-10T13:11:08Z
 parent: OKFT-hkze
 ---
 
@@ -27,3 +27,16 @@ In run R1 a user-language paraphrase ("selbstgehosteter Login-Dienst", "geräteg
 
 ## Note
 No fix is in scope. If the class is real, the remedy (fusion parameters, query expansion, or neither) is a separate decision on this evidence.
+
+
+## Result 2026-08-10 — hypothesis REFUTED, real cause found
+
+Twelve targets sampled mechanically before any query existed (`random.seed(20260810)`, title carries a term rare across catalogue titles, body 1200-20000 chars); three independent agents wrote four queries each under an absolute ban on the title terms. Content-word leak against the target document: 1 of 111 words.
+
+The jargon-paraphrase class performs BETTER than the general unbiased paraphrase set, not worse: recall@1 0.583 vs 0.25, MRR 0.694 vs 0.438, zero-hit 0.167 vs 0.175. There is no class defect. Tuning the fusion rule on the R1 anecdote would have altered a healthy mechanism.
+
+The R1 miss has a different cause: `home-lab-wiki/notes/authelia-passkey-authentication` had NO row in `concept_emb`. The semantic arm could not find it because it did not know it. Catalogue-wide 115 of 2589 concepts (4.4 %) had no vector, every one of them added after the one-shot population run, plus 74 orphan rows for deleted files. Carried into its own bean.
+
+After running the producer (166 concepts): the R1 query returns the target at rank 1 instead of not at all; on the I01 set MRR 0.694 -> 0.771 and zero-hit 0.167 -> 0.083. Controlled A/B on the same catalogue state shows the price on the canonical 48-query set: MRR 0.450 -> 0.432, recall@1 0.271 -> 0.250, recall@10 and zero-hit unchanged — noise of about one query at n=48.
+
+Artefacts: `docs/okf-retrieval-architecture/eval/{queries_i01.json,i01_jargon.json,i01_jargon_after.json,shipped_2026-08-10.json}`. Evidence and numbers: `docs/okf-revision/MODUS-B-REPORT.md`, section "Nachtrag 2026-08-10".

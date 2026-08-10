@@ -18,6 +18,7 @@ Experiment-Code und Rohergebnisse der Think-Session. **Wegwerf-Code mit bleibend
 | `queries_real.json` | 8 | vom PO getippt, Zielkonzept bekannt und pfad-verifiziert | 47 % Body-Überlappung (natürlich) |
 | `queries_v2.json` | 40 | von vier Subagenten aus den Konzepten geschrieben, Regel: kein Wort >3 Zeichen im Zieldokument | **0,6 %** |
 | `queries_generated.json` | 50 | qwen3.5:9b, Sperre nur Titel+Tags | **75 %** — verzerrt zugunsten lexikaler Verfahren, nur als Kontrastmenge nutzen |
+| `queries_i01.json` | 12 | von drei Subagenten geschrieben, Ziele vorher mechanisch gesampelt, absolutes Verbot der Titelterme | **0,9 %** Inhaltswörter (11 weitere Treffer sind Funktionswörter) |
 
 Für belastbare Aussagen `queries_v2.json` + `queries_real.json` verwenden. `queries_generated.json` überschätzt jedes lexikale Verfahren massiv (siehe REFERENCES R33).
 
@@ -29,6 +30,7 @@ Für belastbare Aussagen `queries_v2.json` + `queries_real.json` verwenden. `que
 | `gen_queries.py` | v1-Generator (qwen3.5:9b). Historisch — seine Sperre war unvollständig, siehe Leak-Quote oben. |
 | `eval_arms.py` | Misst alle in der DB gefundenen Vektor-Arme plus den heutigen `okf-cli find` gegen einen Query-Satz: Recall@1/5/10, MRR, Zero-Hit, je Teilmenge. |
 | `fts_arm.py` | Lexikaler Arm: FTS5-Index über title/tags/body, BM25 mit Feldgewichten 3/2/1, Varianten plain/porter × mit/ohne Prefix. |
+| `remeasure.py` | Misst den ausgelieferten `okf-cli find` als Subprozess gegen einen Query-Satz — die Zahl, die Nutzer bekommen. |
 | `hybrid_eval.py` | Misst die **Architektur**: lexikal + semantisch unter drei Fusionsregeln (heutige Score-Mischung, RRF, bedingte Übergabe). |
 
 Die `eval.sqlite` mit den 35 800 Vektoren ist **nicht** eingecheckt (~150 MB). Reproduzierbar über `embed_arms.py`; die Voyage-Arme kosten dabei ~$0.71, die bge-Arme ~45 min lokale GPU-Zeit.
@@ -41,5 +43,7 @@ Die `eval.sqlite` mit den 35 800 Vektoren ist **nicht** eingecheckt (~150 MB). R
 | `eval_v2.json` | Sechs-Arm-Matrix gegen v2 + real (unverzerrt) — die maßgebliche Messung |
 | `hybrid_v1c.json` | Fusionsregeln im wörtlichen Regime |
 | `hybrid_v2c.json` | Fusionsregeln im Paraphrase-Regime |
+| `i01_jargon.json` / `i01_jargon_after.json` | Jargon-Paraphrase-Klasse vor und nach dem Embedding-Nachlauf 2026-08-10 |
+| `shipped_2026-08-10.json` | Ausgelieferter Stand gegen v2+real, gemessen 2026-08-10 nach dem Nachlauf |
 
 Interpretation und Schlussfolgerungen: `../DESIGN.md`, Belege einzeln in `../REFERENCES.md` (R20–R43).

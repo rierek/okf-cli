@@ -1,0 +1,266 @@
+{
+  "queries_i01.json": {
+    "n": 12,
+    "recall@1": 0.5833333333333334,
+    "recall@5": 0.8333333333333334,
+    "recall@10": 0.8333333333333334,
+    "mrr": 0.6944444444444445,
+    "zero_hit": 0.16666666666666666,
+    "latency_p50": 0.9642050266265869,
+    "latency_max": 1.249474048614502,
+    "rows": [
+      {
+        "query": "linkes Fenster im Notizprogramm mit Hierarchie meiner Sammlungen, per Ziehen umsortieren",
+        "expected_path": "general-knowledge-wiki/personal-knowledge-mgmt/file-explorer",
+        "rank": 1,
+        "top3": [
+          "general-knowledge-wiki/personal-knowledge-mgmt/file-explorer",
+          "obsidian-vault-mgmt-wiki/grundlagen/file-explorer",
+          "general-knowledge-wiki/personal-knowledge-mgmt/graph-view"
+        ]
+      },
+      {
+        "query": "Suchlauf geb\u00fcndelt statt einzeln, jetzt purzelt mein Protokoll durcheinander, ist das schlimm",
+        "expected_path": "agent-memory/loop-inversion-changes-output-order",
+        "rank": null,
+        "top3": [
+          "agent-memory/catalogue-wide-command-writes-into-foreign-repos",
+          "claude-code-wiki/optimization-lessons-learned/okf-p-init-testlauf-sproutling",
+          "agent-memory/subagent-delegation-hygiene"
+        ]
+      },
+      {
+        "query": "neuartige Milit\u00e4rtechnik ohne Atomsprengkopf, die mit Strahlen oder enormem Tempo zerst\u00f6rt",
+        "expected_path": "general-knowledge-wiki/defense-and-geopolitics/hochenergie-systeme-konventionell",
+        "rank": 1,
+        "top3": [
+          "general-knowledge-wiki/defense-and-geopolitics/hochenergie-systeme-konventionell",
+          "general-knowledge-wiki/defense-and-geopolitics/technologischer-spruenge",
+          "general-knowledge-wiki/defense-and-geopolitics/letales"
+        ]
+      },
+      {
+        "query": "Anleitung einer Software verr\u00e4t nichts dazu, besser das Programm selbst anschauen statt mutma\u00dfen",
+        "expected_path": "agent-memory/code-over-docs-when-readme-incomplete",
+        "rank": 1,
+        "top3": [
+          "agent-memory/code-over-docs-when-readme-incomplete",
+          "claude-code-wiki/sessions-workflow/session-picker-escape-kills-process",
+          "ai-wiki/death-of-mcps-rise-of-clis"
+        ]
+      },
+      {
+        "query": "welche Kapitel meiner Vortragsmappe fielen weg, wohin wanderten sie, was fehlt noch",
+        "expected_path": "km-wiki/wissensmanagement-slide-deck-changelog-v2-2",
+        "rank": 2,
+        "top3": [
+          "km-wiki/bezuege-zwischen-den-lehrbuchkapiteln-herstellen",
+          "km-wiki/wissensmanagement-slide-deck-changelog-v2-2",
+          "agent-memory/draft-in-knowledge-sink-needs-a-warning-head"
+        ]
+      },
+      {
+        "query": "Womit halte ich offene Punkte als Textnotizen im Projektordner, damit mein Helfer sie liest",
+        "expected_path": "agent-memory/beans-agent-native-issue-tracker",
+        "rank": null,
+        "top3": [
+          "obsidian-vault-mgmt-wiki/konventionen-templates/topic-documentation-template",
+          "obsidian-vault-mgmt-wiki/konventionen-templates/template-para-dashboard",
+          "dev-wiki/inbox/todo-ablage-sstd-nsp-userinput"
+        ]
+      },
+      {
+        "query": "Regelwerk f\u00fcr den Aufbau meiner Musterbeschreibungen von Pr\u00e4sentationsbausteinen, damit Helfer sie einheitlich bauen",
+        "expected_path": "linear-design-system/about/slide-template-spec",
+        "rank": 1,
+        "top3": [
+          "linear-design-system/about/slide-template-spec",
+          "linear-design-system/templates/slides/pyramiden-hierarchie",
+          "linear-design-system/templates/slides/puzzle-elemente-synergie"
+        ]
+      },
+      {
+        "query": "Vorlage die zeigt wo ein Interessent uns begegnet und wie zufrieden er jeweils ist",
+        "expected_path": "linear-design-system/templates/slides/customer-journey-map",
+        "rank": 1,
+        "top3": [
+          "linear-design-system/templates/slides/customer-journey-map",
+          "qm-wiki/checklist/kundenzufriedenheit",
+          "qm-wiki/checklist/kundenzufriedenheit-methoden"
+        ]
+      },
+      {
+        "query": "Womit schicke ich mir Alarme aufs Handy wenn nachts eine Automatisierung scheitert",
+        "expected_path": "general-knowledge-wiki/ai-agentic-coding/pushover",
+        "rank": 1,
+        "top3": [
+          "general-knowledge-wiki/ai-agentic-coding/pushover",
+          "general-knowledge-wiki/ai-agentic-coding/telegram",
+          "general-knowledge-wiki/ai-agentic-coding/e-mail"
+        ]
+      },
+      {
+        "query": "Welches KI-Werkzeug macht aus meinen Worten bedienbare Oberfl\u00e4chen samt fertigem Quelltext",
+        "expected_path": "ai-wiki/google-stitch",
+        "rank": 2,
+        "top3": [
+          "general-knowledge-wiki/ai-agentic-coding/stitch",
+          "ai-wiki/google-stitch",
+          "ai-wiki/claude-code-now-destroys-web-design-with-stitch-2"
+        ]
+      },
+      {
+        "query": "Wie halte ich die Funktions\u00fcbersicht meines Dienstes automatisch aktuell, ohne ihn hochzufahren",
+        "expected_path": "agent-memory/mcp-tool-introspection-via-monkeypatched-recorder",
+        "rank": 1,
+        "top3": [
+          "agent-memory/mcp-tool-introspection-via-monkeypatched-recorder",
+          "claude-code-wiki/dependency-graph/layer2-layer3-consumer",
+          "claude-code-wiki/skills-commands/doctor-builtin-nicht-von-skills-aufrufbar"
+        ]
+      },
+      {
+        "query": "Kann mein Assistent eine skizzenhafte Ablaufgrafik malen und selbst auf Richtigkeit nachpr\u00fcfen",
+        "expected_path": "general-knowledge-wiki/ai-agentic-coding/excalidraw",
+        "rank": 3,
+        "top3": [
+          "qm-wiki/qmb-training/knowledge-blocks/ablaufdiagramm",
+          "obsidian-vault-mgmt-wiki/ai-agents-integration/excalidraw-diagram-skill-claude-code-video",
+          "general-knowledge-wiki/ai-agentic-coding/excalidraw"
+        ]
+      }
+    ]
+  },
+  "combined": {
+    "n": 12,
+    "recall@1": 0.5833333333333334,
+    "recall@5": 0.8333333333333334,
+    "recall@10": 0.8333333333333334,
+    "mrr": 0.6875,
+    "zero_hit": 0.16666666666666666,
+    "latency_p50": 0.8829221725463867,
+    "latency_max": 1.2516660690307617,
+    "rows": [
+      {
+        "query": "linkes Fenster im Notizprogramm mit Hierarchie meiner Sammlungen, per Ziehen umsortieren",
+        "expected_path": "general-knowledge-wiki/personal-knowledge-mgmt/file-explorer",
+        "rank": 1,
+        "top3": [
+          "general-knowledge-wiki/personal-knowledge-mgmt/file-explorer",
+          "obsidian-vault-mgmt-wiki/grundlagen/file-explorer",
+          "general-knowledge-wiki/personal-knowledge-mgmt/graph-view"
+        ]
+      },
+      {
+        "query": "Suchlauf geb\u00fcndelt statt einzeln, jetzt purzelt mein Protokoll durcheinander, ist das schlimm",
+        "expected_path": "agent-memory/loop-inversion-changes-output-order",
+        "rank": null,
+        "top3": [
+          "agent-memory/catalogue-wide-command-writes-into-foreign-repos",
+          "claude-code-wiki/optimization-lessons-learned/okf-p-init-testlauf-sproutling",
+          "agent-memory/subagent-delegation-hygiene"
+        ]
+      },
+      {
+        "query": "neuartige Milit\u00e4rtechnik ohne Atomsprengkopf, die mit Strahlen oder enormem Tempo zerst\u00f6rt",
+        "expected_path": "general-knowledge-wiki/defense-and-geopolitics/hochenergie-systeme-konventionell",
+        "rank": 1,
+        "top3": [
+          "general-knowledge-wiki/defense-and-geopolitics/hochenergie-systeme-konventionell",
+          "general-knowledge-wiki/defense-and-geopolitics/technologischer-spruenge",
+          "general-knowledge-wiki/defense-and-geopolitics/letales"
+        ]
+      },
+      {
+        "query": "Anleitung einer Software verr\u00e4t nichts dazu, besser das Programm selbst anschauen statt mutma\u00dfen",
+        "expected_path": "agent-memory/code-over-docs-when-readme-incomplete",
+        "rank": 1,
+        "top3": [
+          "agent-memory/code-over-docs-when-readme-incomplete",
+          "claude-code-wiki/sessions-workflow/session-picker-escape-kills-process",
+          "ai-wiki/death-of-mcps-rise-of-clis"
+        ]
+      },
+      {
+        "query": "welche Kapitel meiner Vortragsmappe fielen weg, wohin wanderten sie, was fehlt noch",
+        "expected_path": "km-wiki/wissensmanagement-slide-deck-changelog-v2-2",
+        "rank": 2,
+        "top3": [
+          "km-wiki/bezuege-zwischen-den-lehrbuchkapiteln-herstellen",
+          "km-wiki/wissensmanagement-slide-deck-changelog-v2-2",
+          "agent-memory/draft-in-knowledge-sink-needs-a-warning-head"
+        ]
+      },
+      {
+        "query": "Womit halte ich offene Punkte als Textnotizen im Projektordner, damit mein Helfer sie liest",
+        "expected_path": "agent-memory/beans-agent-native-issue-tracker",
+        "rank": null,
+        "top3": [
+          "obsidian-vault-mgmt-wiki/konventionen-templates/topic-documentation-template",
+          "obsidian-vault-mgmt-wiki/konventionen-templates/template-para-dashboard",
+          "dev-wiki/inbox/todo-ablage-sstd-nsp-userinput"
+        ]
+      },
+      {
+        "query": "Regelwerk f\u00fcr den Aufbau meiner Musterbeschreibungen von Pr\u00e4sentationsbausteinen, damit Helfer sie einheitlich bauen",
+        "expected_path": "linear-design-system/about/slide-template-spec",
+        "rank": 1,
+        "top3": [
+          "linear-design-system/about/slide-template-spec",
+          "linear-design-system/templates/slides/pyramiden-hierarchie",
+          "linear-design-system/templates/slides/puzzle-elemente-synergie"
+        ]
+      },
+      {
+        "query": "Vorlage die zeigt wo ein Interessent uns begegnet und wie zufrieden er jeweils ist",
+        "expected_path": "linear-design-system/templates/slides/customer-journey-map",
+        "rank": 1,
+        "top3": [
+          "linear-design-system/templates/slides/customer-journey-map",
+          "qm-wiki/checklist/kundenzufriedenheit",
+          "qm-wiki/checklist/kundenzufriedenheit-methoden"
+        ]
+      },
+      {
+        "query": "Womit schicke ich mir Alarme aufs Handy wenn nachts eine Automatisierung scheitert",
+        "expected_path": "general-knowledge-wiki/ai-agentic-coding/pushover",
+        "rank": 1,
+        "top3": [
+          "general-knowledge-wiki/ai-agentic-coding/pushover",
+          "general-knowledge-wiki/ai-agentic-coding/telegram",
+          "general-knowledge-wiki/ai-agentic-coding/e-mail"
+        ]
+      },
+      {
+        "query": "Welches KI-Werkzeug macht aus meinen Worten bedienbare Oberfl\u00e4chen samt fertigem Quelltext",
+        "expected_path": "ai-wiki/google-stitch",
+        "rank": 2,
+        "top3": [
+          "general-knowledge-wiki/ai-agentic-coding/stitch",
+          "ai-wiki/google-stitch",
+          "ai-wiki/claude-code-now-destroys-web-design-with-stitch-2"
+        ]
+      },
+      {
+        "query": "Wie halte ich die Funktions\u00fcbersicht meines Dienstes automatisch aktuell, ohne ihn hochzufahren",
+        "expected_path": "agent-memory/mcp-tool-introspection-via-monkeypatched-recorder",
+        "rank": 1,
+        "top3": [
+          "agent-memory/mcp-tool-introspection-via-monkeypatched-recorder",
+          "claude-code-wiki/dependency-graph/layer2-layer3-consumer",
+          "claude-code-wiki/skills-commands/doctor-builtin-nicht-von-skills-aufrufbar"
+        ]
+      },
+      {
+        "query": "Kann mein Assistent eine skizzenhafte Ablaufgrafik malen und selbst auf Richtigkeit nachpr\u00fcfen",
+        "expected_path": "general-knowledge-wiki/ai-agentic-coding/excalidraw",
+        "rank": 4,
+        "top3": [
+          "qm-wiki/qmb-training/knowledge-blocks/ablaufdiagramm",
+          "obsidian-vault-mgmt-wiki/ai-agents-integration/excalidraw-diagram-skill-claude-code-video",
+          "linear-design-system/templates/slides/zahnrad-system-interaktion"
+        ]
+      }
+    ]
+  }
+}
