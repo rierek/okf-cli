@@ -5,7 +5,8 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-08-09T19:09:25Z
-updated_at: 2026-08-09T19:09:25Z
+updated_at: 2026-08-13T11:07:18Z
+parent: OKFT-wmbu
 ---
 
 Measured in lean-stack/docs/okf-knowledge-lifecycle/taxonomy-and-lifecycle (R09, reproducible via `just okf-archive-exclusion`).
