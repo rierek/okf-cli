@@ -1,11 +1,11 @@
 ---
 # OKFT-0k55
 title: Handle BrokenPipeError in cmd_find
-status: todo
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-08-13T11:07:31Z
-updated_at: 2026-08-13T11:25:07Z
+updated_at: 2026-08-13T12:38:29Z
 parent: OKFT-wmbu
 ---
 
