@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-08-13T11:07:04Z
-updated_at: 2026-08-13T11:17:27Z
+updated_at: 2026-08-13T11:22:10Z
 ---
 
 Root cause behind OKFT-xori and OKFT-oe8t: the catalogue has no notion of a topic folder. is_bundle_dir (okf-cli.py:68-69) is a two-clause name filter - anything without a leading dot or underscore is a bundle - and it never opens the directory. Correct at the catalogue root, where every top-level directory really is a bundle; wrong for every directory but one in a repo docs root.
@@ -30,3 +30,12 @@ Runner metrics in the same output: `recall_at_1 0.000`, `recall_at_5 0.000`, `mr
 These three tests measure against the live catalogue `~/Obsidian/Knowledge-Catalogue` (the substrate OKFT-5c2c wants to remove). They are **independent of OKFT-n8xz** by construction: the catalogue `.okf.toml` carries no `bundle` key (verified 2026-08-13; only `wikilink_checked_bundles`), so the declaration rule from D16 falls back to the existing name filter there and the catalogue corpus is unchanged. Whoever lands OKFT-n8xz must show these three still fail identically and no fourth failure joins them.
 
 Do not attribute these three to any commit of this epic.
+
+
+## Q01 — should the FTS rebuild hook cover repo-local docs bundles? (2026-08-13, open, PO)
+
+OKFT-iaxj D03 (PO, 2026-08-03) scopes the `SessionStart` rebuild hooks to `kc_root` and explicitly excludes repo-local `docs/*-okf` bundles. Verified 2026-08-13: `lean-stack/docs/.fts/fts.sqlite` therefore has no automatic trigger of any kind — not via hook, justfile, git-hook, cron or launchd.
+
+That exclusion is what let the index behind this epic's own measurement go 15 days stale (R37), so every number in R33-R37 was taken against a corpus that understated the current state. The defect is real regardless, but the measurement was distorted by a policy decision, not by an accident.
+
+Question: extend the hooks to repo-local docs roots, or leave D03 standing and accept a manual rebuild after corpus-affecting changes? Not blocking OKFT-pwap — that task rebuilds once by hand either way.
