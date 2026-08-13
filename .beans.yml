@@ -2,7 +2,7 @@
 # See: https://github.com/hmans/beans
 beans:
     # Directory where bean files are stored
-    path: .beans
+    path: ../.beans
     # Prefix for bean IDs (e.g., "myproject-abc1")
     prefix: OKFT-
     # Length of the random ID suffix
