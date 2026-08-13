@@ -12,7 +12,6 @@
 |---|---|---|
 | `cli/` | `okf-cli.py`, `test_okf_cli.py` | Python |
 | `mcp/` | `okf_mcp.py` | Python |
-| `plugin/` | Skeleton (Zweck offen) | TypeScript (geplant) |
 
 ## Pläne
 - `plans/<beans-id>-<slug>/` — operationalisierte Pläne (writing-plans).

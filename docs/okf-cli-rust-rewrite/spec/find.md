@@ -1,6 +1,6 @@
 ---
 type: Spec
-title: "find — EARS-Requirements FIND-1..FIND-26"
+title: "find — EARS-Requirements FIND-1..FIND-27"
 description: "Hybride Suche: lexikaler FTS5/BM25-Arm und optionaler semantischer Arm, conditional Handover statt Blending, eigene Score-Skalen je Arm, definierte Degradation je Ausfall."
 tags:
   - okf-cli
@@ -9,7 +9,7 @@ tags:
   - spec
 ---
 
-# find — EARS-Requirements FIND-1..FIND-26
+# find — EARS-Requirements FIND-1..FIND-27
 
 `find` beantwortet eine Ranking-Frage über den ganzen Store (oder einen Scope darin): welche Concepts passen zur Anfrage, in welcher Reihenfolge. Zwei Arme tragen die Antwort — ein lexikaler (FTS5/BM25, mit Substring-Scan als Fallback) und ein semantischer (Embeddings) — und genau ein Arm übernimmt pro Anfrage die Rangfolge; sie werden nie score-gewichtet gemischt. Der semantische Arm hängt an einem Schalter (D05) und ist damit optional; sein Ausbleiben — ob abgeschaltet oder degradiert — darf die lexikalische Antwort nie verhindern.
 
@@ -24,6 +24,7 @@ Die Querschnitts-Regeln gelten unverändert; hier steht nur, was `find` darüber
 | FIND-1 | THE okf binary SHALL rank a query with a lexical arm that reads the FTS5 index built by `build-index`. |
 | FIND-2 | THE okf binary SHALL weight a lexical hit's title contribution above its tag contribution, and its tag contribution above its body contribution. |
 | FIND-3 | WHERE the switch governing the semantic arm is inactive, THE okf binary SHALL rank every query with the lexical arm alone. |
+| FIND-27 | WHERE the semantic-arm switch is not explicitly set, THE okf binary SHALL activate it under the `catalogue` profile and deactivate it under the `okf` profile. |
 
 ### Rankverfahren: Handover statt Blend
 

@@ -38,6 +38,7 @@ Die Querschnitts-Regeln gelten unverändert; hier steht nur, was `check` darübe
 | CHECK-8 | WHERE the active profile leaves a rule disabled, THE okf binary SHALL evaluate no file against that rule. |
 | CHECK-9 | WHERE the `okf` profile is active, THE okf binary SHALL evaluate the three clauses of OKF v0.1 §9 and no further rule. |
 | CHECK-10 | THE okf binary SHALL report every rule it evaluated and every rule it left disabled. |
+| CHECK-21 | IF `--profile okf` is combined with an extension-switch argument, an extension-switch MCP parameter or an `.okf.toml` extension-switch override, THEN THE okf binary SHALL exit 2 and SHALL name the conflicting input. |
 
 ### Severity und Exit
 

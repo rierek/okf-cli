@@ -3,8 +3,9 @@
 title: 'Confirm D08: --summary as the I08 resolution'
 status: todo
 type: task
+priority: normal
 created_at: 2026-08-09T20:44:56Z
-updated_at: 2026-08-09T20:44:56Z
+updated_at: 2026-08-11T19:21:40Z
 parent: okf-cli-03o1
 ---
 
@@ -13,3 +14,6 @@ parent: okf-cli-03o1
 I08 requires the split but names no flag, and an unnamed flag makes INDEX-7 unauditable as an audit cell — so the name stands in the spec rather than being left blank. It is recorded as D08 with status yellow in `docs/okf-cli-rust-rewrite/DECISIONS.md`, explicitly marked as not PO-confirmed.
 
 Needs a yes or a different name. Not an agent decision.
+
+## PO decision 2026-08-11
+D08 is confirmed: `index <bundle> --summary` renders the compact bundle summary; the unflagged bundle invocation renders the full view.

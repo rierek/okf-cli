@@ -1,6 +1,6 @@
 ---
 type: Spec
-title: "Querschnitt — EARS-Requirements COM-1..COM-45"
+title: "Querschnitt — EARS-Requirements COM-1..COM-51"
 description: "Store-Erkennung, Profile, Streams, Exit-Codes, JSON-Envelope, Mutations-Polarität, Flag-Vokabular und Selbstdokumentation — die Regeln, die für jedes Kommando gelten."
 tags:
   - okf-cli
@@ -9,7 +9,7 @@ tags:
   - spec
 ---
 
-# Querschnitt — EARS-Requirements COM-1..COM-45
+# Querschnitt — EARS-Requirements COM-1..COM-51
 
 Diese Regeln gelten für **jedes** Kommando. Eine Kommando-Datei wiederholt sie nicht, sondern verweist auf die COM-Nummer und spezifiziert nur, was bei ihr davon abweicht oder darüber hinausgeht.
 
@@ -34,17 +34,23 @@ Systemname in allen Requirements ist `THE okf binary`.
 
 | ID | EARS-Requirement |
 |----|------------------|
-| COM-9 | THE okf binary SHALL carry every extension over OKF v0.1 as a named switch that is readable and settable in `.okf.toml`. |
-| COM-10 | THE okf binary SHALL provide a profile named `okf` that enables no extension beyond OKF v0.1. |
-| COM-11 | THE okf binary SHALL provide a profile named `catalogue` that enables the extension set this catalogue relies on. |
+| COM-9 | THE okf binary SHALL expose in `.okf.toml` the Boolean extension switches `type_registry`, `tag_registry`, `english_keys`, `catalogue_root_links`, `wikilink_resolution`, `tags_block_form`, `xml_tag_placeholders`, `portable_filenames`, `asset_placement`, `entry_file_description` and `semantic_retrieval`. |
+| COM-10 | THE okf binary SHALL provide a profile named `okf` that sets every COM-9 switch to `false`. |
+| COM-11 | THE okf binary SHALL provide a profile named `catalogue` that sets every COM-9 switch to `true`. |
 | COM-12 | WHERE `.okf.toml` names a profile, THE okf binary SHALL apply that profile as the baseline for every switch the file leaves unset. |
 | COM-13 | WHERE `.okf.toml` sets a switch, THE okf binary SHALL honour that switch over the profile baseline. |
 | COM-14 | WHERE the store is a bundle and `.okf.toml` names no profile, THE okf binary SHALL apply the `okf` profile. |
 | COM-15 | WHERE the store is a catalogue and `.okf.toml` names no profile, THE okf binary SHALL apply the `catalogue` profile. |
 | COM-16 | IF `.okf.toml` names an unknown profile or an unknown switch, THEN THE okf binary SHALL exit 2 and SHALL list the names it accepts. |
-| COM-17 | WHERE a profile is named on the command line, THE okf binary SHALL apply it in place of the profile from `.okf.toml`. |
+| COM-17 | WHERE `--profile <okf|catalogue>` is given, THE okf binary SHALL apply it in place of the profile from `.okf.toml`. |
 | COM-43 | WHERE a switch is disabled and a command corrects what that switch governs, THE okf binary SHALL correct nothing under that rule. |
 | COM-44 | WHERE a command corrects nothing under a rule because the switch of that rule is disabled, THE okf binary SHALL announce the skip on stderr. |
+| COM-46 | WHERE the store is a bundle, THE okf binary SHALL resolve every path or scope operand relative to the store root and SHALL NOT consume a leading segment as a bundle selector. |
+| COM-47 | WHERE the store is a catalogue, THE okf binary SHALL resolve every path or scope operand relative to the store root and SHALL treat its first segment as the bundle selector. |
+| COM-48 | WHERE an invocation supplies an extension-switch argument, THE okf binary SHALL apply it over the `.okf.toml` switch value, the selected profile and the built-in default. |
+| COM-49 | WHERE an MCP tool parameter supplies an extension-switch value, THE okf binary SHALL apply it with the same precedence as an extension-switch argument. |
+| COM-50 | WHERE an MCP tool parameter `profile` is given, THE okf binary SHALL apply it with the same precedence as `--profile`. |
+| COM-51 | WHERE `wikilink_checked_bundles` is absent or empty, THE okf binary SHALL evaluate no bundle for the `wikilink_resolution` rule; WHERE it lists bundle names, THE okf binary SHALL evaluate only those bundles. |
 
 ### Streams und Diagnose
 
@@ -143,8 +149,8 @@ Selbstdokumentation: `_sub()` (`cli/okf-cli.py:4031`) und `render_command_overvi
 
 ## Offene Fragen
 
-COM-9 verlangt eine benannte Menge von Schaltern; welche das genau sind und wie sie auf die Profile `okf` und `catalogue` verteilt werden, ist Task T06 aus [DECISIONS.md](../DECISIONS.md). Bis T06 entschieden ist, nennt keine Kommando-Datei einen konkreten Schalternamen.
+COM-9 through COM-17 and COM-50/COM-51 record the T06 decisions D15 through D20. Remaining command-specific questions in this SPEC are not profile-schema decisions.
 
 COM-35 vergibt `-T` für `--tag`, weil `-t` an `--type` geht. Die Zuordnung ist willkürlich und hält nur, solange kein Kommando beide gleichzeitig anders gewichtet.
 
-COM-17 setzt ein Kommandozeilen-Flag für das Profil voraus, ohne es zu benennen. Der Name gehört zu T06.
+COM-17 names `--profile <okf|catalogue>` under D18.

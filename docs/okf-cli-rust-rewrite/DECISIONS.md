@@ -1,14 +1,14 @@
 ---
 type: ADR
-title: "Rust-Rewrite — Scope-Entscheidungen D05-D07"
-description: "Erweiterungen werden Config-Profile statt Plugins, das Binary kennt Bundle und Catalogue als Store-Modelle, MCP bleibt stdio-only in v1."
+title: "Rust-Rewrite — Scope- und Konfigurationsentscheidungen D05-D14"
+description: "Erweiterungen werden über Profile statt Plugins geschaltet; das Binary unterstützt Bundle und Catalogue, MCP bleibt stdio-only, und Profile steuern Portabilität sowie Retrieval."
 tags:
   - okf-cli
   - rust
   - architecture
 ---
 
-# Rust-Rewrite — Scope-Entscheidungen D05-D07
+# Rust-Rewrite — Scope- und Konfigurationsentscheidungen D05-D14
 
 Grilling-Session 2026-08-09, Fortsetzung des Nummernraums aus [AUDIT.md](./AUDIT.md) (D01-D04 dort vergeben). Löst die dortigen Q02 und Q03 auf.
 
@@ -19,7 +19,19 @@ Grilling-Session 2026-08-09, Fortsetzung des Nummernraums aus [AUDIT.md](./AUDIT
 | D05 | Erweiterungen gegenüber OKF v0.1 werden über ein **Config-Profil in `.okf.toml`** geschaltet, nicht über ein Plugin-System. `plugin/` entfällt. | 🟢 | Die Erweiterungen sind eine bekannte, endliche Menge und gehören fest ins Binary. Ein echtes Plugin-System hieße in Rust dynamisch geladener Code — kein stabiles ABI, Cross-Compilation-Bruch, und es zerstört die Single-Binary-Distribution, die das Ziel des Rewrites ist. Der Mechanismus ist im eigenen Code bereits erprobt (`wikilink_checked_bundles`, bundle-granulares Opt-in). Nutzer entscheiden selbst, was sie aktivieren. |
 | D06 | Das Binary kennt **beide Store-Modelle**. Erkennung über die Umkehrung der Beweislast: **Marker gefunden → Catalogue, kein Marker → Bundle.** Marker bleibt `.okf.toml` bzw. `SPEC.md`+`TYPES.md`. | 🟢 | Ein verteilbares Binary, das nur ein privates Catalogue-Layout kennt, löst das Distributionsproblem der Runtime und behält das des Datenmodells. OKF §2 nennt das Bundle „the unit of distribution". Die Umkehrung ist robust, weil die Norm-Form markerlos bleibt und die Erweiterung sich ausweist. |
 | D07 | Der MCP-Server spricht in v1 **ausschließlich stdio** (`okf mcp serve`). | 🟢 | Der Store ist ein lokales Dateisystem-Artefakt mit Symlinks in Projekt-Repos, die über HTTP ins Leere zeigen; Synchronisation ist git, nicht HTTP. Bei `rmcp` ist der Transport von den Tool-Definitionen getrennt (`serve(transport)`), ein HTTP-Transport später ist additiv statt Umbau. |
-| D08 | Die `--full`-Dualität von `index` (I08) wird aufgelöst, indem die Bundle-Variante das eigene Flag **`--summary`** bekommt. | 🟡 | Vorschlag aus dem Fan-out, **nicht vom PO bestätigt**. I08 verlangt die Auftrennung, benennt aber kein Flag; ein unbenanntes Flag macht INDEX-7 als Audit-Zelle unprüfbar. Der Name ist die einzige erfundene Bezeichnung in 26 Dateien und steht hier, damit sie sichtbar ist statt in einer Requirement-Zeile zu verschwinden. |
+| D08 | Die `--full`-Dualität von `index` (I08) wird aufgelöst, indem die Bundle-Variante das eigene Flag **`--summary`** bekommt. Ohne Flag zeigt `index <bundle>` die vollständige Bundle-Ansicht. | 🟢 | PO-Bestätigung am 2026-08-11. `--summary` beschreibt die reduzierte Ausgabe direkt und begrenzt die Umschaltung auf die Bundle-Variante. |
+| D09 | `.okf.toml` kennt die Profile **`okf`** und **`catalogue`**; einzelne Erweiterungen dürfen die Profil-Defaults überschreiben. | 🟢 | `okf` schafft einen reproduzierbaren Portabilitätsmodus, `catalogue` den produktiven Knowledge-Catalogue-Modus; Overrides erlauben die schrittweise Migration ohne weitere Binaries. |
+| D10 | Im Bundle-Modus sind Pfadargumente und `--scope` bundle-wurzelrelativ und dürfen kein Bundle-Präfix enthalten; im Catalogue-Modus bleiben sie catalogue-wurzelrelativ mit Bundle-Namen. | 🟢 | Ein standalone Bundle kennt keinen späteren Mount-Namen; die beiden Adressformen bleiben eindeutig. |
+| D11 | `check --profile okf` prüft ausschließlich OKF-v0.1-Regeln und ignoriert Catalogue-Erweiterungen. | 🟢 | Nur ein isolierter Regelraum macht den Exit-Code zu einem belastbaren Portabilitätsnachweis. |
+| D12 | Im Profil `catalogue` ist die semantische Suche standardmäßig aktiv, im Profil `okf` deaktiviert; ein Einzel-Override bleibt möglich. | 🟢 | Der produktive Catalogue behält bessere Retrieval-Qualität, während portable Bundles keine semantische Infrastruktur voraussetzen. |
+| D13 | Konfigurationspräzedenz lautet: explizites CLI-/MCP-Argument → `.okf.toml`-Einzel-Override → Profil → Built-in-Default. | 🟢 | Diagnosen und Automatisierung können gezielt vom Store-Default abweichen, ohne die Konfiguration umzuschreiben. |
+| D14 | `check --profile okf` ist ein harter Gate-Modus: Erweiterungsflags und Einzel-Overrides sind ungültige Eingabe und führen zum Usage-Fehler. | 🟢 | Ein still ignoriertes Flag wäre irreführend; ein wirksames Flag würde den Portabilitätsnachweis entwerten. |
+| D15 | `.okf.toml` verwendet `profile` plus einen `[extensions]`-Block mit den elf benannten Boolean-Schaltern `type_registry`, `tag_registry`, `english_keys`, `catalogue_root_links`, `wikilink_resolution`, `tags_block_form`, `xml_tag_placeholders`, `portable_filenames`, `asset_placement`, `entry_file_description` und `semantic_retrieval`. | 🟢 | Namen beschreiben die Regel statt ihre Implementierung und erlauben Schema-Validierung sowie einzelne Overrides. |
+| D16 | `wikilink_resolution` bleibt ein Bundle-Opt-in: fehlende oder leere Positivliste prüft kein Bundle, nur gelistete Bundles werden geprüft. | 🟢 | Der schrittweise Crosslink-Cleanup bleibt kompatibel mit `wikilink_checked_bundles` und erzeugt keine unerwarteten Warnungsfluten. |
+| D17 | `wikilink_checked_bundles` bleibt ein Top-level-Array in `.okf.toml`; `[extensions]` enthält nur Boolean-Overrides. | 🟢 | Die bestehende Konfigurationsform bleibt erhalten, ohne eine Liste als Boolean zu vermischen. |
+| D18 | Die globale Profilauswahl lautet `--profile <okf|catalogue>`; MCP führt den äquivalenten Parameter `profile`. | 🟢 | Flag und Config-Schlüssel stimmen überein, gelten für alle Kommandos und bleiben erweiterbar. |
+| D19 | Das Profil `okf` setzt alle elf Extensions auf `false`; `catalogue` setzt sie auf `true`. `wikilink_resolution` prüft trotzdem nur die D16-Positivliste. | 🟢 | Der produktive Modus ist vollständig und eindeutig, ohne den sicheren Wikilink-Rollout zu umgehen. |
+| D20 | Der semantische Arm heißt in `[extensions]` `semantic_retrieval`. | 🟢 | Der Name beschreibt die Capability statt des heutigen Handover-Algorithmus und erfüllt D12 sowie FIND-3/FIND-27 mit einem expliziten Override. |
 
 ## Verworfene Alternativen
 

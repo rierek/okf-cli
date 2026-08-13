@@ -66,10 +66,9 @@ Today `cmd_index()` carries no existence gate on `args.bundle` — a typo prints
 
 **INDEX-4 wiederholt COM-23 absichtlich.** B01 benennt `index` als das Kommando, an dem die fehlende Existenzprüfung tatsächlich beobachtet und gefixt wurde — derselbe Grund, aus dem CHECK-13/CHECK-14 COM-21/COM-22 wiederholen: der Vertrag wird an der Stelle geprüft, an der der reale Bug saß, nicht nur querschnittlich behauptet.
 
-**Die Flag-Namen `--full` und `--summary` sind eine Entscheidung dieser SPEC, keine Vorgabe aus AUDIT/DECISIONS.** I08 verlangt nur die Trennung in zwei benannte Flags, nicht deren Namen. `--full` bleibt für die Katalog-TOC-Anreicherung (heutige Bedeutung ohne Bundle-Argument), `--summary` ist neu für die heutige Bundle-Argument-Bedeutung.
+**Die Flag-Namen `--full` und `--summary` sind durch D08 entschieden.** `--full` bleibt für die Katalog-TOC-Anreicherung ohne Bundle-Argument; `--summary` ist die explizite kompakte Ansicht mit Bundle-Argument, während dessen Default die vollständige Bundle-Ansicht bleibt.
 
 ## Offene Fragen
 
 Ob das Bundle-Positional künftig auch `<bundle>/<subdir>` adressiert, wie `list`s und `recent`s Target das tun, ist nicht entschieden. Diese SPEC hält an der heutigen bundle-einzigen Granularität fest (`cli/okf-cli.py:4217-4218` kennt keine Subdir-Form).
 
-Der Flag-Name `--summary` (INDEX-7) ist mein Vorschlag zur Auflösung von I08 und keine protokollierte Entscheidung — offen für Revision, falls ein anderer Name bevorzugt wird.
