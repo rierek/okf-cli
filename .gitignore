@@ -1,3 +1,4 @@
 docs/_free-notes/
 docs/okf-tools-okf-inbox/
 __pycache__/
+.worktrees/
