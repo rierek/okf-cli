@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-08-13T11:07:04Z
-updated_at: 2026-08-13T11:22:10Z
+updated_at: 2026-08-13T11:25:24Z
 ---
 
 Root cause behind OKFT-xori and OKFT-oe8t: the catalogue has no notion of a topic folder. is_bundle_dir (okf-cli.py:68-69) is a two-clause name filter - anything without a leading dot or underscore is a bundle - and it never opens the directory. Correct at the catalogue root, where every top-level directory really is a bundle; wrong for every directory but one in a repo docs root.
@@ -39,3 +39,30 @@ OKFT-iaxj D03 (PO, 2026-08-03) scopes the `SessionStart` rebuild hooks to `kc_ro
 That exclusion is what let the index behind this epic's own measurement go 15 days stale (R37), so every number in R33-R37 was taken against a corpus that understated the current state. The defect is real regardless, but the measurement was distorted by a policy decision, not by an accident.
 
 Question: extend the hooks to repo-local docs roots, or leave D03 standing and accept a manual rebuild after corpus-affecting changes? Not blocking OKFT-pwap — that task rebuilds once by hand either way.
+
+
+## Gate B 2026-08-13 — verdict OPERATIONALIZATION_GAPS, resolved before dispatch
+
+`ce-verify-operationalization` checked the six child beans against D16/D17 and R33-R42, and re-verified every cited line number against `cli/okf-cli.py`. Textual fidelity to the source was high; the gaps were in the source and in the bean graph, not in the transcription.
+
+Two blocking findings, both resolved by the supervisor before any implementer ran:
+
+- **B01 — the source's own call-site census was incomplete.** Lines 745, 793 and 3326 feed the index/search corpus and appeared in neither of OKFT-n8xz's lists. Each is the `_archive/` sibling of a call site already on the positive list. Resolved in OKFT-n8xz D01: all three join the positive list, which is now 740, 745, 785, 793, 851, 3312, 3317, 3326. Rationale there.
+- **B02 — the blocked_by edge was circular.** OKFT-n8xz was blocked by OKFT-xori, whose only possible resolution is OKFT-n8xz landing. Edge reversed: OKFT-xori is now blocked_by OKFT-n8xz and closes once the fix is proven.
+
+Non-blocking findings, all resolved:
+
+- Negative-list line `560` is off by one; the token sits on 561. Corrected in OKFT-n8xz.
+- OKFT-oe8t cited `iter_all_md` at :2582; it is at :2883, pruning clause :2888-2890. ERRATA appended there.
+- OKFT-xori still read as an open question with four candidate mechanisms that D16 explicitly rejects. Verdict appended so a fresh agent cannot implement a rejected candidate.
+- OKFT-0k55 named the defect but no target behaviour. Acceptance and D01 (exit 0) appended.
+- OKFT-pwap bundled a design question with a mechanical step. The design half turned out to be already settled by OKFT-iaxj D03; research prelude appended there, remainder raised as Q01.
+- This bean cited "R33-R42" as full rationale. R41 (Go-vs-Python latency) and R42 (stdlib dependencies) belong to D21, the Go-rewrite question, not to D16/D17. **Read the citation as R33-R40.**
+
+### Cross-repo note for the PO
+
+B01 is not only a bean defect — `lean-stack/docs/aca_capability-mcp/REFERENCES.md:97` (R40) and `DECISIONS.md:32` (D17) carry the same incomplete census. The think session that owns those files should know that its call-site enumeration missed the three archive branches.
+
+## Q02 — exit status on a broken pipe (2026-08-13, open, PO)
+
+OKFT-0k55 gets exit **0** on a clean early close, so `okf-cli find x | head` does not trip `set -o pipefail`. The competing convention is 141 (128+SIGPIPE), which the CLI-program conformance spec drafted in lean-stack D20 may prefer. Not blocking — one-line change if D20 says otherwise.
