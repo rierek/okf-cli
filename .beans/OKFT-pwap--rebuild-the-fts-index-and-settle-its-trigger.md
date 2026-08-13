@@ -1,11 +1,11 @@
 ---
 # OKFT-pwap
 title: Rebuild the FTS index and settle its trigger
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-08-13T11:07:31Z
-updated_at: 2026-08-13T11:22:02Z
+updated_at: 2026-08-13T13:02:24Z
 parent: OKFT-wmbu
 blocked_by:
     - OKFT-n8xz

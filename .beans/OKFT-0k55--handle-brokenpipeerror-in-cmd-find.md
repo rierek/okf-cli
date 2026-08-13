@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: normal
 created_at: 2026-08-13T11:07:31Z
-updated_at: 2026-08-13T12:52:11Z
+updated_at: 2026-08-13T13:02:24Z
 parent: OKFT-wmbu
 ---
 
@@ -158,3 +158,25 @@ wikilinks  returncode=0  traceback=False  exception-ignored=False
 ```
 
 `list` and `toc` returned non-zero, but for reasons unrelated to broken-pipe handling (their own ordinary argument/state validation, not investigated further here — out of this bean's scope); neither showed a traceback or shutdown noise, which is the only thing this bean's fix is responsible for. Any exit-status *behaviour* review for those commands (D01/Q02-style) would be new scope, not a gap in this fix.
+
+
+## Review 2026-08-13 — APPROVED (ce-specs-reviewer)
+
+All three hard criteria verified with real pipes, both cases:
+
+- **Large answer** (write attempt mid-run): `find zqxbig --limit 300` into `head -n 1` → exit 0, no traceback, no shutdown noise.
+- **Buffer-small answer** (failure only at the final flush): `find zqxtiny` into an immediately-exiting consumer → exit 0, clean.
+
+**The flush explanation holds.** Mutation 1 — removing only `sys.stdout.flush()` — turns exactly the two `BrokenPipeOnFindTinyAnswer` tests red (`AssertionError: 120 != 0`, plus `Exception ignored while flushing sys.stdout`) while all three `BrokenPipeOnFind` tests stay green. Mutation 2 — removing the whole try/except — turns all five red including the original traceback. Two mutations, two different test sets: the coverage is not half, and the tiny-answer class earns its place. Both reverted byte-identically (`md5 08c3cf4c0c9bdc92c45005df9f96dac1` before and after).
+
+**The blast radius is acceptable.** Regular error paths are untouched: `check --strict` with violations → exit 1, `check` with warnings only → exit 0, missing root → exit 1. The two non-stdout write paths that could in principle raise `BrokenPipeError` are already covered upstream, not by this handler: `subprocess.communicate()` swallows it internally when writing to a dead consumer's stdin (verified with a 10 MB `input=`), and the Voyage `urllib` POST sits inside `except Exception` at both call sites (:1503-1509, :1550-1564). The `git subprocess.run` calls (:2685, :2709, :2847, :4373, :4393) all use `capture_output=True` without `input=` and never write into a foreign pipe.
+
+**The `list`/`toc` exit codes are pre-existing and unrelated**, and the reviewer named the causes the implementer had left open: `list` without `--type`/`--tag` exits 1 through its own validation (:665-668), `toc` without a path exits 2 through argparse (:5003).
+
+`just test`: `Ran 701 tests in 27.078s`, `FAILED (failures=3)` — the three baseline failures, no fourth.
+
+### I01 (non-blocking) — stderr is not covered
+
+The handler protects stdout (fd1) only. Under `cmd 2>&1 | head` with enough stderr volume the exit-0 guarantee breaks: reproduced 5/5 with 5000 stderr lines, `returncode: 120`. It does not fire with today's `cmd_find`, which writes one or two short `note:` lines — the condition is volume-dependent and currently latent.
+
+Outside this bean's three acceptance criteria, which name `find <query> | head` and not the merged stream. But criterion 1 says "no traceback on stdout **or stderr**", and the architecture only holds that for the unmerged case. Filed as OKFT-az0k.
