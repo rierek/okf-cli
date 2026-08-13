@@ -1,11 +1,11 @@
 ---
 # OKFT-oe8t
 title: iter_concepts does not prune _-prefixed dirs
-status: in-progress
+status: completed
 type: bug
 priority: normal
 created_at: 2026-08-09T19:09:25Z
-updated_at: 2026-08-13T12:10:58Z
+updated_at: 2026-08-13T12:18:37Z
 parent: OKFT-wmbu
 ---
 
@@ -25,3 +25,169 @@ Note the outward coupling: fixing this makes `just okf-archive-exclusion` in lea
 The body above cites `iter_all_md` at `okf-cli.py:2582`. That is wrong: line 2582 holds the unrelated `render_recent_lines`. `iter_all_md` is defined at **okf-cli.py:2883**, and the pruning clause this bean compares against (`not d.startswith("_")`) sits at **2888-2890**. The function name is correct and greppable; only the line reference was off. Verified 2026-08-13 by ce-verify-operationalization.
 
 `iter_concepts` at :81 is correct as written.
+
+
+## Summary
+
+`iter_concepts` (okf-cli.py:117, this repo's line drifted from the bean's
+:81 since OKFT-n8xz inserted `list_indexable_bundles` above it) now prunes
+`_`-prefixed staging dirs, matching `iter_all_md`'s existing convention
+(:2925, clause :2930-2932, itself drifted from the bean's :2883/2888-2890
+by an unrelated insertion — confirmed both names greppable and correct,
+only line numbers moved).
+
+### D01 — call-site census and decision: shared-function fix, no opt-in
+
+Full census of `iter_concepts(` call sites in cli/okf-cli.py (grep, all 19,
+excluding the `def` line and two comment mentions at :1238/:3355):
+
+| line | caller function | purpose |
+|------|------------------|---------|
+| 204 | `all_tags` | tag registry usage counts |
+| 267 | `cmd_merge_tags` | frontmatter tag mutation |
+| 304 | `cmd_remove_tags` | frontmatter tag mutation |
+| 357 | `cmd_normalize_tags` | frontmatter tag mutation |
+| 522 | `bundle_types_and_tags` | `index --full` types/tags summary |
+| 533 | `render_bundle_line` | `prime` bundle listing (count) |
+| 548 | `render_bundle_block` | `index --full` block |
+| 575 | `_bundle_summary_json` | `index --json` summary |
+| 584 | `_concepts_json` | `index --json` per-bundle concepts |
+| 611 | `cmd_index` | `index <bundle>` synthesized TOC |
+| 643 | `cmd_list` | `list --type/--tag` |
+| 761 | `build_fts_index` | FTS index build |
+| 822, 830 | `_fts_index_stale` | FTS staleness check (active + archive) |
+| 889 | `cmd_build_semantic_index` | semantic/tagvec index build |
+| 1244 | `_substring_ranking` | `find`'s degraded lexical arm |
+| 1953 | `render_catalogue_state` | `prime` onboarding facts |
+| 2039 | `bundle_graph` | wikilink graph viz |
+| 2754 | `cmd_recent` | `recent` listing |
+
+Every caller feeds index, search, list, presentation (`prime`/`index`), or
+frontmatter tag-maintenance. None is an integrity/`check` path — `check`
+and its siblings (reserved-file scan, wikilink gate, etc.) walk
+`iter_all_md` exclusively (verified: `iter_all_md(` appears only at
+:3130, :3280, :3696, :3705, :3762, :3905, all inside check-family
+functions; `cmd_check` itself at :3917). So the two functions already
+diverging left in-bundle `_intake/` content reachable via every one of the
+18 read-path callers above, while `check` — the one function it needed to
+be visible to — never saw it.
+
+**Decision: fix `iter_concepts` directly, no opt-in parameter.** This is
+the opposite situation from OKFT-n8xz's `resolve_scopes()`, where ten
+callers wanted two different defaults (10 call sites, D17 census missed 3
+archive branches and mis-scoped `check`/`wikilinks`) — there, narrowing
+the shared function would have silently broken integrity checks, so the
+fix went in as an opt-in `indexable_only` parameter at the ONE caller that
+wanted the narrower behaviour. Here, all 18 read-path callers of
+`iter_concepts` want the same thing (staging pruned), and the one function
+that must NOT prune it (`check`) already uses the sibling function
+`iter_all_md`, unaffected by this change. No caller loses visibility it
+needed; no opt-in is required.
+
+## Test-Output
+
+RED (tests written first against the unfixed `iter_concepts`, run before
+any production-code edit):
+
+```
+test_underscore_staging_dir_pruned (test_okf_cli.IterConceptsStagingPrune.test_underscore_staging_dir_pruned) ... FAIL
+AssertionError: Lists differ: ['_intake/konzept'] != []
+
+test_find_degraded_excludes_staging (test_okf_cli.StagingExcludedFromIndexListFind.test_find_degraded_excludes_staging) ... FAIL
+AssertionError: '_intake' unexpectedly found in '...
+path: b/_intake/konzept
+...'
+
+test_index_json_excludes_staging_keeps_regular (test_okf_cli.StagingExcludedFromIndexListFind.test_index_json_excludes_staging_keeps_regular) ... FAIL
+AssertionError: '_intake/konzept' unexpectedly found in ['_intake/konzept', 'sub/regular']
+
+test_list_excludes_staging_keeps_regular (test_okf_cli.StagingExcludedFromIndexListFind.test_list_excludes_staging_keeps_regular) ... FAIL
+AssertionError: '_intake' unexpectedly found in '...
+path: b/_intake/konzept
+...'
+
+Ran 6 tests in 0.007s
+FAILED (failures=4)
+```
+
+GREEN (after the fix, full suite, `just test`):
+
+```
+FAIL: test_index_walk_row_present_with_rank_no_dedicated_metric (test_eval_runner.RunnerAgainstRealCatalogueTest.test_index_walk_row_present_with_rank_no_dedicated_metric)
+FAIL: test_metadata_hit_and_miss_rows_scored_correct (test_eval_runner.RunnerAgainstRealCatalogueTest.test_metadata_hit_and_miss_rows_scored_correct)
+FAIL: test_runner_scores_literal_s1_top1 (test_eval_runner.RunnerAgainstRealCatalogueTest.test_runner_scores_literal_s1_top1)
+Ran 691 tests in 26.153s
+FAILED (failures=3)
+```
+
+Exactly the three pre-existing, pre-attributed failures (baseline in
+OKFT-wmbu, `RunnerAgainstRealCatalogueTest`), no fourth. 691 = 685 baseline
++ 6 new tests (`IterConceptsStagingPrune` ×3, `StagingExcludedFromIndexListFind`
+×3).
+
+**Mutation proof** (Edit → run → revert, on the guard's own repo copy):
+removing the `and not d.startswith("_")` clause from `iter_concepts`
+reproduces the RED single-test failure above
+(`test_underscore_staging_dir_pruned`: `['_intake/konzept'] != []`); the
+revert Edit restored the clause byte-identically (`git diff` before/after
+identical).
+
+## Smoke
+
+Real catalogue, read-only (`~/Obsidian/Knowledge-Catalogue`, both
+bundles are symlinks resolved transparently by `os.walk`; no write, no
+Testlauf writes into the catalogue — CLAUDE.md Regel 1 honoured; count
+comparison run via a standalone in-process script, not `just test`):
+
+```
+general-knowledge-wiki before: 345 after: 344 intake concepts removed: ['_intake/ingest-lessons-learned']
+qm-wiki                before: 764 after: 763 intake concepts removed: ['_intake/ingest-lessons-learned']
+```
+
+Outward coupling, confirmed as designed — `just okf-archive-exclusion` in
+`/Users/erik/dev/lean-stack`, run read-only, lean-stack repo untouched
+(`git status --porcelain` empty before and after):
+
+```
+probe catalogue: /var/folders/1s/0zxb5ygn78l1582rpl4kx5jw0000gn/T/okf-archive-probe-5pfjlayf
+command   sees <bundle>/_archive/     sees /_toplevel-`_`-dir
+index     no                          no
+list      no                          no
+find      no                          no
+check     no                          no
+DRIFT — okf-cli no longer behaves as R09 records, for: find, index, list
+Reread R09 and D14 in docs/okf-knowledge-lifecycle/taxonomy-and-lifecycle/.
+```
+exit code: 1
+
+Matches the D01 census exactly: drift reported for find/index/list (the
+three read-paths this fix changes), `check` still reports "no" (unaffected
+— confirmed unchanged, as it always used `iter_all_md`).
+
+## Deviations/ERRATA
+
+- Bean text cited `iter_concepts` at :81 and `iter_all_md` at :2883/2888-2890
+  (ERRATA-corrected from the original :2582). Both had drifted further by
+  the time of implementation, to :117 and :2925/2930-2932 respectively —
+  OKFT-n8xz's `list_indexable_bundles` insertion above `iter_concepts`
+  moved the first, an unrelated intervening insertion moved the second.
+  Function names stayed correct and greppable both times; only line
+  numbers moved. No bean update needed beyond this note — greppable names
+  are the load-bearing reference, not line numbers, per the bean's own
+  ERRATA precedent.
+- No other deviation from the bean's scope. Archive-lifecycle work
+  (docs/okf-archive-lifecycle, T15) was not touched.
+
+## Notes for T(n+1)
+
+- The lean-stack guard `just okf-archive-exclusion` now exits 1 by design.
+  Per the task's explicit instruction, lean-stack was not touched — DESIGN
+  section 4 in `lean-stack/docs/okf-knowledge-lifecycle/taxonomy-and-lifecycle/`
+  needs re-reading/updating there to record the new `find`/`index`/`list`
+  behaviour (R09/D14 currently describe the pre-fix state). That is
+  lean-stack's own follow-up, out of this bean's scope.
+- `check`'s own `_`-pruning behaviour (via `iter_all_md`) was not modified
+  and needed no new test — pre-existing regression coverage
+  (`cli/test_okf_cli.py:6713 test_staging_subdir_target_is_not_checked`)
+  already locks it down, and the full-suite GREEN run confirms no
+  regression there.
