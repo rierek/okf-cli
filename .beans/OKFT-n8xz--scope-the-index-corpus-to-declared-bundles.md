@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-08-13T11:07:18Z
-updated_at: 2026-08-13T11:51:18Z
+updated_at: 2026-08-13T11:55:07Z
 parent: OKFT-wmbu
 blocking_external: lean-stack:LES-zr4r
 ---
@@ -431,3 +431,17 @@ exact 33/23/9/1 figures confirmed.
 
 Gate unchanged: `just test` — 685 tests, exactly the three pre-existing
 `RunnerAgainstRealCatalogueTest` failures, no fourth (quoted above).
+
+
+## Re-Review 2026-08-13 — APPROVED (ce-specs-reviewer, second pass)
+
+Verified independently, not from the fix report:
+
+- `indexable_only=True` appears exactly **once** in the whole file, at `_substring_ranking` (:1236). All ten `resolve_scopes` callers walked and mapped: `cmd_merge_tags` (:266), `cmd_remove_tags` (:303), `cmd_normalize_tags` (:356), `cmd_list` (:641), `_substring_ranking` (:1235), `_recent_scopes` (:2712), `fix_xml_like_tags` (:3129), `fix_crosslinks` (:3279), `scan_wikilinks` (:3761), `run_checks` (:3874). Nine call without the argument. None missed, none over-set.
+- The silent regression is gone: unscoped `check` against a fresh tmpdir copy of `okf-tools/docs` reports **33 VIOLATIONS** again, split exactly 23 / 9 / 1 across `okf-retrieval-architecture`, `okf-revision`, `wikilink-awareness`. The synthetic `wikilinks` probe reports `1 unresolved` again.
+- **Reverse mutation at a different site than the implementer used**: `scan_wikilinks` (:3761) forced to `indexable_only=True` turns exactly `test_unscoped_wikilinks_still_reports_the_unresolved_link` red (`AssertionError: False is not true`) while the `check` test stays green. Both new tests are therefore separately sensitive — the coverage is not half. Reverted byte-identically, `git diff` empty.
+- The five uncontested positive sites still narrow: `build_fts_index` (:776, :781), `_fts_index_stale` (:821, :829), `cmd_build_semantic_index` (:887). The fix rolled nothing back.
+- **The epic's actual benefit is intact**, shown rather than asserted: query `DUPLICATE-MARGIN`, a term that occurs only in `okf-revision/B02-DUPLICATE-MARGIN.md` — scaffolding outside the declared bundle. Against the narrowed index (14 concepts) it does not surface; rank 1 is an unrelated bundle concept. Remove the `bundle` key, rebuild wide (32 concepts), and the same query puts `okf-revision/B02-DUPLICATE-MARGIN` at rank 1.
+- `just test`: `Ran 685 tests in 25.487s`, `FAILED (failures=3)`, exactly the three baseline failures.
+
+Open and deliberately not decided here: Q03 (`cmd_list`), Q02 (52 instead of the acceptance's 41, growth-explained). Both carried on the epic for the PO gate.

@@ -1,11 +1,11 @@
 ---
 # OKFT-glon
 title: 'Break-test: corpus scoping must not strand wikilinks'
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-08-13T11:07:31Z
-updated_at: 2026-08-13T11:07:31Z
+updated_at: 2026-08-13T11:55:07Z
 parent: OKFT-wmbu
 blocked_by:
     - OKFT-n8xz
