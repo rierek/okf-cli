@@ -1,11 +1,11 @@
 ---
 # OKFT-xori
 title: Topic folders outrank bundle concepts in find
-status: todo
+status: completed
 type: bug
 priority: high
 created_at: 2026-07-27T06:36:10Z
-updated_at: 2026-08-13T11:24:39Z
+updated_at: 2026-08-13T13:10:29Z
 parent: OKFT-wmbu
 blocked_by:
     - OKFT-n8xz
@@ -70,3 +70,18 @@ Both defects reported above are covered:
 2. *Un-drained inbox competes with canon* — `docs/lean-stack-okf-inbox/` and `docs/okf-tools-okf-inbox/` are not the declared bundle and fall out of the corpus with everything else.
 
 **Dependency corrected the same day.** This bean previously blocked OKFT-n8xz, which was circular: the only way to resolve this bug is for OKFT-n8xz to land. The edge is reversed — this bean is now `blocked_by: OKFT-n8xz` and closes once the fix has landed and OKFT-glon has proved it did not strand wikilinks.
+
+
+## Closed 2026-08-13 — the fix landed and was proven
+
+Both defects reported in this bean are resolved, and the proof is external to the implementer's own word.
+
+**Defect 1, working notes outrank canon.** OKFT-n8xz narrowed the index/search corpus to the bundle declared in `.okf.toml`. Measured against the rebuilt `lean-stack/docs` index (OKFT-pwap): 197 documents down to 52, all 52 under `lean-stack-okf`, not one topic-folder document left. Verified independently by direct SQLite query against the shipped index, not by re-running the builder.
+
+The claim this bean actually made — that scaffolding outranks canon — was retested on its own terms. R34 recorded the query `dev-CLI Kanon Entrypoint Wrapper Shims` returning 8 of 9 hits from topic folders with `lean-stack-okf/dev-cli-canon` at rank 4. The same query now returns `lean-stack-okf/dev-cli-canon` at **rank 1**, with all ten hits under `lean-stack-okf`.
+
+**Defect 2, un-drained inbox competes with canon.** `docs/lean-stack-okf-inbox/` is not the declared bundle and left the corpus with everything else. No special `*-inbox` rule was needed.
+
+**The monotonic degradation this bean predicted is stopped at the source.** It said "every new think session adds noise on top of the same canon". A new think session now adds nothing to the corpus at all, because the corpus is a declaration rather than a leftover of a name filter.
+
+**What it cost, recorded because this bean asked the question that started it.** The four candidate mechanisms proposed here were all rejected by D16 in favour of reading a key that was already being parsed. That was the right call, and it was still not the hard part. The hard part was D17's confinement — narrowing only the corpus, never the resolution — and following D17's own call-site list literally would have broken it twice. See OKFT-wmbu for both occurrences.

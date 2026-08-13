@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-08-13T11:07:31Z
-updated_at: 2026-08-13T13:05:51Z
+updated_at: 2026-08-13T13:10:29Z
 parent: OKFT-wmbu
 blocked_by:
     - OKFT-n8xz
@@ -156,3 +156,15 @@ Note: this pre-existing working-tree state is broader than the task brief's sing
 ## Notes for T(n+1)
 
 Recommendation on \`build-semantic-index\`: **do not run it yet, and route the decision through Q01, not around it.** Reasoning: if the PO answers Q01 "yes, extend the SessionStart hooks to repo-local docs roots," both the FTS and the semantic-coverage rebuild become automatic on the next session start for lean-stack, and a manual semantic rebuild done now would just be redone by the hook shortly after — wasted Voyage-API spend. If the PO answers "no, leave D03 standing," a manual semantic rebuild is still worth doing once, but it should happen as the first step of whichever future task actually runs a semantic-arm remeasurement (R33/R34-style), not speculatively here — this task's scope was the lexical FTS index per the epic's own baseline framing, and \`build-semantic-index\` is unbudgeted work with a real cost (Voyage API calls) that the bean did not ask for. Net: hold, let Q01 resolve first, then let the semantic remeasurement task pay for its own rebuild.
+
+
+## Review 2026-08-13 — APPROVED (ce-specs-reviewer)
+
+- **Neighbour repo clean.** `docs/.fts/` independently confirmed ignored (`.gitignore:12`). The six extra dirty files were absorbed by lean-stack commit `0cfa3f0 feat(aca): map TPIC execution` at 15:06:17, three minutes after the `fts.sqlite` mtime of 15:03:37; their own mtimes run 14:25-15:01, all before that commit. A parallel session working the `aca_agentic-capability-architecture` epic, not us. `git status --porcelain` there now shows only the one pre-existing modified file.
+- **52 confirmed without rebuilding**: `select count(*) from docs` → 52; `fts_meta` → `n_concepts 52`, `n_archived 0`. Path aggregation → 52 under `lean-stack-okf`, not a single topic-folder document. Matches the independent OKFT-n8xz measurement exactly.
+- **The epic's headline claim reproduced.** `find "dev-CLI Kanon Entrypoint Wrapper Shims"` → rank 1 `lean-stack-okf/dev-cli-canon`, and all ten returned paths are `lean-stack-okf/*`. R34 read in the original (`REFERENCES.md:91`) and the before-state is quoted correctly: "8 von 9 Treffern aus `dev-cli-canon/`, `dev-cli-layering/`, `obs-hygiene/`; der kanonische `lean-stack-okf/dev-cli-canon` steht auf Rang 4."
+- **No trigger decision smuggled in.** Both SessionStart hook scripts unchanged since before this session (mtimes 3 Aug and 10 Aug). No `.tagvec*` in `lean-stack/docs` — `build-semantic-index` was not run, no Voyage spend. Q01 left open on the epic.
+
+`just test`: `Ran 701 tests in 27.782s`, `FAILED (failures=3)`, the three baseline failures, no fourth.
+
+One observation, not a finding: this bean carries no formal acceptance-criteria list the way OKFT-n8xz does. Its prose objective was unambiguous enough to judge against, but the asymmetry is worth noticing for the next planner.
