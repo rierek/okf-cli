@@ -5029,4 +5029,38 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+        # Explicit flush, still inside the try: stdout to a pipe is
+        # block-buffered, not line-buffered, so a small answer (the common
+        # case against the real catalogue, measured 2026-08-13) can finish
+        # every print() into the buffer without ever attempting the OS-level
+        # write() that would raise. Without this line the write only
+        # happens implicitly at interpreter shutdown, OUTSIDE this
+        # try/except, so BrokenPipeError is never caught at all and only
+        # the "Exception ignored ..." shutdown noise appears — no
+        # traceback, but still not clean. Confirmed against the real
+        # catalogue: OKFT-0k55 Test-Output.
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # OKFT-0k55 D02: fixed centrally, around the single entrypoint,
+        # rather than with a try/except duplicated inside cmd_find (and
+        # then cmd_index, cmd_list, cmd_toc, cmd_wikilinks, ... — every
+        # command that print()s a long answer shares this exact failure
+        # mode; the observed call site, cmd_find's `type:` line, is not
+        # special). Catching the exception alone is NOT sufficient: Python
+        # flushes sys.stdout at interpreter shutdown, and flushing a
+        # closed stdout raises again there, past any handler, printing
+        # "Exception ignored ..." noise (wording differs across CPython
+        # versions; observed 3.14: "Exception ignored while flushing
+        # sys.stdout:"). Redirecting the stdout fd to os.devnull before
+        # exit — the standard recipe, see
+        # https://docs.python.org/3/library/signal.html#note-on-sigpipe —
+        # makes that later flush a silent no-op.
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        # D01 (OKFT-0k55, revisable — Q02 open with the PO): a clean early
+        # close (`| head`) is not a CLI error, so exit 0, silently. The
+        # competing convention (141 = 128+SIGPIPE) is one line plus a test
+        # constant away if the PO's D20 lands on it instead.
+        sys.exit(0)

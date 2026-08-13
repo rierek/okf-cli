@@ -7733,5 +7733,161 @@ class CheckSupersededBy(unittest.TestCase):
         self.assertNotIn("superseded-by-scope", self._names(warnings))
 
 
+class BrokenPipeOnFind(unittest.TestCase):
+    """OKFT-0k55. `okf-cli find <query> | head` must not surface Python's
+    plumbing. This needs a REAL subprocess piped into a REAL early-closing
+    reader — an in-process contextlib.redirect_stdout(io.StringIO()) (as
+    `_run_find` above uses) never touches an actual file descriptor, so it
+    can never observe SIGPIPE/EPIPE at all; that is the exact interplay of
+    process, pipe and interpreter shutdown this bean is about.
+
+    Two failure modes, asserted separately per the bean's acceptance
+    criteria: (1) the raised BrokenPipeError itself must not print a
+    traceback, and (2) flushing the still-open (now broken) stdout at
+    interpreter shutdown must not print `Exception ignored in: ...` — that
+    second message appears only AFTER any handler has already run, so
+    catching the exception alone provably does not cover it (proven by the
+    RED run captured in OKFT-0k55's `## Test-Output`, before stdout was
+    redirected to os.devnull).
+
+    D01 (bean, revisable — Q02 open with the PO): exit status on a clean
+    early close is 0, not 141.
+
+    The producer needs enough real output that it is still writing after
+    the consumer has already closed its end, or the whole answer fits in
+    the OS pipe buffer and no EPIPE is ever raised — hence 300 fixture
+    concepts with a padded body (CLAUDE.md rule 1: this substrate lives
+    under its own tmpdir, never under ~/Obsidian/Knowledge-Catalogue)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(cls.root, "b"))
+        pad = "x" * 400
+        for i in range(300):
+            with open(os.path.join(cls.root, "b", "c{}.md".format(i)), "w",
+                      encoding="utf-8") as f:
+                f.write(
+                    "---\ntype: Concept\ntitle: Zqxbrokenpipe item {}\n"
+                    "description: {}\ntags: [k]\n---\n# t{}\n\n{}\n".format(
+                        i, pad, i, pad))
+        with open(os.path.join(cls.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+        okf.build_fts_index(cls.root)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def _pipe_into_early_closing_reader(self):
+        import subprocess
+        import sys
+        producer = subprocess.Popen(
+            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root",
+             self.root, "find", "zqxbrokenpipe", "--limit", "300"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        consumer = subprocess.Popen(["head", "-n", "1"],
+                                     stdin=producer.stdout,
+                                     stdout=subprocess.DEVNULL)
+        # Drop our own handle on the read end so the producer's writes hit
+        # EPIPE once (and only once) the consumer's copy is gone too —
+        # the standard recipe for provoking SIGPIPE across a Popen pipe.
+        producer.stdout.close()
+        consumer.wait(timeout=10)
+        producer.wait(timeout=10)
+        stderr = producer.stderr.read().decode("utf-8", "replace")
+        producer.stderr.close()
+        return producer.returncode, stderr
+
+    def test_no_traceback_on_stderr(self):
+        _, stderr = self._pipe_into_early_closing_reader()
+        self.assertNotIn("Traceback (most recent call last)", stderr)
+        self.assertNotIn("BrokenPipeError", stderr)
+
+    def test_no_exception_ignored_noise_at_interpreter_shutdown(self):
+        # ERRATA vs. the bean text: this interpreter (3.14) prints
+        # "Exception ignored while flushing sys.stdout:", not the older
+        # "Exception ignored in: <_io.TextIOWrapper ...>" the bean quotes —
+        # same failure class (unraisable-exception noise from flushing a
+        # closed stdout at shutdown), different exact wording across
+        # CPython versions. Assert the version-stable substring so the
+        # test does not accidentally pass vacuously on a newer runtime.
+        _, stderr = self._pipe_into_early_closing_reader()
+        self.assertNotIn("Exception ignored", stderr)
+
+    def test_exit_status_is_zero_per_d01(self):
+        returncode, _ = self._pipe_into_early_closing_reader()
+        self.assertEqual(returncode, 0)
+
+
+class BrokenPipeOnFindTinyAnswer(unittest.TestCase):
+    """Companion to BrokenPipeOnFind, guarding a failure mode the large
+    fixture there cannot reach. Confirmed against the real Knowledge-
+    Catalogue (read-only smoke, no write — CLAUDE.md rule 1) during
+    OKFT-0k55: a small `find` answer completes cmd_find's whole print loop
+    without ANY write() syscall ever being attempted — stdout to a pipe is
+    block-buffered (default ~8KB), so a small answer just accumulates in
+    Python's own buffer and main() returns normally. The one and only
+    write() then happens at the FINAL flush, whichever flush actually
+    runs first: our entrypoint's explicit `sys.stdout.flush()` (inside its
+    try/except), or — if that line is ever removed — Python's own implicit
+    flush at interpreter shutdown, which runs OUTSIDE any try/except in
+    user code and therefore can never be caught, however it's written
+    around `main()`.
+
+    A `head -n 1` consumer (as BrokenPipeOnFind uses) cannot isolate this:
+    `head` has to actually read a line before it can exit, so with a
+    small, fully-buffered answer it just blocks until that one write
+    lands — and since the write happens while `head` is still connected,
+    it always succeeds either way, discriminating nothing. The consumer
+    here instead exits immediately without reading anything at all — a
+    real subprocess that inherits and then simply drops its copy of the
+    pipe's read end on exit — so the read end is already gone before the
+    producer's single write is ever attempted, regardless of buffering."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(cls.root, "b"))
+        with open(os.path.join(cls.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Zqxtinyanswer\n"
+                    "description: d\ntags: [k]\n---\n# t\n\nzqxtinyanswer\n")
+        with open(os.path.join(cls.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+        okf.build_fts_index(cls.root)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def _pipe_into_instantly_closing_reader(self):
+        import subprocess
+        import sys
+        producer = subprocess.Popen(
+            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root",
+             self.root, "find", "zqxtinyanswer"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        consumer = subprocess.Popen([sys.executable, "-c", "pass"],
+                                     stdin=producer.stdout,
+                                     stdout=subprocess.DEVNULL)
+        producer.stdout.close()
+        consumer.wait(timeout=10)
+        producer.wait(timeout=10)
+        stderr = producer.stderr.read().decode("utf-8", "replace")
+        producer.stderr.close()
+        return producer.returncode, stderr
+
+    def test_no_exception_ignored_noise_when_answer_fits_the_buffer(self):
+        _, stderr = self._pipe_into_instantly_closing_reader()
+        self.assertNotIn("Exception ignored", stderr)
+
+    def test_exit_status_is_zero_when_answer_fits_the_buffer(self):
+        returncode, _ = self._pipe_into_instantly_closing_reader()
+        self.assertEqual(returncode, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
