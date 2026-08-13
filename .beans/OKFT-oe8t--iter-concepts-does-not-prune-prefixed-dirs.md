@@ -1,11 +1,11 @@
 ---
 # OKFT-oe8t
 title: iter_concepts does not prune _-prefixed dirs
-status: completed
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-08-09T19:09:25Z
-updated_at: 2026-08-13T12:18:37Z
+updated_at: 2026-08-13T12:28:25Z
 parent: OKFT-wmbu
 ---
 
@@ -191,3 +191,48 @@ three read-paths this fix changes), `check` still reports "no" (unaffected
   (`cli/test_okf_cli.py:6713 test_staging_subdir_target_is_not_checked`)
   already locks it down, and the full-suite GREEN run confirms no
   regression there.
+
+
+## Review 2026-08-13 — CHANGES_REQUIRED (ce-specs-reviewer, reproduced)
+
+The census counts correctly — 19 call sites, every line and function name confirmed — and `check` really does run exclusively over `iter_all_md` (`run_checks` :3875-3919, called from `cmd_check` :3927, plus the separate `check_asset_placement` walk with its own untouched `_` clause). Claim (d) of D01 holds.
+
+### B01 (blocking) — three of the nineteen write files
+
+D01 files `cmd_merge_tags` (:267), `cmd_remove_tags` (:304) and `cmd_normalize_tags` (:357) under "read-path callers". They are not read paths. All three call `write_file`. Reproduced in a tmpdir with `merge-tags oldtag --into newtag`, no `--apply`:
+
+```
+after the fix:   would rewrite  mybundle/sub/regular.md
+before the fix:  would rewrite  mybundle/_intake/staged.md
+                 would rewrite  mybundle/sub/regular.md
+```
+
+`_intake/staged.md` is no longer seen at all. A tag rename now leaves staging content carrying the old tag, and nothing reports it. That is the same shape as the first OKFT-n8xz round: a narrowing placed in a shared function reached callers nobody had classified.
+
+`fix_crosslinks` (:3290), `fix_xml_like_tags` (:3140) and `rename` are unaffected — they walk `iter_all_md` or no bundle-wide iteration at all.
+
+### D02 — the three tag commands keep the wide walk
+
+Resolved conservatively rather than by consistency argument.
+
+There is a tempting counter-argument: `fix_crosslinks` and `fix_xml_like_tags` are mutation commands that already prune `_`, so pruning the tag commands too would make mutation behaviour uniform. That argument is real but it is **not this task's to settle**. This bean's mandate is the retrieval surface — index, list, find — and the reason given for it is "reachable but unverified". Nothing here asked to change which files a writing command repairs, and a change that silently shrinks a write path is exactly the class this epic has now been bitten by three times.
+
+So: `cmd_merge_tags`, `cmd_remove_tags` and `cmd_normalize_tags` keep the unpruned walk. Use the same shape OKFT-n8xz landed on — default wide, narrowing explicit at the caller — rather than a second bespoke mechanism.
+
+The uniformity question is filed separately as OKFT-eyla. Do not decide it here.
+
+### Documentation errors in D01, correct them
+
+- **I01** — D01 says "18 read-path callers"; the table underneath lists 19.
+- **I02** — D01 says two comment mentions at :1238 and :3355; there are three, at :1248, :2585 and :3365.
+- **I03** — D01 says all six `iter_all_md` sites sit inside check-family functions; two of them are in `fix_xml_like_tags` (:3140) and `fix_crosslinks` (:3290), which are mutation commands. Harmless in effect — both already pruned `_` before this fix — but the statement is wrong and it is the statement a future reader would rely on.
+
+### I04 (fix with this round) — the prune must hit directories only
+
+No test covers that the `_` rule applies to directory names and not to file names. Verified by hand: a file `_private.md` directly in a bundle root stays reachable, which is correct — and unprotected. Pin it.
+
+### Not findings
+
+Behaviour confirmed experimentally: `_intake` gone from index, list and find; a regular subdirectory fully retained; `assets` and dot-dirs still pruned; `check` output byte-identical before and after. The six new tests call production functions, no re-implemented pruning logic. Reverse mutation turns exactly four of them red. Outward coupling is as the bean predicted: `just okf-archive-exclusion` in lean-stack exits 1 with DRIFT on find/index/list and `check` unaffected, lean-stack working tree clean before and after. Smoke reproduced: 345→344 and 764→763, and each `_intake/` really does hold only one `.md` — the rest are `.tsv`/`.txt` and were never concepts. `just test`: `Ran 691 tests in 25.343s`, `FAILED (failures=3)`.
+
+**I05** — regression cover for this fix rests entirely on the six unit tests; no CLI-level test reacts to removing the clause. Noted, not required this round.
