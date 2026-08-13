@@ -1402,6 +1402,70 @@ class RemoveTags(unittest.TestCase):
         self.assertIn("drop", open(b, encoding="utf-8").read())  # out of scope, untouched
 
 
+class TagCommandsReachStagingContent(unittest.TestCase):
+    """OKFT-oe8t Review D02: merge-tags/remove-tags/normalize-tags are write
+    paths, not the retrieval surface this bean's fix narrowed (index/list/
+    find). The prune that dropped "_intake/" from those three commands must
+    NOT also drop it here — a tag rename/removal/normalization would then
+    silently leave staging content on the old tag, unreported. Behavioural,
+    mirroring the reviewer's own reproduction: a bundle with
+    `_intake/staged.md` and a regular concept, both carrying the same tag —
+    a dry run must name both."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._w("b/_intake/staged.md",
+                "---\ntype: Concept\ntitle: Staged\ntags:\n  - oldtag\n---\n# Staged\n")
+        self._w("b/sub/regular.md",
+                "---\ntype: Concept\ntitle: Regular\ntags:\n  - oldtag\n---\n# Regular\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _run(self, cmd, **extra):
+        import types
+        import contextlib
+        import io
+        kwargs = {"scope": None, "apply": False}
+        kwargs.update(extra)
+        args = types.SimpleNamespace(**kwargs)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cmd(self.tmp, args)
+        return buf.getvalue()
+
+    def test_merge_tags_dry_run_reaches_staging(self):
+        """Exact reproduction from the review: `merge-tags oldtag --into
+        newtag`, no --apply, must name the _intake file, not just the
+        regular one."""
+        out = self._run(okf.cmd_merge_tags, tags=["oldtag"], into="newtag")
+        self.assertIn("b/_intake/staged.md", out)
+        self.assertIn("b/sub/regular.md", out)
+
+    def test_remove_tags_dry_run_reaches_staging(self):
+        out = self._run(okf.cmd_remove_tags, tags=["oldtag"])
+        self.assertIn("b/_intake/staged.md", out)
+        self.assertIn("b/sub/regular.md", out)
+
+    def test_normalize_tags_dry_run_reaches_staging(self):
+        # normalize-tags only rewrites an *inline* `tags: [...]` field — the
+        # block-list fixtures from setUp never trigger it, so this test
+        # needs its own inline-form fixture.
+        self._w("b/_intake/staged.md",
+                "---\ntype: Concept\ntitle: Staged\ntags: [oldtag]\n---\n# Staged\n")
+        self._w("b/sub/regular.md",
+                "---\ntype: Concept\ntitle: Regular\ntags: [oldtag]\n---\n# Regular\n")
+        out = self._run(okf.cmd_normalize_tags)
+        self.assertIn("b/_intake/staged.md", out)
+        self.assertIn("b/sub/regular.md", out)
+
+
 class RenderBundleLine(unittest.TestCase):
     """T-okf-cli-dwcq — compact one-liner for prime's default bundle listing."""
 
@@ -1940,6 +2004,26 @@ class IterConceptsStagingPrune(unittest.TestCase):
         self._w("b/kept.md")
         cids = sorted(cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b")))
         self.assertEqual(cids, ["kept"])
+
+    def test_underscore_prefix_prunes_dirs_not_files(self):
+        """I04 (Review 2026-08-13): the "_" rule inspects DIRECTORY names in
+        `dirnames`, never file names — a file `_private.md` sitting directly
+        in the bundle root is untouched by the prune and stays reachable.
+        Correct today, but unpinned before this test."""
+        self._w("b/_private.md")
+        cids = [cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b"))]
+        self.assertEqual(cids, ["_private"])
+
+    def test_prune_staging_false_widens_the_walk(self):
+        """OKFT-oe8t Review D02: prune_staging=False is the opt-out the
+        three tag-mutation commands (cmd_merge_tags, cmd_remove_tags,
+        cmd_normalize_tags) pass explicitly — it restores the pre-fix wide
+        walk for whichever caller opts into it, without a second, duplicated
+        traversal function."""
+        self._w("b/_intake/konzept.md")
+        cids = [cid for cid, _ap in
+                okf.iter_concepts(os.path.join(self.tmp, "b"), prune_staging=False)]
+        self.assertEqual(cids, ["_intake/konzept"])
 
 
 class CmdListJson(unittest.TestCase):

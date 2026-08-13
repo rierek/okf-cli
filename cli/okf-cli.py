@@ -114,20 +114,33 @@ def list_indexable_bundles(root, config_root=None):
     return [bundle] if os.path.isdir(os.path.join(root, bundle)) else []
 
 
-def iter_concepts(bundle_path):
+def iter_concepts(bundle_path, prune_staging=True):
     """Yield (concept_id, abspath) for every non-reserved .md under a bundle.
 
-    Prunes "_"-prefixed staging dirs, same convention as iter_all_md (:2925,
-    clause :2930-2932) — every one of iter_concepts()'s ~19 call sites feeds
-    index/search/list/tag-maintenance, never `check` (which walks
-    iter_all_md exclusively), so the two functions diverging left in-bundle
-    staging content reachable via index/list/find yet skipped by check
-    (OKFT-oe8t D01: shared-function fix, no opt-in needed — contrast
-    OKFT-n8xz's resolve_scopes(), whose ten callers wanted different
-    defaults)."""
+    prune_staging=True (default): prunes "_"-prefixed staging dirs, same
+    convention as iter_all_md (:2954, clause :2960-2961) — most callers feed
+    index/search/list/presentation, never `check` (which walks iter_all_md
+    exclusively), so the two functions diverging left in-bundle staging
+    content reachable via index/list/find yet skipped by check (OKFT-oe8t
+    D01: fixed here, at the shared function, because that read-path
+    majority needed it and `check` was never affected).
+
+    prune_staging=False (OKFT-oe8t Review, D02): the three tag-mutation
+    writers — cmd_merge_tags, cmd_remove_tags, cmd_normalize_tags — pass
+    this explicitly. They are not read paths; narrowing what a write
+    command touches is a different question than narrowing what the
+    retrieval surface returns, and this bean's mandate was retrieval only.
+    Same shape as OKFT-n8xz's `indexable_only` on resolve_scopes(): one
+    shared walk, the default serving the majority, the minority opting
+    explicitly at its own call site rather than a second, duplicated walk."""
     for dirpath, dirnames, filenames in os.walk(bundle_path):
-        dirnames[:] = [d for d in dirnames
-                       if not d.startswith(".") and not d.startswith("_") and d != "assets"]
+        if prune_staging:
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith(".") and not d.startswith("_")
+                           and d != "assets"]
+        else:
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith(".") and d != "assets"]
         for fn in filenames:
             if not fn.endswith(".md") or fn.lower() in RESERVED:
                 continue
@@ -274,7 +287,9 @@ def cmd_merge_tags(root, args):
     sources = set(args.tags)
     touched, unparseable = [], []
     for _bundle, bp in resolve_scopes(root, args.scope):
-        for _cid, ap in iter_concepts(bp):
+        # prune_staging=False (OKFT-oe8t Review D02): a tag rename must reach
+        # staging content too, or it silently leaves the old tag behind there.
+        for _cid, ap in iter_concepts(bp, prune_staging=False):
             text = read_file(ap)
             tags = extract_tags(text)
             if not any(t in sources for t in tags):
@@ -311,7 +326,9 @@ def cmd_remove_tags(root, args):
     targets = set(args.tags)
     touched, emptied, unparseable = [], [], []
     for _bundle, bp in resolve_scopes(root, args.scope):
-        for _cid, ap in iter_concepts(bp):
+        # prune_staging=False (OKFT-oe8t Review D02): same reasoning as
+        # cmd_merge_tags — a tag removal must reach staging content too.
+        for _cid, ap in iter_concepts(bp, prune_staging=False):
             text = read_file(ap)
             tags = extract_tags(text)
             if not any(t in targets for t in tags):
@@ -364,7 +381,9 @@ def normalize_tags_in_file(text):
 def cmd_normalize_tags(root, args):
     touched = []
     for _bundle, bp in resolve_scopes(root, args.scope):
-        for _cid, ap in iter_concepts(bp):
+        # prune_staging=False (OKFT-oe8t Review D02): same reasoning as
+        # cmd_merge_tags — normalization must reach staging content too.
+        for _cid, ap in iter_concepts(bp, prune_staging=False):
             text = read_file(ap)
             new_text = normalize_tags_in_file(text)
             if new_text is None:
