@@ -757,12 +757,11 @@ FTS_META_SCHEMA = "CREATE TABLE IF NOT EXISTS fts_meta(k TEXT PRIMARY KEY, v TEX
 # bm25() weight per column, in declaration order: path, ctype, title, tags, body.
 FTS_BM25_WEIGHTS = "0.0, 0.0, 3.0, 2.0, 1.0"
 
-def build_fts_index(root, db_path=None, include_topics=False):
 def _fts_db_path(root):
     return os.path.join(root, FTS_DIRNAME, FTS_FILENAME)
 
 
-def build_fts_index(root, db_path=None):
+def build_fts_index(root, db_path=None, include_topics=False):
     """(Re)build the FTS5 lexical index from the catalogue. Returns
     (n_concepts, db_path) where n_concepts is active + archived combined.
     Local I/O only — no network, stdlib sqlite3. Builds into a .tmp sibling
@@ -802,20 +801,19 @@ def build_fts_index(root, db_path=None):
                     ("{}{}/{}".format(path_prefix, b, cid), fm.get("type", ""),
                      title, " ".join(extract_tags(raw)), body))
                 count += 1
-        for b in list_search_bundles(root, include_topics):
-            n_active += _index_bundle(b, os.path.join(root, b), "")
+                mt = os.path.getmtime(ap)
+                if mt > newest:
                     newest = mt
             return count
 
-            for b in list_search_bundles(archive_root, include_topics):
-                n_archived += _index_bundle(
-                    b, os.path.join(archive_root, b), "_archive/")
+        for b in list_search_bundles(root, include_topics):
+            n_active += _index_bundle(b, os.path.join(root, b), "")
+
         archive_root = os.path.join(root, "_archive")
         if os.path.isdir(archive_root):
             for b in list_indexable_bundles(archive_root, root):
-            [("n_concepts", str(n_active)), ("n_archived", str(n_archived)),
-             ("newest_mtime", repr(newest)),
-             ("includes_topics", "1" if include_topics else "0")])
+                n_archived += _index_bundle(
+                    b, os.path.join(archive_root, b), "_archive/")
 
         conn.executemany(
             "INSERT OR REPLACE INTO fts_meta(k, v) VALUES (?, ?)",
