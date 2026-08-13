@@ -4,8 +4,10 @@ title: 'Index corpus: canon must outweigh scaffolding'
 status: todo
 type: epic
 priority: high
+tags:
+    - to-review
 created_at: 2026-08-13T11:07:04Z
-updated_at: 2026-08-13T11:46:14Z
+updated_at: 2026-08-13T13:13:03Z
 ---
 
 Root cause behind OKFT-xori and OKFT-oe8t: the catalogue has no notion of a topic folder. is_bundle_dir (okf-cli.py:68-69) is a two-clause name filter - anything without a leading dot or underscore is a bundle - and it never opens the directory. Correct at the catalogue root, where every top-level directory really is a bundle; wrong for every directory but one in a repo docs root.
@@ -83,3 +85,45 @@ Left **wide** for now, because wide is the conservative default and because narr
 Gate B found D17/R40 missing three archive branches. The review of OKFT-n8xz found the same class again, worse: D17 lists `resolve_scopes` (3312, 3317) as "Index/Suche → find", but ten commands go through that function, including `check` and `wikilinks` — the very integrity paths D17 wants kept wide. Following the list literally produced exactly the silent defect D17 was written to prevent.
 
 The lesson is not that D17 is wrong — its principle held and is what caught this. The lesson is that a call-site census taken by reading is not a census. Both occurrences should go back to the think session that owns `lean-stack/docs/aca_capability-mcp/`.
+
+
+## Epic complete 2026-08-13 — all six leaves closed, ready for PO review
+
+Full gate on the merged state: `Ran 701 tests in 27.846s`, `FAILED (failures=3)` — exactly the three `RunnerAgainstRealCatalogueTest` failures recorded in the baseline above, no fourth. Test count grew 675 to 701. `beans check` clean, working tree clean.
+
+### What the epic promised and what it delivered
+
+The corpus in `lean-stack/docs` fell from **197 documents to 52**, all 52 under `lean-stack-okf`, not one topic-folder document left — verified by direct SQLite query against the shipped index rather than by re-running the builder. The bean predicted 41; the difference is organic growth of `lean-stack-okf` since the 2026-08-13 measurement, 24 commits touching that directory since 2026-08-01, independently reproduced (Q02).
+
+The behavioural claim was retested on R34's own terms. Query `dev-CLI Kanon Entrypoint Wrapper Shims` returned 8 of 9 hits from topic folders with the canonical `lean-stack-okf/dev-cli-canon` at rank 4. It now returns that concept at **rank 1**, with all ten hits under `lean-stack-okf`.
+
+### Leaves
+
+| bean | what landed |
+|---|---|
+| OKFT-n8xz | `list_indexable_bundles` from the `.okf.toml` `bundle` key, applied at the index/search sites only; `is_bundle_dir` untouched |
+| OKFT-glon | break-test in both directions against the real repo, plus a counter-probe proving the probe can fail |
+| OKFT-xori | closed on evidence, both reported defects resolved |
+| OKFT-oe8t | `iter_concepts` prunes `_`-prefixed staging; the three tag-mutation commands opt out explicitly |
+| OKFT-0k55 | broken-pipe handling at the entry point, exit 0, no traceback, no shutdown noise |
+| OKFT-pwap | index rebuilt, trigger question found already settled by OKFT-iaxj D03 |
+
+### Three rounds of the same defect class, and it is the epic's real finding
+
+A narrowing placed in a shared function reached callers nobody had classified — three times, twice from the source document and once from us. Gate B caught the missing `_archive/` branches before dispatch; the first review caught `resolve_scopes` serving ten commands including `check` and `wikilinks`; the third caught `iter_concepts` serving three file-writing tag commands. Both shared functions ended on the same shape: wide by default, narrowing explicit at the caller. Recorded as LL-35 in `docs/LESSONS-LEARNED.md`, with LL-36 on why a green suite of purpose-written fixtures proved nothing here.
+
+**This should go back to the think session that owns `lean-stack/docs/aca_capability-mcp/`.** D17 and R40 carry a call-site census that was incomplete in two distinct ways. The principle in D17 held throughout and is what caught both errors; only its enumeration was wrong.
+
+### Open for the PO
+
+- **Q01** — should the `SessionStart` rebuild hooks cover repo-local docs bundles, or does OKFT-iaxj D03 stand? Blocks the recommendation on `build-semantic-index` in OKFT-pwap.
+- **Q02** — 52 documents instead of the bean's 41. Growth-explained and independently reproduced; needs formal sign-off.
+- **Q03** — does `okf-cli list` belong to the index corpus? Left wide, which is conservative and required by nothing this epic promised.
+
+### Follow-ups filed, deliberately out of scope
+
+`OKFT-epil` (opt-in flag for topic folders, deferred by D16 itself) · `OKFT-uctf` (arm `wikilink_checked_bundles` for this repo; `check` is currently blind to the failure class this epic guarded) · `OKFT-eyla` (writing commands disagree about `_` staging) · `OKFT-az0k` (broken-pipe handling does not cover stderr).
+
+### Cross-repo
+
+The rebuilt index is the new baseline for the re-measurement tracked as `lean-stack:LES-zr4r`. That measurement belongs to the session that owns it; nothing here touched that bean. `lean-stack` carries unrelated modifications from a parallel session (`0cfa3f0 feat(aca): map TPIC execution`) — not from this work, and the only file written there was the gitignored `docs/.fts/fts.sqlite`.
