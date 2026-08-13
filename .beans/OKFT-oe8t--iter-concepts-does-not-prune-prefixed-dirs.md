@@ -1,11 +1,11 @@
 ---
 # OKFT-oe8t
 title: iter_concepts does not prune _-prefixed dirs
-status: in-progress
+status: completed
 type: bug
 priority: normal
 created_at: 2026-08-09T19:09:25Z
-updated_at: 2026-08-13T12:28:25Z
+updated_at: 2026-08-13T12:34:37Z
 parent: OKFT-wmbu
 ---
 
@@ -236,3 +236,105 @@ No test covers that the `_` rule applies to directory names and not to file name
 Behaviour confirmed experimentally: `_intake` gone from index, list and find; a regular subdirectory fully retained; `assets` and dot-dirs still pruned; `check` output byte-identical before and after. The six new tests call production functions, no re-implemented pruning logic. Reverse mutation turns exactly four of them red. Outward coupling is as the bean predicted: `just okf-archive-exclusion` in lean-stack exits 1 with DRIFT on find/index/list and `check` unaffected, lean-stack working tree clean before and after. Smoke reproduced: 345→344 and 764→763, and each `_intake/` really does hold only one `.md` — the rest are `.tsv`/`.txt` and were never concepts. `just test`: `Ran 691 tests in 25.343s`, `FAILED (failures=3)`.
 
 **I05** — regression cover for this fix rests entirely on the six unit tests; no CLI-level test reacts to removing the clause. Noted, not required this round.
+
+
+## Fix round 2026-08-13 — response to Review CHANGES_REQUIRED
+
+### B01 — fixed: the three tag-mutation commands keep the wide walk
+
+`iter_concepts` gained a `prune_staging` parameter, default `True` (okf-cli.py:117):
+
+- `prune_staging=True` (default): the behaviour this bean shipped — `_`-prefixed staging dirs pruned, matching `iter_all_md`. All 16 read-path callers keep calling `iter_concepts(bp)` unchanged; they get the fix without a single line touched at their call sites.
+- `prune_staging=False`: the pre-fix wide walk, restored explicitly at the three tag-mutation call sites that need it — `cmd_merge_tags` (:292), `cmd_remove_tags` (:331), `cmd_normalize_tags` (:386) — each now reads `iter_concepts(bp, prune_staging=False)` with a one-line comment pointing at this decision.
+
+Same shape as OKFT-n8xz's `resolve_scopes(indexable_only=...)`: one shared walk function, a default that serves the majority of callers, and the minority opting explicitly at its own call site — not a second, duplicated traversal. A parameter was chosen over a second function (both were open per the review) because the walk logic itself (the `os.walk` loop, the `.md`/RESERVED filtering, the cid derivation) is identical either way — only the one `dirnames[:]` filter line differs, which is exactly what a boolean toggles cleanly without duplicating the surrounding ~10 lines.
+
+### D02 — not decided by the uniformity argument
+
+`fix_crosslinks` (:3309) and `fix_xml_like_tags` (:3159) already prune `_` via `iter_all_md`, so there is a real argument that all mutation commands pruning `_` would be more uniform. That argument is filed separately as **OKFT-eyla** and was deliberately NOT used to decide this round: this bean's mandate is the retrieval surface (index/list/find), the stated reason is "reachable but unverified", and nothing in it authorised narrowing what a write command touches. No switch/flag was pre-built toward the uniform-pruning outcome — `prune_staging=False` is a plain, unconditional opt-out at the three call sites, not a hook for OKFT-eyla to later flip.
+
+### I04 — directory-only prune, pinned
+
+New test `IterConceptsStagingPrune.test_underscore_prefix_prunes_dirs_not_files`: a file `_private.md` directly in a bundle root stays reachable (the `_` filter runs over `dirnames`, never `filenames`) — correct today, now pinned.
+
+### I01-I03 — ERRATA on D01 (additive, D01 itself left standing)
+
+- **I01.** D01 said "18 read-path callers" against its own 19-row table. Corrected count: **19** call sites total, all still valid as of this round (`iter_concepts(` census re-run: same 19 lines, renumbered by this round's edits — see table below for current line numbers).
+- **I02.** D01 said two comment mentions at :1238/:3355. There are three. As of this round (renumbered again by the `prune_staging` edit): **:1267, :2604, :3384**.
+- **I03.** D01 said all six `iter_all_md` call sites sit inside check-family functions. Two do not: `fix_xml_like_tags` (now :3159) and `fix_crosslinks` (now :3309) are mutation commands, not integrity checks. Harmless in effect (both already pruned `_` before this bean touched anything), but the sentence was wrong. Corrected reading: `iter_all_md`'s six call sites are `fix_xml_like_tags` (:3159), `fix_crosslinks` (:3309), `build_concept_basename_index` (:3725, :3734 — two calls, active + archive), `scan_wikilinks` (:3791), and `run_checks` (:3934, the one `cmd_check` itself uses). Four of six are check-family; two are mutation commands that happen to already prune `_`.
+
+Current `iter_concepts` call-site table (post this round, line numbers current as of this commit — expect further drift from unrelated commits, per the bean's own running ERRATA precedent):
+
+| line | caller | prune_staging |
+|------|--------|----------------|
+| 227 | `all_tags` | True (default) |
+| 292 | `cmd_merge_tags` | **False** |
+| 331 | `cmd_remove_tags` | **False** |
+| 386 | `cmd_normalize_tags` | **False** |
+| 551 | `bundle_types_and_tags` | True |
+| 562 | `render_bundle_line` | True |
+| 577 | `render_bundle_block` | True |
+| 604 | `_bundle_summary_json` | True |
+| 613 | `_concepts_json` | True |
+| 640 | `cmd_index` | True |
+| 672 | `cmd_list` | True |
+| 790 | `build_fts_index` | True |
+| 851, 859 | `_fts_index_stale` | True |
+| 918 | `cmd_build_semantic_index` | True |
+| 1273 | `_substring_ranking` | True |
+| 1982 | `render_catalogue_state` | True |
+| 2068 | `bundle_graph` | True |
+| 2783 | `cmd_recent` | True |
+
+### Test-Output — fix round
+
+RED (behavioural, exact reproduction of the reviewer's own repro — tests written first against the round-1 fix, before `prune_staging` was added):
+
+```
+test_merge_tags_dry_run_reaches_staging (test_okf_cli.TagCommandsReachStagingContent.test_merge_tags_dry_run_reaches_staging) ... FAIL
+AssertionError: 'b/_intake/staged.md' not found in 'would rewrite  b/sub/regular.md
+...'
+
+test_remove_tags_dry_run_reaches_staging (test_okf_cli.TagCommandsReachStagingContent.test_remove_tags_dry_run_reaches_staging) ... FAIL
+test_normalize_tags_dry_run_reaches_staging (test_okf_cli.TagCommandsReachStagingContent.test_normalize_tags_dry_run_reaches_staging) ... FAIL
+```
+
+GREEN (after adding `prune_staging` and wiring the three callers):
+
+```
+test_merge_tags_dry_run_reaches_staging ... ok
+test_normalize_tags_dry_run_reaches_staging ... ok
+test_remove_tags_dry_run_reaches_staging ... ok
+test_underscore_prefix_prunes_dirs_not_files ... ok
+test_prune_staging_false_widens_the_walk ... ok
+
+Ran 8 tests in 0.005s
+OK
+```
+
+Full suite (`just test`):
+
+```
+FAIL: test_index_walk_row_present_with_rank_no_dedicated_metric (test_eval_runner.RunnerAgainstRealCatalogueTest.test_index_walk_row_present_with_rank_no_dedicated_metric)
+FAIL: test_metadata_hit_and_miss_rows_scored_correct (test_eval_runner.RunnerAgainstRealCatalogueTest.test_metadata_hit_and_miss_rows_scored_correct)
+FAIL: test_runner_scores_literal_s1_top1 (test_eval_runner.RunnerAgainstRealCatalogueTest.test_runner_scores_literal_s1_top1)
+Ran 696 tests in 25.676s
+FAILED (failures=3)
+```
+
+Exactly the three pre-existing, pre-attributed failures, no fourth. 696 = 691 (round-1 total) + 5 new tests (`IterConceptsStagingPrune` +2: directory-only prune, prune_staging=False widening; `TagCommandsReachStagingContent` +3: merge/remove/normalize-tags reach staging).
+
+**Mutation proof, item 6** (Edit → run → revert, `cmd_merge_tags` only, as asked): removed the `prune_staging=False` argument from `cmd_merge_tags`'s `iter_concepts` call (reverting it to plain `iter_concepts(bp)`), ran the new regression test:
+
+```
+test_merge_tags_dry_run_reaches_staging ... FAIL
+AssertionError: 'b/_intake/staged.md' not found in 'would rewrite  b/sub/regular.md
+merge-tags: 1 file(s) would rewrite, 0 unparseable — oldtag -> newtag
+'
+```
+
+Reverted via the same Edit tool, byte-identical to the pre-mutation state (confirmed: `git diff` before/after the mutate-revert cycle identical; full suite re-run GREEN at the same 3/696 count above).
+
+### Not touched this round
+
+Per the coordinator's explicit scope: the round-1 fix itself (`_intake/` gone from index/list/find via `prune_staging=True`, the default), the outward coupling to lean-stack (`just okf-archive-exclusion` exit 1, DRIFT on find/index/list, `check` unaffected), and the real-catalogue smoke numbers (345→344, 764→763) are unchanged and were not re-verified this round beyond the full-suite GREEN re-run, which exercises the same code paths. OKFT-eyla (uniformity question) was filed by the reviewer, not touched here. No write to `/Users/erik/dev/lean-stack` or `~/Obsidian/Knowledge-Catalogue` this round.
