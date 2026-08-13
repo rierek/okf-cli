@@ -1,11 +1,11 @@
 ---
 # OKFT-n8xz
 title: Scope the index corpus to declared bundles
-status: completed
+status: in-progress
 type: task
 priority: high
 created_at: 2026-08-13T11:07:18Z
-updated_at: 2026-08-13T11:38:35Z
+updated_at: 2026-08-13T11:46:01Z
 parent: OKFT-wmbu
 blocking_external: lean-stack:LES-zr4r
 ---
@@ -257,3 +257,45 @@ key, against copies of `lean-stack/docs`. No write ever touched
   measurement task should re-baseline against 245/52 or re-run at execution
   time rather than trusting numbers frozen at epic-creation time in a
   concurrently-edited repo.
+
+
+## Review 2026-08-13 — CHANGES_REQUIRED (ce-specs-reviewer, verified by experiment)
+
+### B01 (blocking) — narrowing `resolve_scopes` traded the loud defect for the silent one
+
+The eleven negative call sites are clean; the reviewer walked all eleven by function and each still calls `list_bundles`. The defect is at the two sites that were on the *positive* list: `resolve_scopes` (now :3349, :3354) is not a `find` helper. Ten commands go through it:
+
+`cmd_merge_tags` (:266), `cmd_remove_tags` (:303), `cmd_normalize_tags` (:356), `cmd_list` (:641), `_substring_ranking` (:1230, find), `_recent_scopes` (:2706), `fix_xml_like_tags` (:3123), `fix_crosslinks` (:3273), `scan_wikilinks` (:3730, the `wikilinks` command), `run_checks` (:3843, the `check` command).
+
+Narrowing inside the shared function narrowed all ten. Measured against a copy of the real `okf-tools/docs`, whose `.okf.toml` carries `bundle = "okf-tools-okf"`:
+
+- unscoped `okf-cli --root docs check` reports `OK — 0 violations`
+- the same violations, scanned per directory, are still there: `okf-retrieval-architecture` 23, `okf-revision` 9, `wikilink-awareness` 1 — **33 real violations a default run no longer sees**
+
+And on a synthetic tmpdir repo: `wikilinks` unscoped reports `0 unresolved` with the `bundle` key present, while a real `[[does-not-exist-anywhere]]` link sits in an undeclared directory; remove the key and the same run reports `1 unresolved`.
+
+This is live today in both okf-tools and lean-stack — the two repos this epic measured against. The implementer's `harmless today` is refuted.
+
+### D02 — the fix: opt in at the caller, never inside the shared function
+
+`resolve_scopes` keeps `list_bundles` as its default. Add an explicit opt-in parameter (e.g. `indexable_only=False`) and pass it `True` from **only** the find/index path — `_substring_ranking` (:1230) and any other path that feeds the search corpus.
+
+Everything else keeps the wide set, and for two distinct reasons:
+
+- `run_checks` and `scan_wikilinks` are integrity paths. D17 names them explicitly: narrowing them is the exact trade this epic exists to avoid.
+- `cmd_merge_tags`, `cmd_remove_tags`, `cmd_normalize_tags`, `fix_xml_like_tags`, `fix_crosslinks` **write files**. A silently narrowed mutation command skips files it used to repair — worse than a narrowed read.
+- `_recent_scopes` is presentation.
+
+`cmd_list` (:641) stays **wide** for now. It is neither on D17's index/search list nor on its presentation list — the same under-census that produced B01 at Gate B. Wide is the conservative default. Raised as Q03 on the epic; do not decide it here.
+
+### I01 (required with the fix) — the guard did not guard this
+
+`BundleKeyDoesNotNarrowResolution` only exercises `build_concept_basename_index`. It never touches the `run_checks`/`scan_wikilinks` path through `resolve_scopes`, which is why a green suite shipped a silent regression. The fix needs a behavioural test that fails if `check` or `wikilinks` unscoped ever narrows again: a docs root with a `bundle` key, a real violation in an undeclared directory, and an assertion that the default run still reports it.
+
+### Q02 — measurement 52 instead of the acceptance's 41
+
+Reproduced independently: `list_bundles` → 25 directories / 245 concepts, `list_indexable_bundles` → exactly `['lean-stack-okf']` / 52 concepts. `lean-stack-okf` holds 55 `.md` files, 52 counted concepts, difference explained by reserved files; 24 commits touched that directory since 2026-08-01. The gap to 41 is organic growth, no scaffolding leaking into the corpus. Accepted as a deviation, PO to confirm at the gate.
+
+### Not a finding
+
+Test substance is sound — all seven tests import production functions, no hand-rolled parser. The reverse mutation was executed by the reviewer (:3664 switched to the narrow set) and turned `BundleKeyDoesNotNarrowResolution` red, reverted byte-identically. The missing-bundle-directory case yields the empty set, no silent fallback. `just test`: `Ran 682 tests in 26.417s`, `FAILED (failures=3)`, exactly the three baseline failures.

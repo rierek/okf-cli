@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-08-13T11:07:04Z
-updated_at: 2026-08-13T11:25:24Z
+updated_at: 2026-08-13T11:46:14Z
 ---
 
 Root cause behind OKFT-xori and OKFT-oe8t: the catalogue has no notion of a topic folder. is_bundle_dir (okf-cli.py:68-69) is a two-clause name filter - anything without a leading dot or underscore is a bundle - and it never opens the directory. Correct at the catalogue root, where every top-level directory really is a bundle; wrong for every directory but one in a repo docs root.
@@ -66,3 +66,20 @@ B01 is not only a bean defect — `lean-stack/docs/aca_capability-mcp/REFERENCES
 ## Q02 — exit status on a broken pipe (2026-08-13, open, PO)
 
 OKFT-0k55 gets exit **0** on a clean early close, so `okf-cli find x | head` does not trip `set -o pipefail`. The competing convention is 141 (128+SIGPIPE), which the CLI-program conformance spec drafted in lean-stack D20 may prefer. Not blocking — one-line change if D20 says otherwise.
+
+
+## Q03 — does `okf-cli list` belong to the index corpus? (2026-08-13, open, PO)
+
+`cmd_list` (okf-cli.py:641) resolves its scope through `resolve_scopes` and appears in neither of D17's lists — neither index/search nor presentation. It is the third site the source's census missed, after the archive branches (B01 at Gate B).
+
+The argument for narrowing: `list --type Concept` in a repo docs root is a retrieval question, and the eval runner already scores `list(type,tag)` rows under `metadata_hit_rate`. Scaffolding pollutes that answer the same way it pollutes `find`.
+
+The argument against: `list` is also how one sees what is actually on disk, and narrowing it silently shrinks that view.
+
+Left **wide** for now, because wide is the conservative default and because narrowing it is not required by anything this epic promised. One-line change either way.
+
+## Note on the source census, second occurrence
+
+Gate B found D17/R40 missing three archive branches. The review of OKFT-n8xz found the same class again, worse: D17 lists `resolve_scopes` (3312, 3317) as "Index/Suche → find", but ten commands go through that function, including `check` and `wikilinks` — the very integrity paths D17 wants kept wide. Following the list literally produced exactly the silent defect D17 was written to prevent.
+
+The lesson is not that D17 is wrong — its principle held and is what caught this. The lesson is that a call-site census taken by reading is not a census. Both occurrences should go back to the think session that owns `lean-stack/docs/aca_capability-mcp/`.
