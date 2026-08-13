@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: normal
 created_at: 2026-08-09T19:09:25Z
-updated_at: 2026-08-13T12:34:37Z
+updated_at: 2026-08-13T12:38:19Z
 parent: OKFT-wmbu
 ---
 
@@ -338,3 +338,19 @@ Reverted via the same Edit tool, byte-identical to the pre-mutation state (confi
 ### Not touched this round
 
 Per the coordinator's explicit scope: the round-1 fix itself (`_intake/` gone from index/list/find via `prune_staging=True`, the default), the outward coupling to lean-stack (`just okf-archive-exclusion` exit 1, DRIFT on find/index/list, `check` unaffected), and the real-catalogue smoke numbers (345→344, 764→763) are unchanged and were not re-verified this round beyond the full-suite GREEN re-run, which exercises the same code paths. OKFT-eyla (uniformity question) was filed by the reviewer, not touched here. No write to `/Users/erik/dev/lean-stack` or `~/Obsidian/Knowledge-Catalogue` this round.
+
+
+## Re-Review 2026-08-13 — APPROVED (ce-specs-reviewer, second pass)
+
+Verified independently:
+
+- 19 call sites, exactly three carrying `prune_staging=False` (:292, :331, :386), the other sixteen bare. Signature default confirmed `True`, not inverted.
+- All three tag commands reach staging again, not just the one the fix round demonstrated: `merge-tags`, `remove-tags` and `normalize-tags` each name both `mybundle/_intake/staged.md` and `mybundle/sub/regular.md` in dry-run.
+- The retrieval fix survived the parameter: `_intake` still absent from index, list and find; `check` output unchanged.
+- **Reverse mutation at a different site than the implementer used** — `prune_staging=False` stripped from `cmd_remove_tags` alone — turns exactly `test_remove_tags_dry_run_reaches_staging` red while the other two stay green. The three tests are independently sharp, no shared blind spot. Reverted byte-identically.
+- I04 is sharp: extending the prune clause to file names turns `test_underscore_prefix_prunes_dirs_not_files` red (`[] != ['_private']`). Reverted byte-identically.
+- All three ERRATA re-checked against the source and correct, including the 4-of-6 split of `iter_all_md` sites between check-family and mutation commands.
+
+`just test`: `Ran 696 tests in 26.502s`, `FAILED (failures=3)` — the three baseline failures, no fourth. 696 = 691 + 5 new tests, matching the bean's own arithmetic.
+
+**Q01 (informational, not ours)** — `/Users/erik/dev/lean-stack` is not clean: `docs/aca_agentic-capability-architecture/eriks-notes/eriks-task-list.md` is modified. No command was run there in this round and the file has no okf-cli relation. Pre-existing drift from another source, most likely the PO's own editing. Flagged so nobody later attributes it to this epic.
