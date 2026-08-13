@@ -1,11 +1,11 @@
 ---
 # OKFT-n8xz
 title: Scope the index corpus to declared bundles
-status: in-progress
+status: completed
 type: task
 priority: high
 created_at: 2026-08-13T11:07:18Z
-updated_at: 2026-08-13T11:46:01Z
+updated_at: 2026-08-13T11:51:18Z
 parent: OKFT-wmbu
 blocking_external: lean-stack:LES-zr4r
 ---
@@ -299,3 +299,135 @@ Reproduced independently: `list_bundles` → 25 directories / 245 concepts, `lis
 ### Not a finding
 
 Test substance is sound — all seven tests import production functions, no hand-rolled parser. The reverse mutation was executed by the reviewer (:3664 switched to the narrow set) and turned `BundleKeyDoesNotNarrowResolution` red, reverted byte-identically. The missing-bundle-directory case yields the empty set, no silent fallback. `just test`: `Ran 682 tests in 26.417s`, `FAILED (failures=3)`, exactly the three baseline failures.
+
+## Fix Round 2026-08-13 — response to Review CHANGES_REQUIRED (B01/D02/I01)
+
+### Summary of the fix
+
+`resolve_scopes` gets `list_bundles` back as its unconditional default. Added
+an explicit opt-in parameter `indexable_only=False`. Only `_substring_ranking`
+(`cli/okf-cli.py`, find's substring/lexical-fallback arm — the one path that
+actually feeds the search corpus among `resolve_scopes`'s ten callers) passes
+`indexable_only=True`. Every other caller keeps calling `resolve_scopes(root,
+target[, include_archive])` unchanged, i.e. wide:
+
+- Integrity (D17's explicit exemption): `run_checks` (the `check` command),
+  `scan_wikilinks` (the `wikilinks` command).
+- Write commands: `cmd_merge_tags`, `cmd_remove_tags`, `cmd_normalize_tags`,
+  `fix_xml_like_tags`, `fix_crosslinks`.
+- Presentation: `_recent_scopes`.
+- `cmd_list` — stays wide per instruction 3, Q03 left open for the PO, no
+  preparatory branch added for it.
+
+The eight D01 positive call sites that are genuinely index/search primitives
+(`build_fts_index` active+archive, `_fts_index_stale` active+archive,
+`cmd_build_semantic_index --if-stale`, plus `_substring_ranking`'s new
+`indexable_only=True` opt-in replacing the three now-reverted
+`resolve_scopes` internals) still narrow via `list_indexable_bundles`. The
+eleven negative call sites are untouched (reviewer verified all eleven
+individually and found them clean; not re-touched here).
+
+### Test-Output
+
+RED — the new I01 guard test, with `run_checks`'s `resolve_scopes` call
+mutated to `indexable_only=True` (simulating the shipped B01 defect):
+
+```
+$ python3 -m unittest test_okf_cli.CheckAndWikilinksStayWideWithDeclaredBundle -v
+test_unscoped_check_still_reports_the_violation_outside_the_bundle ... FAIL
+test_unscoped_wikilinks_still_reports_the_unresolved_link ... ok
+
+======================================================================
+FAIL: test_unscoped_check_still_reports_the_violation_outside_the_bundle
+----------------------------------------------------------------------
+AssertionError: 'other-scaffolding/bad.md' not found in []
+----------------------------------------------------------------------
+Ran 2 tests in 0.004s
+FAILED (failures=1)
+```
+
+Reverted byte-identically (restored from a pre-mutation copy of
+`okf-cli.py`; `git diff` against HEAD after revert shows only the intended
+fix, confirmed before committing).
+
+GREEN, full affected-area run after the fix (18 tests: the original 7 plus
+3 new — `test_resolve_scopes_default_stays_wide_even_with_a_bundle_key`,
+`CheckAndWikilinksStayWideWithDeclaredBundle` x2 — plus the pre-existing
+`ResolveScopesArchive`/`ResolveScopesTargets` classes, unaffected):
+
+```
+$ python3 -m unittest test_okf_cli.ListIndexableBundles test_okf_cli.BundleKeyDoesNotNarrowResolution test_okf_cli.IndexableArchiveScopedToDeclaredBundle test_okf_cli.CheckAndWikilinksStayWideWithDeclaredBundle test_okf_cli.ResolveScopesArchive test_okf_cli.ResolveScopesTargets -v
+...
+Ran 18 tests in 0.019s
+OK
+```
+
+`just test` gate (685 = 682 + 3 new; exactly the three pre-existing
+`RunnerAgainstRealCatalogueTest` failures, no fourth):
+
+```
+FAIL: test_index_walk_row_present_with_rank_no_dedicated_metric (test_eval_runner.RunnerAgainstRealCatalogueTest.test_index_walk_row_present_with_rank_no_dedicated_metric)
+FAIL: test_metadata_hit_and_miss_rows_scored_correct (test_eval_runner.RunnerAgainstRealCatalogueTest.test_metadata_hit_and_miss_rows_scored_correct)
+FAIL: test_runner_scores_literal_s1_top1 (test_eval_runner.RunnerAgainstRealCatalogueTest.test_runner_scores_literal_s1_top1)
+Ran 685 tests in 25.624s
+FAILED (failures=3)
+```
+
+### Reviewer-experiment verification, read-only tmpdir copy of the real repo
+
+`cp -R /Users/erik/dev/okf-tools/docs <tmpdir>` (no `.fts/` carried over),
+unscoped `check` against the copy:
+
+```
+$ okf-cli.py --root <tmpdir-copy> check
+...
+33 VIOLATIONS
+```
+
+Per-directory breakdown (grep+sort+uniq -c over the same run's output),
+matching the reviewer's report exactly:
+
+```
+23 okf-retrieval-architecture/
+ 9 okf-revision/
+ 1 wikilink-awareness/
+```
+
+No write ever touched `/Users/erik/dev/okf-tools/docs` itself.
+
+### New/changed tests
+
+- `IndexableArchiveScopedToDeclaredBundle.test_find_include_archive_scope_excludes_the_undeclared_bundle`
+  updated to call `resolve_scopes(..., indexable_only=True)` explicitly —
+  it now pins what `_substring_ranking` actually passes, not a bare
+  unscoped call (the bare call's behaviour changed with this fix, by
+  design).
+- `IndexableArchiveScopedToDeclaredBundle.test_resolve_scopes_default_stays_wide_even_with_a_bundle_key`
+  (new) — B01 pinned at the primitive level: `resolve_scopes(root, None,
+  include_archive=True)` without `indexable_only` must still surface an
+  archived bundle that is not the declared one.
+- `CheckAndWikilinksStayWideWithDeclaredBundle` (new, satisfies I01) — a
+  docs root with a declared `bundle` key, a real violation (no parseable
+  frontmatter + an unresolved wikilink) sitting in an undeclared directory,
+  asserting the unscoped `run_checks`/`scan_wikilinks` default still
+  reports it. This is the reviewer's experiment as a test, not a
+  regex/text-match guard — both assertions call the production functions
+  (`run_checks`, `scan_wikilinks`) and check the returned records.
+- `BundleKeyDoesNotNarrowResolution` (from the first round) left in place
+  unchanged, per instruction 4 — it still covers
+  `build_concept_basename_index`, a distinct guard from the new one.
+
+### Deviations/ERRATA (fix round)
+
+None from the coordinator's explicit instructions 1-6 — implemented
+literally: `resolve_scopes` defaults to `list_bundles`, `indexable_only`
+opt-in restricted to `_substring_ranking`, the ten callers classified
+exactly as instructed (2 integrity wide, 5 write wide, 1 presentation wide,
+`cmd_list` wide/undecided per Q03, 1 find narrow), I01 test built
+behaviourally against real production functions, mutation proof against
+`run_checks`'s call site exactly as specified, reviewer experiment
+reproduced read-only against a copy of the real `okf-tools/docs` with the
+exact 33/23/9/1 figures confirmed.
+
+Gate unchanged: `just test` — 685 tests, exactly the three pre-existing
+`RunnerAgainstRealCatalogueTest` failures, no fourth (quoted above).
