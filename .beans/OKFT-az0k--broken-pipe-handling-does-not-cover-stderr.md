@@ -1,11 +1,11 @@
 ---
 # OKFT-az0k
 title: Broken-pipe handling does not cover stderr
-status: draft
+status: completed
 type: bug
 priority: low
 created_at: 2026-08-13T13:02:21Z
-updated_at: 2026-08-13T13:02:21Z
+updated_at: 2026-08-13T17:37:27Z
 ---
 
 Found while reviewing OKFT-0k55, 2026-08-13. Fast-follow to that fix, not a regression from it.

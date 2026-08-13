@@ -1,11 +1,11 @@
 ---
 # OKFT-uctf
 title: Arm the wikilink guard for okf-tools' own docs
-status: draft
+status: completed
 type: task
 priority: normal
 created_at: 2026-08-13T12:10:53Z
-updated_at: 2026-08-13T12:10:53Z
+updated_at: 2026-08-13T17:37:27Z
 ---
 
 Found while reviewing OKFT-glon, 2026-08-13. Two related gaps, both in the guard rather than in the code it guards.

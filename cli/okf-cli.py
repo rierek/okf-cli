@@ -655,6 +655,10 @@ def cmd_index(root, args):
         print("-----")
 
 
+def list_search_bundles(root, include_topics=False, config_root=None):
+    return (list_bundles(root) if include_topics
+            else list_indexable_bundles(root, config_root))
+
 def tokenize(s):
     """Lowercased word tokens. `\\w` is Unicode-aware in Python 3, so umlauts
     and ß stay inside their token (B01); `_` is kept as a separator, matching
@@ -757,7 +761,7 @@ def _fts_db_path(root):
     return os.path.join(root, FTS_DIRNAME, FTS_FILENAME)
 
 
-def build_fts_index(root, db_path=None):
+def build_fts_index(root, db_path=None, include_topics=False):
     """(Re)build the FTS5 lexical index from the catalogue. Returns
     (n_concepts, db_path) where n_concepts is active + archived combined.
     Local I/O only — no network, stdlib sqlite3. Builds into a .tmp sibling
@@ -802,19 +806,20 @@ def build_fts_index(root, db_path=None):
                     newest = mt
             return count
 
-        for b in list_indexable_bundles(root):
+        for b in list_search_bundles(root, include_topics):
             n_active += _index_bundle(b, os.path.join(root, b), "")
 
         archive_root = os.path.join(root, "_archive")
         if os.path.isdir(archive_root):
-            for b in list_indexable_bundles(archive_root, root):
+            for b in list_search_bundles(archive_root, include_topics, root):
                 n_archived += _index_bundle(
                     b, os.path.join(archive_root, b), "_archive/")
 
         conn.executemany(
             "INSERT OR REPLACE INTO fts_meta(k, v) VALUES (?, ?)",
             [("n_concepts", str(n_active)), ("n_archived", str(n_archived)),
-             ("newest_mtime", repr(newest))])
+             ("newest_mtime", repr(newest)),
+             ("includes_topics", "1" if include_topics else "0")])
         conn.commit()
     finally:
         conn.close()
@@ -822,7 +827,7 @@ def build_fts_index(root, db_path=None):
     return n_active + n_archived, db_path
 
 
-def _fts_index_stale(root, conn):
+def _fts_index_stale(root, conn, include_topics=False, check_corpus=True):
     """True when the catalogue gained/lost concepts (active OR archived) or
     any concept file is newer than the newest one seen at build time.
     stat()-only — it never reads a concept body, which is exactly what
@@ -842,12 +847,18 @@ def _fts_index_stale(root, conn):
         n_active_idx = int(meta["n_concepts"])
         n_archived_idx = int(meta["n_archived"])
         newest_idx = float(meta["newest_mtime"])
+        stored_topics = meta.get("includes_topics", "0") == "1"
+        if check_corpus and stored_topics != include_topics:
+            return True
     except (sqlite3.DatabaseError, KeyError, ValueError, TypeError):
         return True
+    # A query against a broad index is current for its stored broad corpus;
+    # the query predicate hides topic rows for the default narrow view.
+    count_topics = include_topics if check_corpus else stored_topics
     n_active = 0
     n_archived = 0
     newest = 0.0
-    for b in list_indexable_bundles(root):
+    for b in list_search_bundles(root, count_topics):
         for _cid, ap in iter_concepts(os.path.join(root, b)):
             n_active += 1
             mt = os.path.getmtime(ap)
@@ -855,7 +866,7 @@ def _fts_index_stale(root, conn):
                 newest = mt
     archive_root = os.path.join(root, "_archive")
     if os.path.isdir(archive_root):
-        for b in list_indexable_bundles(archive_root, root):
+        for b in list_search_bundles(archive_root, count_topics, root):
             for _cid, ap in iter_concepts(os.path.join(archive_root, b)):
                 n_archived += 1
                 mt = os.path.getmtime(ap)
@@ -877,13 +888,13 @@ def cmd_build_index(root, args):
         if os.path.isfile(db_path):
             conn = sqlite3.connect(db_path)
             try:
-                stale = _fts_index_stale(root, conn)
+                stale = _fts_index_stale(root, conn, getattr(args, "include_topics", False))
             finally:
                 conn.close()
             if not stale:
                 print("index is current, skipping rebuild -> {}".format(db_path))
                 return
-    n, db = build_fts_index(root)
+    n, db = build_fts_index(root, include_topics=getattr(args, "include_topics", False))
     print("indexed {} concept(s) -> {}".format(n, db))
 
 
@@ -999,7 +1010,7 @@ class FindFilters:
     sql_where() for arms that filter in the database, matches()/matches_loaded()
     for arms that walk the file tree."""
 
-    __slots__ = ("scope", "type", "tag", "include_archive")
+    __slots__ = ("scope", "type", "tag", "include_archive", "include_topics", "corpus_bundles")
 
     _ARCHIVE_PREFIX = "_archive/"
     # Escaped once here rather than re-derived at each of the two LIKE call
@@ -1009,13 +1020,15 @@ class FindFilters:
     # sites is how the first fix already missed one of them.
     _ARCHIVE_PREFIX_ESC = _like_escape(_ARCHIVE_PREFIX)
 
-    def __init__(self, scope=None, type=None, tag=None, include_archive=False):
+    def __init__(self, scope=None, type=None, tag=None, include_archive=False, include_topics=False, corpus_bundles=None):
         # Normalize "" to None once, here: cmd_find reads these off argparse
         # and the MCP layer passes empty strings for "unset".
         self.scope = (scope or "").rstrip("/") or None
         self.type = type or None
         self.tag = tag or None
         self.include_archive = bool(include_archive)
+        self.include_topics = bool(include_topics)
+        self.corpus_bundles = tuple(corpus_bundles or ())
 
     def __bool__(self):
         # Deliberately NOT include_archive: this reports whether scope/type/
@@ -1043,6 +1056,24 @@ class FindFilters:
         formatting them into the SQL is safe; every VALUE is still bound."""
         sql, params = "", []
         covered = set()
+        if self.corpus_bundles and "scope" in columns:
+            col = columns["scope"]
+            branches = []
+            for b in self.corpus_bundles:
+                esc_bundle = _like_escape(b)
+                archived = self._ARCHIVE_PREFIX + b
+                branches.extend([
+                    "{} = ?".format(col),
+                    "{} LIKE ? ESCAPE char(92)".format(col),
+                    "{} = ?".format(col),
+                    "{} LIKE ? ESCAPE char(92)".format(col),
+                ])
+                params.extend([
+                    b, esc_bundle + "/%",
+                    archived, _like_escape(archived) + "/%",
+                ])
+            sql += " AND (" + " OR ".join(branches) + ")"
+            covered.add("corpus")
         if self.scope and "scope" in columns:
             col = columns["scope"]
             # R-09: an archived concept of this scope lives at
@@ -1089,6 +1120,7 @@ class FindFilters:
             type=None if "type" in covered else self.type,
             tag=None if "tag" in covered else self.tag,
             include_archive=self.include_archive,
+            include_topics=self.include_topics, corpus_bundles=self.corpus_bundles,
         )
         return sql, params, residual
 
@@ -1102,11 +1134,15 @@ class FindFilters:
         reusable spot: any future caller that walks paths in Python (not
         SQL) gets both rules by calling this, not by re-deriving them."""
         archived = path.startswith(self._ARCHIVE_PREFIX)
+        compared = path[len(self._ARCHIVE_PREFIX):] if archived else path
+        if (self.corpus_bundles
+                and not any(compared == b or compared.startswith(b + "/")
+                            for b in self.corpus_bundles)):
+            return False
         if archived and not self.include_archive:
             return False
         if not self.scope:
             return True
-        compared = path[len(self._ARCHIVE_PREFIX):] if archived else path
         return compared == self.scope or compared.startswith(self.scope + "/")
 
     def matches_loaded(self, path, fm, text):
@@ -1204,7 +1240,11 @@ def _fts_ranking(root, query, limit, filters, notify=True):
             # at exactly one stderr note without changing what
             # _fts_index_stale() itself reports when called directly.
             rows = conn.execute(sql, params).fetchall()
-            if notify and _fts_index_stale(root, conn):
+            topic_corpus_missing = (
+                filters.include_topics and _fts_index_includes_topics(root) is False)
+            if (notify and not topic_corpus_missing
+                    and _fts_index_stale(
+                        root, conn, filters.include_topics, check_corpus=False)):
                 print("note: lexical index is stale (catalogue changed since "
                       "build) — run `okf-cli build-index`", file=sys.stderr)
         finally:
@@ -1256,13 +1296,12 @@ def _substring_ranking(root, query, terms, limit, filters):
     path. Only the second one is a predicate; dropping it would reopen the
     I01 gap the moment the traversal changes shape.
 
-    indexable_only=True (OKFT-n8xz, Review 2026-08-13 D02): this is the ONE
-    resolve_scopes() call that feeds the search corpus, so it is the ONE
-    caller that opts into the narrower, declared-bundle traversal. Every
-    other resolve_scopes() caller stays on the wide default."""
+    `indexable_only` tracks `--include-topics`: the default uses the declared
+    index corpus while an explicit topic search scans all bundles."""
     hits = []
-    for _b, bp in resolve_scopes(root, filters.scope, filters.include_archive,
-                                  indexable_only=True):
+    for _b, bp in resolve_scopes(
+            root, filters.scope, filters.include_archive,
+            indexable_only=not filters.include_topics):
         # B04: the path prefix is the SCOPE's position under root, not the
         # bundle name. iter_concepts() yields cids relative to `bp`, so with
         # --scope b/sub the old "{bundle}/{cid}" form printed `b/y` for a
@@ -1632,7 +1671,24 @@ def _zero_hit_suggestions(root, query, limit=5):
     return out[:limit]
 
 
+def _fts_index_includes_topics(root):
+    db = _fts_db_path(root)
+    if not os.path.isfile(db):
+        return None
+    try:
+        conn = sqlite3.connect(db)
+        try:
+            row = conn.execute("SELECT v FROM fts_meta WHERE k = 'includes_topics'").fetchone()
+        finally:
+            conn.close()
+        return bool(row and row[0] == "1")
+    except sqlite3.DatabaseError:
+        return None
+
+
 def cmd_find(root, args):
+    if getattr(args, "include_topics", False) and _fts_index_includes_topics(root) is False:
+        print("note: lexical index excludes topic folders — run `okf-cli build-index --include-topics`", file=sys.stderr)
     terms = tokenize(args.query)
     if not terms:
         print("(empty query)")
@@ -1645,11 +1701,20 @@ def cmd_find(root, args):
     # behavior is unchanged (resolve_scopes(root, None) == list_bundles(root)
     # iteration, as before). --bundle was a duplicate alias, removed D02
     # (PO-grilling 2026-07-26).
+    include_topics = getattr(args, "include_topics", False)
+    # Only a positive `bundle` declaration narrows the result predicate.
+    # A catalogue without that declaration keeps its historic behavior:
+    # archived-only bundles remain reachable via --include-archive.
+    config = load_okf_config(root)
+    corpus_bundles = (list_search_bundles(root) if config.get("bundle")
+                      and not include_topics else None)
     filters = FindFilters(
         scope=getattr(args, "scope", None),
         type=getattr(args, "type", None),
         tag=getattr(args, "tag", None),
         include_archive=getattr(args, "include_archive", False),
+        include_topics=include_topics,
+        corpus_bundles=corpus_bundles,
     )
     hits, max_score = _rank_lexically(root, args.query, terms, args.limit,
                                       filters)
@@ -2108,8 +2173,9 @@ def cmd_visualize(root, args):
 
 
 def _prune_walk_dirs(dirnames):
-    """In-place os.walk prune: skip node_modules and dot-dirs."""
-    dirnames[:] = [d for d in dirnames if d != "node_modules" and not d.startswith(".")]
+    """In-place os.walk prune: skip node_modules and dot-directories."""
+    dirnames[:] = [d for d in dirnames
+                   if d != "node_modules" and not d.startswith(".")]
 
 
 def _find_reserved_name(filenames, name="index.md"):
@@ -2951,14 +3017,15 @@ def load_okf_config(root):
     return data
 
 
-def iter_all_md(bundle_path):
+def iter_all_md(bundle_path, prune_staging=True):
     """Yield abspath for every .md under a bundle, reserved files included.
 
-    Prunes "assets" (binary asset store) and "_"-prefixed dirs (staging, same
-    convention as is_bundle_dir uses one level up for bundles)."""
+    Prunes "assets" (binary asset store), dot-directories, and, by default,
+    "_"-prefixed staging directories."""
     for dirpath, dirnames, filenames in os.walk(bundle_path):
         dirnames[:] = [d for d in dirnames
-                       if not d.startswith(".") and not d.startswith("_") and d != "assets"]
+                       if not d.startswith(".") and d != "assets"
+                       and (not prune_staging or not d.startswith("_"))]
         for fn in filenames:
             if fn.endswith(".md"):
                 yield os.path.join(dirpath, fn)
@@ -3156,7 +3223,7 @@ def fix_xml_like_tags(root, target, dry_run=False):
     catalogue when None). Returns [(rel, count), ...]."""
     touched = []
     for bundle, bp in resolve_scopes(root, target):
-        for ap in iter_all_md(bp):
+        for ap in iter_all_md(bp, prune_staging=False):
             if os.path.basename(ap).lower() in RESERVED:
                 continue
             text = read_file(ap)
@@ -3306,7 +3373,7 @@ def fix_crosslinks(root, target, dry_run=False):
     touched = [(rel, changed_count), ...], unresolved = [(rel, target), ...]."""
     touched, unresolved = [], []
     for bundle, bp in resolve_scopes(root, target):
-        for ap in iter_all_md(bp):
+        for ap in iter_all_md(bp, prune_staging=False):
             if os.path.basename(ap).lower() in RESERVED:
                 continue
             text = read_file(ap)
@@ -4837,6 +4904,7 @@ def build_parser():
     pbi = _sub(sub, "build-index", "search",
                "(re)build the FTS5 lexical search index at "
                "<root>/.fts/fts.sqlite (local only, no network)")
+    pbi.add_argument("--include-topics", action="store_true", help="widen beyond .okf.toml declared bundle to topic folders")
     pbi.add_argument("--if-stale", action="store_true",
                       help="skip the rebuild when the existing index is "
                            "already current (default: always rebuild)")
@@ -4859,6 +4927,7 @@ def build_parser():
               formatter_class=argparse.RawDescriptionHelpFormatter,
               epilog=_FIND_EPILOG)
     pf.add_argument("query", help="search terms; quote multi-word queries")
+    pf.add_argument("--include-topics", action="store_true", help="widen beyond .okf.toml declared bundle to topic folders")
     pf.add_argument("--limit", type=int, default=10,
                     help="max results to print (default 10)")
     pf.add_argument("--type", help="filter by frontmatter `type` (exact match)")
@@ -5018,6 +5087,15 @@ def build_parser():
     return ap
 
 
+def _silence_broken_pipe_streams():
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, sys.stdout.fileno())
+        os.dup2(devnull, sys.stderr.fileno())
+    finally:
+        os.close(devnull)
+
+
 def main():
     args = build_parser().parse_args()
     root = catalogue_root(args.root)
@@ -5043,24 +5121,5 @@ if __name__ == "__main__":
         # catalogue: OKFT-0k55 Test-Output.
         sys.stdout.flush()
     except BrokenPipeError:
-        # OKFT-0k55 D02: fixed centrally, around the single entrypoint,
-        # rather than with a try/except duplicated inside cmd_find (and
-        # then cmd_index, cmd_list, cmd_toc, cmd_wikilinks, ... — every
-        # command that print()s a long answer shares this exact failure
-        # mode; the observed call site, cmd_find's `type:` line, is not
-        # special). Catching the exception alone is NOT sufficient: Python
-        # flushes sys.stdout at interpreter shutdown, and flushing a
-        # closed stdout raises again there, past any handler, printing
-        # "Exception ignored ..." noise (wording differs across CPython
-        # versions; observed 3.14: "Exception ignored while flushing
-        # sys.stdout:"). Redirecting the stdout fd to os.devnull before
-        # exit — the standard recipe, see
-        # https://docs.python.org/3/library/signal.html#note-on-sigpipe —
-        # makes that later flush a silent no-op.
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, sys.stdout.fileno())
-        # D01 (OKFT-0k55, revisable — Q02 open with the PO): a clean early
-        # close (`| head`) is not a CLI error, so exit 0, silently. The
-        # competing convention (141 = 128+SIGPIPE) is one line plus a test
-        # constant away if the PO's D20 lands on it instead.
+        _silence_broken_pipe_streams()
         sys.exit(0)

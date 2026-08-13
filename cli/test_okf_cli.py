@@ -5,6 +5,8 @@ Run: python3 -m unittest test_okf_cli -v
 """
 import argparse
 import datetime
+import contextlib
+import io
 import importlib.util
 import json
 import os
@@ -788,6 +790,33 @@ class BundleKeyDoesNotNarrowResolution(unittest.TestCase):
         self.assertEqual(candidates, ["/other-scaffolding/outside.md"])
 
 
+
+class WikilinkSourceOutsideDeclaredBundle(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "declared-bundle"))
+        os.makedirs(os.path.join(self.tmp, "topic-folder"))
+        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
+            f.write('bundle = "declared-bundle"\n')
+        with open(os.path.join(self.tmp, "topic-folder", "source.md"),
+                  "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Source\n---\nSee [[target]].\n")
+        with open(os.path.join(self.tmp, "declared-bundle", "target.md"),
+                  "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Target\n---\nbody\n")
+
+    def test_wikilink_from_outside_the_declared_bundle_resolves(self):
+        index = okf.build_concept_basename_index(self.tmp)
+        with open(os.path.join(self.tmp, "topic-folder", "source.md"),
+                  encoding="utf-8") as f:
+            records = okf.resolve_wikilink_records(
+                index, okf.parse_wikilinks(f.read(), "topic-folder/source.md"))
+        self.assertEqual(records[0]["status"], "resolved")
+        self.assertEqual(records[0]["candidates"], ["/declared-bundle/target.md"])
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
 class IndexableArchiveScopedToDeclaredBundle(unittest.TestCase):
     """OKFT-n8xz test 6 / Gate B B01 — with a `bundle` key declared, an
     archived directory that is NOT the declared bundle must not surface in
@@ -890,6 +919,30 @@ class CheckAndWikilinksStayWideWithDeclaredBundle(unittest.TestCase):
             any(r["source"] == "other-scaffolding/bad.md" for r in unresolved),
             "expected an unresolved wikilink reported from "
             "other-scaffolding/bad.md, got: {}".format(unresolved))
+
+class WikilinkCheckedBundleConfigGate(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        for directory in ("declared-bundle", "topic-folder"):
+            os.makedirs(os.path.join(self.tmp, directory))
+        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
+            f.write('bundle = "declared-bundle"\n'
+                    'wikilink_checked_bundles = ["declared-bundle"]\n')
+        for directory in ("declared-bundle", "topic-folder"):
+            with open(os.path.join(self.tmp, directory, "source.md"),
+                      "w", encoding="utf-8") as f:
+                f.write("---\ntype: Concept\ntitle: Source\n---\nSee [[dead-link]].\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_gate_checks_declared_bundle_but_ignores_topic_folder(self):
+        errors, warnings = okf.run_checks(self.tmp, None)
+        findings = errors + warnings
+        paths = [path for name, path, _message in findings
+                 if name == "wikilink-resolvable"]
+        self.assertIn("declared-bundle/source.md", paths)
+        self.assertNotIn("topic-folder/source.md", paths)
 
 
 class ConfigAwareTypes(unittest.TestCase):
@@ -7775,6 +7828,10 @@ class BrokenPipeOnFind(unittest.TestCase):
                   encoding="utf-8") as f:
             f.write("# B\n")
         okf.build_fts_index(cls.root)
+        for i in range(300):
+            with open(os.path.join(cls.root, "b", "invalid{}.md".format(i)),
+                      "wb") as f:
+                f.write(b"\xff\n")
 
     @classmethod
     def tearDownClass(cls):
@@ -7799,6 +7856,27 @@ class BrokenPipeOnFind(unittest.TestCase):
         stderr = producer.stderr.read().decode("utf-8", "replace")
         producer.stderr.close()
         return producer.returncode, stderr
+    def _pipe_merged_stderr_into_early_closing_reader(self):
+        import subprocess
+        import sys
+        producer = subprocess.Popen(
+            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root",
+             self.root, "fix-crosslinks", "b"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        consumer = subprocess.Popen(["head", "-n", "1"],
+                                     stdin=producer.stdout,
+                                     stdout=subprocess.PIPE)
+        producer.stdout.close()
+        consumer_output = consumer.communicate(timeout=10)[0]
+        producer.wait(timeout=10)
+        return producer.returncode, consumer_output.decode("utf-8", "replace")
+
+    def test_merged_stderr_pipe_exits_cleanly(self):
+        returncode, output = self._pipe_merged_stderr_into_early_closing_reader()
+        self.assertEqual(returncode, 0)
+        self.assertNotIn("Traceback (most recent call last)", output)
+        self.assertNotIn("Exception ignored", output)
+
 
     def test_no_traceback_on_stderr(self):
         _, stderr = self._pipe_into_early_closing_reader()
@@ -7888,6 +7966,120 @@ class BrokenPipeOnFindTinyAnswer(unittest.TestCase):
         returncode, _ = self._pipe_into_instantly_closing_reader()
         self.assertEqual(returncode, 0)
 
+
+class StagingContentRepair(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._w("b/published.md",
+                "---\ntype: Concept\ntitle: Published\n---\n"
+                "See [Old](old.md).\n<PLACEHOLDER>\nold/path\n")
+        self._w("b/_intake/staged.md",
+                "See [Old](../old.md).\n<PLACEHOLDER>\nold/path\n")
+        self._w("b/old.md", "---\ntype: Concept\ntitle: Old\n---\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_fix_crosslinks_reaches_staging(self):
+        touched, _ = okf.fix_crosslinks(self.tmp, "b")
+        self.assertEqual({p for p, _ in touched},
+                         {"b/published.md", "b/_intake/staged.md"})
+        self.assertIn("(/b/old.md)", self._r("b/_intake/staged.md"))
+
+    def test_fix_xml_tags_reaches_staging(self):
+        touched = okf.fix_xml_like_tags(self.tmp, "b")
+        self.assertEqual({p for p, _ in touched},
+                         {"b/published.md", "b/_intake/staged.md"})
+        self.assertIn("`<PLACEHOLDER>`", self._r("b/_intake/staged.md"))
+
+    def test_rewrite_path_reaches_staging(self):
+        touched = okf.rewrite_path(self.tmp, "old/path", "new/path")
+        self.assertEqual({p for p, _ in touched},
+                         {"b/published.md", "b/_intake/staged.md"})
+        self.assertIn("new/path", self._r("b/_intake/staged.md"))
+
+    def test_reindex_and_check_prune_staging(self):
+        reindexed = _cli(self.tmp, "reindex", "b")
+        checked = _cli(self.tmp, "check", "b")
+        self.assertEqual(reindexed.returncode, 0, reindexed.stderr)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.assertNotIn("_intake/staged.md", reindexed.stdout)
+        self.assertNotIn("_intake/staged.md", checked.stdout)
+
+
+
+class CorpusScopingTask1(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "canonical"))
+        os.makedirs(os.path.join(self.root, "topic"))
+        with open(os.path.join(self.root, ".okf.toml"), "w") as f:
+            f.write("bundle = \"canonical\"\n")
+        for bundle, cid, title in [("canonical", "main", "Canonical"), ("topic", "topic-only", "UniqueTopicNeedle")]:
+            with open(os.path.join(self.root, bundle, cid + ".md"), "w") as f:
+                f.write("---\ntype: Concept\ntitle: " + title + "\ndescription: d\ntags: []\n---\n" + title + "\n")
+            with open(os.path.join(self.root, bundle, "index.md"), "w") as f:
+                f.write("# " + bundle + "\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_default_filter_excludes_topic_from_broad_fts(self):
+        okf.build_fts_index(self.root, include_topics=True)
+        filters = okf.FindFilters(corpus_bundles=okf.list_search_bundles(self.root))
+        ranked = okf._fts_ranking(self.root, "UniqueTopicNeedle", 10, filters)
+        self.assertEqual(ranked, [])
+
+    def test_explicit_inclusion_returns_topic_from_broad_fts(self):
+        okf.build_fts_index(self.root, include_topics=True)
+        filters = okf.FindFilters(include_topics=True, corpus_bundles=okf.list_search_bundles(self.root, True))
+        ranked = okf._fts_ranking(self.root, "UniqueTopicNeedle", 10, filters)
+        self.assertEqual(ranked[0][0], "topic/topic-only")
+
+    def test_narrow_metadata_is_stale_for_topic_request(self):
+        okf.build_fts_index(self.root, include_topics=False)
+        conn = sqlite3.connect(okf._fts_db_path(self.root))
+        try:
+            self.assertTrue(okf._fts_index_stale(self.root, conn, include_topics=True))
+        finally:
+            conn.close()
+
+    def test_topic_request_against_narrow_index_emits_only_rebuild_note(self):
+        okf.build_fts_index(self.root, include_topics=False)
+        args = argparse.Namespace(
+            query="UniqueTopicNeedle", limit=10, scope=None, type=None,
+            tag=None, include_archive=False, include_topics=True,
+            breakdown=False)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            okf.cmd_find(self.root, args)
+        lexical_notes = [line for line in stderr.getvalue().splitlines()
+                         if line.startswith("note: lexical index")]
+        self.assertEqual(
+            lexical_notes,
+            ["note: lexical index excludes topic folders — run "
+             "`okf-cli build-index --include-topics`"])
+
+    def test_topic_request_without_fts_uses_wide_substring_scan(self):
+        filters = okf.FindFilters(include_topics=True)
+        ranked = okf._substring_ranking(
+            self.root, "UniqueTopicNeedle", ["uniquetopicneedle"], 10, filters)
+        self.assertEqual(ranked[0]["path"], "topic/topic-only")
+
+    def test_parser_exposes_include_topics(self):
+        parser = okf.build_parser()
+        self.assertTrue(parser.parse_args(["build-index", "--include-topics"]).include_topics)
+        self.assertTrue(parser.parse_args(["find", "needle", "--include-topics"]).include_topics)
 
 if __name__ == "__main__":
     unittest.main()

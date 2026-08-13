@@ -1,11 +1,11 @@
 ---
 # OKFT-epil
 title: Opt-in flag to search topic folders on purpose
-status: draft
+status: completed
 type: feature
 priority: low
 created_at: 2026-08-13T11:25:38Z
-updated_at: 2026-08-13T11:25:38Z
+updated_at: 2026-08-13T17:37:27Z
 ---
 
 Deferred by D16 itself: `lean-stack/docs/aca_capability-mcp/DECISIONS.md:31` chooses the declaration rule for the index corpus and adds "Zusätzlich Opt-in-Flag für Themen-Ordner als eigene, zweite Frage ('was haben wir damals gedacht?')".

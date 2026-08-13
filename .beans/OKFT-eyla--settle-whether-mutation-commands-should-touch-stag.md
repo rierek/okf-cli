@@ -1,11 +1,11 @@
 ---
 # OKFT-eyla
 title: Settle whether mutation commands should touch _ staging content
-status: draft
+status: completed
 type: task
 priority: low
 created_at: 2026-08-13T12:28:21Z
-updated_at: 2026-08-13T12:28:21Z
+updated_at: 2026-08-13T17:37:27Z
 ---
 
 Split out of OKFT-oe8t on 2026-08-13 so that bean could stay inside its retrieval-surface mandate.
