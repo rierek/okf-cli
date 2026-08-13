@@ -1225,9 +1225,15 @@ def _substring_ranking(root, query, terms, limit, filters):
     resolve_scopes() confines the TRAVERSAL (so a filtered-out concept is
     never even read from disk), while matches_loaded() re-checks the assembled
     path. Only the second one is a predicate; dropping it would reopen the
-    I01 gap the moment the traversal changes shape."""
+    I01 gap the moment the traversal changes shape.
+
+    indexable_only=True (OKFT-n8xz, Review 2026-08-13 D02): this is the ONE
+    resolve_scopes() call that feeds the search corpus, so it is the ONE
+    caller that opts into the narrower, declared-bundle traversal. Every
+    other resolve_scopes() caller stays on the wide default."""
     hits = []
-    for _b, bp in resolve_scopes(root, filters.scope, filters.include_archive):
+    for _b, bp in resolve_scopes(root, filters.scope, filters.include_archive,
+                                  indexable_only=True):
         # B04: the path prefix is the SCOPE's position under root, not the
         # bundle name. iter_concepts() yields cids relative to `bp`, so with
         # --scope b/sub the old "{bundle}/{cid}" form printed `b/y` for a
@@ -3306,26 +3312,52 @@ def cmd_fix_crosslinks(root, args):
         len(touched), verb, len(unresolved)))
 
 
-def resolve_scopes(root, target, include_archive=False):
+def resolve_scopes(root, target, include_archive=False, indexable_only=False):
     """[(bundle, bundle_path), ...] for `target` (<bundle> or <bundle>/<subdir>),
     or every bundle in the catalogue when target is None.
 
-    R-12 (okf-cli-iwx4): the ONE function `cmd_list` and `_substring_ranking`
-    both traverse through — AC1 is that the answer does not depend on which
-    of the two called it. When include_archive is set, each resolved scope's
-    archived counterpart is appended too, labelled `_archive/<bundle>[...]`
-    and pointing at the real `_archive/...` directory below root — a caller
-    that walks the returned pairs reaches the archive without a second
-    traversal shape, and a hit's path stays its true position below root
-    (AC3: `okf-cli read` on it resolves, SC-02). Unscoped, every bundle
-    registered under `_archive/` is reached this way too, including one with
-    no active counterpart — the same discovery R-05/R-06's wikilink basename
-    index already does for the archive
-    (build_concept_basename_index, above). Scoped, the archived counterpart
-    is derived WITHOUT an existence check, same as the active side already
-    does for a scoped target: a directory that turns out not to exist yields
-    no concepts from iter_concepts()'s os.walk, silently, the same contract
-    as always — no special-casing needed here for that."""
+    R-12 (okf-cli-iwx4): the ONE function ten commands traverse through —
+    `cmd_merge_tags`, `cmd_remove_tags`, `cmd_normalize_tags`, `cmd_list`,
+    `_substring_ranking` (find), `_recent_scopes`, `fix_xml_like_tags`,
+    `fix_crosslinks`, `scan_wikilinks` (the `wikilinks` command) and
+    `run_checks` (the `check` command) — AC1 is that the answer does not
+    depend on which one called it, for a given set of arguments.
+
+    `indexable_only` (OKFT-n8xz, Review 2026-08-13 B01/D02) narrows the
+    unscoped enumeration to list_indexable_bundles() instead of
+    list_bundles() — the declared `.okf.toml` `bundle` key, when present.
+    Defaults to False and MUST default to False: this function is shared by
+    write commands (a silently narrowed mutation command stops repairing
+    files it used to reach), by the two integrity commands `check` and
+    `wikilinks` (D17 names these explicitly as paths that must not narrow —
+    narrowing them traded the loud defect this epic exists to close for a
+    silent one: a real violation in an undeclared directory stops being
+    reported at all, verified against a copy of the real okf-tools/docs,
+    33 violations gone from an unscoped `check` run), and by presentation
+    (`_recent_scopes`). Only the find/index path opts in explicitly
+    (`_substring_ranking`), because it alone feeds the search corpus this
+    epic is about narrowing. `cmd_list` stays wide too (Q03, undecided by
+    design — raised to the PO, not this function).
+
+    When include_archive is set, each resolved scope's archived counterpart
+    is appended too, labelled `_archive/<bundle>[...]` and pointing at the
+    real `_archive/...` directory below root — a caller that walks the
+    returned pairs reaches the archive without a second traversal shape, and
+    a hit's path stays its true position below root (AC3: `okf-cli read` on
+    it resolves, SC-02). Unscoped, every bundle registered under `_archive/`
+    is reached this way too, including one with no active counterpart — the
+    same discovery R-05/R-06's wikilink basename index already does for the
+    archive (build_concept_basename_index, above; that function's traversal
+    is independent of this one and always stays wide — resolution never
+    narrows regardless of `indexable_only` here). Scoped, the archived
+    counterpart is derived WITHOUT an existence check, same as the active
+    side already does for a scoped target: a directory that turns out not to
+    exist yields no concepts from iter_concepts()'s os.walk, silently, the
+    same contract as always — no special-casing needed here for that."""
+    def _bundles(r, config_r=None):
+        return (list_indexable_bundles(r, config_r) if indexable_only
+                else list_bundles(r))
+
     if target:
         # An absolute target addresses a directory directly and must keep doing
         # so — os.path.join(root, "/x") discards root, and normalising it into a
@@ -3345,13 +3377,12 @@ def resolve_scopes(root, target, include_archive=False):
             # directory.
             norm = os.path.normpath(target).replace(os.sep, "/").strip("/")
             if norm in (".", ""):
-                scopes = [(b, os.path.join(root, b))
-                          for b in list_indexable_bundles(root)]
+                scopes = [(b, os.path.join(root, b)) for b in _bundles(root)]
                 norm = None
             else:
                 scopes = [(norm.split("/")[0], os.path.join(root, norm))]
     else:
-        scopes = [(b, os.path.join(root, b)) for b in list_indexable_bundles(root)]
+        scopes = [(b, os.path.join(root, b)) for b in _bundles(root)]
         norm = None
     if not include_archive:
         return scopes
@@ -3360,7 +3391,7 @@ def resolve_scopes(root, target, include_archive=False):
         if not os.path.isdir(archive_root):
             return scopes
         return scopes + [("_archive/" + b, os.path.join(archive_root, b))
-                         for b in list_indexable_bundles(archive_root, root)]
+                         for b in _bundles(archive_root, root)]
     return scopes + [("_archive/" + norm.split("/")[0],
                       os.path.join(archive_root, norm))]
 

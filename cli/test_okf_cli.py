@@ -822,10 +822,74 @@ class IndexableArchiveScopedToDeclaredBundle(unittest.TestCase):
         self.assertNotIn("_archive/other-scaffolding/three", rows)
 
     def test_find_include_archive_scope_excludes_the_undeclared_bundle(self):
-        scopes = okf.resolve_scopes(self.tmp, None, include_archive=True)
+        """Review 2026-08-13 D02: `indexable_only` is find's explicit opt-in,
+        not resolve_scopes()'s default — the call below mirrors what
+        `_substring_ranking` actually passes, not a bare unscoped call."""
+        scopes = okf.resolve_scopes(self.tmp, None, include_archive=True,
+                                    indexable_only=True)
         names = [b for b, _ in scopes]
         self.assertIn("_archive/declared-bundle", names)
         self.assertNotIn("_archive/other-scaffolding", names)
+
+    def test_resolve_scopes_default_stays_wide_even_with_a_bundle_key(self):
+        """Review 2026-08-13 B01 — the regression itself, pinned at the
+        primitive level: without indexable_only=True, resolve_scopes() must
+        NOT narrow just because `.okf.toml` declares a `bundle` key. Every
+        caller except find (merge-tags, remove-tags, normalize-tags, list,
+        _recent_scopes, fix-xml-like-tags, fix-crosslinks, wikilinks, check)
+        relies on this default."""
+        scopes = okf.resolve_scopes(self.tmp, None, include_archive=True)
+        names = [b for b, _ in scopes]
+        self.assertIn("_archive/other-scaffolding", names)
+
+
+class CheckAndWikilinksStayWideWithDeclaredBundle(unittest.TestCase):
+    """Review 2026-08-13 I01 — the required behavioural guard. A docs root
+    with a declared `bundle` key, a real violation sitting in an UNDECLARED
+    directory, and the assertion that an unscoped `check`/`wikilinks` run
+    still reports it. This is the reviewer's own experiment, reproduced as a
+    test: unscoped `check` against a copy of the real okf-tools/docs went
+    from 33 reported violations to 0 once resolve_scopes() narrowed its
+    default. `BundleKeyDoesNotNarrowResolution` alone did not catch that —
+    it only exercises `build_concept_basename_index`, never the
+    `run_checks`/`scan_wikilinks` traversal through `resolve_scopes`."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "declared-bundle"))
+        os.makedirs(os.path.join(self.tmp, "other-scaffolding"))
+        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
+            f.write('bundle = "declared-bundle"\n')
+        # clean concept in the declared bundle
+        with open(os.path.join(self.tmp, "declared-bundle", "clean.md"),
+                  "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Clean\n---\nSee "
+                    "[[still-clean]].\n")
+        with open(os.path.join(self.tmp, "declared-bundle", "still-clean.md"),
+                  "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Still Clean\n---\nbody\n")
+        # a REAL violation, sitting entirely outside the declared bundle: no
+        # parseable frontmatter at all (check_fm_parseable) AND a wikilink to
+        # a target that exists nowhere in the tree (resolve_wikilink).
+        with open(os.path.join(self.tmp, "other-scaffolding", "bad.md"),
+                  "w", encoding="utf-8") as f:
+            f.write("no frontmatter here.\n\nSee [[does-not-exist-anywhere]].\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_unscoped_check_still_reports_the_violation_outside_the_bundle(self):
+        errors, _warnings = okf.run_checks(self.tmp, None)
+        rels = [rel for _name, rel, _msg in errors]
+        self.assertIn("other-scaffolding/bad.md", rels)
+
+    def test_unscoped_wikilinks_still_reports_the_unresolved_link(self):
+        links = okf.scan_wikilinks(self.tmp, None)
+        unresolved = [r for r in links if r["status"] == "unresolved"]
+        self.assertTrue(
+            any(r["source"] == "other-scaffolding/bad.md" for r in unresolved),
+            "expected an unresolved wikilink reported from "
+            "other-scaffolding/bad.md, got: {}".format(unresolved))
 
 
 class ConfigAwareTypes(unittest.TestCase):
