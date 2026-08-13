@@ -1,11 +1,11 @@
 ---
 # OKFT-n8xz
 title: Scope the index corpus to declared bundles
-status: todo
+status: in-progress
 type: task
 priority: high
 created_at: 2026-08-13T11:07:18Z
-updated_at: 2026-08-13T11:24:27Z
+updated_at: 2026-08-13T11:26:12Z
 parent: OKFT-wmbu
 blocking_external: lean-stack:LES-zr4r
 ---
