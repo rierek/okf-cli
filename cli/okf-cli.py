@@ -78,6 +78,42 @@ def list_bundles(root):
     return out
 
 
+def list_indexable_bundles(root, config_root=None):
+    """The narrower bundle set for index/search call sites only -- build-index,
+    the FTS/semantic staleness counters, and find's whole-catalogue scope
+    (resolve_scopes). A repo docs root names exactly one real bundle in its
+    `.okf.toml` `bundle` key among many TPIC-scaffolding directories that also
+    pass is_bundle_dir()'s name filter; only the declared one belongs in the
+    index/search corpus (OKFT-n8xz, epic OKFT-wmbu).
+
+    Falls back to list_bundles(root) -- the catalogue behaviour, unchanged --
+    when the key is absent, matching the central Knowledge-Catalogue's
+    .okf.toml, which carries no `bundle` key.
+
+    A declared bundle that does not exist on disk yields the EMPTY set, not a
+    silent fallback to the name filter: `bundle` is a positive declaration of
+    the one directory that counts, and falling back the moment its path goes
+    missing would quietly resurrect every scaffolding directory into the
+    index -- exactly the regression this split exists to prevent.
+
+    `config_root` is where `.okf.toml` is read from when it differs from
+    `root` -- the `_archive/<bundle>/` mirror of an indexed root has no
+    config of its own (the declaration lives once, at the real root), so its
+    callers pass the real root as `config_root` while still listing
+    `_archive/` itself. Defaults to `root`.
+
+    Deliberately NOT used for wikilink/crosslink resolution, `check`'s
+    integrity scan, or any presentation surface -- those keep calling
+    list_bundles() directly, so narrowing the corpus never narrows what a
+    link can resolve to (okf-tools-okf/archive-lifecycle/
+    active-beats-archived-in-wikilink-resolution)."""
+    config = load_okf_config(root if config_root is None else config_root)
+    bundle = config.get("bundle")
+    if not isinstance(bundle, str) or not bundle:
+        return list_bundles(root)
+    return [bundle] if os.path.isdir(os.path.join(root, bundle)) else []
+
+
 def iter_concepts(bundle_path):
     """Yield (concept_id, abspath) for every non-reserved .md under a bundle."""
     for dirpath, dirnames, filenames in os.walk(bundle_path):
@@ -737,12 +773,12 @@ def build_fts_index(root, db_path=None):
                     newest = mt
             return count
 
-        for b in list_bundles(root):
+        for b in list_indexable_bundles(root):
             n_active += _index_bundle(b, os.path.join(root, b), "")
 
         archive_root = os.path.join(root, "_archive")
         if os.path.isdir(archive_root):
-            for b in list_bundles(archive_root):
+            for b in list_indexable_bundles(archive_root, root):
                 n_archived += _index_bundle(
                     b, os.path.join(archive_root, b), "_archive/")
 
@@ -782,7 +818,7 @@ def _fts_index_stale(root, conn):
     n_active = 0
     n_archived = 0
     newest = 0.0
-    for b in list_bundles(root):
+    for b in list_indexable_bundles(root):
         for _cid, ap in iter_concepts(os.path.join(root, b)):
             n_active += 1
             mt = os.path.getmtime(ap)
@@ -790,7 +826,7 @@ def _fts_index_stale(root, conn):
                 newest = mt
     archive_root = os.path.join(root, "_archive")
     if os.path.isdir(archive_root):
-        for b in list_bundles(archive_root):
+        for b in list_indexable_bundles(archive_root, root):
             for _cid, ap in iter_concepts(os.path.join(archive_root, b)):
                 n_archived += 1
                 mt = os.path.getmtime(ap)
@@ -848,7 +884,7 @@ def cmd_build_semantic_index(root, args):
     itself (D13/D16)."""
     db_path = _tagvec_db_path(root)
     if getattr(args, "if_stale", False):
-        bundles = list_bundles(root)
+        bundles = list_indexable_bundles(root)
         paths = ["{}/{}".format(b, cid) for b in bundles
                  for cid, _ap in iter_concepts(os.path.join(root, b))]
         cov = semantic_coverage(root, paths)
@@ -3309,12 +3345,13 @@ def resolve_scopes(root, target, include_archive=False):
             # directory.
             norm = os.path.normpath(target).replace(os.sep, "/").strip("/")
             if norm in (".", ""):
-                scopes = [(b, os.path.join(root, b)) for b in list_bundles(root)]
+                scopes = [(b, os.path.join(root, b))
+                          for b in list_indexable_bundles(root)]
                 norm = None
             else:
                 scopes = [(norm.split("/")[0], os.path.join(root, norm))]
     else:
-        scopes = [(b, os.path.join(root, b)) for b in list_bundles(root)]
+        scopes = [(b, os.path.join(root, b)) for b in list_indexable_bundles(root)]
         norm = None
     if not include_archive:
         return scopes
@@ -3323,7 +3360,7 @@ def resolve_scopes(root, target, include_archive=False):
         if not os.path.isdir(archive_root):
             return scopes
         return scopes + [("_archive/" + b, os.path.join(archive_root, b))
-                         for b in list_bundles(archive_root)]
+                         for b in list_indexable_bundles(archive_root, root)]
     return scopes + [("_archive/" + norm.split("/")[0],
                       os.path.join(archive_root, norm))]
 

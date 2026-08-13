@@ -703,6 +703,131 @@ class OkfConfig(unittest.TestCase):
         self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
 
 
+class ListIndexableBundles(unittest.TestCase):
+    """OKFT-n8xz — the narrower corpus for index/search call sites only: the
+    declared `.okf.toml` `bundle` key when present, list_bundles()'s name
+    filter (catalogue behaviour, unchanged) otherwise."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _mkdirs(self, *names):
+        for n in names:
+            os.makedirs(os.path.join(self.tmp, n), exist_ok=True)
+
+    def _w_toml(self, text):
+        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_declared_bundle_key_narrows_to_exactly_that_name(self):
+        """AC1 — a `bundle` key wins even with other namefilter-eligible
+        directories sitting right next to it (the TPIC-scaffolding shape a
+        repo docs root actually has)."""
+        self._mkdirs("lean-stack-okf", "some-tpic-scaffolding", "another-plan-dir")
+        self._w_toml('bundle = "lean-stack-okf"\n')
+        self.assertEqual(okf.list_indexable_bundles(self.tmp), ["lean-stack-okf"])
+
+    def test_absent_bundle_key_matches_list_bundles(self):
+        """AC2 — no `bundle` key -> catalogue behaviour (list_bundles)."""
+        self._mkdirs("a", "b", "_staging")
+        self._w_toml('types_source = "x"\n')
+        self.assertEqual(okf.list_indexable_bundles(self.tmp),
+                          okf.list_bundles(self.tmp))
+
+    def test_no_config_file_at_all_matches_list_bundles(self):
+        """AC3 — no `.okf.toml` at all -> same fallback as AC2."""
+        self._mkdirs("a", "b")
+        self.assertEqual(okf.list_indexable_bundles(self.tmp),
+                          okf.list_bundles(self.tmp))
+
+    def test_declared_bundle_missing_on_disk_yields_empty_not_fallback(self):
+        """AC4 — a `bundle` key naming a directory that does not exist is a
+        positive declaration gone stale, not an invitation back to the wide
+        name filter: the empty set, chosen and justified in the bean over
+        falling back silently, which would resurrect every scaffolding
+        directory the moment the declared path went missing."""
+        self._mkdirs("some-other-dir")
+        self._w_toml('bundle = "does-not-exist"\n')
+        self.assertEqual(okf.list_indexable_bundles(self.tmp), [])
+
+
+class BundleKeyDoesNotNarrowResolution(unittest.TestCase):
+    """Acceptance guard (OKFT-n8xz, test 5) — the resolution call sites keep
+    seeing the WIDE bundle set even when `.okf.toml` declares a narrower
+    `bundle` key: a wikilink to a concept outside the declared bundle must
+    stay resolvable. Narrowing the index/search corpus must not narrow
+    resolution, or the exact defect
+    okf-tools-okf/archive-lifecycle/active-beats-archived-in-wikilink-resolution
+    describes for archiving recurs here for scaffolding."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "declared-bundle"))
+        os.makedirs(os.path.join(self.tmp, "other-scaffolding"))
+        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
+            f.write('bundle = "declared-bundle"\n')
+        with open(os.path.join(self.tmp, "declared-bundle", "source.md"),
+                  "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Source\n---\n"
+                    "See [[outside]].\n")
+        with open(os.path.join(self.tmp, "other-scaffolding", "outside.md"),
+                  "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Outside\n---\nbody\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_wikilink_to_a_concept_outside_the_declared_bundle_resolves(self):
+        index = okf.build_concept_basename_index(self.tmp)
+        status, candidates = okf.resolve_wikilink(
+            index, "declared-bundle/source.md", "outside")
+        self.assertEqual(status, "resolved")
+        self.assertEqual(candidates, ["/other-scaffolding/outside.md"])
+
+
+class IndexableArchiveScopedToDeclaredBundle(unittest.TestCase):
+    """OKFT-n8xz test 6 / Gate B B01 — with a `bundle` key declared, an
+    archived directory that is NOT the declared bundle must not surface in
+    the FTS index (740/745) nor in find's --include-archive scope
+    (resolve_scopes, 3312/3317/3326)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "declared-bundle"))
+        self._w("declared-bundle/one.md", "One", "active body.\n")
+        self._w("_archive/declared-bundle/two.md", "Two", "archived, same bundle.\n")
+        self._w("_archive/other-scaffolding/three.md", "Three", "archived, other dir.\n")
+        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
+            f.write('bundle = "declared-bundle"\n')
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, title, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: {}\n---\n{}".format(title, body))
+
+    def test_fts_index_excludes_the_undeclared_archived_bundle(self):
+        okf.build_fts_index(self.tmp)
+        conn = sqlite3.connect(okf._fts_db_path(self.tmp))
+        rows = [r[0] for r in conn.execute("SELECT path FROM docs")]
+        conn.close()
+        self.assertIn("declared-bundle/one", rows)
+        self.assertIn("_archive/declared-bundle/two", rows)
+        self.assertNotIn("_archive/other-scaffolding/three", rows)
+
+    def test_find_include_archive_scope_excludes_the_undeclared_bundle(self):
+        scopes = okf.resolve_scopes(self.tmp, None, include_archive=True)
+        names = [b for b, _ in scopes]
+        self.assertIn("_archive/declared-bundle", names)
+        self.assertNotIn("_archive/other-scaffolding", names)
+
+
 class ConfigAwareTypes(unittest.TestCase):
     """type-registered check resolves TYPES.md via .okf.toml types_source,
     so a repo bundle points at the central catalogue's TYPES.md (no local copy)."""
