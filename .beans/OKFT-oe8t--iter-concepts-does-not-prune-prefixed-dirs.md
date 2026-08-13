@@ -1,11 +1,11 @@
 ---
 # OKFT-oe8t
 title: iter_concepts does not prune _-prefixed dirs
-status: todo
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-08-09T19:09:25Z
-updated_at: 2026-08-13T11:24:44Z
+updated_at: 2026-08-13T12:10:58Z
 parent: OKFT-wmbu
 ---
 

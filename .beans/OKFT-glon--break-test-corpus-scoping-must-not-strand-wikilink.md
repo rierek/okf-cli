@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-08-13T11:07:31Z
-updated_at: 2026-08-13T12:01:57Z
+updated_at: 2026-08-13T12:10:58Z
 parent: OKFT-wmbu
 blocked_by:
     - OKFT-n8xz
@@ -178,3 +178,24 @@ Both directions' actual failure modes are therefore already guarded by existing,
 
 - If a future task wants `check` itself to be the discriminating signal for wikilink regressions in this repo, `docs/.okf.toml` needs a `wikilink_checked_bundles` entry naming `okf-tools-okf` — currently absent, so `check`'s 33-violation count is entirely `asset-placement`/`reserved-no-type`/`entry-file-description` and never wikilinks, independent of any corpus-scoping change.
 - The asymmetry documented above (Richtung 2 breakable by index-narrowing, Richtung 1 not) is a property of `build_concept_basename_index`'s specific narrowing mutation, not a general claim that inbound links from scaffolding are safe from every possible future narrowing — see failure mode B, which a *different* mutation (of the source-traversal call sites, still on OKFT-n8xz's negative list) would trigger, and which is already guarded.
+
+
+## Review 2026-08-13 — APPROVED (ce-specs-reviewer)
+
+The reviewer re-ran the whole probe rather than reading it, and confirmed the asymmetry with a stronger argument than the implementer gave.
+
+**The `check` substitution holds.** Verified mechanically, not taken on trust: `docs/.okf.toml` carries no `wikilink_checked_bundles`, so `wikilink_checked_bundles(config, root)` returns `set()`, `wl_checked` in `run_checks` is empty, and `check_wikilink_resolvable` (:3797-3815) returns `[]` for every file regardless of resolution state. The substitute is not a workaround but the same mechanism: `check_wikilink_resolvable` and `scan_wikilinks` both go through `resolve_wikilink_records` → `resolve_wikilink` → `build_concept_basename_index`. Only the opt-in gate and file-wise vs link-wise aggregation differ. `wikilinks --unresolved` exercises exactly the path `check` would exercise if the gate were armed.
+
+**The inert direction is inert by construction, not by accident.** Reproduced: with `build_concept_basename_index` narrowed, direction 2 gives `4 link(s), 0 resolved, 0 ambiguous, 4 unresolved`, direction 1 gives `4 link(s), 1 resolved, 0 ambiguous, 3 unresolved`. The reviewer's addition: such a mutation can only remove targets *outside* the declared bundle from the index, and direction 1's target is by definition *inside* it. Direction 1 is therefore unbreakable by **any** bundle-narrowing mutation of that function — not just by the one that was tried.
+
+**Direction 1's real risk is a different mutation, and it is covered.** The risk is narrowing the *source* traversal, so the link is never seen at all. The reviewer wrote a second, different mutation for that (`scan_wikilinks` building a bundle-scoped index) and found both existing guards still green while the real direction-1 probe still resolved — i.e. it hunted for a gap and did not find one.
+
+**Rollback clean.** `git status --porcelain` and `git diff HEAD` empty before and after the reviewer's own runs; `git show ac66bfd --stat` is one file, 164 insertions, the bean alone; both manipulated docs files byte-identical to origin; `cli/okf-cli.py` byte-identical to a pre-review backup.
+
+`just test`: `Ran 685 tests in 26.692s`, `FAILED (failures=3)`, the three baseline failures, no fourth.
+
+### Non-blocking, carried forward
+
+- **D01** — the bean said `check` **on the bundle**; the run was unscoped against the whole docs root. Correct as executed: a bundle-scoped run would never have scanned direction 1's source file, which lives outside the bundle, and would have voided the probe. Deviation is right, but it is a deviation.
+- **Q01 / I01** — filed as OKFT-uctf: arm `wikilink_checked_bundles` for this repo, and add a test that pins direction 1 directly instead of relying on a structural argument.
+- **Q02** — the gap hunt in prüfpunkt 5 was targeted, not exhaustive. No impossibility proof was attempted, and none is claimed.
