@@ -115,9 +115,19 @@ def list_indexable_bundles(root, config_root=None):
 
 
 def iter_concepts(bundle_path):
-    """Yield (concept_id, abspath) for every non-reserved .md under a bundle."""
+    """Yield (concept_id, abspath) for every non-reserved .md under a bundle.
+
+    Prunes "_"-prefixed staging dirs, same convention as iter_all_md (:2925,
+    clause :2930-2932) — every one of iter_concepts()'s ~19 call sites feeds
+    index/search/list/tag-maintenance, never `check` (which walks
+    iter_all_md exclusively), so the two functions diverging left in-bundle
+    staging content reachable via index/list/find yet skipped by check
+    (OKFT-oe8t D01: shared-function fix, no opt-in needed — contrast
+    OKFT-n8xz's resolve_scopes(), whose ten callers wanted different
+    defaults)."""
     for dirpath, dirnames, filenames in os.walk(bundle_path):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "assets"]
+        dirnames[:] = [d for d in dirnames
+                       if not d.startswith(".") and not d.startswith("_") and d != "assets"]
         for fn in filenames:
             if not fn.endswith(".md") or fn.lower() in RESERVED:
                 continue

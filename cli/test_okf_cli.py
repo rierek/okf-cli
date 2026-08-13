@@ -1901,6 +1901,47 @@ class CmdPrimeCompactGuide(unittest.TestCase):
         self.assertIn("--root", self._prime())
 
 
+class IterConceptsStagingPrune(unittest.TestCase):
+    """iter_concepts (okf-cli.py:117) did not prune "_"-prefixed staging
+    dirs, unlike its sibling iter_all_md (:2925, clause :2930-2932) —
+    in-bundle staging content was reachable via index/list/find yet skipped
+    by `check`, the worst combination: reachable but unverified (OKFT-oe8t).
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text="---\ntype: Concept\ntitle: T\n---\nbody\n"):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_underscore_staging_dir_pruned(self):
+        self._w("b/_intake/konzept.md")
+        cids = [cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b"))]
+        self.assertEqual(cids, [])
+
+    def test_ordinary_subdir_still_walked(self):
+        """The prune targets "_"-prefixed names only — a normal nested
+        directory stays fully reachable."""
+        self._w("b/sub/inner.md")
+        cids = [cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b"))]
+        self.assertEqual(cids, ["sub/inner"])
+
+    def test_dot_dir_and_assets_still_pruned(self):
+        """Unchanged behaviour — this fix adds a clause, it does not touch
+        the two that were already there."""
+        self._w("b/.git/hidden.md")
+        self._w("b/assets/pic.md")
+        self._w("b/kept.md")
+        cids = sorted(cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b")))
+        self.assertEqual(cids, ["kept"])
+
+
 class CmdListJson(unittest.TestCase):
     """okf-cli-83vq (B01) — `list --json` emits a json.loads-parseable array;
     non-json output stays byte-identical to today's human-readable form."""
@@ -4182,6 +4223,61 @@ class FindDegradesWithoutIndex(unittest.TestCase):
             self.assertIn("semantic arm skipped", lines[1])
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+
+class StagingExcludedFromIndexListFind(unittest.TestCase):
+    """OKFT-oe8t AC 1+2: a bundle's `_intake` staging content was reachable
+    via index/list/find before this fix (iter_concepts did not prune "_"),
+    and is not after — while a bundle with only ordinary subdirs stays
+    fully enumerated (AC 4)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._w("b/_intake/konzept.md",
+                "---\ntype: Concept\ntitle: Konzept\ndescription: d\n"
+                "tags: [staged]\n---\nzqxstagingmarker body.\n")
+        self._w("b/sub/regular.md",
+                "---\ntype: Concept\ntitle: Regular\ndescription: d\n"
+                "tags: [kept]\n---\nzqxregularmarker body.\n")
+        self._w("b/index.md", "# B\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_index_json_excludes_staging_keeps_regular(self):
+        import io
+        import contextlib
+        import json
+        import types
+        args = types.SimpleNamespace(bundle="b", json=True, full=True)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_index(self.tmp, args)
+        ids = [c["id"] for c in json.loads(buf.getvalue())["concepts"]]
+        self.assertNotIn("_intake/konzept", ids)
+        self.assertIn("sub/regular", ids)
+
+    def test_list_excludes_staging_keeps_regular(self):
+        import io
+        import contextlib
+        import types
+        args = types.SimpleNamespace(type="Concept", tag=None, scope=None, json=False)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_list(self.tmp, args)
+        out = buf.getvalue()
+        self.assertNotIn("_intake", out)
+        self.assertIn("sub/regular", out)
+
+    def test_find_degraded_excludes_staging(self):
+        out = _run_find(self.tmp, "zqxstagingmarker")
+        self.assertNotIn("_intake", out)
 
 
 class FtsBm25WeightsApplied(unittest.TestCase):
