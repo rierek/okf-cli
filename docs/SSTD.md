@@ -2,6 +2,8 @@
 
 > SSTD hält kein Wissen — nur Sink-Registry + Entry-Point (D01). Decisions/durables Wissen → OKF-Bundle, Work-State → beans, Code-Historie → git.
 
+> Präfix-Migration 2026-08-10: IDs der Form `okf-cli-<suffix>` in diesem Dokument sind die Schreibweise vor der Umstellung auf `OKFT-<suffix>` — dasselbe Bean, dieselbe Historie (`OKFT-eil9`).
+
 ## Sink-Registry
 
 | Sink | Hält | Lesen | Fundstelle |
@@ -11,7 +13,18 @@
 | **git** | Code-/Change-Verlauf | `git log` / `git diff` | dieses Repo |
 | **SSTD.md** | Continuity/Entry-Point (dieses File) | Read | `docs/SSTD.md` |
 
-## Entry-Point (Stand 2026-08-13, Epos `OKFT-wmbu` realisiert — PO-Review-Gate offen)
+## Entry-Point (Stand 2026-08-16, vier Bugfix-beans realisiert — kein PO-Gate, direkt via `beans complete`)
+
+- **Vier eigenständige beans abgeschlossen, alle `completed`:** `OKFT-ji5g` (log-Kommando + `log.md` retiriert), `OKFT-o1u6` (fix-crosslinks meldete Doku-Format-Beispiele als unresolved — `_mask_code_spans` deckte nur exakt 3 Backticks/Tilden ab, jetzt `{3,}`), `OKFT-gm5k` (Resolver ignorierte NFC/NFD — `_normalize_key` an allen fünf Key-Ableitungsstellen, Mutant U01 killed), `OKFT-czm9` (Root-Ursache war nicht `reindex`, sondern `resolve_crosslink_target`, das einen falsch positionierten `--root` nie prüft — `main()` warnt jetzt auf stderr; drei reale Artefakte im `sproutling-okf`-Bundle repariert).
+- **Subagent-Selbstberichte lagen dreimal falsch, jedes Mal unabhängig widerlegt statt übernommen:** eine erfundene „vorherige Runde" plus ein fälschlich „existiert nicht mehr" gemeldetes Repo bei `czm9` (echter Fund: Root-Validierungslücke, real repariert in `/Users/erik/dev/prod/SPF_sproutling/repo/docs/sproutling-okf`), eine self-reported „all passing" bei `gm5k`, die tatsächlich zwei Tests brach (Pfad-Tail-Vergleich fälschlich auf Gleichheit statt `endswith` verengt), und eine vom Reviewer gefundene, nie geprüfte Restzeile in `ce-okf/SKILL.md`. Für `ce-mem-dream`/bereits erledigt: dritter Absatz an `agent-memory/subagent-delegation-hygiene` angehängt.
+- **Ein neues bean gefilet, nicht blockierend:** `rx51` — `check`/`fix-crosslinks` überspringen `RESERVED`-Dateinamen als Scan-Quelle vollständig, ein handgeschriebener Crosslink in `README.md`/`index.md` außerhalb der Marker ist dadurch dauerhaft unsichtbar für beide Kommandos. Genau das ließ die drei `czm9`-Artefakte seit 2026-07-26 unentdeckt. Design-Entscheidung offen (Scan-und-warn vs. Scan-und-rewrite-außerhalb-Marker vs. akzeptiertes Risiko), bewusst nicht blind gepatcht.
+- **Vier weitere live-Dokumente korrigiert, außerhalb des ursprünglichen `ji5g`-Scopes gefunden:** `okf-meta-wiki/narrative/catalog-and-okf-synthesis.md`, `baseline/index-and-log-files.md` (D03), `examples/log-entry-template.md`, `okf-cli-mcp-overview.md` (Tabellenzeile + CLI-only-Liste) behaupteten weiterhin, `okf-cli.py log --write` funktioniere.
+- **Beweislage:** `just test` → `Ran 729 tests`, `failures=3` (unverändert die drei vorbestehenden `RunnerAgainstRealCatalogueTest`-Fehler aus `OKFT-5c2c`, kein vierter). `check` gegen den echten Katalog: nur vorbestehende, session-fremde `tag-registered`-Warnungen.
+- **Commits:** `2604a4d`+`e18d76a` (okf-tools, main), `72c3541c` (SPF_sproutling), `7f1ed4dc` (Skills-Repo). Katalog-Commit für die `agent-memory`-Ergänzung steht noch aus (Teil des laufenden `/ce-end`).
+- **Session-fremd, nicht angefasst:** `docs/LESSONS-LEARNED.md`, `docs/SSTD.md`, `docs/okf-tools-okf/retrieval-architecture/index.md` + ein untrackter Concept-Entwurf im selben Ordner waren bereits vor Session-Start modifiziert/untracked — gehören mutmaßlich zu `OKFT-wuiv` (weiterhin `in-progress`, von dieser Session nicht berührt). Nicht committet, nicht gelöscht.
+- **Nächster Schritt:** `beans list --ready`. `rx51` ist der einzige neue Kandidat aus dieser Session.
+
+## Vorheriger Entry-Point (Stand 2026-08-13, Epos `OKFT-wmbu` realisiert — PO-Review-Gate offen)
 
 - **Epos `OKFT-wmbu` „Index corpus: canon must outweigh scaffolding" ist realisiert, alle sechs Leaves `completed`, Tag `to-review` gesetzt.** Der Suchkorpus in `lean-stack/docs` fiel von 197 auf 52 Dokumente, alle 52 unter `lean-stack-okf`, kein einziges aus einem Themen-Ordner — per SQLite-Direktabfrage gegen den ausgelieferten Index belegt, nicht per Neubau. Verhaltensbeleg an R34s eigener Query: `dev-CLI Kanon Entrypoint Wrapper Shims` liefert `lean-stack-okf/dev-cli-canon` jetzt auf Rang 1 statt Rang 4 von 9. Commit-Kette auf `main` von `da21ab1` bis `e72553c`, gepusht.
 - **Der Mechanismus:** `list_indexable_bundles` liest den `bundle`-Schlüssel der `.okf.toml`, den `okf-cli` bis dahin nie ausgewertet hat, und wird ausschließlich an den Index-/Such-Aufrufstellen eingesetzt. `is_bundle_dir` ist unverändert; Auflösung, Rename und Wikilink-Integrität behalten die breite Menge. Rückwärtskompatibel per Konstruktion, weil der Katalog keinen `bundle`-Schlüssel trägt.
