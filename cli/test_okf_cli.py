@@ -260,57 +260,6 @@ class ForceFlattenAndExempt(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
-class RenderGitLog(unittest.TestCase):
-    """T04 — render git history as a SPEC §7 date-grouped flat list."""
-
-    def test_groups_by_date_newest_first(self):
-        rows = [
-            ("2026-07-04", "feat(x): a"),
-            ("2026-07-04", "chore(y): b"),
-            ("2026-07-03", "fix(z): c"),
-        ]
-        md = okf.render_git_log("dev-arch-wiki", rows)
-        self.assertIn("# dev-arch-wiki Update Log", md)
-        # one heading per date, newest first
-        self.assertEqual(md.count("## 2026-07-04"), 1)
-        self.assertLess(md.index("## 2026-07-04"), md.index("## 2026-07-03"))
-        # both same-day commits land under the one date heading, as bullets
-        self.assertIn("* feat(x): a", md)
-        self.assertIn("* chore(y): b", md)
-        self.assertIn("* fix(z): c", md)
-        # bullet b sits after its date heading and before the next date heading
-        self.assertLess(md.index("* chore(y): b"), md.index("## 2026-07-03"))
-
-    def test_empty_history_still_has_header(self):
-        md = okf.render_git_log("dev-arch-wiki", [])
-        self.assertIn("# dev-arch-wiki Update Log", md)
-
-
-class SpliceLog(unittest.TestCase):
-    """T05 — --write is marker-bounded: refresh the snapshot, never clobber the
-    hand-authored archive that lives outside the markers."""
-
-    def test_replaces_only_between_markers(self):
-        existing = (
-            "# Catalogue Update Log\n\n> notice\n\n"
-            + okf.LOG_START + "\nOLD SNAPSHOT\n" + okf.LOG_END
-            + "\n\n## Archiv\n* precious hand entry\n"
-        )
-        new = okf.splice_log(existing, "NEW SNAPSHOT")
-        self.assertIn("NEW SNAPSHOT", new)
-        self.assertNotIn("OLD SNAPSHOT", new)
-        self.assertIn("* precious hand entry", new)   # archive outside markers preserved
-        self.assertIn("> notice", new)
-
-    def test_wraps_markerless_file_and_preserves_content_as_archive(self):
-        existing = "# Catalogue Update Log\n\n## 2026-07-04\n* precious hand entry\n"
-        new = okf.splice_log(existing, "SNAP")
-        self.assertIn(okf.LOG_START, new)
-        self.assertIn("SNAP", new)
-        self.assertIn("* precious hand entry", new)    # old content kept, not lost
-        # snapshot block comes before the preserved archive
-        self.assertLess(new.index("SNAP"), new.index("* precious hand entry"))
-
 
 class CheckCommand(unittest.TestCase):
     """T06 — okf-cli check: pluggable (name, severity, check_fn) conformance
@@ -619,6 +568,38 @@ class RewriteCrosslinksInBody(unittest.TestCase):
         new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
         self.assertEqual(new, body)
         self.assertEqual(changed, 0)
+    def test_four_backtick_fence_blocks_are_masked(self):
+        """Verify that code fences with 4+ backticks are handled correctly.
+        Markdown allows any number of backticks >= 3. The regex must match
+        the opening fence marker and expect the same number of backticks
+        to close the block."""
+        self._w("b/y.md", "")
+        body = "````markdown\n[Y](y.md)\n````\n\nAnother ```` fence with 4 tildes:\n~~~~\n[Z](z.md)\n~~~~"
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        # Links inside fences should not be rewritten
+        self.assertEqual(new, body)
+        self.assertEqual(changed, 0)
+        self.assertEqual(unresolved, [])
+
+    def test_five_backtick_fence_blocks_are_masked(self):
+        """Test 5-backtick fences (common for escaping code examples that
+        themselves contain triple-backtick examples)."""
+        self._w("b/inner.md", "")
+        body = "`````\n[Y](inner.md)\n`````"
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        self.assertEqual(new, body)
+        self.assertEqual(changed, 0)
+        self.assertEqual(unresolved, [])
+
+    def test_multiple_fence_styles_same_document(self):
+        """Verify that various fence styles don't interfere with each other."""
+        self._w("b/a.md", "")
+        self._w("b/b.md", "")
+        body = "```\n[A](a.md)\n```\n\n````\n[B](b.md)\n````\n\n~~~\n[A](a.md)\n~~~"
+        new, changed, unresolved = okf.rewrite_crosslinks_in_body(self.tmp, "b", "", body)
+        self.assertEqual(new, body)
+        self.assertEqual(changed, 0)
+        self.assertEqual(unresolved, [])
 
 
 class FixCrosslinksCommand(unittest.TestCase):
@@ -5490,6 +5471,45 @@ class WikilinkResolve(WikilinkFixtureMixin, unittest.TestCase):
             import shutil
             shutil.rmtree(ext, ignore_errors=True)
 
+    def test_nfd_filename_matches_nfc_link(self):
+        """OKFT-gm5k: APFS delivers filenames in NFD, but users type links
+        in NFC. build_concept_basename_index normalizes filenames; resolve_wikilink
+        normalizes link text. Both must use the same order (NFC + lowercase) to
+        match bidirectionally."""
+        import unicodedata
+        # Create a concept with an umlaut filename in NFD (APFS form).
+        name_nfd = unicodedata.normalize('NFD', 'Größe')  # ö = o + combining diacritic
+        self._w(f"a/{name_nfd}.md", "---\ntype: Concept\n---\n# Größe\n")
+        # Type the same word in NFC (user input) and check it resolves.
+        name_nfc = unicodedata.normalize('NFC', 'Größe')  # ö = single precomposed char
+        self.assertEqual(self._status("a/x.md", name_nfc),
+                         ("resolved", [f"/a/{name_nfd}.md"]))
+
+    def test_nfc_filename_matches_nfd_link(self):
+        """Reverse of above: file created with NFC normalization (e.g., from
+        editor or git), link queried with NFD (rare but possible on clipboard
+        paste). Both forms must resolve to the same concept."""
+        import unicodedata
+        name_nfc = unicodedata.normalize('NFC', 'Größe')
+        self._w(f"a/{name_nfc}.md", "---\ntype: Concept\n---\n# Größe\n")
+        name_nfd = unicodedata.normalize('NFD', 'Größe')
+        self.assertEqual(self._status("a/x.md", name_nfd),
+                         ("resolved", [f"/a/{name_nfc}.md"]))
+
+    def test_case_folding_does_not_use_casefold_preserving_d06(self):
+        """D06 regression test: casefold() would map ß → ss, causing [[STRASSE]]
+        to resolve to Straße.md. JavaScript toLowerCase() (which Obsidian uses)
+        leaves ß alone. Our _normalize_key() matches that, using .lower() not
+        casefold()."""
+        self._w("a/Straße.md", "---\ntype: Concept\n---\n# S\n")
+        # Uppercase german eszett does not exist in lowercase form; [[STRASSE]]
+        # should not resolve.
+        self.assertEqual(self._status("a/x.md", "STRASSE"),
+                         ("unresolved", []))
+        # But [[straße]] should resolve just fine.
+        self.assertEqual(self._status("a/x.md", "straße"),
+                         ("resolved", ["/a/Straße.md"]))
+
 
 class WikilinkArchiveResolution(WikilinkFixtureMixin, unittest.TestCase):
     """R-05/R-06 (docs/okf-archive-lifecycle/SPEC.md) — build_concept_basename_index
@@ -8178,6 +8198,154 @@ class CorpusScopingTask1(unittest.TestCase):
         parser = okf.build_parser()
         self.assertTrue(parser.parse_args(["build-index", "--include-topics"]).include_topics)
         self.assertTrue(parser.parse_args(["find", "needle", "--include-topics"]).include_topics)
+
+
+class CmdReindexBlastRadius(unittest.TestCase):
+    """Ensure reindex <bundle>/<subdir> does not write to sibling directories."""
+    
+    def test_reindex_subdir_does_not_modify_siblings(self):
+        """Verify that uncovered_index_dirs uses the scoped target path (fix for OKFT-czm9)."""
+        with tempfile.TemporaryDirectory() as root:
+            # Create a bundle with two subdirs, each with index.md
+            bundle_path = os.path.join(root, "bundle")
+            os.makedirs(os.path.join(bundle_path, "subdir1"))
+            os.makedirs(os.path.join(bundle_path, "subdir2"))
+            
+            # Create index.md in each subdir with marker blocks
+            idx1 = os.path.join(bundle_path, "subdir1", "index.md")
+            idx2 = os.path.join(bundle_path, "subdir2", "index.md")
+            
+            okf.write_file(idx1, "# Subdir1\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
+            okf.write_file(idx2, "# Subdir2\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
+            
+            # Create a concept file in each subdir
+            okf.write_file(os.path.join(bundle_path, "subdir1", "concept1.md"),
+                          "---\ntitle: Concept1\n---\n")
+            okf.write_file(os.path.join(bundle_path, "subdir2", "concept2.md"),
+                          "---\ntitle: Concept2\n---\n")
+            
+            # Reindex only subdir1 by creating args directly (no sys.argv)
+            args = okf.build_parser().parse_args(["reindex", "bundle/subdir1"])
+            okf.cmd_reindex(root, args)
+            
+            # Verify subdir1/index.md was updated with concept1
+            content1 = okf.read_file(idx1)
+            self.assertIn("concept1", content1)
+            self.assertNotIn("concept2", content1)
+            
+            # Verify subdir2/index.md was NOT modified (regression: it should not be touched)
+            content2_expected = "# Subdir2\n\n<!-- okf:index -->\n<!-- /okf:index -->\n"
+            content2_actual = okf.read_file(idx2)
+            self.assertEqual(content2_actual, content2_expected,
+                           "reindex <bundle>/<subdir> modified a sibling directory!")
+
+
+class CmdReindexSlugCollision(unittest.TestCase):
+    """README.md name collision across subdirs of one bundle (OKFT-czm9).
+
+    README.md is excluded from concept listing via RESERVED, so it is never
+    rendered as a link target and a vault-absolute alias can never be
+    emitted for it. This reproduces the bean's exact repro steps (two
+    README.md in different subdirs of one bundle, run reindex) and asserts
+    on the actual generated index content, not just render_block in
+    isolation."""
+
+    def test_two_readmes_never_surface_as_link_targets(self):
+        with tempfile.TemporaryDirectory() as root:
+            bundle_path = os.path.join(root, "bundle")
+            e2e = os.path.join(bundle_path, "e2e-tests")
+            other = os.path.join(bundle_path, "other")
+            os.makedirs(e2e)
+            os.makedirs(other)
+            okf.write_file(os.path.join(e2e, "README.md"),
+                          "---\ntitle: E2E Readme\ntype: guide\n---\n# E2E\n")
+            okf.write_file(os.path.join(other, "README.md"),
+                          "---\ntitle: Other Readme\ntype: guide\n---\n# Other\n")
+            okf.write_file(os.path.join(e2e, "index.md"),
+                          "# e2e-tests\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
+
+            args = okf.build_parser().parse_args(["reindex", "bundle"])
+            okf.cmd_reindex(root, args)
+
+            content = okf.read_file(os.path.join(e2e, "index.md"))
+            self.assertNotIn("README", content,
+                           "README.md must never surface as a link target")
+            self.assertNotIn(os.path.basename(root), content,
+                           "reindex must never emit a vault-absolute path alias")
+
+    def test_render_block_uses_bundle_relative_paths(self):
+        """render_block always emits /bundle/subdir links, never a vault-absolute alias."""
+        with tempfile.TemporaryDirectory() as root:
+            bundle = "test-bundle"
+            bundle_path = os.path.join(root, bundle)
+            subdir = os.path.join(bundle_path, "sub1")
+            os.makedirs(subdir)
+            okf.write_file(os.path.join(subdir, "concept.md"),
+                          "---\ntitle: Test Concept\n---\n")
+            subdirs = okf.list_subdirs_with_index(subdir)
+            concepts = okf.list_dir_concepts(subdir)
+            block = okf.render_block(subdirs, concepts, "test-bundle/sub1")
+            self.assertIn("/test-bundle/sub1", block,
+                         "render_block must use bundle-relative paths")
+            for line in block.split('\n'):
+                if '.md)' in line:
+                    match = re.search(r'\]\(([^)]+)\)', line)
+                    if match:
+                        self.assertTrue(match.group(1).startswith('/'),
+                                      f"Link {match.group(1)} must start with / (bundle-relative)")
+
+
+class MainExplicitRootMarkerWarning(unittest.TestCase):
+    """OKFT-czm9 root cause: resolve_crosslink_target and peers compute every
+    emitted path as "/" + relpath(dest, root). An explicit --root pointed one
+    level above the real catalogue silently prefixes every emitted path with
+    the extra segment (the observed vault-relative alias) instead of failing.
+    main() must warn on stderr, without blocking (SC-002 requires an explicit
+    --root to keep working with no marker present)."""
+
+    def test_warns_when_explicit_root_has_no_marker(self):
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "bundle"))
+            import sys as _sys, io as _io
+            old_argv, old_stderr = _sys.argv, _sys.stderr
+            _sys.argv = ["okf-cli.py", "--root", root, "index"]
+            _sys.stderr = captured = _io.StringIO()
+            try:
+                okf.main()
+            finally:
+                _sys.argv, _sys.stderr = old_argv, old_stderr
+            self.assertIn("no catalogue marker", captured.getvalue())
+
+    def test_no_warning_when_marker_present(self):
+        with tempfile.TemporaryDirectory() as root:
+            okf.write_file(os.path.join(root, ".okf.toml"), "")
+            import sys as _sys, io as _io
+            old_argv, old_stderr = _sys.argv, _sys.stderr
+            _sys.argv = ["okf-cli.py", "--root", root, "index"]
+            _sys.stderr = captured = _io.StringIO()
+            try:
+                okf.main()
+            finally:
+                _sys.argv, _sys.stderr = old_argv, old_stderr
+            self.assertNotIn("no catalogue marker", captured.getvalue())
+
+    def test_no_warning_when_root_auto_detected(self):
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "bundle"))
+            import sys as _sys, io as _io
+            old_cwd, old_argv, old_stderr = os.getcwd(), _sys.argv, _sys.stderr
+            os.chdir(root)
+            okf.write_file(os.path.join(root, ".okf.toml"), "")
+            _sys.argv = ["okf-cli.py", "index"]
+            _sys.stderr = captured = _io.StringIO()
+            try:
+                okf.main()
+            finally:
+                os.chdir(old_cwd)
+                _sys.argv, _sys.stderr = old_argv, old_stderr
+            self.assertNotIn("no catalogue marker", captured.getvalue())
+
+
 
 if __name__ == "__main__":
     unittest.main()

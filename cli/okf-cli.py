@@ -24,6 +24,7 @@ import struct
 import subprocess
 import sys
 import textwrap
+import unicodedata
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -32,15 +33,7 @@ RESERVED = {"index.md", "log.md", "readme.md", "index-map.md"}
 FM_DELIM = "---"
 MARK_START = "<!-- okf:index -->"
 MARK_END = "<!-- /okf:index -->"
-LOG_START = "<!-- okf:log -->"
-LOG_END = "<!-- /okf:log -->"
 EXEMPT = "<!-- okf:index-exempt -->"
-LOG_NOTICE = (
-    "> **History lives in git.** This file is a portability snapshot, not the "
-    "source of truth. Regenerate the block below with `python3 okf-cli.py log "
-    "--write` (per bundle: `okf-cli.py log <bundle>`). Rationale for each change "
-    "lives in its commit body; anything outside the markers is a frozen archive."
-)
 
 
 def catalogue_root(explicit):
@@ -1936,11 +1929,10 @@ Markdown — following a link beats re-running a search, and a large bundle's
 ## Write — through the ce-okf skill, never by hand
 
 Concepts are not hand-authored. The `ce-okf` skill routes a source to a bundle,
-applies frontmatter and re-indexes. `index.md` listings and `log.md` are
-marker-managed and generated (`reindex`, `log --write`) — never edit between the
-`<!-- okf:... -->` markers. Tag edits go through `merge-tags` / `remove-tags`,
-not a search-and-replace. A commit is allowed only once `check` reports zero
-violations.
+applies frontmatter and re-indexes. `index.md` listings are marker-managed and
+generated (`reindex`) — never edit between the `<!-- okf:... -->` markers. Tag
+edits go through `merge-tags` / `remove-tags`, not a search-and-replace. A
+commit is allowed only once `check` reports zero violations.
 """
 
 
@@ -1970,8 +1962,8 @@ Progressive disclosure: widen only when the cheaper step left the question open.
 ## Write — through the ce-okf skill, never by hand
 
 Concepts are not hand-authored: `ce-okf` routes a source to a bundle, applies
-frontmatter and re-indexes. `index.md` listings and `log.md` are marker-managed
-and generated — never edit between the `<!-- okf:... -->` markers. A commit is
+frontmatter and re-indexes. `index.md` listings are marker-managed and
+generated — never edit between the `<!-- okf:... -->` markers. A commit is
 allowed only once `check` reports zero violations.
 """
 
@@ -2535,7 +2527,7 @@ def uncovered_index_dirs(root, target):
     proves those files appear in the index. Returns sorted rel index.md paths.
     """
     out = []
-    for dp, dn, fn in os.walk(target):
+    for dp, dn, fn in os.walk(os.path.join(root, target)):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
         idx_name = _find_reserved_name(fn)
         if not idx_name:
@@ -2611,38 +2603,6 @@ def cmd_reindex(root, args):
     print("reindex: {} updated, {} skipped".format(len(changed), len(skipped)))
 
 
-def render_git_log(title, rows):
-    """rows: [(date, subject), …] newest-first → SPEC §7 date-grouped flat list."""
-    out = ["# {} Update Log".format(title)]
-    last = None
-    for date, subject in rows:
-        if date != last:
-            out.append("")
-            out.append("## {}".format(date))
-            last = date
-        out.append("* {}".format(subject))
-    return "\n".join(out).rstrip() + "\n"
-
-
-def splice_log(existing, snapshot):
-    """Insert/refresh the git snapshot inside <!-- okf:log --> markers.
-
-    If markers exist, only the block between them is replaced (the hand-authored
-    archive outside stays put). Otherwise a notice header + marker block is
-    created and any prior content is preserved below as a frozen archive.
-    """
-    block = LOG_START + "\n" + snapshot.rstrip() + "\n" + LOG_END
-    if existing and LOG_START in existing:
-        si = existing.find(LOG_START)
-        ei = existing.find(LOG_END, si) + len(LOG_END)
-        return existing[:si] + block + existing[ei:]
-    header = "# Catalogue Update Log\n\n" + LOG_NOTICE + "\n\n"
-    archive = ""
-    if existing and existing.strip():
-        arch = re.sub(r"^#\s+.*\n+", "", existing.strip())  # drop duplicate H1
-        archive = "\n\n## Archiv (hand-authored, eingefroren)\n\n" + arch + "\n"
-    return header + block + archive + "\n"
-
 
 # --- recent: concepts by the commit that added them ------------------------
 # `log` answers "what moved" at commit granularity; `recent` answers "what is
@@ -2656,7 +2616,7 @@ def splice_log(existing, snapshot):
 #
 # git as a source is SPEC-sanctioned, not a layering break: SPEC.md §2 names a
 # git repository as the recommended shape ("provides history, attribution,
-# diffs") and §7 defines `**Creation**` as a log entry type. cmd_log below has
+# diffs") and §7 defines `**Creation**` as a log entry type. Recent and other
 # read git since the beginning.
 RECENT_TS_RE = re.compile(r"^@(\d+)$")
 UNCOMMITTED = "(uncommitted)"
@@ -2923,34 +2883,6 @@ def cmd_recent(root, args):
     print("recent: {} of {} concept(s)".format(len(rows), total))
 
 
-def cmd_log(root, args):
-    bundle = getattr(args, "bundle", None)
-    scope = os.path.join(root, bundle) if bundle else root
-    title = bundle if bundle else "Catalogue"
-    cmd = ["git", "-C", root, "log", "--date=short", "--format=%ad\t%s"]
-    if args.since:
-        cmd.append("--since={}".format(args.since))
-    cmd += ["--", os.path.relpath(scope, root) if bundle else "."]
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print("git log failed: {}".format(e), file=sys.stderr)
-        sys.exit(1)
-    rows = []
-    for line in res.stdout.splitlines():
-        if "\t" in line:
-            d, s = line.split("\t", 1)
-            rows.append((d, s))
-    md = render_git_log(title, rows)
-    if args.write:
-        target = os.path.join(scope, "log.md")
-        existing = read_file(target) if os.path.isfile(target) else ""
-        snapshot = re.sub(r"^#\s+.*\n+", "", md)  # snapshot body without its own H1
-        write_file(target, splice_log(existing, snapshot))
-        print("wrote {}".format(os.path.relpath(target, root)))
-    else:
-        print(md, end="")
-
 
 # --- check: pluggable conformance scan (§9 hard rules + local invariants) ---
 
@@ -3207,7 +3139,7 @@ def _mask_code_spans(body):
         tokens.append(m.group(0))
         return "\x00{}\x00".format(len(tokens) - 1)
 
-    body = re.sub(r"(```|~~~)[\s\S]*?\1", stash, body)
+    body = re.sub(r"(`{3,}|~{3,})[\s\S]*?\1", stash, body)
     body = re.sub(r"`[^`\n]+`", stash, body)
     return body, tokens
 
@@ -3774,6 +3706,17 @@ def _apply_archive_precedence(candidates):
     return sorted(active) if active else sorted(candidates)
 
 
+def _normalize_key(s):
+    """Normalize and lowercase a basename key for case/NFC-insensitive matching.
+
+    Order matters: first normalize to NFC (canonical composition), then lowercase
+    (matching Obsidian's JavaScript toLowerCase()). This ensures keys derived from
+    filenames on APFS (which deliver NFD) match links typed in NFC and vice versa.
+    D06 is preserved: casefold() is avoided — [[STRASSE]] vs Straße stay unresolved.
+    """
+    return unicodedata.normalize('NFC', s).lower()
+
+
 def build_concept_basename_index(root):
     """lowercased basename (no .md) -> sorted catalogue-root-absolute paths of
     every non-reserved concept. A wikilink carries no path, so the basename IS
@@ -3815,7 +3758,7 @@ def build_concept_basename_index(root):
             fn = os.path.basename(ap)
             if fn.lower() in RESERVED:
                 continue
-            idx.setdefault(fn[:-3].lower(), []).append(
+            idx.setdefault(_normalize_key(fn[:-3]), []).append(
                 "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
     archive_root = os.path.join(root, "_archive")
     if os.path.isdir(archive_root):
@@ -3824,7 +3767,7 @@ def build_concept_basename_index(root):
                 fn = os.path.basename(ap)
                 if fn.lower() in RESERVED:
                     continue
-                idx.setdefault(fn[:-3].lower(), []).append(
+                idx.setdefault(_normalize_key(fn[:-3]), []).append(
                     "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
     for k in idx:
         idx[k] = _apply_archive_precedence(idx[k])
@@ -3844,12 +3787,12 @@ def resolve_wikilink(index, source_rel, page):
          spelling excludes, which is the failure this step exists to prevent;
       3. on a remaining collision, the linking file's own bundle wins when
          exactly one candidate lives there."""
-    cands = index.get(page.rsplit("/", 1)[-1].lower(), [])
+    cands = index.get(_normalize_key(page.rsplit("/", 1)[-1]), [])
     if not cands:
         return "unresolved", []
     if "/" in page:
-        tail = "/{}.md".format(page.strip("/")).lower()
-        cands = [c for c in cands if c.lower().endswith(tail)]
+        tail = "/{}.md".format(page.strip("/"))
+        cands = [c for c in cands if _normalize_key(c).endswith(_normalize_key(tail))]
         if not cands:
             return "unresolved", []
     if len(cands) == 1:
@@ -4213,19 +4156,19 @@ def plan_wikilink_rewrites(root, old_abs, new_abs):
     keep = {old_link.lower(), new_link.lower()}
     collisions = sorted(
         c for c in ("/" + os.path.relpath(ap, root).replace(os.sep, "/") for ap in files)
-        if os.path.basename(c)[:-3].lower() == new_base.lower()
+        if _normalize_key(os.path.basename(c)[:-3]) == _normalize_key(new_base)
         and c.lower() not in keep)
     # Casefolded, because resolve_wikilink is (D06). A case-sensitive filter
     # here silently excluded every case-variant inbound link from the plan — the
     # 96 live links D06 exists to rescue would have been orphaned by the very
     # rename that was supposed to carry them.
-    old_key, new_key = old_base.lower(), new_base.lower()
+    old_key, new_key = _normalize_key(old_base), _normalize_key(new_base)
     after = _index_after_move(index, old_link, new_link, collisions)
     out = []
     for ap in files:
         rel = os.path.relpath(ap, root).replace(os.sep, "/")
         for rec in parse_wikilinks(read_file(ap), rel):
-            key = rec["page"].rsplit("/", 1)[-1].lower()
+            key = _normalize_key(rec["page"].rsplit("/", 1)[-1])
             if key not in (old_key, new_key):
                 continue
             # Resolve the occurrence against the catalogue as it is and as it
@@ -4796,7 +4739,7 @@ COMMAND_DISPATCH = {
     "rewrite-path": cmd_rewrite_path, "rename": cmd_rename, "archive": cmd_archive,
     "build-index": cmd_build_index,
     "build-semantic-index": cmd_build_semantic_index,
-    "reindex": cmd_reindex, "log": cmd_log, "recent": cmd_recent,
+    "reindex": cmd_reindex, "recent": cmd_recent,
     "tags": cmd_tags,
     "merge-tags": cmd_merge_tags,
     "remove-tags": cmd_remove_tags,
@@ -5002,11 +4945,6 @@ def build_parser():
                          "default (combine with --scope to reach the "
                          "archived concepts of one bundle)")
     pls.add_argument("--json", action="store_true", help="machine-readable output")
-    pl = _sub(sub, "log", "navigation",
-              "render git history for the catalogue or a bundle as a SPEC §7 changelog")
-    pl.add_argument("bundle", nargs="?", help="bundle to scope to (default: whole catalogue)")
-    pl.add_argument("--since", help="git --since filter, e.g. '3 months ago'")
-    pl.add_argument("--write", action="store_true", help="materialize into <scope>/log.md instead of stdout")
     pmt = _sub(sub, "merge-tags", "tags",
                "merge/rename one or more tags into a target tag across concept frontmatter")
     pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows")
@@ -5125,6 +5063,24 @@ def main():
         sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
     if not os.path.isdir(root):
         sys.exit("ERROR: root not found: {} (pass --root <path>)".format(root))
+    if args.root and not (
+        os.path.isfile(os.path.join(root, ".okf.toml"))
+        or (os.path.isfile(os.path.join(root, "SPEC.md")) and os.path.isfile(os.path.join(root, "TYPES.md")))
+    ):
+        # SC-002 (test_explicit_root_returns_abspath_unchanged) requires an
+        # explicit --root to keep working with no marker present, so this
+        # never blocks. But every write command below computes emitted paths
+        # as "/" + relpath(dest, root) (resolve_crosslink_target and peers) —
+        # a --root pointed one level above the real catalogue silently
+        # prefixes every emitted link with the extra segment instead of
+        # failing (OKFT-czm9: a vault-relative alias like
+        # "SPF_Sproutling/docs/sproutling-okf/e2e-tests/README.md" got
+        # written and committed unnoticed). Loud-but-non-blocking, matching
+        # this file's stderr-degradation idiom (see find's stale-index note).
+        print("note: --root {} carries no catalogue marker (.okf.toml or "
+              "SPEC.md+TYPES.md) — if this is not the real catalogue root, "
+              "write commands will silently emit wrong paths".format(root),
+              file=sys.stderr)
     COMMAND_DISPATCH[args.cmd](root, args)
 
 
