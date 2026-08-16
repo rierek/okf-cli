@@ -69,6 +69,21 @@ def is_bundle_dir(name):
     return not name.startswith(".") and not name.startswith("_")
 
 
+def require_bundle_dir(root, bundle):
+    """Refuse a bundle argument that names no directory under root — the gate
+    `check` has carried alone (cmd_check: "a typo'd or renamed bundle scanned
+    nothing and exited 0 — a clean bill of health for a directory that does
+    not exist"). `index` printed an empty listing for one; `visualize` created
+    the directory to write into.
+
+    The test is existence, deliberately NOT is_bundle_dir(): a `_`-prefixed
+    directory is not a bundle for listing purposes but is a real, printable
+    directory, and refusing it here would break callers that name one."""
+    if not os.path.isdir(os.path.join(root, os.path.normpath(bundle))):
+        print("not a directory: {}".format(bundle), file=sys.stderr)
+        sys.exit(1)
+
+
 def list_bundles(root):
     out = []
     for name in sorted(os.listdir(root)):
@@ -622,6 +637,8 @@ def _concepts_json(bp):
 
 
 def cmd_index(root, args):
+    if args.bundle:
+        require_bundle_dir(root, args.bundle)
     if getattr(args, "json", False):
         if args.bundle:
             bp = os.path.join(root, args.bundle)
@@ -2101,6 +2118,7 @@ def bundle_graph(root, bundle):
 
 def cmd_visualize(root, args):
     import json
+    require_bundle_dir(root, args.bundle)
     nodes, edges = bundle_graph(root, args.bundle)
     out = args.out or os.path.join(root, args.bundle, "assets", "viz.html")
     data = json.dumps({"name": args.bundle, "nodes": nodes, "edges": edges})
