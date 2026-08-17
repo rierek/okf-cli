@@ -2,6 +2,8 @@
 
 Additive log. Each entry: Symptom · Fix · Forward-Guard.
 
+> Präfix-Migration 2026-08-10: IDs der Form `okf-cli-<suffix>` in diesem Dokument sind die Schreibweise vor der Umstellung auf `OKFT-<suffix>` — dasselbe Bean, dieselbe Historie (`OKFT-eil9`).
+
 ## LL-01 (2026-07-25, P6 okf-cli-asky) — env-var pinning dead due to import-time binding
 
 - **Symptom:** Boundary tests pinned the CLI under test via `os.environ["OKF_CLI"]` in `setUp`, but `mcp/okf_mcp.py` binds `OKF_CLI = os.environ.get(...)` as a module global at import time — the tests silently exercised the main-repo CLI copy instead of the worktree copy; a broken worktree CLI kept them green.
