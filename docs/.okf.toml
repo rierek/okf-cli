@@ -1,7 +1,0 @@
-# okf-p machine config — single source for tooling (okf-cli / okf-MCP / hook).
-# Human/agent pointer lives in ./CLAUDE.md. Values live ONLY here.
-kc_root      = "/Users/erik/Obsidian/Knowledge-Catalogue"
-types_source = "/Users/erik/Obsidian/Knowledge-Catalogue/TYPES.md"
-bundle       = "okf-tools-okf"
-wikilink_checked_bundles = ["okf-tools-okf"]
-symlink      = "/Users/erik/Obsidian/Knowledge-Catalogue/okf-tools-okf"   # false | absolute KC symlink path once mounted

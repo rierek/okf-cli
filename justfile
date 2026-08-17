@@ -5,7 +5,7 @@ cli_dir := "cli"
 # Catalogue-Root fuer Smoke-Laeufe gegen einen echten Store
 catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
 # EARS-SPEC des Rust-Rewrites (Tabellen-Requirements, siehe spec/README.md)
-spec_dir := "docs/okf-cli-rust-rewrite/spec"
+spec_dir := "../docs/topics/okf-cli-rust-rewrite/spec"
 
 # Alle Rezepte auflisten
 default:
