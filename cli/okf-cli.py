@@ -5033,9 +5033,10 @@ def build_parser():
     pt.add_argument("--level", type=int, default=2,
                     help="heading level to list (default 2 = h2); 0 = full indented tree")
     pv = _sub(sub, "visualize", "navigation",
-              "write a self-contained viz.html graph for a bundle")
+              "write a viz.html concept graph for a bundle "
+              "(embeds every concept body; needs network for cytoscape/marked)")
     pv.add_argument("bundle", help="bundle to render the graph for")
-    pv.add_argument("--out", help="output path (default: <bundle>/viz.html)")
+    pv.add_argument("--out", help="output path (default: <bundle>/assets/viz.html)")
     pwl = _sub(sub, "wikilinks", "maintenance",
                "report Obsidian wikilinks ([[…]]) and whether each resolves to a concept")
     pwl.add_argument("target", nargs="?",
