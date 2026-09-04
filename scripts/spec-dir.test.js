@@ -127,8 +127,8 @@ test('success path (AC-06): identical SPEC dir from a real linked git worktree',
   gitInit(repoDir);
   const commit = spawnSync(
     'git',
-    ['-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '--allow-empty', '-q', '-m', 'init'],
-    { cwd: repoDir, encoding: 'utf8' },
+    ['-c', 'user.email=t@example.invalid', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-q', '-m', 'init'],
+    { cwd: repoDir, encoding: 'utf8', env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null' } },
   );
   assert.equal(commit.status, 0, `git commit failed: ${commit.stderr}`);
 
