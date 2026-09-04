@@ -448,5 +448,92 @@ class MainCliTest(unittest.TestCase):
                 os.remove(out_path)
 
 
+class PickBundlesTest(unittest.TestCase):
+    """OKFT-sgkn AC-01/AC-02/AC-03/AC-06 — `_pick_bundles` pins the fixture
+    bundle pair explicitly instead of deriving it from `list_bundles()`
+    alphabetical order. Isolated tmpdir, no live catalogue, no subprocess."""
+
+    def _make_root(self, names):
+        root = tempfile.mkdtemp(prefix="okfeval-pickbundles-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        for name in names:
+            os.makedirs(os.path.join(root, name))
+        return root
+
+    def test_pins_correct_and_wrong_bundle_by_name(self):
+        root = self._make_root([fixtures.CORRECT_BUNDLE, fixtures.WRONG_BUNDLE])
+        self.assertEqual(
+            fixtures._pick_bundles(root),
+            (fixtures.CORRECT_BUNDLE, fixtures.WRONG_BUNDLE),
+        )
+
+    def test_ignores_alphabetically_earlier_bundle(self):
+        # AC-03/AC-06: an extra bundle sorting before the pinned pair must
+        # not shift the resolved pair — the historical defect (OKFT-sgkn)
+        # was exactly this: "aca-okf" sorting before "agent-memory" bumped
+        # S1 into the wrong bundle. "aaa-earlier-than-both" sorts before
+        # both pinned names, so a sort-order-derived pick would return it
+        # instead of at least one of them.
+        root = self._make_root(
+            ["aaa-earlier-than-both", fixtures.CORRECT_BUNDLE, fixtures.WRONG_BUNDLE]
+        )
+        self.assertEqual(
+            fixtures._pick_bundles(root),
+            (fixtures.CORRECT_BUNDLE, fixtures.WRONG_BUNDLE),
+        )
+
+    def test_raises_when_pinned_bundle_missing(self):
+        # AC-02: only the correct bundle present, wrong bundle absent —
+        # must fail loudly, never silently fall back to sort order.
+        root = self._make_root([fixtures.CORRECT_BUNDLE])
+        with self.assertRaises(RuntimeError):
+            fixtures._pick_bundles(root)
+
+    def test_raises_when_pinned_bundle_is_symlink(self):
+        root = self._make_root([fixtures.CORRECT_BUNDLE])
+        real_wrong = tempfile.mkdtemp(prefix="okfeval-wrong-target-")
+        self.addCleanup(shutil.rmtree, real_wrong, ignore_errors=True)
+        os.symlink(real_wrong, os.path.join(root, fixtures.WRONG_BUNDLE))
+        with self.assertRaises(RuntimeError):
+            fixtures._pick_bundles(root)
+
+
+class GoldenBundleConsistencyTest(unittest.TestCase):
+    """OKFT-sgkn AC-07 / D-sgkn-02 — golden.json's bundle-name literals
+    (expected_path prefix, and the s4-index-walk row's query.bundle) are
+    the second literal source the D-sgkn-02 interpretation leaves in
+    place; this guard checks the FILE against fixtures.py's pinned
+    constants (not the production function against the same constants it
+    reads from — that would be tautological) so a one-sided drift between
+    the two fails loudly instead of silently. Reads golden.json as data —
+    no catalogue, no subprocess."""
+
+    @staticmethod
+    def _expected_bundle_for(row_id):
+        # S2 is the deliberately-misplaced fixture (correct_bundle=False
+        # in fixtures.py); every other scenario (S1/S3/S4) lives in the
+        # correct bundle.
+        return fixtures.WRONG_BUNDLE if row_id.startswith("s2") else fixtures.CORRECT_BUNDLE
+
+    def test_golden_bundle_literals_match_fixtures_pin(self):
+        with open(GOLDEN_PATH, encoding="utf-8") as f:
+            golden = json.load(f)
+        mismatches = []
+        for row in golden:
+            want = self._expected_bundle_for(row["id"])
+            path_bundle = row["expected_path"].split("/", 1)[0]
+            if path_bundle != want:
+                mismatches.append((row["id"], "expected_path", path_bundle, want))
+            query = row.get("query")
+            if isinstance(query, dict) and "bundle" in query:
+                if query["bundle"] != want:
+                    mismatches.append((row["id"], "query.bundle", query["bundle"], want))
+        self.assertEqual(
+            mismatches, [],
+            "golden.json bundle literal(s) diverge from fixtures.py pin "
+            "(row id, field, got, want): {}".format(mismatches),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
