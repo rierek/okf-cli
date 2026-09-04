@@ -277,6 +277,60 @@ test('parseSymbolSpec: distinguishes func/class/method grammar', () => {
   assert.equal(parseSymbolSpec('2093'), null);
 });
 
+test('parseSymbolSpec: SCREAMING_SNAKE resolves to const, checked before class', () => {
+  assert.deepEqual(parseSymbolSpec('MARK_START'), { kind: 'const', name: 'MARK_START' });
+  assert.deepEqual(parseSymbolSpec('RESERVED'), { kind: 'const', name: 'RESERVED' });
+});
+
+// ---------------------------------------------------------------------
+// D-wqge-21/AC-11: module-level constants as a fourth symbol form
+// ---------------------------------------------------------------------
+
+const CONST_SOURCE = [
+  'import re',
+  '',
+  'MARK_START = "<!-- start -->"',
+  'MARK_END = "<!-- end -->"',
+  '',
+  'RESERVED = {',
+  '    "index.md",',
+  '    "README.md",',
+  '}',
+  '',
+  'class Config:',
+  '    DEFAULT_TIMEOUT = 30', // indented -- must never satisfy a module-const lookup
+  '',
+  'class SCREAMING:',
+  '    pass',
+  '',
+].join('\n');
+
+test('AC-11 branch 1: module constant found at column 0', () => {
+  const r = resolveDefinitionSite(CONST_SOURCE, 'MARK_START');
+  assert.equal(r.ok, true);
+  assert.match(r.body, /^MARK_START = /);
+});
+
+test('AC-11 branch 2: an indented same-named assignment is rejected, distinct reason', () => {
+  const r = resolveDefinitionSite(CONST_SOURCE, 'DEFAULT_TIMEOUT');
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /not a module constant/);
+  assert.match(r.reason, /column 0/);
+});
+
+test('AC-11 branch 3: an all-caps class name is resolved as const, not class -- fails by name', () => {
+  const r = resolveDefinitionSite(CONST_SOURCE, 'SCREAMING');
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /no module assignment "SCREAMING" found/);
+});
+
+test('AC-11 branch 4: fine-anchor fragment found across a multi-line constant body', () => {
+  const r = resolveDefinitionSite(CONST_SOURCE, 'RESERVED');
+  assert.equal(r.ok, true);
+  assert.equal(fragmentPresent(r.body, '"index.md"'), true);
+  assert.equal(fragmentPresent(r.body, '"nonexistent.md"'), false);
+});
+
 // ---------------------------------------------------------------------
 // Teilschritt "vergleichen": fragmentPresent (AC-09)
 // ---------------------------------------------------------------------

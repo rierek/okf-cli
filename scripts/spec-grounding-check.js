@@ -67,6 +67,10 @@ const FILE_PREFIX_RE = new RegExp(`^(${TARGET_FILE_ALT}):(.+)$`);
 const FUNC_RE = /^([A-Za-z_][A-Za-z0-9_]*)\(\)$/;
 const CLASS_RE = /^([A-Za-z_][A-Za-z0-9_]*)$/;
 const METHOD_RE = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\(\)$/;
+// Module-level constant (D-wqge-21): SCREAMING_SNAKE, no parens. Checked
+// BEFORE class -- a bare all-caps identifier is deterministically a
+// constant, never a class, even if a same-named class happens to exist.
+const CONST_RE = /^([A-Z][A-Z0-9_]*)$/;
 
 // -- Teilschritt "altform-erkennen": classify one raw token (delimiters
 // included) into an anchor or one of the three pinned legacy forms, or
@@ -198,6 +202,8 @@ function parseSymbolSpec(location) {
   if (m) return { kind: 'method', cls: m[1], name: m[2] };
   m = location.match(FUNC_RE);
   if (m) return { kind: 'func', name: m[1] };
+  m = location.match(CONST_RE);
+  if (m) return { kind: 'const', name: m[1] };
   m = location.match(CLASS_RE);
   if (m) return { kind: 'class', name: m[1] };
   return null;
@@ -222,6 +228,22 @@ function resolveDefinitionSite(sourceText, location) {
       return { ok: false, body: null, reason: `no definition "def ${spec.name}(" found` };
     }
     return { ok: true, body: extractBlock(lines, idx, lines.length).body, reason: null };
+  }
+
+  if (spec.kind === 'const') {
+    const colZeroRe = new RegExp(`^${spec.name}\\s*(:[^=]*)?=`);
+    const idx = lines.findIndex(l => colZeroRe.test(l));
+    if (idx !== -1) {
+      return { ok: true, body: extractBlock(lines, idx, lines.length).body, reason: null };
+    }
+    const indentedRe = new RegExp(`^\\s+${spec.name}\\s*(:[^=]*)?=`);
+    if (lines.some(l => indentedRe.test(l))) {
+      return {
+        ok: false, body: null,
+        reason: `indented assignment "${spec.name}" is not a module constant (not at column 0)`,
+      };
+    }
+    return { ok: false, body: null, reason: `no module assignment "${spec.name}" found` };
   }
 
   if (spec.kind === 'class') {
