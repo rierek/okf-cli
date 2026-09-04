@@ -3065,15 +3065,22 @@ def check_crosslink_format(ctx):
     leading `/` = catalogue root = Obsidian vault root). Flags (a) relative links
     that resolve inconsistently and orphan in Obsidian, and (b) leading-`/` links
     that do not resolve to a real file from the catalogue root (legacy bundle-
-    relative `/subdir/x.md` or typos — the phantom-orphan class)."""
-    if ctx["is_reserved"]:
-        return []
+    relative `/subdir/x.md` or typos — the phantom-orphan class).
+
+    D-rx51-01 (OKFT-rx51): RESERVED files (index.md, log.md, readme.md,
+    index-map.md) are scanned as a link source too — they routinely carry
+    hand-authored prose alongside or instead of the managed
+    `<!-- okf:index -->` block, and a crosslink an author writes there is a
+    real crosslink. The managed block itself is masked out first so its
+    generated links never trigger a warning; fix_crosslinks is untouched by
+    this — it still never rewrites a RESERVED file."""
     # Symlinked external bundles keep the portable bundle-relative OKF form and are
     # audited in their own repo — the catalogue-root convention does not apply here.
     if os.path.islink(os.path.join(ctx["root"], ctx["bundle"])):
         return []
     relative, dangling = [], []
-    scan_body, _ = _mask_code_spans(ctx["body"])   # fenced/inline example links are not real links
+    scan_body, _ = _mask_code_spans(_mask_managed_block(ctx["body"]))
+    # fenced/inline example links and the managed index block are not hand-authored links
     for m in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", scan_body):
         tgt = m.group(1).split("#")[0].split("?")[0].strip()
         if not tgt.endswith(".md") or tgt.startswith(("http://", "https://", "mailto:")):
@@ -3126,6 +3133,14 @@ _TAG = r"</?[A-Za-z][\w:-]*>"
 XML_TAG_CHAIN_RE = re.compile(r"{t}(?:\.(?:{t}|[A-Za-z0-9_-]+))*".format(t=_TAG))
 SAFE_HTML_TAGS = {"br", "hr", "sub", "sup", "kbd", "mark", "code", "wbr"}
 AUTOLINK_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+
+
+def _mask_managed_block(body):
+    """Blank out the managed `<!-- okf:index -->`..`<!-- /okf:index -->` region
+    so a hand-authored-crosslink scan of a RESERVED file never flags a
+    generated link. Non-greedy: an unterminated/absent marker pair leaves
+    body untouched (find/find-based _replace_block behaves the same way)."""
+    return re.sub(re.escape(MARK_START) + r"[\s\S]*?" + re.escape(MARK_END), "", body)
 
 
 def _mask_code_spans(body):
