@@ -23,12 +23,13 @@ const { classifySpecFile } = require('./ears-table-check.js');
 // checkout is `repo/` or a linked `worktrees/<id>/`.
 function resolveRealSpecDir() {
   try {
-    return execFileSync(path.join(__dirname, 'spec-dir.sh'), { encoding: 'utf-8' }).trim();
-  } catch {
-    return null;
+    return { dir: execFileSync(path.join(__dirname, 'spec-dir.sh'), { encoding: 'utf-8' }).trim(), error: null };
+  } catch (err) {
+    return { dir: null, error: (err.stderr || err.message || String(err)).trim() };
   }
 }
-const REAL_SPEC_DIR = resolveRealSpecDir();
+const REAL_SPEC_DIR_RESULT = resolveRealSpecDir();
+const REAL_SPEC_DIR = REAL_SPEC_DIR_RESULT.dir;
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ears-table-check-test-'));
@@ -159,10 +160,13 @@ test('aggregate zero-case: total zero requirement rows across all files still ex
 
 // -- AC-08: a real command Spec losing its table form --------------------
 
-test('AC-08: a copy of a real Spec file with its table stripped fails, names the file', (t) => {
+test('AC-08: a copy of a real Spec file with its table stripped fails, names the file', () => {
   if (!REAL_SPEC_DIR) {
-    t.skip('scripts/spec-dir.sh could not resolve the SPEC directory from this checkout');
-    return;
+    // Loud, not skipped: spec-dir.sh is a hard dependency of `just spec-check`
+    // itself, so a failure here means the gate this test defends is already
+    // broken -- a silent skip would let the suite stay green while AC-08
+    // proves nothing.
+    assert.fail(`scripts/spec-dir.sh could not resolve the SPEC directory: ${REAL_SPEC_DIR_RESULT.error}`);
   }
   const realFiles = fs.readdirSync(REAL_SPEC_DIR)
     .filter((f) => f.endsWith('.md') && f !== 'README.md' && f !== '_common.md');
