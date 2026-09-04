@@ -4,8 +4,6 @@ set shell := ["bash", "-uc"]
 cli_dir := "cli"
 # Catalogue-Root fuer Smoke-Laeufe gegen einen echten Store
 catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
-# EARS-SPEC des Rust-Rewrites (Tabellen-Requirements, siehe spec/README.md)
-spec_dir := "../docs/topics/okf-cli-rust-rewrite/spec"
 
 # Alle Rezepte auflisten
 default:
@@ -23,6 +21,13 @@ check root=catalogue:
 prime root=catalogue:
     python3 {{cli_dir}}/okf-cli.py --root {{root}} prime
 
+# spec_dir wird per scripts/spec-dir.sh abgeleitet (D-siyu-07), nicht als
+# Modul-Variable -- die wuerde `just` bei JEDEM Rezept eager auswerten und
+# bei Fehlschlag auch test/check/prime mitreissen, nicht nur dieses.
+
 # EARS-Konformitaet der Rewrite-SPEC pruefen (Abgabekriterium je SPEC-Datei)
 spec-check *FILES:
-    node scripts/ears-table-check.js {{ if FILES == "" { spec_dir + "/*.md" } else { FILES } }}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
+    exec node scripts/ears-table-check.js "$@"
