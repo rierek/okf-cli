@@ -17,8 +17,18 @@ const path = require('node:path');
 const SCRIPT = path.join(__dirname, 'ears-table-check.js');
 const { classifySpecFile } = require('./ears-table-check.js');
 
-const REAL_SPEC_DIR = path.join(
-  __dirname, '..', '..', '..', 'docs', 'topics', 'okf-cli-rust-rewrite', 'spec');
+// Resolved worktree-agnostically via the existing scripts/spec-dir.sh
+// (D-siyu-07, owned by container OKFT-g01s -- read-only use here) instead
+// of a fixed relative step count, which breaks depending on whether the
+// checkout is `repo/` or a linked `worktrees/<id>/`.
+function resolveRealSpecDir() {
+  try {
+    return execFileSync(path.join(__dirname, 'spec-dir.sh'), { encoding: 'utf-8' }).trim();
+  } catch {
+    return null;
+  }
+}
+const REAL_SPEC_DIR = resolveRealSpecDir();
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ears-table-check-test-'));
@@ -149,7 +159,11 @@ test('aggregate zero-case: total zero requirement rows across all files still ex
 
 // -- AC-08: a real command Spec losing its table form --------------------
 
-test('AC-08: a copy of a real Spec file with its table stripped fails, names the file', () => {
+test('AC-08: a copy of a real Spec file with its table stripped fails, names the file', (t) => {
+  if (!REAL_SPEC_DIR) {
+    t.skip('scripts/spec-dir.sh could not resolve the SPEC directory from this checkout');
+    return;
+  }
   const realFiles = fs.readdirSync(REAL_SPEC_DIR)
     .filter((f) => f.endsWith('.md') && f !== 'README.md' && f !== '_common.md');
   assert.ok(realFiles.length > 0, 'expected at least one real command spec file');
@@ -157,9 +171,14 @@ test('AC-08: a copy of a real Spec file with its table stripped fails, names the
   const raw = fs.readFileSync(realPath, 'utf-8');
   const stripped = raw.replace(/^\|.*\|\s*$/gm, '');
   const copy = writeFixture(realFiles[0], stripped);
-  const { status, stdout } = run([copy]);
+  // Paired with a healthy Spec file so the total stays > 0 -- isolates the
+  // per-file zero-case guard (AC-03) from the orthogonal aggregate
+  // zero-case, the same isolation AC-03 itself relies on.
+  const healthy = writeFixture('healthy.md', SPEC_HEADER + REAL_ROW);
+  const { status, stdout } = run([copy, healthy]);
   assert.equal(status, 1);
   assert.match(stdout, new RegExp(`FAIL\\s+.*${realFiles[0].replace('.', '\\.')}\\s+\\(0 requirement\\(s\\)`));
+  assert.match(stdout, /OK\s+.*healthy\.md\s+\(1 requirement\(s\)\)/);
 });
 
 // -- AC-09: existing exit-code meanings are preserved ---------------------
