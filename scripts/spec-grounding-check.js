@@ -223,8 +223,15 @@ function resolveDefinitionSite(sourceText, location) {
   const lines = sourceText.split('\n');
 
   if (spec.kind === 'func') {
-    const re = new RegExp(`^def ${spec.name}\\(`);
-    const idx = lines.findIndex(l => re.test(l));
+    // OKFT-uzht: `^` against a single already-split line IS the column-0
+    // condition (no `m` flag needed) -- an indented same-named def (nested
+    // function, same-named method) never matches this and falls through to
+    // the "no definition found" rejection below, same as an outright
+    // missing definition. Kept implicit (unlike the const branch, which
+    // needs a second regex only to produce a more specific message) because
+    // the fallback message is already correct for both cases.
+    const colZeroRe = new RegExp(`^def ${spec.name}\\(`);
+    const idx = lines.findIndex(l => colZeroRe.test(l));
     if (idx === -1) {
       return { ok: false, body: null, reason: `no definition "def ${spec.name}(" found` };
     }

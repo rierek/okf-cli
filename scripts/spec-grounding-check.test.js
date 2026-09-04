@@ -219,6 +219,40 @@ test('resolveDefinitionSite: resolves a top-level function at its def line, not 
   assert.doesNotMatch(r.body, /helper_used_elsewhere/);
 });
 
+// ---------------------------------------------------------------------
+// OKFT-uzht: plain function anchors need the same column-0 condition
+// already pinned for module constants (D-wqge-21/AC-11 branches 1/2).
+// ---------------------------------------------------------------------
+
+const FUNC_COLZERO_SOURCE = [
+  'def marker():',
+  '    return "top-level"',
+  '',
+  'class Nested:',
+  '    def marker(self):', // indented -- must never satisfy a bare function anchor
+  '        return "nested-method"',
+  '',
+].join('\n');
+
+test('OKFT-uzht branch 1: a top-level function resolves even when a same-named indented def exists', () => {
+  const r = resolveDefinitionSite(FUNC_COLZERO_SOURCE, 'marker()');
+  assert.equal(r.ok, true);
+  assert.match(r.body, /^def marker\(\):/);
+  assert.doesNotMatch(r.body, /nested-method/);
+});
+
+test('OKFT-uzht branch 2: an indented same-named def alone does not satisfy the anchor', () => {
+  const onlyIndented = [
+    'class Nested:',
+    '    def marker(self):',
+    '        return "nested-method"',
+    '',
+  ].join('\n');
+  const r = resolveDefinitionSite(onlyIndented, 'marker()');
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /no definition "def marker\(" found/);
+});
+
 test('D-wqge-12: a call-site-only symbol with no def anywhere does not resolve', () => {
   const r = resolveDefinitionSite(SAMPLE_SOURCE, 'touch_marker()');
   assert.equal(r.ok, false);
