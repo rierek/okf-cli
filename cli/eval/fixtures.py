@@ -54,21 +54,41 @@ Fixture = collections.namedtuple(
 )
 
 
+# Pinned fixture bundle pair (D-sgkn-01, D-sgkn-02, OKFT-sgkn): explicit,
+# not derived from list_bundles() alphabetical order. Matches the bundle
+# segment cli/eval/golden.json's expected_path / s4-index-walk query.bundle
+# fields already hardcode — golden.json's literals are checked against
+# these two constants by cli/test_eval_runner.py's
+# GoldenBundleConsistencyTest, so the two files cannot drift silently.
+# Changing either constant without updating golden.json (or vice versa)
+# fails that guard immediately.
+CORRECT_BUNDLE = "agent-memory"
+WRONG_BUNDLE = "ai-wiki"
+
+
 def _pick_bundles(root):
-    """Deterministically pick (correct_bundle, wrong_bundle): the first two
-    non-symlink real bundles in list_bundles() order. Symlinked bundles are
-    skipped so seeding never writes through a symlink into an unrelated
-    repo (several catalogue bundles are mounted via symlink, e.g.
-    lean-stack-okf)."""
-    candidates = [
+    """Return the pinned (correct_bundle, wrong_bundle) pair, after
+    validating both are real (non-symlink) bundles under root.
+
+    Previously derived positionally from list_bundles() alphabetical
+    order ("first two non-symlink bundles") — silently wrong whenever a
+    new, earlier-sorting bundle joined the catalogue (OKFT-sgkn: `aca-okf`
+    started sorting before `agent-memory`, seeding S1 into the wrong
+    bundle while golden.json kept expecting `agent-memory`). Pinning by
+    name removes the coupling to catalogue sort order entirely."""
+    real = {
         b for b in okf.list_bundles(root)
         if not os.path.islink(os.path.join(root, b))
-    ]
-    if len(candidates) < 2:
+    }
+    missing = [b for b in (CORRECT_BUNDLE, WRONG_BUNDLE) if b not in real]
+    if missing:
         raise RuntimeError(
-            "fixtures.py needs >=2 non-symlink bundles under {}".format(root)
+            "fixtures.py pin ({!r}, {!r}) invalid under {}: {} not found "
+            "as a real (non-symlink) bundle".format(
+                CORRECT_BUNDLE, WRONG_BUNDLE, root, ", ".join(missing)
+            )
         )
-    return candidates[0], candidates[1]
+    return CORRECT_BUNDLE, WRONG_BUNDLE
 
 
 def _fixture_spec(root):
