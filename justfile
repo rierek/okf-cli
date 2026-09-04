@@ -31,3 +31,25 @@ spec-check *FILES:
     set -euo pipefail
     if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
     exec node scripts/ears-table-check.js "$@"
+
+# Eigener Schritt (D-wqge-09): spec-check prueft die EARS-Form, dieser Schritt
+# loest jeden Symbolanker an seiner Definitionsstelle auf (D-wqge-12).
+# Grounding-Wahrheit der Rewrite-SPEC pruefen
+spec-grounding *FILES:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
+    exec node scripts/spec-grounding-check.js "$@"
+
+# Fixtures der scripts/-Tests gehoeren in einen eigenen tmpdir, nie ins
+# SPEC-Verzeichnis -- der Glob von spec-check fischt dort jede *.md ein
+# (CLAUDE.md Regel 1 gilt sinngemaess).
+
+# Tests der scripts/-Werkzeuge (node built-in runner, gefiltert je Datei)
+test-scripts *FILES:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    if [ -z "{{FILES}}" ]; then set -- scripts/*.test.js; else set -- {{FILES}}; fi
+    [ "$#" -gt 0 ] || { echo 'test-scripts: no test file matched scripts/*.test.js -- nothing was checked' >&2; exit 1; }
+    exec node --test "$@"
