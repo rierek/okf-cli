@@ -244,11 +244,25 @@ def embed_resilient(fn, texts, label, sleep=time.sleep):
 
 
 def write_concept_rows(db_path, rows):
-    """rows: iterable of (key, path, model, dim, vec_bytes)."""
+    """rows: iterable of (key, path, model, dim, vec_bytes).
+
+    D-3520-01 (OKFT-3520): `key` is the PRIMARY KEY, not `path` — a content
+    change derives a new `key`, so INSERT OR REPLACE alone leaves the old
+    key's row behind. Prune the previous row(s) for each (path, model)
+    before inserting, scoped by `model` so a different model's row for the
+    same path is never touched (AC-02/AC-06). `rows` must be materialized
+    before deriving the delete set — it is also the iterable executemany()
+    consumes below, and draining a generator here would silently insert
+    nothing (AC-05)."""
+    rows = list(rows)
     os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
     conn = sqlite3.connect(db_path)
     try:
         conn.execute(CONCEPT_SCHEMA)
+        conn.executemany(
+            "DELETE FROM concept_emb WHERE path = ? AND model = ?",
+            {(path, model) for _key, path, model, _dim, _vec in rows},
+        )
         conn.executemany(
             "INSERT OR REPLACE INTO concept_emb(key, path, model, dim, vec) VALUES (?, ?, ?, ?, ?)",
             rows,

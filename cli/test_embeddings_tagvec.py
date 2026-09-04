@@ -477,5 +477,94 @@ class EmbedResilient(unittest.TestCase):
         self.assertIsNone(got)
 
 
+class WriteConceptRowsReplacesStaleRowOnContentChange(unittest.TestCase):
+    """OKFT-3520 (D-3520-01) — concept_emb's PRIMARY KEY is `key`
+    (hash of model+path+text), NOT `path`. A content edit produces a new
+    key, so INSERT OR REPLACE alone leaves the OLD key's row behind: two
+    rows for one (path, model) after a single content change. Scope: only
+    the producer's own stale-row-on-edit defect — orphans of DELETED
+    concepts are OKFT-uumj and stay untouched here."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.tmp, "tag_vectors.sqlite")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _rows(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            return conn.execute(
+                "SELECT key, path, model FROM concept_emb").fetchall()
+        finally:
+            conn.close()
+
+    def test_second_write_with_new_key_replaces_old_row_for_same_path_model(self):
+        bt.write_concept_rows(self.db_path, [
+            ("key-v1", "b/one", "voyage-3-large", 1, bt.pack_vec([0.1])),
+        ])
+        # Content changed: same path/model, new key.
+        bt.write_concept_rows(self.db_path, [
+            ("key-v2", "b/one", "voyage-3-large", 1, bt.pack_vec([0.2])),
+        ])
+        rows = self._rows()
+        self.assertEqual(
+            len(rows), 1,
+            "stale row from key-v1 must be deleted, not just superseded: "
+            "got {}".format(rows))
+        self.assertEqual(rows[0], ("key-v2", "b/one", "voyage-3-large"))
+
+    def test_other_model_row_for_same_path_survives_prune(self):
+        """AC-06/SC-05 (Gate B Auflage A) — the DELETE predicate must be
+        scoped to `model`, not just `path`. A model-crossing prune (DELETE
+        WHERE path = ? without AND model = ?) would pass the same-model
+        test above just as well as the correct fix; this test is the only
+        one that tells the two implementations apart."""
+        bt.write_concept_rows(self.db_path, [
+            ("key-m1-v1", "a", "bge-m3", 1, bt.pack_vec([0.1])),
+        ])
+        bt.write_concept_rows(self.db_path, [
+            ("key-m2", "a", "voyage-3-large", 1, bt.pack_vec([0.2])),
+        ])
+        # Content changed again under model M1 only.
+        bt.write_concept_rows(self.db_path, [
+            ("key-m1-v3", "a", "bge-m3", 1, bt.pack_vec([0.3])),
+        ])
+        rows = set(self._rows())
+        self.assertIn(
+            ("key-m2", "a", "voyage-3-large"), rows,
+            "a different model's row for the same path must be untouched: "
+            "got {}".format(rows))
+        self.assertIn(
+            ("key-m1-v3", "a", "bge-m3"), rows,
+            "the current bge-m3 row must be present: got {}".format(rows))
+        self.assertNotIn(
+            ("key-m1-v1", "a", "bge-m3"), rows,
+            "the stale bge-m3 row must be pruned: got {}".format(rows))
+        self.assertEqual(
+            len(rows), 2,
+            "exactly the current row per model, no more: got {}".format(rows))
+
+    def test_generator_input_is_fully_written(self):
+        """AC-05/SC-04 — write_concept_rows() takes an iterable that
+        executemany() consumes. Deriving the DELETE set from `rows` without
+        materializing it first (`rows = list(rows)`) would drain the
+        generator, and the subsequent executemany() would silently insert
+        nothing — a bug the count(*) == count(DISTINCT path) style
+        assertion (AC-03) cannot see, because 0 == 0 passes trivially. This
+        test asserts a POSITIVE row count instead."""
+        def _gen():
+            yield ("key-g1", "g/one", "voyage-3-large", 1, bt.pack_vec([0.1]))
+            yield ("key-g2", "g/two", "voyage-3-large", 1, bt.pack_vec([0.2]))
+        bt.write_concept_rows(self.db_path, _gen())
+        rows = self._rows()
+        self.assertEqual(
+            len(rows), 2,
+            "both generator-supplied rows must be written, got {}".format(rows))
+        self.assertEqual(
+            {r[0] for r in rows}, {"key-g1", "key-g2"})
+
+
 if __name__ == "__main__":
     unittest.main()
