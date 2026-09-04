@@ -677,6 +677,91 @@ class FixCrosslinksCommand(unittest.TestCase):
         self.assertEqual(touched, [])
         self.assertIn(("b/x.md", "ghost.md"), unresolved)
 
+    def test_include_reserved_rewrites_outside_marker_only(self):
+        block = "<!-- okf:index -->\n* [Y](y.md)\n<!-- /okf:index -->"
+        self._w("b/index.md",
+                "# B\n\n[Rel](y.md)\n\n[Legacy](/y.md)\n\n" + block + "\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        self.assertIn("b/index.md", [t[0] for t in touched])
+        content = self._r("b/index.md")
+        self.assertIn(block, content)
+        self.assertIn("[Rel](/b/y.md)", content)
+        self.assertIn("[Legacy](/b/y.md)", content)
+
+    def test_include_reserved_rewrites_reserved_file_without_marker(self):
+        self._w("b/index.md", "# B\n\n[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        self.assertIn("b/index.md", [t[0] for t in touched])
+        self.assertIn("[Y](/b/y.md)", self._r("b/index.md"))
+
+    def test_include_reserved_does_not_change_non_reserved_behavior(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        self.assertEqual(len(touched), 1)
+        self.assertIn("[Y](/b/y.md)", self._r("b/x.md"))
+
+    def test_include_reserved_protects_unterminated_marker(self):
+        self._w("b/index.md", "[Y](y.md)\n\n<!-- okf:index -->\n[Z](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        content = self._r("b/index.md")
+        self.assertIn("[Y](/b/y.md)", content)
+        self.assertIn("<!-- okf:index -->\n[Z](y.md)\n", content)
+
+    def test_include_reserved_dry_run_reports_without_writing(self):
+        self._w("b/index.md", "[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        before = self._r("b/index.md")
+        touched, unresolved = okf.fix_crosslinks(
+            self.tmp, "b", dry_run=True, include_reserved=True)
+        self.assertIn("b/index.md", [t[0] for t in touched])
+        self.assertEqual(self._r("b/index.md"), before)
+
+    def test_include_reserved_ignores_index_exempt_marker(self):
+        self._w("b/index.md", "<!-- okf:index-exempt -->\n[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        self.assertIn("b/index.md", [t[0] for t in touched])
+        self.assertIn("[Y](/b/y.md)", self._r("b/index.md"))
+
+
+class SplitManagedBlockUnit(unittest.TestCase):
+    """Direct unit coverage for `_split_managed_block`'s byte boundary —
+    an end-to-end `fix_crosslinks` test cannot observe this: a boundary
+    mutated by one byte (leaking the trailing `>` of MARK_END into
+    `after` instead of `block`) reconstructs an identical final rewrite
+    whenever the leaked byte is never itself a rewritable crosslink, so
+    it passes every file-level test unchanged. Reviewer finding on
+    62e867f, closed here at the function boundary instead."""
+
+    def test_complete_pair_bounds_block_exactly(self):
+        body = "before\n" + M0 + "\nX\n" + M1 + "\nafter\n"
+        before, block, after = okf._split_managed_block(body)
+        self.assertEqual(before + block + after, body)
+        self.assertTrue(block.startswith(M0))
+        self.assertTrue(block.endswith(M1))
+        self.assertEqual(before, "before\n")
+        self.assertEqual(after, "\nafter\n")
+        self.assertFalse(after.startswith(">"))
+
+    def test_unterminated_start_protects_to_eof(self):
+        body = "before\n" + M0 + "\nX\n"
+        before, block, after = okf._split_managed_block(body)
+        self.assertEqual(before + block + after, body)
+        self.assertTrue(block.startswith(M0))
+        self.assertEqual(before, "before\n")
+        self.assertEqual(after, "")
+
+    def test_no_marker_returns_whole_body_as_before(self):
+        body = "just prose, no markers\n"
+        before, block, after = okf._split_managed_block(body)
+        self.assertEqual(before, body)
+        self.assertEqual(block, "")
+        self.assertEqual(after, "")
+
 
 class OkfConfig(unittest.TestCase):
     """.okf.toml is the machine-truth config; absent or empty -> {}.
