@@ -32,6 +32,15 @@ spec-check *FILES:
     if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
     exec node scripts/ears-table-check.js "$@"
 
+# Grounding-Wahrheit der Rewrite-SPEC pruefen: loest jeden Symbolanker an seiner
+# Definitionsstelle auf (D-wqge-12). Eigener Schritt, damit spec-check in seiner
+# Bedeutung unberuehrt bleibt (EARS-Form, D-wqge-09).
+spec-grounding *FILES:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
+    exec node scripts/spec-grounding-check.js "$@"
+
 # Fixtures der scripts/-Tests gehoeren in einen eigenen tmpdir, nie ins
 # SPEC-Verzeichnis -- der Glob von spec-check fischt dort jede *.md ein
 # (CLAUDE.md Regel 1 gilt sinngemaess).
