@@ -67,10 +67,11 @@ const FILE_PREFIX_RE = new RegExp(`^(${TARGET_FILE_ALT}):(.+)$`);
 const FUNC_RE = /^([A-Za-z_][A-Za-z0-9_]*)\(\)$/;
 const CLASS_RE = /^([A-Za-z_][A-Za-z0-9_]*)$/;
 const METHOD_RE = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\(\)$/;
-// Module-level constant (D-wqge-21): SCREAMING_SNAKE, no parens. Checked
-// BEFORE class -- a bare all-caps identifier is deterministically a
-// constant, never a class, even if a same-named class happens to exist.
-const CONST_RE = /^([A-Z][A-Z0-9_]*)$/;
+// Module-level constant (D-wqge-21, extended D-wqge-25): SCREAMING_SNAKE,
+// optional leading underscores (private module attribute), no parens.
+// Checked BEFORE class -- a bare all-caps identifier is deterministically
+// a constant, never a class, even if a same-named class happens to exist.
+const CONST_RE = /^(_*[A-Z][A-Z0-9_]*)$/;
 
 // -- Teilschritt "altform-erkennen": classify one raw token (delimiters
 // included) into an anchor or one of the three pinned legacy forms, or

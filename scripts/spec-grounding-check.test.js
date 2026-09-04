@@ -303,6 +303,10 @@ const CONST_SOURCE = [
   'class SCREAMING:',
   '    pass',
   '',
+  '_PRIVATE_EPILOG = """\\',
+  'hidden text',
+  '"""',
+  '',
 ].join('\n');
 
 test('AC-11 branch 1: module constant found at column 0', () => {
@@ -329,6 +333,12 @@ test('AC-11 branch 4: fine-anchor fragment found across a multi-line constant bo
   assert.equal(r.ok, true);
   assert.equal(fragmentPresent(r.body, '"index.md"'), true);
   assert.equal(fragmentPresent(r.body, '"nonexistent.md"'), false);
+});
+
+test('D-wqge-25: an underscore-prefixed SCREAMING_SNAKE name resolves as const too', () => {
+  const r = resolveDefinitionSite(CONST_SOURCE, '_PRIVATE_EPILOG');
+  assert.equal(r.ok, true);
+  assert.match(r.body, /^_PRIVATE_EPILOG = /);
 });
 
 // ---------------------------------------------------------------------
