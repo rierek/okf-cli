@@ -15,7 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const SCRIPT = path.join(__dirname, 'ears-table-check.js');
-const { classifySpecFile } = require('./ears-table-check.js');
+const { classifySpecFile, checkTitleForRequirementId } = require('./ears-table-check.js');
 
 // Resolved worktree-agnostically via the existing scripts/spec-dir.sh
 // (D-siyu-07, owned by container OKFT-g01s -- read-only use here) instead
@@ -202,6 +202,151 @@ test('aggregate zero-case: total zero requirement rows across all files still ex
   const { status, stdout } = run([emptyFile]);
   assert.equal(status, 1);
   assert.match(stdout, /0 requirement\(s\) found across 1 file\(s\) -- nothing was checked/);
+});
+
+// -- title guard (OKFT-d2ps AC-01/AC-01b/AC-02/AC-02b/AC-05) -------------
+// The front-matter `title` is a second, unguarded source of a Spec's
+// requirement scope (D-wqge-16). This guard fires when a title still
+// carries a requirement id, whether a range or a single id.
+
+test('checkTitleForRequirementId: a title with a requirement-id range is flagged', () => {
+  const raw = '---\ntype: Spec\ntitle: "fix-crosslinks — EARS-Requirements FIX-CROSSLINKS-1..FIX-CROSSLINKS-15"\n---\n\nbody\n';
+  const issue = checkTitleForRequirementId(raw);
+  assert.ok(issue);
+  assert.equal(issue.id, 'title');
+  assert.match(issue.error, /FIX-CROSSLINKS-1/);
+});
+
+test('checkTitleForRequirementId: strips surrounding quotes from the reported title (dequote step)', () => {
+  const raw = '---\ntype: Spec\ntitle: "cmd — EARS-Requirements CMD-3"\n---\n\nbody\n';
+  const issue = checkTitleForRequirementId(raw);
+  assert.equal(issue.error,
+    'front-matter title carries a requirement id ("CMD-3") -- ' +
+    'requirement scope belongs in the table, not the title: "cmd — EARS-Requirements CMD-3"');
+});
+
+test('checkTitleForRequirementId: a title with a single requirement id is flagged', () => {
+  const raw = '---\ntype: Spec\ntitle: "cmd — EARS-Requirements CMD-3"\n---\n\nbody\n';
+  const issue = checkTitleForRequirementId(raw);
+  assert.ok(issue);
+  assert.match(issue.error, /CMD-3/);
+});
+
+test('checkTitleForRequirementId: a title without a requirement id is clean', () => {
+  const raw = '---\ntype: Spec\ntitle: "cmd — EARS-Requirements"\n---\n\nbody\n';
+  assert.equal(checkTitleForRequirementId(raw), null);
+});
+
+test('checkTitleForRequirementId: front-matter without a title field never falls through to a later body title-shaped line', () => {
+  // The `title:` regex is matched against fm.body (the parsed front-matter
+  // block) -- never against the whole raw file. A front-matter WITHOUT a
+  // title field must stay null even when the body happens to contain a
+  // title-shaped, id-bearing line; matching against raw instead of
+  // fm.body would let that later line leak through as if it were the
+  // real title.
+  const raw = '---\ntype: Spec\n---\n\n' +
+    'title: "cmd — EARS-Requirements CMD-1"\n';
+  assert.equal(checkTitleForRequirementId(raw), null);
+});
+
+test('checkTitleForRequirementId: a title-shaped line inside a later codefence is not the front-matter title (AC-01b)', () => {
+  const raw = '---\ntype: Reference\ntitle: "readme — EARS-Requirements"\n---\n\n' +
+    '````\n' +
+    'title: "cmd — EARS-Requirements CMD-1"\n' +
+    '````\n';
+  assert.equal(checkTitleForRequirementId(raw), null);
+});
+
+test('checkTitleForRequirementId: no front-matter returns null instead of scanning the body', () => {
+  assert.equal(checkTitleForRequirementId('# heading only\n\nno front-matter\n'), null);
+});
+
+test('checkTitleForRequirementId: no title field returns null', () => {
+  assert.equal(checkTitleForRequirementId('---\ntype: Spec\n---\n\nbody\n'), null);
+});
+
+test('title guard AC-01: a Spec file title with a requirement-id range fails the run, names file, title and reason', () => {
+  const file = writeFixture('ranged-title.md',
+    '---\ntype: Spec\ntitle: "cmd — EARS-Requirements CMD-1..CMD-3"\n---\n\n' + REAL_ROW);
+  const { status, stdout } = run([file]);
+  assert.equal(status, 1);
+  assert.match(stdout, /ranged-title\.md:\d+\s+title: front-matter title carries a requirement id \("CMD-1"\)/);
+  assert.match(stdout, /"cmd — EARS-Requirements CMD-1\.\.CMD-3"/);
+});
+
+test('title guard AC-01: a Spec file title with a single requirement id fails the run', () => {
+  const file = writeFixture('single-id-title.md',
+    '---\ntype: Spec\ntitle: "cmd — EARS-Requirements CMD-3"\n---\n\n' + REAL_ROW);
+  const { status, stdout } = run([file]);
+  assert.equal(status, 1);
+  assert.match(stdout, /title: front-matter title carries a requirement id \("CMD-3"\)/);
+});
+
+test('title guard: a Spec file title without a requirement id exits 0', () => {
+  const file = writeFixture('clean-title.md',
+    '---\ntype: Spec\ntitle: "cmd — EARS-Requirements"\n---\n\n' + REAL_ROW);
+  const { status, stdout } = run([file]);
+  assert.equal(status, 0);
+  assert.match(stdout, /OK\s+.*clean-title\.md\s+\(1 requirement\(s\)\)/);
+});
+
+test('title guard AC-01b: a title-shaped line inside a codefence does not misfire when the real front-matter title is clean (the README.md case)', () => {
+  const specFile = writeFixture('real-spec.md', SPEC_HEADER + REAL_ROW);
+  const file = writeFixture('readme-shaped.md',
+    '---\ntype: Reference\ntitle: "readme — EARS-Requirements"\n---\n\n' +
+    '````markdown\n' +
+    'title: "cmd — EARS-Requirements CMD-1"\n' +
+    '````\n');
+  const { status, stdout } = run([specFile, file]);
+  assert.equal(status, 0);
+  assert.doesNotMatch(stdout, /FAIL/);
+});
+
+test('title guard AC-02: applies to Reference-type files too, not only Spec files', () => {
+  const file = writeFixture('reference-title.md',
+    '---\ntype: Reference\ntitle: "cmd — EARS-Requirements CMD-1..CMD-2"\n---\n\nbody\n');
+  const { status, stdout } = run([file]);
+  assert.equal(status, 1);
+  assert.match(stdout, /reference-title\.md\s+\(non-Spec file: type: Reference, 1 violation\(s\)\)/);
+  assert.match(stdout, /title: front-matter title carries a requirement id \("CMD-1"\)/);
+});
+
+test('title guard AC-05: a file with an unknown type value and an id-bearing title fails only for the type violation, unaffected by the title guard', () => {
+  const specFile = writeFixture('real-spec.md', SPEC_HEADER + REAL_ROW);
+  const badFile = writeFixture('bad-type.md',
+    '---\ntype: NotAKnownType\ntitle: "cmd — EARS-Requirements CMD-1"\n---\n\nbody\n');
+  const { status, stdout } = run([specFile, badFile]);
+  assert.equal(status, 1);
+  assert.match(stdout, /FAIL\s+.*bad-type\.md\s+\(type field carries unknown value "NotAKnownType" -- allowed: Spec, Reference\)/);
+  assert.doesNotMatch(stdout, /bad-type\.md[\s\S]*title: front-matter title carries a requirement id/);
+});
+
+test('title guard AC-04: a Spec file with zero requirement rows still reports its title violation', () => {
+  const file = writeFixture('empty-bad-title.md',
+    '---\ntype: Spec\ntitle: "cmd — EARS-Requirements CMD-1"\n---\n\njust prose, no table\n');
+  const { status, stdout } = run([file]);
+  assert.equal(status, 1);
+  assert.match(stdout, /FAIL\s+.*empty-bad-title\.md\s+\(0 requirement\(s\)/);
+  assert.match(stdout, /title: front-matter title carries a requirement id \("CMD-1"\)/);
+});
+
+test('title guard AC-02b: a clean multi-file run keeps the byte-identical summary line', () => {
+  const fileA = writeFixture('clean-a.md', SPEC_HEADER + REAL_ROW);
+  const fileB = writeFixture('clean-b.md', SPEC_HEADER + '| REAL-2 | WHEN y occurs THE system SHALL respond too. |\n');
+  const { status, stdout } = run([fileA, fileB]);
+  assert.equal(status, 0);
+  assert.match(stdout, /OK — 2 requirement\(s\) across 2 file\(s\), 0 violations/);
+});
+
+test('title guard AC-02b: the title finding line is distinguishable from the type-violation class', () => {
+  const badTitle = writeFixture('bad-title-only.md',
+    '---\ntype: Spec\ntitle: "cmd — EARS-Requirements CMD-1"\n---\n\n' + REAL_ROW);
+  const badType = writeFixture('bad-type-only.md', '---\ntype: NotAKnownType\n---\n\nbody\n');
+  const { stdout } = run([badTitle, badType]);
+  // type-violation class: a bare top-level FAIL line, reason in parens, no nested detail row.
+  assert.match(stdout, /FAIL\s+.*bad-type-only\.md\s+\(type field carries unknown value "NotAKnownType" -- allowed: Spec, Reference\)\n/);
+  // title-violation class: a nested "path:line  title: ..." detail row under its file's FAIL summary.
+  assert.match(stdout, /FAIL\s+.*bad-title-only\.md\s+\(1 requirement\(s\), 1 violation\(s\)\)\n\s+.*bad-title-only\.md:\d+\s+title: front-matter title carries a requirement id/);
 });
 
 // -- AC-08: a real command Spec losing its table form --------------------
