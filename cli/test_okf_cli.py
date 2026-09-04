@@ -367,6 +367,26 @@ class CheckCommand(unittest.TestCase):
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertNotIn("crosslink-format", self._names(warnings))
 
+    def test_reserved_file_relative_link_outside_marker_is_warning(self):
+        """D-rx51-01 (OKFT-rx51): a hand-authored relative link in index.md's
+        prose, outside the managed `<!-- okf:index -->` block, is a real
+        crosslink and must be caught the same as one in a concept file."""
+        self._w("b/index.md", "# B\n\nSee [Old](old.md) for background.\n\n"
+                              + okf.MARK_START + "\n" + okf.MARK_END + "\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertIn("crosslink-format", self._names(warnings))
+
+    def test_reserved_file_link_inside_marker_is_clean(self):
+        """D-rx51-01: the managed block is masked before the scan, so a
+        generated (relative-by-convention) link inside it never warns —
+        RESERVED files becoming a scan source must not regress the common
+        case of an ordinary reindexed index.md."""
+        self._w("b/index.md", "# B\n\n" + okf.MARK_START + "\n* [X](x.md)\n"
+                              + okf.MARK_END + "\n")
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
+        errors, warnings = okf.run_checks(self.tmp, "b")
+        self.assertNotIn("crosslink-format", self._names(warnings))
+
     def test_cross_bundle_dotdot_link_is_flagged(self):
         """Inverted with the canonical form: check_crosslink_format flags ANY
         relative link now, `../other/y.md` included, because it resolves
@@ -604,8 +624,9 @@ class RewriteCrosslinksInBody(unittest.TestCase):
 
 class FixCrosslinksCommand(unittest.TestCase):
     """T09 — fix_crosslinks: file-level orchestration, frontmatter untouched,
-    reserved files skipped (parity with check_crosslink_format's own scope),
-    dry-run writes nothing."""
+    reserved files never rewritten (D-rx51-01 kept this unchanged even though
+    check_crosslink_format now scans RESERVED files as a source), dry-run
+    writes nothing."""
 
     def setUp(self):
         import tempfile
