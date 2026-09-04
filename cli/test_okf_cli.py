@@ -728,6 +728,41 @@ class FixCrosslinksCommand(unittest.TestCase):
         self.assertIn("[Y](/b/y.md)", self._r("b/index.md"))
 
 
+class SplitManagedBlockUnit(unittest.TestCase):
+    """Direct unit coverage for `_split_managed_block`'s byte boundary —
+    an end-to-end `fix_crosslinks` test cannot observe this: a boundary
+    mutated by one byte (leaking the trailing `>` of MARK_END into
+    `after` instead of `block`) reconstructs an identical final rewrite
+    whenever the leaked byte is never itself a rewritable crosslink, so
+    it passes every file-level test unchanged. Reviewer finding on
+    62e867f, closed here at the function boundary instead."""
+
+    def test_complete_pair_bounds_block_exactly(self):
+        body = "before\n" + M0 + "\nX\n" + M1 + "\nafter\n"
+        before, block, after = okf._split_managed_block(body)
+        self.assertEqual(before + block + after, body)
+        self.assertTrue(block.startswith(M0))
+        self.assertTrue(block.endswith(M1))
+        self.assertEqual(before, "before\n")
+        self.assertEqual(after, "\nafter\n")
+        self.assertFalse(after.startswith(">"))
+
+    def test_unterminated_start_protects_to_eof(self):
+        body = "before\n" + M0 + "\nX\n"
+        before, block, after = okf._split_managed_block(body)
+        self.assertEqual(before + block + after, body)
+        self.assertTrue(block.startswith(M0))
+        self.assertEqual(before, "before\n")
+        self.assertEqual(after, "")
+
+    def test_no_marker_returns_whole_body_as_before(self):
+        body = "just prose, no markers\n"
+        before, block, after = okf._split_managed_block(body)
+        self.assertEqual(before, body)
+        self.assertEqual(block, "")
+        self.assertEqual(after, "")
+
+
 class OkfConfig(unittest.TestCase):
     """.okf.toml is the machine-truth config; absent or empty -> {}.
     ~ in path values is expanded."""
