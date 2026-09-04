@@ -535,5 +535,50 @@ class GoldenBundleConsistencyTest(unittest.TestCase):
         )
 
 
+class FixtureSpecGoldenAlignmentTest(unittest.TestCase):
+    """OKFT-fivs — GoldenBundleConsistencyTest above only catches literal
+    (golden.json) vs constant (fixtures.CORRECT_BUNDLE/WRONG_BUNDLE) drift;
+    it never asks `_fixture_spec` where it actually PLACES each scenario.
+    Changing S2's `format(wrong, ...)` to `format(correct, ...)` in
+    `_fixture_spec` moves S2 into CORRECT_BUNDLE for real while leaving both
+    shared constants and golden.json untouched — the guard above stays
+    green. This test derives the real per-scenario placement from
+    `_fixture_spec` itself and compares it against golden.json's
+    expectation for the same scenario id directly, so that drift fails
+    here too. Isolated tmpdir, no live catalogue, no subprocess."""
+
+    def _make_root(self):
+        root = tempfile.mkdtemp(prefix="okfeval-specgolden-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        os.makedirs(os.path.join(root, fixtures.CORRECT_BUNDLE))
+        os.makedirs(os.path.join(root, fixtures.WRONG_BUNDLE))
+        return root
+
+    def test_fixture_spec_placement_matches_golden_expectations(self):
+        root = self._make_root()
+        placements = {
+            fx.sz.lower(): fx.rel_path.split("/", 1)[0]
+            for fx in fixtures._fixture_spec(root)
+        }
+        with open(GOLDEN_PATH, encoding="utf-8") as f:
+            golden = json.load(f)
+        mismatches = []
+        for row in golden:
+            sz = row["id"].split("-", 1)[0]
+            placed_bundle = placements[sz]
+            path_bundle = row["expected_path"].split("/", 1)[0]
+            if path_bundle != placed_bundle:
+                mismatches.append((row["id"], "expected_path", path_bundle, placed_bundle))
+            query = row.get("query")
+            if isinstance(query, dict) and "bundle" in query:
+                if query["bundle"] != placed_bundle:
+                    mismatches.append((row["id"], "query.bundle", query["bundle"], placed_bundle))
+        self.assertEqual(
+            mismatches, [],
+            "golden.json bundle literal(s) diverge from _fixture_spec's "
+            "actual placement (row id, field, got, want): {}".format(mismatches),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
