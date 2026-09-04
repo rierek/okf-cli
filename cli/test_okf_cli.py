@@ -741,8 +741,7 @@ class SplitManagedBlockUnit(unittest.TestCase):
         body = "before\n" + M0 + "\nX\n" + M1 + "\nafter\n"
         before, block, after = okf._split_managed_block(body)
         self.assertEqual(before + block + after, body)
-        self.assertTrue(block.startswith(M0))
-        self.assertTrue(block.endswith(M1))
+        self.assertEqual(block, M0 + "\nX\n" + M1)
         self.assertEqual(before, "before\n")
         self.assertEqual(after, "\nafter\n")
         self.assertFalse(after.startswith(">"))
