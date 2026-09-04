@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // EARS conformance gate for the Rust-rewrite SPEC files.
 //
-// The house EARS validator (ce-beans-operationalize/scripts/ears-validator.js)
+// The house EARS validator (operationalize-beans/scripts/ears-validator.js)
 // only parses numbered lists under "#### Acceptance Criteria" and **SC-###**
 // checkboxes -- the bean acceptance shape. The persistent-Spec shape used by
 // lean-stack-okf/dev-cli-conformance is a markdown table, so it goes
@@ -11,21 +11,43 @@
 // play, not a second implementation that could drift from it.
 //
 // Usage:  node scripts/ears-table-check.js <file.md> [<file.md> ...]
-// Exit:   0 all statements valid | 1 violations found | 2 usage/setup error
+//
+// Exit codes (I09, project convention _common.md:63-70; D-siyu-06/D-siyu-07):
+//   0  COM-21  checked, all statements valid.
+//   1  COM-22  adverse finding about the checked input -- an EARS
+//              violation, or files were read but carried zero requirement
+//              rows (a silently-empty gate is itself a finding).
+//   2  COM-23  the invocation itself is malformed: no file argument, or a
+//              caller-named path does not exist.
+//   3  COM-24  a failure outside the invocation and outside the checked
+//              input's content -- the house validator dependency is
+//              missing, or a caller-named path exists but cannot be read.
+//              The message names the failing subsystem.
 
 const fs = require('fs');
 const path = require('path');
 
-const VALIDATOR = path.join(
-  process.env.HOME, '.claude', 'skills', 'ce-beans-operationalize',
-  'scripts', 'ears-validator.js');
+function findValidator() {
+  const candidates = [];
+  if (process.env.EARS_VALIDATOR) candidates.push(process.env.EARS_VALIDATOR);
+  candidates.push(path.join(
+    process.env.HOME, '.claude', 'skills', 'operationalize-beans',
+    'scripts', 'ears-validator.js'));
 
-if (!fs.existsSync(VALIDATOR)) {
-  console.error('ears-table-check: house validator not found at ' + VALIDATOR);
-  console.error('hint: this gate reuses the ce-beans-operationalize validator; ' +
-                'it is not vendored here on purpose, so the ruleset stays single-source.');
-  process.exit(2);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  console.error('ears-table-check: subsystem "ears-validator" unavailable -- no candidate found. Checked:');
+  for (const candidate of candidates) {
+    console.error('  - ' + candidate);
+  }
+  console.error('hint: this gate reuses the operationalize-beans validator; ' +
+                'it is not vendored here on purpose, so the ruleset stays single-source. ' +
+                'Set EARS_VALIDATOR to override the search.');
+  process.exit(3);
 }
+const VALIDATOR = findValidator();
 const { validateEarsStatement } = require(VALIDATOR);
 
 // A requirement row: | <ID> | <EARS statement> |
@@ -34,7 +56,19 @@ const { validateEarsStatement } = require(VALIDATOR);
 const ROW_RE = /^\|\s*([A-Z][A-Z0-9-]*-\d+)\s*\|\s*(.+?)\s*\|\s*$/;
 
 function checkFile(file) {
-  const lines = fs.readFileSync(file, 'utf-8').split('\n');
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf-8');
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      console.error(`ears-table-check: path does not exist: ${file}`);
+      process.exit(2);
+    }
+    console.error(`ears-table-check: subsystem "filesystem" failed reading ${file}: ${err.message}`);
+    process.exit(3);
+  }
+
+  const lines = raw.split('\n');
   const issues = [];
   const ids = new Map();
   let count = 0;
@@ -75,7 +109,7 @@ for (const file of files) {
   total += count;
   const rel = path.relative(process.cwd(), file);
   if (issues.length === 0) {
-    console.log(`OK       ${rel}  (${count} requirement(s))`);
+    console.log(`${count === 0 ? 'EMPTY  ' : 'OK     '}  ${rel}  (${count} requirement(s))`);
     continue;
   }
   failed += issues.length;
@@ -86,6 +120,11 @@ for (const file of files) {
       console.log(it.suggestion.split('\n').map(l => '      ' + l).join('\n'));
     }
   }
+}
+
+if (total === 0) {
+  console.log(`\n0 requirement(s) found across ${files.length} file(s) -- nothing was checked`);
+  process.exit(1);
 }
 
 console.log(failed === 0
