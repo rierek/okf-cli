@@ -677,6 +677,56 @@ class FixCrosslinksCommand(unittest.TestCase):
         self.assertEqual(touched, [])
         self.assertIn(("b/x.md", "ghost.md"), unresolved)
 
+    def test_include_reserved_rewrites_outside_marker_only(self):
+        block = "<!-- okf:index -->\n* [Y](y.md)\n<!-- /okf:index -->"
+        self._w("b/index.md",
+                "# B\n\n[Rel](y.md)\n\n[Legacy](/y.md)\n\n" + block + "\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        self.assertIn("b/index.md", [t[0] for t in touched])
+        content = self._r("b/index.md")
+        self.assertIn(block, content)
+        self.assertIn("[Rel](/b/y.md)", content)
+        self.assertIn("[Legacy](/b/y.md)", content)
+
+    def test_include_reserved_rewrites_reserved_file_without_marker(self):
+        self._w("b/index.md", "# B\n\n[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        self.assertIn("b/index.md", [t[0] for t in touched])
+        self.assertIn("[Y](/b/y.md)", self._r("b/index.md"))
+
+    def test_include_reserved_does_not_change_non_reserved_behavior(self):
+        self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        self.assertEqual(len(touched), 1)
+        self.assertIn("[Y](/b/y.md)", self._r("b/x.md"))
+
+    def test_include_reserved_protects_unterminated_marker(self):
+        self._w("b/index.md", "[Y](y.md)\n\n<!-- okf:index -->\n[Z](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        content = self._r("b/index.md")
+        self.assertIn("[Y](/b/y.md)", content)
+        self.assertIn("<!-- okf:index -->\n[Z](y.md)\n", content)
+
+    def test_include_reserved_dry_run_reports_without_writing(self):
+        self._w("b/index.md", "[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        before = self._r("b/index.md")
+        touched, unresolved = okf.fix_crosslinks(
+            self.tmp, "b", dry_run=True, include_reserved=True)
+        self.assertIn("b/index.md", [t[0] for t in touched])
+        self.assertEqual(self._r("b/index.md"), before)
+
+    def test_include_reserved_ignores_index_exempt_marker(self):
+        self._w("b/index.md", "<!-- okf:index-exempt -->\n[Y](y.md)\n")
+        self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
+        touched, unresolved = okf.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        self.assertIn("b/index.md", [t[0] for t in touched])
+        self.assertIn("[Y](/b/y.md)", self._r("b/index.md"))
+
 
 class OkfConfig(unittest.TestCase):
     """.okf.toml is the machine-truth config; absent or empty -> {}.
