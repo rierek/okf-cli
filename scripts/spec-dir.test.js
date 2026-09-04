@@ -87,8 +87,8 @@ test('path 4 (AC-01): cd into dirname(git-common-dir) fails -> exit 3, named sub
   const res = run(cwd, { PATH: `${binDir}:${process.env.PATH}` });
 
   assert.equal(res.status, 3);
-  assert.match(res.stderr, /^spec-check: subsystem "spec-dir" unavailable --/);
-  assert.match(res.stderr, new RegExp(vanishedParent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const expectedCore = `spec-check: subsystem "spec-dir" unavailable -- could not enter ${vanishedParent}, derived from git common dir ${fakeCommonDir}`;
+  assert.equal(res.stderr.trim(), expectedCore);
   // Distinguishable from the three existing messages (AC-02):
   assert.doesNotMatch(res.stderr, /not inside a git checkout/);
   assert.doesNotMatch(res.stderr, /no hull \(repo\/\+docs\/\) found/);
@@ -112,4 +112,38 @@ test('success path: prints absolute SPEC dir, exit 0, worktree-agnostic (root an
   const fromNested = run(nested, { GIT_CEILING_DIRECTORIES: root });
   assert.equal(fromNested.status, 0);
   assert.equal(fromNested.stdout.trim(), specDir);
+});
+
+test('success path (AC-06): identical SPEC dir from a real linked git worktree', () => {
+  // The motivating case for D-siyu-07: `git rev-parse --git-common-dir` from a
+  // linked worktree returns an ABSOLUTE path into the main checkout's `.git`,
+  // not a relative one -- a fixed dirname-step-count would silently break
+  // here even though the relative (root/nested) cases above stay green.
+  const root = mkdtemp('okft-g01s-wt-');
+  const repoDir = path.join(root, 'hull', 'repo');
+  const specDir = path.join(root, 'hull', 'docs', 'topics', 'okf-cli-rust-rewrite', 'spec');
+  fs.mkdirSync(specDir, { recursive: true });
+  fs.mkdirSync(repoDir, { recursive: true });
+  gitInit(repoDir);
+  const commit = spawnSync(
+    'git',
+    ['-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '--allow-empty', '-q', '-m', 'init'],
+    { cwd: repoDir, encoding: 'utf8' },
+  );
+  assert.equal(commit.status, 0, `git commit failed: ${commit.stderr}`);
+
+  const linkedWorktree = path.join(root, 'linked-wt');
+  const wtAdd = spawnSync('git', ['worktree', 'add', '-q', linkedWorktree, '-b', 'okft-g01s-wt-branch'], {
+    cwd: repoDir,
+    encoding: 'utf8',
+  });
+  assert.equal(wtAdd.status, 0, `git worktree add failed: ${wtAdd.stderr}`);
+
+  try {
+    const fromWorktree = run(linkedWorktree, { GIT_CEILING_DIRECTORIES: root });
+    assert.equal(fromWorktree.status, 0, `stderr: ${fromWorktree.stderr}`);
+    assert.equal(fromWorktree.stdout.trim(), specDir);
+  } finally {
+    spawnSync('git', ['worktree', 'remove', '--force', linkedWorktree], { cwd: repoDir, encoding: 'utf8' });
+  }
 });

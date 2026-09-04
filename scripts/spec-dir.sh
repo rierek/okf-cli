@@ -31,8 +31,9 @@ if [ -z "$gcd" ]; then
   exit 3
 fi
 
-if ! d="$(cd "$(dirname "$gcd")" 2>/dev/null && pwd)"; then
-  echo "spec-check: subsystem \"spec-dir\" unavailable -- could not resolve directory containing git common dir at $gcd" >&2
+dparent="$(dirname "$gcd")"
+if ! d="$(cd "$dparent" 2>/dev/null && pwd)"; then
+  echo "spec-check: subsystem \"spec-dir\" unavailable -- could not enter $dparent, derived from git common dir $gcd" >&2
   exit 3
 fi
 start="$d"
