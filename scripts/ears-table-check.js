@@ -40,6 +40,23 @@ const ROW_RE = /^\|\s*([A-Z][A-Z0-9-]*-\d+)\s*\|\s*(.+?)\s*\|\s*$/;
 // which is what a closing fence must match: same character, length >= open.
 const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
 
+// A requirement id, matched anywhere inside a string rather than anchored
+// to the start of a table row -- used by the title guard (AC-01, exact
+// pattern from the OKFT-d2ps execution contract).
+const REQUIREMENT_ID_RE = /[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[0-9]+/;
+
+// Front-matter parsing shared by classifySpecFile (the `type` field) and
+// the title guard (the `title` field, AC-01b): both read the SAME parsed
+// first `---`-delimited block at the top of the file, never a line search
+// over the whole file -- a codefenced template further down (README.md's
+// "Aufbau einer Kommando-Datei") repeats the same line shape and would
+// otherwise be mistaken for real front-matter.
+function parseFrontMatter(raw) {
+  const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+  if (!fm) return null;
+  return { body: fm[1], bodyOffset: fm.index + fm[0].indexOf(fm[1]) };
+}
+
 // The SPEC-file criterion (D-wqge-05): which files in the SPEC directory
 // are Spec files that this gate must check is DECLARED via front-matter,
 // never derived from a file's content (a content-derived criterion is
@@ -51,7 +68,7 @@ const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
 // Exported so a second tool (e.g. a grounding check) can reuse this exact
 // criterion instead of re-deriving it from content.
 function classifySpecFile(raw) {
-  const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+  const fm = parseFrontMatter(raw);
   if (!fm) {
     return { kind: 'error', reason: 'no readable front-matter (missing --- delimiters)' };
   }
@@ -60,7 +77,7 @@ function classifySpecFile(raw) {
   // `type:` with no value at all is distinct from a missing `type:` line
   // (that stays "no type field" above); an empty value is itself an
   // unknown-value finding under AC-10, not a silent pass-through.
-  const typeMatch = fm[1].match(/^type:\s*(.*?)\s*$/m);
+  const typeMatch = fm.body.match(/^type:\s*(.*?)\s*$/m);
   if (!typeMatch) {
     return { kind: 'error', reason: 'front-matter has no type field' };
   }
@@ -76,7 +93,34 @@ function classifySpecFile(raw) {
   };
 }
 
-module.exports = { classifySpecFile };
+// D-wqge-16 / AC-01 / AC-01b: a Spec-/Reference-file title that still
+// names a requirement id (a range or a single id) is a second, unguarded
+// source of the file's requirement scope -- it belongs in the table only.
+// Returns an issue in the same {line, id, error} shape the row-validation
+// loop below produces, so both flow through the identical report/exit
+// path (AC-02b); returns null when the title is clean or absent.
+function checkTitleForRequirementId(raw) {
+  const fm = parseFrontMatter(raw);
+  if (!fm) return null;
+  const titleLineMatch = fm.body.match(/^title:[^\n]*$/m);
+  if (!titleLineMatch) return null;
+  let title = titleLineMatch[0].slice('title:'.length).trim();
+  const quoted = title.match(/^(['"])(.*)\1$/);
+  if (quoted) title = quoted[2];
+
+  const idMatch = title.match(REQUIREMENT_ID_RE);
+  if (!idMatch) return null;
+
+  const line = raw.slice(0, fm.bodyOffset + titleLineMatch.index).split('\n').length;
+  return {
+    line,
+    id: 'title',
+    error: `front-matter title carries a requirement id ("${idMatch[0]}") -- ` +
+      `requirement scope belongs in the table, not the title: "${title}"`,
+  };
+}
+
+module.exports = { classifySpecFile, checkTitleForRequirementId };
 
 if (require.main === module) {
   function findValidator() {
@@ -116,12 +160,19 @@ if (require.main === module) {
     }
 
     const classification = classifySpecFile(raw);
+    // AC-01: the title guard applies to Spec-/Reference-classified files.
+    // A classification-'error' file's issues never surface (the report
+    // loop below prints only classification.reason for that kind, AC-05),
+    // so this always runs the check and lets that loop be the single
+    // place scope is decided, instead of a second, redundant gate here.
+    const issues = [];
+    const titleIssue = checkTitleForRequirementId(raw);
+    if (titleIssue) issues.push(titleIssue);
     if (classification.kind !== 'spec') {
-      return { file, classification, count: 0, issues: [] };
+      return { file, classification, count: 0, issues };
     }
 
     const lines = raw.split('\n');
-    const issues = [];
     const ids = new Map();
     let count = 0;
     let fenceChar = null;
@@ -173,6 +224,15 @@ if (require.main === module) {
     process.exit(2);
   }
 
+  function printIssues(rel, issues) {
+    for (const it of issues) {
+      console.log(`  ${rel}:${it.line}  ${it.id}: ${it.error}`);
+      if (it.suggestion) {
+        console.log(it.suggestion.split('\n').map(l => '      ' + l).join('\n'));
+      }
+    }
+  }
+
   let total = 0, failed = 0;
   for (const file of files) {
     const { classification, count, issues } = checkFile(file);
@@ -184,7 +244,13 @@ if (require.main === module) {
       continue;
     }
     if (classification.kind === 'skip') {
-      console.log(`SKIP     ${rel}  (non-Spec file: ${classification.reason})`);
+      if (issues.length === 0) {
+        console.log(`SKIP     ${rel}  (non-Spec file: ${classification.reason})`);
+        continue;
+      }
+      failed += issues.length;
+      console.log(`FAIL     ${rel}  (non-Spec file: ${classification.reason}, ${issues.length} violation(s))`);
+      printIssues(rel, issues);
       continue;
     }
 
@@ -192,6 +258,10 @@ if (require.main === module) {
     if (count === 0) {
       failed++;
       console.log(`FAIL     ${rel}  (0 requirement(s) -- Spec file carries no requirement rows)`);
+      if (issues.length > 0) {
+        failed += issues.length;
+        printIssues(rel, issues);
+      }
       continue;
     }
     if (issues.length === 0) {
@@ -200,12 +270,7 @@ if (require.main === module) {
     }
     failed += issues.length;
     console.log(`FAIL     ${rel}  (${count} requirement(s), ${issues.length} violation(s))`);
-    for (const it of issues) {
-      console.log(`  ${rel}:${it.line}  ${it.id}: ${it.error}`);
-      if (it.suggestion) {
-        console.log(it.suggestion.split('\n').map(l => '      ' + l).join('\n'));
-      }
-    }
+    printIssues(rel, issues);
   }
 
   if (total === 0) {
