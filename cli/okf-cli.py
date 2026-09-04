@@ -3143,6 +3143,33 @@ def _mask_managed_block(body):
     return re.sub(re.escape(MARK_START) + r"[\s\S]*?" + re.escape(MARK_END), "", body)
 
 
+def _split_managed_block(body):
+    """Split `body` into (before, block, after) around the managed
+    `<!-- okf:index -->`..`<!-- /okf:index -->` region, for a rewrite that
+    must preserve the block byte-identical instead of deleting it like
+    `_mask_managed_block` does. Three cases:
+      - complete marker pair: `block` carries both markers and everything
+        between them; `before`/`after` are the surrounding text.
+      - `MARK_START` present without a matching `MARK_END` (malformed/
+        truncated file): `block` carries everything from `MARK_START` to
+        end-of-file — an unterminated marker cannot be told apart from a
+        marker whose close tag was itself mid-edit, so the conservative
+        choice protects it rather than guessing it is safe to rewrite.
+      - no `MARK_START` at all: `before` is the whole body, `block` and
+        `after` are empty — the caller rewrites everything, same as a
+        non-RESERVED file, with no special-casing needed.
+    A caller that only ever rewrites `before` and `after` gets the
+    byte-identical-block guarantee by construction, not by comparison."""
+    si = body.find(MARK_START)
+    if si == -1:
+        return body, "", ""
+    ei = body.find(MARK_END, si)
+    if ei == -1:
+        return body[:si], body[si:], ""
+    ei += len(MARK_END)
+    return body[:si], body[si:ei], body[ei:]
+
+
 def _mask_code_spans(body):
     """Stash fenced code blocks + inline code so a pattern scan skips them.
     Frontmatter is already split off by the caller (ctx["body"]/split_frontmatter),
@@ -3335,22 +3362,39 @@ def rewrite_crosslinks_in_body(root, bundle, cdir, body):
     return new_body, changed, unresolved
 
 
-def fix_crosslinks(root, target, dry_run=False):
+def fix_crosslinks(root, target, dry_run=False, include_reserved=False):
     """Rewrite crosslinks in every non-reserved .md under `target` (bundle or
     bundle/subdir, or the whole catalogue when None) to catalogue-root-absolute
-    form. Returns (touched, unresolved):
-    touched = [(rel, changed_count), ...], unresolved = [(rel, target), ...]."""
+    form. `include_reserved=True` (D-fxcr-01) additionally rewrites RESERVED
+    files (index.md, log.md, readme.md, index-map.md), narrowed to the text
+    outside the managed `<!-- okf:index -->` block via `_split_managed_block` —
+    the block itself is never handed to the rewriter, so it stays
+    byte-identical. Default (`include_reserved=False`) leaves RESERVED files
+    untouched, unchanged from before this parameter existed. Returns
+    (touched, unresolved): touched = [(rel, changed_count), ...],
+    unresolved = [(rel, target), ...]."""
     touched, unresolved = [], []
     for bundle, bp in resolve_scopes(root, target):
         for ap in iter_all_md(bp, prune_staging=False):
-            if os.path.basename(ap).lower() in RESERVED:
+            is_reserved = os.path.basename(ap).lower() in RESERVED
+            if is_reserved and not include_reserved:
                 continue
             text = read_file(ap)
             _, body = split_frontmatter(text)
             head = text[:len(text) - len(body)]
             cdir = os.path.dirname(os.path.relpath(ap, bp))
-            new_body, changed, unres = rewrite_crosslinks_in_body(root, bundle, cdir, body)
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            if is_reserved:
+                before, block, after = _split_managed_block(body)
+                new_before, changed_before, unres_before = rewrite_crosslinks_in_body(
+                    root, bundle, cdir, before)
+                new_after, changed_after, unres_after = rewrite_crosslinks_in_body(
+                    root, bundle, cdir, after)
+                new_body = new_before + block + new_after
+                changed = changed_before + changed_after
+                unres = unres_before + unres_after
+            else:
+                new_body, changed, unres = rewrite_crosslinks_in_body(root, bundle, cdir, body)
             for u in unres:
                 unresolved.append((rel, u))
             if changed:
@@ -3367,7 +3411,8 @@ def cmd_fix_crosslinks(root, args):
         if not os.path.isdir(tp):
             print("not a directory: {}".format(target), file=sys.stderr)
             sys.exit(1)
-    touched, unresolved = fix_crosslinks(root, target, dry_run=args.check)
+    touched, unresolved = fix_crosslinks(root, target, dry_run=args.check,
+                                          include_reserved=args.include_reserved)
     verb = "would rewrite" if args.check else "rewrote"
     for rel, n in touched:
         print("{:<14} {}  ({} link(s))".format(verb, rel, n))
@@ -4931,6 +4976,13 @@ def build_parser():
                "rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
     pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
     pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
+    pfx.add_argument("--include-reserved", action="store_true",
+                      dest="include_reserved",
+                      help="also rewrite RESERVED files (index.md, log.md, "
+                           "readme.md, index-map.md), narrowed to the text "
+                           "outside the managed <!-- okf:index --> block, "
+                           "which stays byte-identical (D-fxcr-01, off by "
+                           "default)")
     pfxt = _sub(sub, "fix-xml-tags", "maintenance",
                 "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
     pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
