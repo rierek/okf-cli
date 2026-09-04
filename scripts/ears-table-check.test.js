@@ -79,6 +79,52 @@ test('classifySpecFile: front-matter without type field classifies as error', ()
   assert.match(result.reason, /type field/);
 });
 
+// -- AC-10 / D-wqge-08: closed role set, quotes stripped, then exact case-sensitive --
+
+test('classifySpecFile: lowercase "spec" is an unknown-value finding, not a silent spec', () => {
+  const result = classifySpecFile('---\ntype: spec\n---\n\nbody\n');
+  assert.equal(result.kind, 'error');
+  assert.match(result.reason, /unknown value "spec"/);
+  assert.match(result.reason, /allowed: Spec, Reference/);
+});
+
+test('classifySpecFile: uppercase "SPEC" is an unknown-value finding', () => {
+  const result = classifySpecFile('---\ntype: SPEC\n---\n\nbody\n');
+  assert.equal(result.kind, 'error');
+  assert.match(result.reason, /unknown value "SPEC"/);
+});
+
+test('classifySpecFile: "Specification" is an unknown-value finding, not a prefix match on Spec', () => {
+  const result = classifySpecFile('---\ntype: Specification\n---\n\nbody\n');
+  assert.equal(result.kind, 'error');
+  assert.match(result.reason, /unknown value "Specification"/);
+});
+
+test('classifySpecFile: an empty type value is an unknown-value finding, distinct from a missing field', () => {
+  const result = classifySpecFile('---\ntype:\n---\n\nbody\n');
+  assert.equal(result.kind, 'error');
+  assert.match(result.reason, /unknown value ""/);
+});
+
+test('classifySpecFile: a quoted "Spec" strips quotes and still classifies as spec', () => {
+  const result = classifySpecFile('---\ntype: "Spec"\n---\n\nbody\n');
+  assert.deepEqual(result, { kind: 'spec' });
+});
+
+test('classifySpecFile: a quoted \'Reference\' strips quotes and still classifies as skip', () => {
+  const result = classifySpecFile("---\ntype: 'Reference'\n---\n\nbody\n");
+  assert.equal(result.kind, 'skip');
+  assert.match(result.reason, /type: Reference/);
+});
+
+test('AC-10: an unknown type value fails the run, names the file, the value, and the allowed values', () => {
+  const specFile = writeFixture('real-spec.md', SPEC_HEADER + REAL_ROW);
+  const badFile = writeFixture('typo-type.md', '---\ntype: spec\n---\n\nbody\n');
+  const { status, stdout } = run([specFile, badFile]);
+  assert.equal(status, 1);
+  assert.match(stdout, /FAIL\s+.*typo-type\.md\s+\(type field carries unknown value "spec" -- allowed: Spec, Reference\)/);
+});
+
 // -- AC-01: fenced requirement-shaped rows are not counted --------------
 
 test('AC-01: a requirement-shaped row inside a backtick fence is not counted', () => {

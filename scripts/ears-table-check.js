@@ -55,15 +55,25 @@ function classifySpecFile(raw) {
   if (!fm) {
     return { kind: 'error', reason: 'no readable front-matter (missing --- delimiters)' };
   }
-  const typeMatch = fm[1].match(/^type:\s*(.+?)\s*$/m);
+  // D-wqge-08: membership is decided against a CLOSED set of known roles,
+  // not a content-derived table check and not a tolerant/partial match.
+  // `type:` with no value at all is distinct from a missing `type:` line
+  // (that stays "no type field" above); an empty value is itself an
+  // unknown-value finding under AC-10, not a silent pass-through.
+  const typeMatch = fm[1].match(/^type:\s*(.*?)\s*$/m);
   if (!typeMatch) {
     return { kind: 'error', reason: 'front-matter has no type field' };
   }
-  const type = typeMatch[1].trim();
-  if (type !== 'Spec') {
-    return { kind: 'skip', reason: `type: ${type}` };
-  }
-  return { kind: 'spec' };
+  let type = typeMatch[1].trim();
+  const quoted = type.match(/^(['"])(.*)\1$/);
+  if (quoted) type = quoted[2];
+
+  if (type === 'Spec') return { kind: 'spec' };
+  if (type === 'Reference') return { kind: 'skip', reason: `type: ${type}` };
+  return {
+    kind: 'error',
+    reason: `type field carries unknown value "${type}" -- allowed: Spec, Reference`,
+  };
 }
 
 module.exports = { classifySpecFile };
