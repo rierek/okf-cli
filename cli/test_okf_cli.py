@@ -2497,9 +2497,13 @@ class FindFilterContract(unittest.TestCase):
         # Guard the regime itself: if a literal match crept in, the lexical
         # arm would own the ranking and this would silently retest the case
         # above instead of the one B01 broke.
-        self.assertEqual(self._paths(self.PARAPHRASE, scope="keep/inner"),
-                         [self.WANTED, "keep/inner/type-bait",
-                          "keep/inner/tag-bait"])
+        # OKFT-rx72: order among these three is not the point (all three
+        # embed to the identical vector by construction, see setUp) — only
+        # membership is. assertCountEqual (not assertEqual) keeps this from
+        # re-pinning whatever tiebreak order the fix below happens to give.
+        self.assertCountEqual(self._paths(self.PARAPHRASE, scope="keep/inner"),
+                               [self.WANTED, "keep/inner/type-bait",
+                                "keep/inner/tag-bait"])
         self._check_every_dimension(self.PARAPHRASE, "semantic")
 
     def test_substring_fallback_honours_every_filter(self):
@@ -3542,6 +3546,22 @@ class SemanticBackstop(unittest.TestCase):
         finally:
             okf._cosine = orig_cosine
 
+    def test_equal_cosine_scores_break_the_tie_by_path(self):
+        """OKFT-rx72 — sorted(..., key=lambda x: -x[0]) alone leaves tied
+        cosines in whatever order concept_emb's unordered SELECT returned
+        them, which two separate runs are not guaranteed to agree on. `zzz`
+        and `aaa` share the exact same vector as the query, so their cosine
+        ties at 1.0; the path secondary key must place `b/aaa` first."""
+        self._make_tagvec([
+            ("k1", "b/zzz", [1.0, 0.0]),
+            ("k2", "b/aaa", [1.0, 0.0]),
+        ])
+        okf._embed_query_voyage = lambda text: [1.0, 0.0]
+        ranked = okf.semantic_ranking(self.tmp, "zzz-no-keyword-match-zzz", 10,
+                                       okf.FindFilters())
+        self.assertEqual(ranked[0][0], ranked[1][0])
+        self.assertEqual([p for _c, p in ranked], ["b/aaa", "b/zzz"])
+
     # test_shim_backfills_when_excluded_paths_rank_inside_the_window removed
     # (T08/SC-SHIM): it pinned the T07 cmd_find shim's over-fetch-by-
     # len(exclude) backfill behaviour, which existed only to protect a
@@ -4344,6 +4364,25 @@ class FtsRanking(unittest.TestCase):
         okf.build_fts_index(self.root)
         self.assertNotEqual(okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters(scope="b")), [])
         self.assertEqual(okf._fts_ranking(self.root, "tunnel", 10, okf.FindFilters(scope="zz")), [])
+
+    def test_equal_bm25_scores_break_the_tie_by_path(self):
+        """OKFT-rx72 — ORDER BY r alone leaves tied bm25 rows in whatever
+        order the FTS5 doc table happens to store them, which is not a
+        contract SQLite promises to keep stable across rebuilds. `zzz`/`aaa`
+        share identical title/tags/body, so their bm25 scores tie exactly;
+        the path secondary key must place `b/aaa` before `b/zzz`."""
+        for name in ("zzz", "aaa"):
+            with open(os.path.join(self.root, "b", name + ".md"), "w",
+                      encoding="utf-8") as f:
+                f.write("---\ntype: Concept\ntitle: Tiebreak Term\n"
+                        "description: d\ntags: []\n---\n"
+                        "Tiebreak term appears once in the body.\n")
+        okf.build_fts_index(self.root)
+        ranked = okf._fts_ranking(self.root, "tiebreak", 10, okf.FindFilters())
+        tied_paths = [p for p, _s in ranked if p in ("b/aaa", "b/zzz")]
+        tied_scores = [s for p, s in ranked if p in ("b/aaa", "b/zzz")]
+        self.assertEqual(tied_scores[0], tied_scores[1])
+        self.assertEqual(tied_paths, ["b/aaa", "b/zzz"])
 
     def test_corrupt_index_degrades_to_none(self):
         okf.build_fts_index(self.root)

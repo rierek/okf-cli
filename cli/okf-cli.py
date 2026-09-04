@@ -1236,7 +1236,12 @@ def _fts_ranking(root, query, limit, filters, notify=True):
     sql += where
     params.extend(where_params)
     assert not residual, "docs table covers every filter dimension"
-    sql += " ORDER BY r LIMIT ?"
+    sql += " ORDER BY r, path LIMIT ?"  # path is the tiebreaker for equal
+    # bm25 scores (OKFT-rx72): the FTS5 doc-insertion order that would
+    # otherwise decide ties comes from os.walk() at build-index time, which
+    # is not a contract SQLite is bound to preserve run over run — an
+    # explicit secondary key makes tied ranks reproducible instead of
+    # accidental.
     params.append(limit)
     try:
         conn = sqlite3.connect(db)
@@ -1615,8 +1620,12 @@ def semantic_ranking(root, query, limit, filters):
         print("note: semantic arm skipped (embedding backend unavailable: {})"
               " — lexical results only".format(exc), file=sys.stderr)
         return []
+    # path is the tiebreaker for equal cosine values (OKFT-rx72): the SQL
+    # row order feeding this sort has no ORDER BY of its own, so without a
+    # secondary key here two runs could stably-sort equal cosines in
+    # whatever order concept_emb happened to return them in.
     ranked = sorted(((_cosine(qvec, vec), path) for path, vec in vectors),
-                    key=lambda x: -x[0])
+                    key=lambda x: (-x[0], x[1]))
     if not residual:
         return ranked[:limit]
     out = []
