@@ -10,6 +10,7 @@ the REAL cli/okf-cli.py, exactly as the MCP server does.
 Run: python3 -m unittest cli.test_okf_mcp -v
 """
 import importlib.util
+import inspect
 import os
 import shutil
 import subprocess
@@ -422,6 +423,42 @@ class McpOptionalRoot(unittest.TestCase):
         finally:
             mcp.run_okf = real
         self.assertNotIn("--root", argvs[0])
+
+
+class McpToolSignatureContract(unittest.TestCase):
+    """FastMCP translates a keyword-only parameter without a default into
+    JSON-Schema `required`, and a parameter with a default into optional
+    (verified once against the real library — okf-cli-z69p). Runs under
+    plain python3, unlike a FastMCP-backed check: `mcp` is not on the
+    system interpreter `just test` uses, only inside the `uv run --with
+    'mcp<2'` sandbox the server itself launches in."""
+
+    REQUIRED_KEYWORD_ONLY = {
+        "okf_find": {"query"},
+        "okf_read": {"path"},
+        "okf_toc": {"path"},
+        "okf_reindex": {"target"},
+        "okf_refs": {"path"},
+        "okf_rename": {"old", "new"},
+    }
+
+    def _tools(self):
+        return mcp._register(_ToolCollector()).tools
+
+    def test_root_always_has_a_default(self):
+        for name, fn in self._tools().items():
+            root_param = inspect.signature(fn).parameters["root"]
+            self.assertIsNot(root_param.default, inspect.Parameter.empty, name)
+
+    def test_genuinely_required_params_are_keyword_only_without_a_default(self):
+        for name, required in self.REQUIRED_KEYWORD_ONLY.items():
+            params = inspect.signature(self._tools()[name]).parameters
+            for param_name in required:
+                p = params[param_name]
+                self.assertIs(p.kind, inspect.Parameter.KEYWORD_ONLY,
+                               "{}.{}".format(name, param_name))
+                self.assertIs(p.default, inspect.Parameter.empty,
+                               "{}.{}".format(name, param_name))
 
 
 class McpIncludeArchiveFlag(unittest.TestCase):
