@@ -406,6 +406,23 @@ class McpOptionalRoot(unittest.TestCase):
         argv = mcp.build_argv("/x", "prime", {"compact": True})
         self.assertEqual(argv, ["--root", "/x", "prime", "--compact"])
 
+    def test_registered_tool_called_with_no_args_omits_root(self):
+        # build_argv alone does not guard the 15 tool SIGNATURES — if
+        # `root` were ever restored as a required positional there, this
+        # is what would catch it (build_argv's own unit tests cannot).
+        argvs = []
+        real = mcp.run_okf
+
+        def spy(root, command, params):
+            argvs.append(mcp.build_argv(root, command, params))
+            return ""
+        mcp.run_okf = spy
+        try:
+            mcp._register(_ToolCollector()).tools["okf_prime"]()
+        finally:
+            mcp.run_okf = real
+        self.assertNotIn("--root", argvs[0])
+
 
 class McpIncludeArchiveFlag(unittest.TestCase):
     """R-14 (okf-cli-9e2b) — _BOOL_FLAGS is shared across every command, so
@@ -449,10 +466,12 @@ class McpIncludeArchiveFlag(unittest.TestCase):
         mcp.run_okf = spy
         try:
             mcp._register(_ToolCollector()).tools["okf_find"](
-                "/root", "q", include_archive=True)
+                "/root", query="q", include_archive=True)
         finally:
             mcp.run_okf = real
-        self.assertIn("--include-archive", argvs[0])
+        self.assertEqual(
+            argvs[0],
+            ["--root", "/root", "find", "q", "--limit", "10", "--include-archive"])
 
     def test_ac1_okf_list_tool_accepts_include_archive_and_reaches_build_argv(self):
         argvs = []
@@ -467,7 +486,9 @@ class McpIncludeArchiveFlag(unittest.TestCase):
                 "/root", include_archive=True)
         finally:
             mcp.run_okf = real
-        self.assertIn("--include-archive", argvs[0])
+        self.assertEqual(
+            argvs[0],
+            ["--root", "/root", "list", "--include-archive", "--json"])
 
 
 class McpWikilinksBoundary(McpBoundaryTestBase):

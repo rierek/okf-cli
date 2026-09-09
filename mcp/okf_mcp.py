@@ -126,7 +126,7 @@ def run_okf(root, command, params):
 
 def _register(server):
     @server.tool()
-    def okf_find(root: str = "", query: str = "", limit: int = 10, type: str = "",
+    def okf_find(root: str = "", *, query: str, limit: int = 10, type: str = "",
                  tag: str = "", scope: str = "",
                  include_archive: bool = False) -> list:
         """Ranked search across a catalogue/repo root, composable with
@@ -159,12 +159,12 @@ def _register(server):
         })
 
     @server.tool()
-    def okf_read(root: str = "", path: str = "") -> str:
+    def okf_read(root: str = "", *, path: str) -> str:
         """Print one concept page (bundle/concept-id)."""
         return run_okf(root, "read", {"path": path})
 
     @server.tool()
-    def okf_toc(root: str = "", path: str = "") -> str:
+    def okf_toc(root: str = "", *, path: str) -> str:
         """Section headings of a concept."""
         return run_okf(root, "toc", {"path": path})
 
@@ -191,17 +191,17 @@ def _register(server):
         return run_okf(root, "check", {"target": target})
 
     @server.tool()
-    def okf_reindex(root: str = "", target: str = "") -> str:
+    def okf_reindex(root: str = "", *, target: str) -> str:
         """Regenerate marker-bounded index listings for a bundle/subdir."""
         return run_okf(root, "reindex", {"target": target})
 
     @server.tool()
-    def okf_refs(root: str = "", path: str = "", scan_root: str = "") -> dict:
+    def okf_refs(root: str = "", *, path: str, scan_root: str = "") -> dict:
         """Inbound markdown references to a file (reference-integrity step a)."""
         return run_okf(root, "refs", {"path": path, "scan_root": scan_root})
 
     @server.tool()
-    def okf_rename(root: str = "", old: str = "", new: str = "", apply: bool = False,
+    def okf_rename(root: str = "", *, old: str, new: str, apply: bool = False,
                    force: bool = False) -> str:
         """Move a concept and keep every reference intact: rewrites inbound links
         repo-wide plus the file's own outbound links on a bundle change, then
