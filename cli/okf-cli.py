@@ -40,9 +40,18 @@ def catalogue_root(explicit):
     """Resolve the catalogue root. Explicit --root wins unchanged (abspath,
     even if nonexistent — main() validates that). Absent --root, auto-detect
     by walking cwd upward for a catalogue marker (.okf.toml, or SPEC.md +
-    TYPES.md together); return None if no marker is found anywhere up to the
-    filesystem root — never silently fall back to the script's own directory.
-    """
+    TYPES.md together) either IN the candidate directory or in its `docs/`
+    child; return None if no marker is found anywhere up to the filesystem
+    root — never silently fall back to the script's own directory.
+
+    The `docs/` child check exists for the workspace+repo/-hull layout
+    (okf-p V3): the catalogue root actually returned is `<hull>/docs`, and
+    `.okf.toml` lives there, never directly in `<hull>`. Without it, cwd's
+    upward walk from a linked worktree (`<hull>/worktrees/<id>/`, itself
+    never containing `docs/`) would climb straight past the hull looking
+    for a marker one level up from every candidate, never IN one — the
+    marker sits one level BELOW `<hull>`, not beside any ancestor of a
+    worktree — and reach the filesystem root without ever finding it."""
     if explicit:
         return os.path.abspath(explicit)
     d = os.getcwd()
@@ -52,6 +61,12 @@ def catalogue_root(explicit):
             and os.path.isfile(os.path.join(d, "TYPES.md"))
         ):
             return d
+        docs = os.path.join(d, "docs")
+        if os.path.isfile(os.path.join(docs, ".okf.toml")) or (
+            os.path.isfile(os.path.join(docs, "SPEC.md"))
+            and os.path.isfile(os.path.join(docs, "TYPES.md"))
+        ):
+            return docs
         parent = os.path.dirname(d)
         if parent == d:
             return None

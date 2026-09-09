@@ -390,6 +390,23 @@ class McpPrimeIsCompact(unittest.TestCase):
         self.assertEqual(argvs, [["--root", "/root", "prime", "--compact"]])
 
 
+class McpOptionalRoot(unittest.TestCase):
+    """okf-cli worktree bug — every MCP tool now defaults `root` to "" so a
+    session whose cwd is a linked worktree (never a hull layout's own
+    catalogue root) can omit it and let okf-cli auto-detect from cwd
+    instead of the caller guessing wrong path arithmetic. build_argv is the
+    single point deciding whether `--root` reaches the CLI at all."""
+
+    def test_falsy_root_omits_the_root_flag(self):
+        argv = mcp.build_argv("", "prime", {"compact": True})
+        self.assertNotIn("--root", argv)
+        self.assertEqual(argv, ["prime", "--compact"])
+
+    def test_truthy_root_still_emits_the_root_flag(self):
+        argv = mcp.build_argv("/x", "prime", {"compact": True})
+        self.assertEqual(argv, ["--root", "/x", "prime", "--compact"])
+
+
 class McpIncludeArchiveFlag(unittest.TestCase):
     """R-14 (okf-cli-9e2b) — _BOOL_FLAGS is shared across every command, so
     the tool SIGNATURE decides who can reach the flag: a command whose

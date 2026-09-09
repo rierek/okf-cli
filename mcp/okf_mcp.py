@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """okf-MCP — mechanical okf-cli verbs as MCP tools. Thin subprocess wrapper;
-all correctness logic lives in okf-cli.py."""
+all correctness logic lives in okf-cli.py.
+
+`root` on every tool defaults to "" (omit it): okf-cli then auto-detects the
+catalogue by walking this server process's own cwd upward for a `.okf.toml`/
+`SPEC.md`+`TYPES.md` marker, checked both in each candidate directory and in
+its `docs/` child (the workspace+repo/-hull layout keeps the marker under
+`<hull>/docs/`, never in `<hull>` itself). Since each server instance's cwd
+is the session's own project directory — main checkout or linked worktree
+alike — this resolves correctly from a worktree with no path arithmetic.
+Pass an explicit `root` only for a catalogue outside the session's own
+project tree (e.g. the central Knowledge-Catalogue)."""
 import os
 
 # command -> (positional param names, supports --json)
@@ -45,7 +55,7 @@ def build_argv(root, command, params):
     if command not in _COMMANDS:
         raise ValueError("unsupported okf command: {}".format(command))
     positional, supports_json = _COMMANDS[command]
-    argv = ["--root", root, command]
+    argv = ["--root", root, command] if root else [command]
     for name in positional:
         val = params.get(name)
         if val is not None and val != "":
@@ -116,7 +126,7 @@ def run_okf(root, command, params):
 
 def _register(server):
     @server.tool()
-    def okf_find(root: str, query: str, limit: int = 10, type: str = "",
+    def okf_find(root: str = "", query: str = "", limit: int = 10, type: str = "",
                  tag: str = "", scope: str = "",
                  include_archive: bool = False) -> list:
         """Ranked search across a catalogue/repo root, composable with
@@ -149,17 +159,17 @@ def _register(server):
         })
 
     @server.tool()
-    def okf_read(root: str, path: str) -> str:
+    def okf_read(root: str = "", path: str = "") -> str:
         """Print one concept page (bundle/concept-id)."""
         return run_okf(root, "read", {"path": path})
 
     @server.tool()
-    def okf_toc(root: str, path: str) -> str:
+    def okf_toc(root: str = "", path: str = "") -> str:
         """Section headings of a concept."""
         return run_okf(root, "toc", {"path": path})
 
     @server.tool()
-    def okf_index(root: str, bundle: str = "", full: bool = False) -> dict:
+    def okf_index(root: str = "", bundle: str = "", full: bool = False) -> dict:
         """Catalogue/bundle TOC. Without `bundle`, defaults to one entry per
         bundle with just its name + one-line description — pass full=True
         for the structured per-bundle summary (description, concept count,
@@ -167,7 +177,7 @@ def _register(server):
         return run_okf(root, "index", {"bundle": bundle, "full": full})
 
     @server.tool()
-    def okf_list(root: str, type: str = "", tag: str = "",
+    def okf_list(root: str = "", type: str = "", tag: str = "",
                  include_archive: bool = False) -> dict:
         """Concepts filtered by frontmatter type and/or tag. Pass
         include_archive=True to also list archived concepts."""
@@ -176,22 +186,22 @@ def _register(server):
         })
 
     @server.tool()
-    def okf_check(root: str, target: str = "") -> dict:
+    def okf_check(root: str = "", target: str = "") -> dict:
         """§9 conformance scan (config-aware TYPES). Returns {errors, warnings}."""
         return run_okf(root, "check", {"target": target})
 
     @server.tool()
-    def okf_reindex(root: str, target: str) -> str:
+    def okf_reindex(root: str = "", target: str = "") -> str:
         """Regenerate marker-bounded index listings for a bundle/subdir."""
         return run_okf(root, "reindex", {"target": target})
 
     @server.tool()
-    def okf_refs(root: str, path: str, scan_root: str = "") -> dict:
+    def okf_refs(root: str = "", path: str = "", scan_root: str = "") -> dict:
         """Inbound markdown references to a file (reference-integrity step a)."""
         return run_okf(root, "refs", {"path": path, "scan_root": scan_root})
 
     @server.tool()
-    def okf_rename(root: str, old: str, new: str, apply: bool = False,
+    def okf_rename(root: str = "", old: str = "", new: str = "", apply: bool = False,
                    force: bool = False) -> str:
         """Move a concept and keep every reference intact: rewrites inbound links
         repo-wide plus the file's own outbound links on a bundle change, then
@@ -200,7 +210,7 @@ def _register(server):
         return run_okf(root, "rename", {"old": old, "new": new, "apply": apply, "force": force})
 
     @server.tool()
-    def okf_wikilinks(root: str, target: str = "", unresolved: bool = False) -> dict:
+    def okf_wikilinks(root: str = "", target: str = "", unresolved: bool = False) -> dict:
         """Obsidian wikilinks ([[…]]) in a catalogue, with the resolution status
         of each. Returns {links, by_bundle, totals}; every link record names its
         source file, the region it sits in (body or frontmatter), the raw
@@ -212,14 +222,14 @@ def _register(server):
                        {"target": target, "unresolved": unresolved})
 
     @server.tool()
-    def okf_tags(root: str, query: str = "", limit: int = 8) -> str:
+    def okf_tags(root: str = "", query: str = "", limit: int = 8) -> str:
         """List all tags with usage counts (query omitted), or fuzzy-search a
         candidate tag against the tag universe. Write/admin tag verbs
         (merge-tags, normalize-tags, --register) stay CLI-only by intent."""
         return run_okf(root, "tags", {"query": query, "limit": limit})
 
     @server.tool()
-    def okf_build_index(root: str) -> str:
+    def okf_build_index(root: str = "") -> str:
         """(Re)build the FTS5 lexical index at <root>/.fts/fts.sqlite. Local
         only, no network, no change to catalogue content. Run this when
         okf_find reports the lexical index as absent or stale — that note
@@ -227,7 +237,7 @@ def _register(server):
         return run_okf(root, "build-index", {})
 
     @server.tool()
-    def okf_build_semantic_index(root: str) -> str:
+    def okf_build_semantic_index(root: str = "") -> str:
         """Fill <root>/.tagvec/tag_vectors.sqlite's concept_emb table for
         every concept still missing a voyage-3-large embedding. NETWORK —
         calls the Voyage AI embedding API and requires VOYAGE_API_KEY in
@@ -241,7 +251,7 @@ def _register(server):
         return run_okf(root, "build-semantic-index", {})
 
     @server.tool()
-    def okf_prime(root: str) -> str:
+    def okf_prime(root: str = "") -> str:
         """One-shot onboarding for a fresh session: what the store is, how to
         retrieve from it, the full command directory, `find`'s options and its
         rank/score scales (rank: N is the headline, the arms' own raw scores
@@ -253,7 +263,7 @@ def _register(server):
         return run_okf(root, "prime", {"compact": True})
 
     @server.tool()
-    def okf_info(root: str) -> str:
+    def okf_info(root: str = "") -> str:
         """The catalogue's schema docs (TYPES.md + PROPERTIES.md): the valid
         `type` values and the frontmatter properties a concept must carry.
         Read this before writing into a catalogue."""

@@ -2367,6 +2367,25 @@ class RootSafety(unittest.TestCase):
         expected = os.path.dirname(os.path.dirname(os.getcwd()))
         self.assertEqual(okf.catalogue_root(None), expected)
 
+    def test_auto_detect_docs_nested_okf_toml_from_sibling_subdir(self):
+        # okf-cli worktree bug: a hull-layout project keeps `docs/.okf.toml`
+        # at the WORKSPACE level, sibling to `repo/` and `worktrees/<id>/` —
+        # never inside either checkout. From a linked worktree two levels
+        # below the hull, the walk must still find `<hull>/docs/.okf.toml`
+        # and return `<hull>/docs` (not the hull itself, and not None).
+        hull = self.tmp
+        docs = os.path.join(hull, "docs")
+        os.makedirs(docs)
+        open(os.path.join(docs, ".okf.toml"), "w", encoding="utf-8").close()
+        worktree = os.path.join(hull, "worktrees", "container-1")
+        os.makedirs(worktree)
+        os.chdir(worktree)
+        # os.getcwd() resolves the macOS /var -> /private/var symlink that
+        # tempfile.mkdtemp() returns unresolved, so derive the expectation
+        # from the resolved cwd rather than from self.tmp directly.
+        expected = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "docs")
+        self.assertEqual(okf.catalogue_root(None), expected)
+
 
 class FindFilterContract(unittest.TestCase):
     """I01 — --scope/--type/--tag constrain the ANSWER, not one arm of it.
