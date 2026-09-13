@@ -2478,6 +2478,41 @@ def render_block(subdirs, concepts, dir_rel=""):
     return "\n".join(lines)
 
 
+def render_tree(dirpath, root, depth=0):
+    """Recursive variant of render_block for a managed `index-map.md`.
+
+    `index.md` lists one level; `index-map.md` lists the whole subtree below
+    its own directory as a nested bullet list (two spaces per level). Same
+    catalogue-root-absolute link form, same ordering rule (subdirectories
+    first, then concepts), so a reader sees one notation, not two. Only
+    subdirectories that carry an index.md are descended into — that is what
+    marks a directory as part of the OKF tree.
+    """
+    dir_rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
+    pad = "  " * depth
+    lines = []
+    for title, name, _desc in list_subdirs_with_index(dirpath):
+        sub = os.path.join(dirpath, name)
+        head = render_block([(title, name, _desc)], [], dir_rel)
+        lines.append(pad + head)
+        child = render_tree(sub, root, depth + 1)
+        if child:
+            lines.append(child)
+    body = render_block([], list_dir_concepts(dirpath), dir_rel)
+    if body:
+        lines.extend(pad + ln for ln in body.split("\n"))
+    return "\n".join(lines)
+
+
+def managed_block_for(dirpath, root, idx_name):
+    """The generated block for one reserved index file: recursive full tree
+    for `index-map.md`, single level for every other managed index."""
+    if idx_name.lower() == "index-map.md":
+        return render_tree(dirpath, root)
+    dir_rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
+    return render_block(list_subdirs_with_index(dirpath), list_dir_concepts(dirpath), dir_rel)
+
+
 def replace_managed_block(text, block):
     """Replace content between the markers. Returns (new_text, found)."""
     si = text.find(MARK_START)
@@ -2611,9 +2646,10 @@ def cmd_reindex(root, args):
     dirs = []
     for dp, dn, fn in os.walk(tp):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
-        idx_name = _find_reserved_name(fn)
-        if idx_name:
-            dirs.append((dp, idx_name))
+        for name in ("index.md", "index-map.md"):
+            idx_name = _find_reserved_name(fn, name)
+            if idx_name:
+                dirs.append((dp, idx_name))
     changed, skipped, stale = [], [], []
     for dp, idx_name in sorted(dirs):
         idx = os.path.join(dp, idx_name)
@@ -2622,8 +2658,7 @@ def cmd_reindex(root, args):
         if MARK_START not in text:
             skipped.append(rel)
             continue
-        dir_rel = os.path.relpath(dp, root).replace(os.sep, "/")
-        block = render_block(list_subdirs_with_index(dp), list_dir_concepts(dp), dir_rel)
+        block = managed_block_for(dp, root, idx_name)
         new_text, _ = replace_managed_block(text, block)
         if new_text == text:
             continue
@@ -4923,19 +4958,18 @@ def reindex_tree(root, tp):
     changed = []
     for dp, dn, fn in os.walk(tp):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
-        idx_name = _find_reserved_name(fn)
-        if not idx_name:
-            continue
-        idx = os.path.join(dp, idx_name)
-        text = read_file(idx)
-        if MARK_START not in text:
-            continue
-        dir_rel = os.path.relpath(dp, root).replace(os.sep, "/")
-        block = render_block(list_subdirs_with_index(dp), list_dir_concepts(dp), dir_rel)
-        new_text, _ = replace_managed_block(text, block)
-        if new_text != text:
-            write_file(idx, new_text)
-            changed.append(os.path.relpath(idx, root).replace(os.sep, "/"))
+        for name in ("index.md", "index-map.md"):
+            idx_name = _find_reserved_name(fn, name)
+            if not idx_name:
+                continue
+            idx = os.path.join(dp, idx_name)
+            text = read_file(idx)
+            if MARK_START not in text:
+                continue
+            new_text, _ = replace_managed_block(text, managed_block_for(dp, root, idx_name))
+            if new_text != text:
+                write_file(idx, new_text)
+                changed.append(os.path.relpath(idx, root).replace(os.sep, "/"))
     return changed
 
 
@@ -5577,7 +5611,8 @@ def build_parser():
     prf.add_argument("--json", action="store_true",
                      help="machine-readable output")
     px = _sub(sub, "reindex", "maintenance",
-              "(re)generate marker-bounded index.md listings")
+              "(re)generate marker-bounded index listings: index.md one level, "
+              "index-map.md the whole subtree")
     px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
     px.add_argument("--init", action="store_true",
                     help="recursively migrate marker-less flat index.md in the subtree to "
