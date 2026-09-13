@@ -30,10 +30,14 @@ _COMMANDS = {
     "prime": ([], False),
     "info":  ([], False),
     "wikilinks": (["target"], True),
+    "sync-export": (["concept", "block_id"], False),
+    "sync-insert": (["consumer", "concept", "block_id"], False),
+    "sync-status": (["target"], True),
+    "sync-update": (["target"], False),
 }
 # optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
-          "scope": "--scope"}
+          "scope": "--scope", "source": "--source", "block": "--block"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
                "compact": "--compact", "include_archive": "--include-archive",
@@ -95,11 +99,18 @@ OKF_CLI = os.environ.get("OKF_CLI",
 # a catalogue-wide dump does not.
 MAX_OUTPUT_CHARS = int(os.environ.get("OKF_MCP_MAX_CHARS", "120000"))
 
+# Commands whose nonzero exit code is a FINDING, not a failure: they are
+# report/gate verbs, and the report is on stdout. `sync-status` exits 1 on any
+# drift, `sync-update` on a refused or unresolvable block — raising there would
+# hide the very list the caller asked for.
+EXIT_CODE_IS_DATA = {"check", "sync-status", "sync-update"}
+
 
 def run_okf(root, command, params):
     """Invoke okf-cli.py, return parsed JSON for --json commands else raw text.
-    Note: check exits 1 on violations — that is data, not a crash, so exit code
-    is only treated as an error for non-check commands.
+    Note: check, sync-status and sync-update exit 1 on findings — that is data,
+    not a crash (EXIT_CODE_IS_DATA), so exit code is only treated as an error
+    for the other commands.
 
     D01 (okf-cli-2o39): the CLI announces degradation (stale/absent lexical
     index, unavailable embedding backend, ...) on stderr, never on stdout.
@@ -109,7 +120,7 @@ def run_okf(root, command, params):
     and mixing stderr in would break every consumer of those tools."""
     argv = build_argv(root, command, params)
     proc = subprocess.run(["python3", OKF_CLI] + argv, capture_output=True, text=True)
-    if proc.returncode != 0 and command != "check":
+    if proc.returncode != 0 and command not in EXIT_CODE_IS_DATA:
         raise RuntimeError("okf-cli {} failed: {}".format(command, proc.stderr.strip()))
     out = proc.stdout
     if len(out) > MAX_OUTPUT_CHARS:
@@ -268,6 +279,55 @@ def _register(server):
         `type` values and the frontmatter properties a concept must carry.
         Read this before writing into a catalogue."""
         return run_okf(root, "info", {})
+
+    @server.tool()
+    def okf_sync_export(root: str = "", *, concept: str, block_id: str) -> str:
+        """Print one canonical block's payload, as declared between
+        `<!-- okf:canon id=<block_id> -->` and `<!-- /okf:canon -->` in
+        `concept`. Read-only. Use it to see what a consumer would receive;
+        use okf_sync_insert to actually materialise it."""
+        return run_okf(root, "sync-export",
+                       {"concept": concept, "block_id": block_id})
+
+    @server.tool()
+    def okf_sync_insert(root: str = "", *, consumer: str, concept: str,
+                        block_id: str, apply: bool = False) -> str:
+        """Materialise a canonical block inside a consumer concept, so the
+        consumer holds the Canon it needs in its own context without becoming
+        a second authority. The generated block records its owner and the
+        payload hash, which is what makes drift detectable later. Defaults to
+        a dry-run preview; pass apply=True to write. NEVER hand-write or
+        hand-edit such a block — a needed change goes into the canon owner and
+        then downstream through okf_sync_update."""
+        return run_okf(root, "sync-insert",
+                       {"consumer": consumer, "concept": concept,
+                        "block_id": block_id, "apply": apply})
+
+    @server.tool()
+    def okf_sync_status(root: str = "", target: str = "", source: str = "",
+                        block: str = "") -> dict:
+        """Drift report for every materialised canon block: returns
+        {blocks, totals}, each block naming its consumer, id, source and one
+        of synced / source-changed / consumer-modified / both-changed /
+        source-missing / malformed. `source` (e.g. /kc-governance/ownership.md)
+        lists the consumers of one canonical concept; `block` narrows to one
+        id. Derived by a live catalogue walk — there is no index to rebuild."""
+        return run_okf(root, "sync-status",
+                       {"target": target, "source": source, "block": block})
+
+    @server.tool()
+    def okf_sync_update(root: str = "", target: str = "", source: str = "",
+                        block: str = "", apply: bool = False,
+                        force: bool = False) -> str:
+        """Re-materialise every outdated consumer block from its canon owner.
+        Defaults to a dry-run preview; pass apply=True to write. A block whose
+        LOCAL copy was modified is refused, not overwritten: reconcile that
+        edit into the canon owner first. force=True discards the local copy
+        instead. A block whose owner is gone or whose markers are broken is
+        reported and never written — that is a human decision."""
+        return run_okf(root, "sync-update",
+                       {"target": target, "source": source, "block": block,
+                        "apply": apply, "force": force})
 
     return server
 

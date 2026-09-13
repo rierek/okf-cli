@@ -8509,6 +8509,373 @@ class MainExplicitRootMarkerWarning(unittest.TestCase):
             self.assertNotIn("no catalogue marker", captured.getvalue())
 
 
+# --- canon block synchronisation -------------------------------------------
+
+
+class SyncFixtureMixin:
+    """A two-bundle throwaway catalogue: one canon owner, one consumer."""
+
+    OWNER_PAYLOAD = "Jede normative Aussage hat genau einen Owner.\n"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._w(".okf.toml", "")
+        self._w("kc-gov/ownership.md",
+                "---\ntype: Rule\ndescription: d\n---\n\n# Ownership\n\n"
+                "<!-- okf:canon id=ownership-rule -->\n"
+                + self.OWNER_PAYLOAD
+                + "<!-- /okf:canon -->\n")
+        self._w("kc-proj/setup.md",
+                "---\ntype: Runbook\ndescription: d\n---\n\n# Setup\n\nLokal.\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def _run(self, fn, **kw):
+        """Call a handler with a namespace, capturing stdout and exit code."""
+        buf = io.StringIO()
+        code = 0
+        try:
+            with contextlib.redirect_stdout(buf):
+                fn(self.tmp, argparse.Namespace(**kw))
+        except SystemExit as e:
+            code = e.code or 0
+        return buf.getvalue(), code
+
+    def _insert(self, **over):
+        kw = dict(consumer="kc-proj/setup", concept="kc-gov/ownership",
+                  block_id="ownership-rule", apply=True)
+        kw.update(over)
+        return self._run(okf.cmd_sync_insert, **kw)
+
+    def _status(self, **over):
+        kw = dict(target=None, source=None, block=None, json=True)
+        kw.update(over)
+        return self._run(okf.cmd_sync_status, **kw)
+
+    def _update(self, **over):
+        kw = dict(target=None, source=None, block=None, apply=True, force=False)
+        kw.update(over)
+        return self._run(okf.cmd_sync_update, **kw)
+
+    def _payload_of(self, rel):
+        _, body = okf.split_frontmatter(self._r(rel))
+        return okf.parse_sync_blocks(body)[0]["payload"]
+
+
+class SyncBlockParse(unittest.TestCase):
+    """The marker set is parsed structurally, and a hand-broken one is
+    reported as malformed instead of disappearing from every surface."""
+
+    def _block(self, block_id="b1", source="/a/owner.md", payload="text\n"):
+        return okf.render_sync_block(block_id, source, payload)
+
+    def test_well_formed_block_yields_span_covering_the_whole_block(self):
+        blk = self._block()
+        body = "pre\n\n" + blk + "\n\npost\n"
+        recs = okf.parse_sync_blocks(body)
+        self.assertEqual(len(recs), 1)
+        r = recs[0]
+        self.assertFalse(r["malformed"])
+        self.assertEqual((r["id"], r["source"]), ("b1", "/a/owner.md"))
+        self.assertEqual(r["hash"], okf.sync_hash("text\n"))
+        self.assertEqual(body[r["span"][0]:r["span"][1]], blk)
+
+    def test_two_blocks_in_one_body_stay_separate(self):
+        body = (self._block("b1", payload="one\n") + "\n\ntext\n\n"
+                + self._block("b2", payload="two\n"))
+        recs = okf.parse_sync_blocks(body)
+        self.assertEqual([r["id"] for r in recs], ["b1", "b2"])
+        self.assertEqual([r["payload"].strip() for r in recs], ["one", "two"])
+        self.assertEqual([r["malformed"] for r in recs], [False, False])
+
+    def test_reordered_attributes_are_malformed(self):
+        body = ("<!-- okf:sync source=/a/owner.md id=b1 hash=0123456789ab -->\n"
+                "> [!quote] x\n" + okf.SYNC_BODY + "\ntext\n" + okf.SYNC_END)
+        recs = okf.parse_sync_blocks(body)
+        self.assertEqual(len(recs), 1)
+        self.assertTrue(recs[0]["malformed"])
+
+    def test_missing_body_marker_is_malformed(self):
+        body = self._block().replace(okf.SYNC_BODY + "\n", "")
+        recs = okf.parse_sync_blocks(body)
+        self.assertEqual(len(recs), 1)
+        self.assertTrue(recs[0]["malformed"])
+        self.assertEqual(recs[0]["id"], "b1")
+
+    def test_missing_end_marker_does_not_eat_the_next_block(self):
+        body = (self._block("b1").replace(okf.SYNC_END, "") + "\n"
+                + self._block("b2"))
+        recs = okf.parse_sync_blocks(body)
+        self.assertEqual([r["id"] for r in recs], ["b1", "b2"])
+        self.assertEqual([r["malformed"] for r in recs], [True, False])
+
+    def test_canon_block_without_close_marker_has_no_payload(self):
+        body = "<!-- okf:canon id=x -->\ntext\n"
+        self.assertEqual(okf.parse_canon_blocks(body)[0]["payload"], None)
+
+
+class SyncClassify(unittest.TestCase):
+    """All six statuses of the recorded-hash / canon / local-copy triangle."""
+
+    OWNER = "owner text\n"
+
+    def _rec(self, payload=None, source="/a/owner.md"):
+        return {"id": "b1", "source": source, "hash": okf.sync_hash(self.OWNER),
+                "payload": self.OWNER if payload is None else payload,
+                "span": (0, 1), "malformed": False}
+
+    def _canon(self, payload=None):
+        return {("a/owner.md", "b1"): self.OWNER if payload is None else payload}
+
+    def test_synced(self):
+        self.assertEqual(
+            okf.classify_sync_block(self._rec(), self._canon()), "synced")
+
+    def test_source_changed(self):
+        self.assertEqual(
+            okf.classify_sync_block(self._rec(), self._canon("neu\n")),
+            "source-changed")
+
+    def test_consumer_modified(self):
+        self.assertEqual(
+            okf.classify_sync_block(self._rec(payload="lokal\n"), self._canon()),
+            "consumer-modified")
+
+    def test_both_changed(self):
+        self.assertEqual(
+            okf.classify_sync_block(self._rec(payload="lokal\n"),
+                                    self._canon("neu\n")),
+            "both-changed")
+
+    def test_source_missing(self):
+        self.assertEqual(okf.classify_sync_block(self._rec(), {}),
+                         "source-missing")
+
+    def test_malformed_record_and_non_absolute_source(self):
+        rec = self._rec()
+        rec["malformed"] = True
+        self.assertEqual(okf.classify_sync_block(rec, self._canon()), "malformed")
+        self.assertEqual(
+            okf.classify_sync_block(self._rec(source="a/owner.md"),
+                                    self._canon()),
+            "malformed")
+
+
+class SyncInsertCommand(SyncFixtureMixin, unittest.TestCase):
+    """sync-insert materialises a canon block, dry-run by default, and refuses
+    a second copy of the same id."""
+
+    def test_dry_run_writes_nothing(self):
+        before = self._r("kc-proj/setup.md")
+        out, code = self._insert(apply=False)
+        self.assertEqual(code, 0)
+        self.assertIn("would insert", out)
+        self.assertEqual(self._r("kc-proj/setup.md"), before)
+
+    def test_apply_records_the_owner_payload_hash(self):
+        _, code = self._insert()
+        self.assertEqual(code, 0)
+        _, body = okf.split_frontmatter(self._r("kc-proj/setup.md"))
+        rec = okf.parse_sync_blocks(body)[0]
+        self.assertEqual(rec["source"], "/kc-gov/ownership.md")
+        self.assertEqual(rec["hash"], okf.sync_hash(self.OWNER_PAYLOAD))
+        self.assertEqual(rec["payload"].strip(), self.OWNER_PAYLOAD.strip())
+        self.assertIn("> [!quote] Synchronisiert aus", self._r("kc-proj/setup.md"))
+
+    def test_second_insert_of_the_same_block_refuses_and_changes_nothing(self):
+        self._insert()
+        before = self._r("kc-proj/setup.md")
+        _, code = self._insert()
+        self.assertEqual(code, 1)
+        self.assertEqual(self._r("kc-proj/setup.md"), before)
+
+    def test_unknown_block_id_exits_one(self):
+        _, code = self._insert(block_id="nope")
+        self.assertEqual(code, 1)
+        self.assertNotIn("okf:sync", self._r("kc-proj/setup.md"))
+
+
+class SyncUpdateCommand(SyncFixtureMixin, unittest.TestCase):
+    """sync-update re-materialises what the owner changed, and refuses to
+    discard a locally modified copy without --force."""
+
+    def setUp(self):
+        super().setUp()
+        self._insert()
+
+    def _retype_owner(self, new_payload):
+        self._w("kc-gov/ownership.md",
+                self._r("kc-gov/ownership.md").replace(
+                    self.OWNER_PAYLOAD, new_payload))
+
+    def _retype_consumer(self, new_payload):
+        self._w("kc-proj/setup.md",
+                self._r("kc-proj/setup.md").replace(
+                    self.OWNER_PAYLOAD, new_payload))
+
+    def test_source_changed_is_rewritten_to_the_owner_payload(self):
+        self._retype_owner("Neuer Kanon.\n")
+        out, code = self._update()
+        self.assertEqual(code, 0)
+        self.assertIn("updated", out)
+        self.assertEqual(self._payload_of("kc-proj/setup.md").strip(),
+                         "Neuer Kanon.")
+        self.assertEqual(self._status()[1], 0)
+
+    def test_dry_run_reports_without_writing(self):
+        self._retype_owner("Neuer Kanon.\n")
+        before = self._r("kc-proj/setup.md")
+        out, code = self._update(apply=False)
+        self.assertEqual(code, 0)
+        self.assertIn("would update", out)
+        self.assertEqual(self._r("kc-proj/setup.md"), before)
+
+    def test_consumer_modified_is_refused_and_the_file_is_untouched(self):
+        self._retype_consumer("Lokal umgeschrieben.\n")
+        before = self._r("kc-proj/setup.md")
+        out, code = self._update()
+        self.assertEqual(code, 1)
+        self.assertIn("refused", out)
+        self.assertEqual(self._r("kc-proj/setup.md"), before)
+
+    def test_force_overwrites_a_modified_consumer_copy(self):
+        self._retype_consumer("Lokal umgeschrieben.\n")
+        _, code = self._update(force=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(self._payload_of("kc-proj/setup.md").strip(),
+                         self.OWNER_PAYLOAD.strip())
+
+    def test_source_missing_is_never_written_and_exits_one(self):
+        os.remove(os.path.join(self.tmp, "kc-gov/ownership.md"))
+        before = self._r("kc-proj/setup.md")
+        out, code = self._update(force=True)
+        self.assertEqual(code, 1)
+        self.assertIn("source-missing", out)
+        self.assertEqual(self._r("kc-proj/setup.md"), before)
+
+    def test_source_filter_narrows_the_scan(self):
+        self._retype_owner("Neuer Kanon.\n")
+        before = self._r("kc-proj/setup.md")
+        _, code = self._update(source="/kc-gov/anderes.md")
+        self.assertEqual(code, 0)
+        self.assertEqual(self._r("kc-proj/setup.md"), before)
+
+
+class SyncCheckValidators(SyncFixtureMixin, unittest.TestCase):
+    """The two check entries, and the laziness that keeps a catalogue without
+    any materialised block from paying for the canon index."""
+
+    def test_consumer_modified_is_an_error(self):
+        self._insert()
+        self._w("kc-proj/setup.md",
+                self._r("kc-proj/setup.md").replace(
+                    self.OWNER_PAYLOAD, "Lokal.\n"))
+        errors, _ = okf.run_checks(self.tmp, None)
+        self.assertIn(
+            ("sync-block", "kc-proj/setup.md",
+             "sync block `ownership-rule` from /kc-gov/ownership.md: "
+             "consumer-modified"), errors)
+
+    def test_source_changed_is_a_warning(self):
+        self._insert()
+        self._w("kc-gov/ownership.md",
+                self._r("kc-gov/ownership.md").replace(
+                    self.OWNER_PAYLOAD, "Neuer Kanon.\n"))
+        errors, warnings = okf.run_checks(self.tmp, None)
+        self.assertEqual([e for e in errors if e[0] == "sync-block"], [])
+        self.assertIn("sync-stale", [w[0] for w in warnings])
+
+    def test_duplicate_canon_id_is_an_error(self):
+        self._w("kc-gov/ownership.md",
+                self._r("kc-gov/ownership.md")
+                + "\n<!-- okf:canon id=ownership-rule -->\nzweimal\n"
+                + okf.CANON_END + "\n")
+        errors, _ = okf.run_checks(self.tmp, None)
+        self.assertIn(("canon-block", "kc-gov/ownership.md",
+                       "canon block id `ownership-rule` declared twice"), errors)
+
+    def test_unterminated_canon_marker_is_an_error(self):
+        self._w("kc-gov/ownership.md",
+                "---\ntype: Rule\ndescription: d\n---\n\n"
+                "<!-- okf:canon id=x -->\ntext\n")
+        errors, _ = okf.run_checks(self.tmp, None)
+        self.assertIn("canon-block", [e[0] for e in errors])
+
+    def test_catalogue_without_sync_blocks_never_builds_the_canon_index(self):
+        calls = []
+        real = okf.build_canon_block_index
+        okf.build_canon_block_index = lambda root: (calls.append(root)
+                                                    or real(root))
+        try:
+            errors, warnings = okf.run_checks(self.tmp, None)
+        finally:
+            okf.build_canon_block_index = real
+        self.assertEqual(calls, [])
+        self.assertEqual([e for e in errors if e[0].startswith("sync")], [])
+        self.assertEqual([w for w in warnings if w[0].startswith("sync")], [])
+
+
+class SyncProtectedFromRewriters(SyncFixtureMixin, unittest.TestCase):
+    """A materialised payload is owned by its canon concept: no scanner
+    reports inside it and no rewriter touches it."""
+
+    OWNER_PAYLOAD = ("Siehe [details](../kc-proj/setup.md), [[setup]] und "
+                     "<info>.<other>.\n")
+
+    def setUp(self):
+        super().setUp()
+        self._w(".okf.toml", '[wikilinks]\nchecked_bundles = ["kc-proj"]\n')
+        self._insert()
+        self.consumer_before = self._r("kc-proj/setup.md")
+
+    def test_fix_crosslinks_leaves_the_block_byte_identical(self):
+        okf.fix_crosslinks(self.tmp, None)
+        self.assertEqual(self._r("kc-proj/setup.md"), self.consumer_before)
+
+    def test_fix_xml_tags_leaves_the_block_byte_identical(self):
+        okf.fix_xml_like_tags(self.tmp, None)
+        self.assertEqual(self._r("kc-proj/setup.md"), self.consumer_before)
+
+    def test_crosslink_and_xml_checks_report_nothing_for_the_consumer(self):
+        ctx = okf.gather_file_context(
+            self.tmp, "kc-proj", os.path.join(self.tmp, "kc-proj/setup.md"))
+        self.assertEqual(okf.check_crosslink_format(ctx), [])
+        self.assertEqual(okf.check_xml_like_tags(ctx), [])
+
+    def test_wikilink_in_a_synced_payload_is_not_scanned(self):
+        _, body = okf.split_frontmatter(self._r("kc-proj/setup.md"))
+        self.assertEqual(okf.parse_wikilinks(body), [])
+
+    def test_rename_leaves_the_payload_intact_and_rewrites_the_source(self):
+        expected = okf.parse_sync_blocks(
+            okf.split_frontmatter(self.consumer_before)[1])[0]["payload"]
+        okf.perform_rename(self.tmp,
+                           os.path.join(self.tmp, "kc-proj/setup.md"),
+                           os.path.join(self.tmp, "kc-proj/setup2.md"),
+                           apply=True, force=True)
+        # The payload wikilinks to the renamed concept and must NOT be
+        # rewritten: the owner's copy is the one that carries that link.
+        self.assertEqual(self._payload_of("kc-proj/setup2.md"), expected)
+        okf.perform_rename(self.tmp,
+                           os.path.join(self.tmp, "kc-gov/ownership.md"),
+                           os.path.join(self.tmp, "kc-gov/canon/ownership.md"),
+                           apply=True, force=True)
+        _, body = okf.split_frontmatter(self._r("kc-proj/setup2.md"))
+        self.assertEqual(okf.parse_sync_blocks(body)[0]["source"],
+                         "/kc-gov/canon/ownership.md")
+
+
 
 if __name__ == "__main__":
     unittest.main()
