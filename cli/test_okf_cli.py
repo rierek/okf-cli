@@ -790,6 +790,33 @@ class OkfConfig(unittest.TestCase):
         self.assertFalse(cfg["types_source"].startswith("~"))  # expanduser ran
         self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
 
+    def test_parses_keys_without_tomllib(self):
+        """okf-cli.py is `#!/usr/bin/env python3` with no declared minimum
+        version; on Python <3.11 (no stdlib `tomllib`) load_okf_config must
+        still parse the same file via its dependency-free fallback, not
+        crash with ModuleNotFoundError."""
+        import sys
+        from unittest import mock
+        self._w(".okf.toml", 'kc_root = "~/Obsidian/Knowledge-Catalogue"\n'
+                             'types_source = "~/Obsidian/Knowledge-Catalogue/TYPES.md"\n'
+                             'bundle = "demo-okf"  # trailing comment\n'
+                             'wikilink_checked_bundles = ["demo-okf"]\n')
+        with mock.patch.dict(sys.modules, {"tomllib": None}):
+            cfg = okf.load_okf_config(self.tmp)
+        self.assertEqual(cfg["bundle"], "demo-okf")
+        self.assertEqual(cfg["wikilink_checked_bundles"], ["demo-okf"])
+        self.assertFalse(cfg["types_source"].startswith("~"))  # expanduser ran
+        self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
+
+    def test_malformed_config_without_tomllib_fails_with_a_message(self):
+        import sys
+        from unittest import mock
+        self._w(".okf.toml", "this is not = = toml\n")
+        with mock.patch.dict(sys.modules, {"tomllib": None}):
+            with self.assertRaises(SystemExit) as cm:
+                okf.load_okf_config(self.tmp)
+        self.assertIn(".okf.toml is not valid TOML", str(cm.exception))
+
 
 class ListIndexableBundles(unittest.TestCase):
     """OKFT-n8xz — the narrower corpus for index/search call sites only: the

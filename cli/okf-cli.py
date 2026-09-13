@@ -3219,20 +3219,95 @@ def register_tags(root, new_tags):
     return added, already
 
 
+def _strip_toml_comment(line):
+    """Drop an unquoted trailing `# comment`, respecting quoted strings
+    so a `#` inside a value (rare, but legal TOML) is not mistaken for one."""
+    out = []
+    quote = None
+    for ch in line:
+        if quote:
+            out.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "\"'":
+            quote = ch
+            out.append(ch)
+            continue
+        if ch == "#":
+            break
+        out.append(ch)
+    return "".join(out)
+
+
+def _parse_toml_scalar(value):
+    """Decode one TOML scalar: a quoted string, a flat array of quoted
+    strings, an integer, or true/false. Raises ValueError otherwise."""
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [_parse_toml_scalar(item.strip()) for item in inner.split(",") if item.strip()]
+    if value in ("true", "false"):
+        return value == "true"
+    if re.match(r"^-?\d+$", value):
+        return int(value)
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    raise ValueError("unsupported value {!r}".format(value))
+
+
+def _parse_minimal_toml(text):
+    """Dependency-free fallback for Python <3.11 (no stdlib `tomllib`):
+    a flat-TOML subset — comments, blank lines, and `key = value` where
+    value is a quoted string, a bracketed array of those, an integer, or
+    true/false. No table headers, no multi-line values: this covers the
+    `.okf.toml` keys okf-cli actually reads, nothing more. Raises
+    ValueError with a line-numbered message on anything else."""
+    data = {}
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        line = _strip_toml_comment(raw).strip()
+        if not line:
+            continue
+        if "=" not in line:
+            raise ValueError("line {}: expected 'key = value': {!r}".format(lineno, raw))
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if not re.match(r"^[A-Za-z0-9_-]+$", key):
+            raise ValueError("line {}: invalid key {!r}".format(lineno, key))
+        try:
+            data[key] = _parse_toml_scalar(value)
+        except ValueError as e:
+            raise ValueError("line {}: {}".format(lineno, e))
+    return data
+
+
 def load_okf_config(root):
     """Parse <root>/.okf.toml if present. Returns a dict ({} if absent).
-    Leading-~ path values are expanduser-expanded. Requires Python 3.11+ (tomllib)."""
+    Leading-~ path values are expanduser-expanded. Uses the stdlib `tomllib`
+    on Python 3.11+; below that (no `tomllib`), falls back to
+    `_parse_minimal_toml`, a flat-TOML subset, so the CLI stays
+    dependency-free instead of requiring a backport package."""
     p = os.path.join(root, ".okf.toml")
     if not os.path.isfile(p):
         return {}
-    import tomllib
-    with open(p, "rb") as f:
-        try:
-            data = tomllib.load(f)
-        except tomllib.TOMLDecodeError as e:
-            # Every caller now reaches this on every run, so a parse failure has
-            # to name the file and the reason instead of printing a traceback.
-            sys.exit("ERROR: {} is not valid TOML: {}".format(p, e))
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        with open(p, "r", encoding="utf-8") as f:
+            try:
+                data = _parse_minimal_toml(f.read())
+            except ValueError as e:
+                sys.exit("ERROR: {} is not valid TOML: {}".format(p, e))
+    else:
+        with open(p, "rb") as f:
+            try:
+                data = tomllib.load(f)
+            except tomllib.TOMLDecodeError as e:
+                # Every caller now reaches this on every run, so a parse failure has
+                # to name the file and the reason instead of printing a traceback.
+                sys.exit("ERROR: {} is not valid TOML: {}".format(p, e))
     for k in ("kc_root", "types_source"):
         if isinstance(data.get(k), str):
             data[k] = os.path.expanduser(data[k])
