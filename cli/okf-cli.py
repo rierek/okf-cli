@@ -3610,9 +3610,12 @@ def build_canon_block_index(root):
     # include_archive: archiving an owner rewrites every consumer's `source=`
     # to the `/_archive/...` path, so the archived concept must stay a
     # resolvable owner — otherwise one archive turns every consumer into a
-    # `source-missing` error.
+    # `source-missing` error. prune_staging=False (OKFT bug): "_"-prefixed
+    # dirs (_inbox, _archive, any custom staging dir) are pruned by default,
+    # so an owner living there was invisible here even though the file
+    # exists — every consumer then misreported `source-missing`.
     for _, bp in resolve_scopes(root, None, include_archive=True):
-        for ap in iter_all_md(bp):
+        for ap in iter_all_md(bp, prune_staging=False):
             _, body = split_frontmatter(read_file(ap))
             if "okf:canon" not in body:
                 continue
@@ -4911,10 +4914,12 @@ def find_sync_source_refs(root, source_value):
 
     Without this a rename of a canonical concept breaks the whole ownership
     graph into `source-missing`: the markdown link rewriters never see a
-    `source=` attribute, because it is not a link."""
+    `source=` attribute, because it is not a link. prune_staging=False: a
+    consumer in a staging dir (_inbox, _archive, ...) must also get its
+    `source=` repointed, same reasoning as build_canon_block_index."""
     out = []
     for _, bp in resolve_scopes(root, None, include_archive=True):
-        for ap in iter_all_md(bp):
+        for ap in iter_all_md(bp, prune_staging=False):
             _, body = split_frontmatter(read_file(ap))
             if SYNC_OPEN_LIT not in body:
                 continue

@@ -8799,6 +8799,38 @@ class SyncUpdateCommand(SyncFixtureMixin, unittest.TestCase):
         self.assertEqual(self._r("kc-proj/setup.md"), before)
 
 
+class SyncOwnerInStagingDir(SyncFixtureMixin, unittest.TestCase):
+    """A canon owner living in a "_"-prefixed staging dir (_inbox, _archive,
+    ...) must stay resolvable by the canon index: iter_all_md prunes those
+    dirs by default for read-path scans, but an archived/staged owner is
+    still a legitimate source for sync-insert/-status/-update. Regression
+    for the bug where such an owner was invisible to build_canon_block_index
+    and every consumer misreported source-missing."""
+
+    def setUp(self):
+        super().setUp()
+        os.makedirs(os.path.join(self.tmp, "kc-gov/_archive"), exist_ok=True)
+        os.rename(os.path.join(self.tmp, "kc-gov/ownership.md"),
+                  os.path.join(self.tmp, "kc-gov/_archive/ownership.md"))
+        self._insert(concept="kc-gov/_archive/ownership")
+
+    def test_status_reports_synced_not_source_missing(self):
+        out, code = self._status()
+        self.assertEqual(code, 0)
+        self.assertIn('"status": "synced"', out)
+        self.assertNotIn('"status": "source-missing"', out)
+
+    def test_update_after_owner_change_reaches_the_staged_owner(self):
+        self._w("kc-gov/_archive/ownership.md",
+                self._r("kc-gov/_archive/ownership.md")
+                .replace(self.OWNER_PAYLOAD, "Neuer Kanon.\n"))
+        out, code = self._update()
+        self.assertEqual(code, 0)
+        self.assertIn("updated", out)
+        self.assertEqual(self._payload_of("kc-proj/setup.md").strip(),
+                         "Neuer Kanon.")
+
+
 class SyncCheckValidators(SyncFixtureMixin, unittest.TestCase):
     """The two check entries, and the laziness that keeps a catalogue without
     any materialised block from paying for the canon index."""
