@@ -2314,6 +2314,10 @@ def render_catalogue_state(root, thorough=False):
     else:
         lines.append("tag vocabulary: closed — {} tags in TAGS.md; check a new one with "
                      "`tags --validate`, adopt it with `tags --register`".format(len(registered)))
+    slugs = ctx_slugs(root)
+    if slugs:
+        lines.append("ctx bundles: {} — {} — `ctx show <slug>` lists one".format(
+            len(slugs), " · ".join(slugs)))
     docs = [d for d in ("README.md", "SPEC.md", "TYPES.md", "PROPERTIES.md", "TAGS.md")
             if os.path.isfile(os.path.join(root, d))]
     if docs:
@@ -5774,7 +5778,103 @@ def cmd_ctx_create(root, args):
     print("created {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(entries)))
 
 
-CTX_DISPATCH = {"list": cmd_ctx_list, "create": cmd_ctx_create}
+def _ctx_members(root, slug):
+    """Entries of a ctx with live metadata; required first in pos order."""
+    c = load_ctx(root, slug)
+    out = []
+    for e in c["entries"]:
+        ap = ctx_entry_abspath(root, e["path"])
+        alive = os.path.isfile(ap)
+        typ, title, desc, chars = "", os.path.basename(ap), "", 0
+        if alive:
+            if ap.endswith(".md"):
+                typ, title, desc = meta_of(ap)
+            chars = len(read_file(ap))
+        out.append({"pos": e["pos"] if e["mode"] == "pflicht" else None, "mode": e["mode"],
+                    "path": e["path"], "abspath": ap, "title": title, "type": typ,
+                    "description": desc, "comment": e["comment"], "alive": alive,
+                    "chars": chars,
+                    # ponytail: chars/4 heuristic; use a tokenizer if budgets get tight
+                    "tokens": (chars + 3) // 4})
+    req = sorted((m for m in out if m["mode"] == "pflicht"), key=lambda m: m["pos"])
+    return c, req + [m for m in out if m["mode"] != "pflicht"]
+
+
+def _ctx_dead_warning(slug, k):
+    return ("WARNING: {} dead entr{} — this list is incomplete; fix with `ctx edit {}`"
+            .format(k, "y" if k == 1 else "ies", slug))
+
+
+def cmd_ctx_show(root, args):
+    c, ms = _ctx_members(root, args.slug)
+    req = [m for m in ms if m["mode"] == "pflicht"]
+    ref = [m for m in ms if m["mode"] != "pflicht"]
+    dead = sum(1 for m in ms if not m["alive"])
+    t_req = sum(m["tokens"] for m in req)
+    if args.json:
+        print(json.dumps({"slug": args.slug, "description": c["description"],
+                          "path": "{}/{}.md".format(CTX_DIR, args.slug), "entries": ms,
+                          "dead": dead, "tokens_required": t_req},
+                         ensure_ascii=False, indent=2))
+        if dead:
+            print(_ctx_dead_warning(args.slug, dead), file=sys.stderr)
+            sys.exit(1)
+        return
+
+    def block(m, head):
+        if not m["alive"]:
+            lines = ["{}[DEAD] {}".format(head, m["abspath"])]
+        else:
+            lines = ["{}{}{}  ~{} tok".format(
+                head, m["abspath"], "  [{}] {}".format(m["type"], m["title"]) if m["type"]
+                else "  " + m["title"], m["tokens"])]
+            if m["description"] and m["mode"] == "pflicht":
+                lines.append("     " + m["description"])
+        if m["comment"]:
+            lines.append("     why: " + m["comment"])
+        return lines
+
+    out = ["ctx {}{}".format(args.slug, " — " + c["description"] if c["description"] else ""),
+           "", "required — read in this order:"]
+    for m in req:
+        out += block(m, "  {}. ".format(m["pos"]))
+    if not req:
+        out.append("  (none)")
+    if ref:
+        out.append("reference — query when needed:")
+        for m in ref:
+            out += block(m, "  - ")
+    out += ["", "{} entries ({} required, {} reference), ~{} tokens for the required set".format(
+        len(ms), len(req), len(ref), t_req)]
+    if dead:
+        out.append(_ctx_dead_warning(args.slug, dead))
+    print("\n".join(out))
+    if dead:
+        sys.exit(1)
+
+
+def cmd_ctx_read(root, args):
+    _c, ms = _ctx_members(root, args.slug)
+    req = [m for m in ms if m["mode"] == "pflicht"]
+    r = len(ms) - len(req)
+    dead = False
+    for i, m in enumerate(req, 1):
+        if not m["alive"]:
+            dead = True
+            print("===== {}/{} [DEAD] {} =====".format(i, len(req), m["abspath"]))
+            continue
+        print("===== {}/{} {} =====".format(i, len(req), m["abspath"]))
+        text = read_file(m["abspath"])
+        print(text, end="" if text.endswith("\n") else "\n")
+    if r:
+        print("===== {} reference entr{} not printed — ctx show {} =====".format(
+            r, "y" if r == 1 else "ies", args.slug))
+    if dead:
+        sys.exit(1)
+
+
+CTX_DISPATCH = {"create": cmd_ctx_create, "list": cmd_ctx_list, "read": cmd_ctx_read,
+                "show": cmd_ctx_show}
 
 
 def cmd_ctx(root, args):
@@ -6114,6 +6214,19 @@ def build_parser():
                       help="only bundles whose entries contain PATH (also when the file is gone)"
                       ).completer = _complete_files
     pcxl.add_argument("--json", action="store_true", help="machine-readable output")
+    pcxr = ctx_verbs.add_parser(
+        "read", help="print the full content of every required entry",
+        description="print every required entry of a ctx in position order, each after a "
+                    "`===== i/p <abspath> =====` separator; reference entries are not printed; "
+                    "exit 1 when a required entry is dead")
+    pcxr.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxs = ctx_verbs.add_parser(
+        "show", help="list a ctx in reading order with live metadata and token estimates",
+        description="list the required entries in reading order, then the reference entries; "
+                    "`ctx <slug>` is short for `ctx show <slug>`; exit 1 when an entry is dead")
+    pcxs.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxs.add_argument("--json", action="store_true",
+                      help="machine-readable output (stdout carries only the JSON object)")
     pf = _sub(sub, "find", "search",
               "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
               formatter_class=argparse.RawDescriptionHelpFormatter,

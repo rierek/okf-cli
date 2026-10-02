@@ -490,5 +490,150 @@ class CtxListCreate(CtxCatalogue):
         self.assertEqual(okf.ctx_slugs(self.root), [])
 
 
+class CtxShowRead(CtxCatalogue):
+    def setUp(self):
+        super().setUp()
+        self.one = os.path.join(self.root, "b/one.md")
+        self.three = os.path.join(self.root, "ext", "three.md")
+        self.out = os.path.join(self.home, "notes", "out.md")
+        okf.save_ctx(self.root, {"slug": "demo", "description": "Demo ctx", "entries": [
+            {"mode": "pflicht", "path": "b/one.md", "comment": "start here"},
+            {"mode": "pflicht", "path": "ext/three.md", "comment": ""},
+            {"mode": "nachschlag", "path": "~/notes/out.md", "comment": "background"}]})
+
+    def _kill_one(self):
+        os.remove(self.one)
+
+    def test_show_text_exact(self):
+        r = self._cli("ctx", "show", "demo")
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        one_chars = len(okf.read_file(self.one))
+        three_chars = len(okf.read_file(self.three))
+        t1, t3 = (one_chars + 3) // 4, (three_chars + 3) // 4
+        t_out = (len(okf.read_file(self.out)) + 3) // 4
+        self.assertEqual(r.stdout, (
+            "ctx demo — Demo ctx\n\n"
+            "required — read in this order:\n"
+            "  1. {one}  [Concept] One  ~{t1} tok\n"
+            "     first\n"
+            "     why: start here\n"
+            "  2. {three}  [Concept] Three  ~{t3} tok\n"
+            "reference — query when needed:\n"
+            "  - {out}  out  ~{to} tok\n"
+            "     why: background\n\n"
+            "3 entries (2 required, 1 reference), ~{tt} tokens for the required set\n").format(one=self.one, three=self.three, out=self.out,
+                                  t1=t1, t3=t3, to=t_out, tt=t1 + t3))
+
+    def test_shorthand_equals_show(self):
+        a, b = self._cli("ctx", "demo"), self._cli("ctx", "show", "demo")
+        self.assertEqual((a.returncode, a.stdout, a.stderr), (b.returncode, b.stdout, b.stderr))
+        self.assertIn("1. " + self.one, a.stdout)
+
+    def test_show_unknown_slug(self):
+        r = self._cli("ctx", "show", "nope")
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertEqual(r.stderr.strip(), "ctx: unknown slug: nope")
+
+    def test_show_dead_entry(self):
+        self._kill_one()
+        r = self._cli("ctx", "show", "demo")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("  1. [DEAD] {}\n     why: start here\n".format(self.one), r.stdout)
+        self.assertTrue(r.stdout.endswith(
+            "WARNING: 1 dead entry — this list is incomplete; fix with `ctx edit demo`\n"))
+
+    def test_show_empty_reference_and_none(self):
+        okf.save_ctx(self.root, {"slug": "refonly", "description": "", "entries": [
+            {"mode": "nachschlag", "path": "b/two.md", "comment": ""}]})
+        out = self._cli("ctx", "show", "refonly").stdout
+        self.assertTrue(out.startswith("ctx refonly\n\nrequired — read in this order:\n  (none)\n"
+                                       "reference — query when needed:\n"))
+        okf.save_ctx(self.root, {"slug": "reqonly", "description": "", "entries": [
+            {"mode": "pflicht", "path": "b/two.md", "comment": ""}]})
+        self.assertNotIn("query when needed", self._cli("ctx", "show", "reqonly").stdout)
+
+    def test_show_json_shape_and_values(self):
+        import json
+        r = self._cli("ctx", "show", "demo", "--json")
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        d = json.loads(r.stdout)
+        self.assertEqual(list(d), ["slug", "description", "path", "entries", "dead", "tokens_required"])
+        self.assertEqual((d["slug"], d["path"], d["dead"]), ("demo", "_ctx/demo.md", 0))
+        e1, e2, e3 = d["entries"]
+        self.assertEqual(list(e1), ["pos", "mode", "path", "abspath", "title", "type",
+                                    "description", "comment", "alive", "chars", "tokens"])
+        self.assertEqual((e1["pos"], e1["mode"], e1["title"], e1["type"], e1["alive"]),
+                         (1, "pflicht", "One", "Concept", True))
+        self.assertEqual((e3["pos"], e3["mode"], e3["type"], e3["title"]),
+                         (None, "nachschlag", "", "out"))
+        self.assertEqual(d["tokens_required"], e1["tokens"] + e2["tokens"])
+        self.assertEqual(e1["chars"], len(okf.read_file(self.one)))
+
+    def test_show_json_follows_title_change(self):
+        import json
+        self._w("b/one.md", "---\ntype: Concept\ntitle: Renamed\n---\n\nx\n")
+        d = json.loads(self._cli("ctx", "show", "demo", "--json").stdout)
+        self.assertEqual(d["entries"][0]["title"], "Renamed")
+
+    def test_show_json_dead_stdout_only_object(self):
+        import json
+        self._kill_one()
+        r = self._cli("ctx", "show", "demo", "--json")
+        self.assertEqual(r.returncode, 1)
+        d = json.loads(r.stdout)
+        self.assertEqual(d["dead"], 1)
+        e = d["entries"][0]
+        self.assertEqual((e["alive"], e["chars"], e["tokens"], e["type"], e["title"]),
+                         (False, 0, 0, "", "one.md"))
+        self.assertIn("WARNING: 1 dead entry", r.stderr)
+
+    def test_read_prints_required_only(self):
+        r = self._cli("ctx", "read", "demo")
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertEqual(r.stdout, (
+            "===== 1/2 {one} =====\n{c1}"
+            "===== 2/2 {three} =====\n{c3}"
+            "===== 1 reference entry not printed — ctx show demo =====\n").format(
+                one=self.one, three=self.three,
+                c1=okf.read_file(self.one), c3=okf.read_file(self.three)))
+        self.assertNotIn("# Out", r.stdout)
+
+    def test_read_adds_missing_newline_and_plural(self):
+        self._w("b/two.md", "no newline")
+        okf.save_ctx(self.root, {"slug": "p", "description": "", "entries": [
+            {"mode": "pflicht", "path": "b/two.md", "comment": ""},
+            {"mode": "nachschlag", "path": "b/one.md", "comment": ""},
+            {"mode": "nachschlag", "path": "ext/three.md", "comment": ""}]})
+        out = self._cli("ctx", "read", "p").stdout
+        self.assertIn("no newline\n===== 2 reference entries not printed", out)
+
+    def test_read_dead_exit_1(self):
+        self._kill_one()
+        r = self._cli("ctx", "read", "demo")
+        self.assertEqual(r.returncode, 1)
+        self.assertTrue(r.stdout.startswith(
+            "===== 1/2 [DEAD] {} =====\n===== 2/2 ".format(self.one)))
+
+    def test_prime_ctx_bundles_line(self):
+        okf.save_ctx(self.root, {"slug": "alpha", "description": "", "entries": [
+            {"mode": "pflicht", "path": "b/two.md", "comment": ""}]})
+        out = okf.render_catalogue_state(self.root)
+        self.assertIn("ctx bundles: 2 — alpha · demo — `ctx show <slug>` lists one", out)
+
+    def test_prime_no_line_without_ctx(self):
+        shutil.rmtree(os.path.join(self.root, "_ctx"))
+        self.assertNotIn("ctx bundles", okf.render_catalogue_state(self.root))
+
+    def test_non_md_member_metadata(self):
+        import json
+        with open(os.path.join(self.home, "notes", "a.txt"), "w", encoding="utf-8") as f:
+            f.write("---\ntype: X\ntitle: T\n---\nabcde")
+        okf.save_ctx(self.root, {"slug": "t", "description": "", "entries": [
+            {"mode": "pflicht", "path": "~/notes/a.txt", "comment": ""}]})
+        e = json.loads(self._cli("ctx", "show", "t", "--json").stdout)["entries"][0]
+        self.assertEqual((e["type"], e["title"], e["description"], e["chars"], e["tokens"]),
+                         ("", "a.txt", "", 30, 8))
+
+
 if __name__ == "__main__":
     unittest.main()
