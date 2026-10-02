@@ -878,5 +878,133 @@ class CtxMaintain(CtxCatalogue):
         self.assertEqual((r.returncode, r.stderr), (2, "ctx: unknown slug: nope\n"))
 
 
+class CtxNavigate(CtxCatalogue):
+    def setUp(self):
+        super().setUp()
+        self._w("b/three.md", "# Three\n\n[x](/b/two.md) [dead](nope.md)\n")
+        okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+            {"mode": "pflicht", "path": "b/two.md", "comment": ""}]})
+
+    def _set(self, *paths):
+        okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+            {"mode": "pflicht", "path": p, "comment": ""} for p in paths]})
+
+    def test_toc_exact(self):
+        self._w("b/one.md", "---\ntype: Concept\n---\n# One\n```\n# no\n```\n## A\n### B\n")
+        self._set("b/two.md", "b/one.md", "b/three.md")
+        os.remove(os.path.join(self.root, "b/three.md"))
+        self._w("b/four.md", "x\n")
+        r = self._cli("ctx", "toc", "demo")
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertEqual(r.stdout, "# b/two.md\n## Two\n### Part\n\n# b/one.md\n## One\n### A\n#### B\n\n"
+                                   "# b/three.md [DEAD]\n")
+
+    def test_toc_depth_and_no_headings(self):
+        self._w("b/four.md", "x\n")
+        self._set("b/two.md", "b/four.md")
+        r = self._cli("ctx", "toc", "demo", "--depth", "1")
+        self.assertEqual(r.stdout, "# b/two.md\n## Two\n\n# b/four.md\n(no headings)\n")
+
+    def test_inbound_external_only(self):
+        r = self._cli("ctx", "inbound", "demo")
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        # scan order is directory order: compare the two source lines unordered
+        head, *rest = r.stdout.splitlines()
+        self.assertEqual(head, "inbound \u2014 ctx demo, 1 member(s), external sources only:")
+        self.assertEqual((rest[0], sorted(rest[1:])), ("b/two.md", [
+            "  <- b/one.md  (/b/two.md)", "  <- b/three.md  (/b/two.md)"]))
+
+    def test_inbound_internal(self):
+        self._set("b/one.md", "b/two.md")
+        r = self._cli("ctx", "inbound", "demo")
+        self.assertEqual(r.stdout, "inbound \u2014 ctx demo, 2 member(s), external sources only:\n"
+                                   "b/one.md\n  (none)\nb/two.md\n  <- b/three.md  (/b/two.md)\n")
+        r = self._cli("ctx", "inbound", "demo", "--include-internal")
+        self.assertIn("including internal links:\n", r.stdout)
+        self.assertIn("  <- b/one.md  (/b/two.md)\n", r.stdout)
+        self.assertIn("  <- b/three.md  (/b/two.md)\n", r.stdout)
+        self.assertIn("b/one.md\n  (none)\n", r.stdout)
+
+    def test_inbound_excludes_ctx_files(self):
+        r = self._cli("ctx", "inbound", "demo")
+        self.assertNotIn("_ctx/", r.stdout)
+
+    def test_inbound_case_insensitive_link(self):
+        self._w("b/three.md", "[u](TWO.md)\n")
+        if not os.path.exists(os.path.join(self.root, "b/TWO.md")):
+            self.skipTest("case-sensitive filesystem")
+        r = self._cli("ctx", "inbound", "demo")
+        self.assertIn("  <- b/three.md  (TWO.md)\n", r.stdout)
+
+    def test_outbound(self):
+        self._set("b/one.md", "b/three.md")
+        r = self._cli("ctx", "outbound", "demo")
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertEqual(r.stdout, "outbound \u2014 ctx demo, 2 member(s), external targets only:\n"
+                                   "b/one.md\n  -> b/two.md  (/b/two.md)\n"
+                                   "b/three.md\n  -> b/two.md  (/b/two.md)\n  -> b/nope.md  (nope.md)  [missing]\n")
+
+    def test_outbound_excludes_member_targets(self):
+        self._set("b/one.md", "b/two.md")
+        r = self._cli("ctx", "outbound", "demo")
+        self.assertEqual(r.stdout, "outbound \u2014 ctx demo, 2 member(s), external targets only:\n"
+                                   "b/one.md\n  (none)\nb/two.md\n  (none)\n")
+        r = self._cli("ctx", "outbound", "demo", "--include-internal")
+        self.assertIn("b/one.md\n  -> b/two.md  (/b/two.md)\n", r.stdout)
+
+    def test_outbound_dead_and_nonmd(self):
+        self._w("b/a.txt", "[l](two.md)\n")
+        self._set("b/gone.md", "b/a.txt")
+        with mock.patch.object(okf, "outbound_links", side_effect=AssertionError):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                okf.cmd_ctx_outbound(self.root, mock.Mock(slug="demo", file=None,
+                                                          include_internal=False, json=False))
+        self.assertEqual(out.getvalue().split("\n", 1)[1], "b/gone.md [DEAD]\nb/a.txt\n  (none)\n")
+        r = self._cli("ctx", "outbound", "demo")
+        self.assertEqual(r.returncode, 0)
+
+    def test_outbound_json(self):
+        import json
+        self._set("b/gone.md", "b/three.md")
+        d = json.loads(self._cli("ctx", "outbound", "demo", "--json").stdout)
+        self.assertEqual(d, {"slug": "demo", "direction": "outbound", "include_internal": False,
+                             "members": [
+            {"path": "b/gone.md", "dead": True, "links": []},
+            {"path": "b/three.md", "dead": False, "links": [
+                {"target": "b/two.md", "link": "/b/two.md", "exists": True},
+                {"target": "b/nope.md", "link": "nope.md", "exists": False}]}]})
+
+    def test_inbound_json(self):
+        import json
+        d = json.loads(self._cli("ctx", "inbound", "demo", "--json").stdout)
+        self.assertEqual(d["direction"], "inbound")
+        (m,) = d["members"]
+        self.assertEqual((m["path"], sorted(l["source"] for l in m["links"]),
+                          {l["link"] for l in m["links"]}),
+                         ("b/two.md", ["b/one.md", "b/three.md"], {"/b/two.md"}))
+        self.assertEqual(set(m), {"path", "links"})
+
+    def test_file_filter(self):
+        self._set("b/one.md", "b/two.md")
+        for sel in ("TWO", "two", "b/TWO.md"):
+            r = self._cli("ctx", "inbound", "demo", "--file", sel)
+            self.assertEqual(r.stdout.splitlines()[0],
+                             "inbound \u2014 ctx demo, 1 member(s), external sources only:", sel)
+            self.assertIn("b/two.md\n", r.stdout)
+            self.assertNotIn("b/one.md\n", r.stdout)
+
+    def test_file_no_match_and_ambiguous(self):
+        self._set("b/one.md", "b/two.md")
+        r = self._cli("ctx", "inbound", "demo", "--file", "zzz")
+        self.assertEqual((r.returncode, r.stdout, r.stderr),
+                         (2, "", 'ctx: no entry in demo matches --file "zzz"\n'))
+        self._w("c/two.md", "# T\n")
+        self._set("b/two.md", "c/two.md")
+        r = self._cli("ctx", "outbound", "demo", "--file", "two")
+        self.assertEqual((r.returncode, r.stdout, r.stderr),
+                         (2, "", 'ctx: --file "two" matches several entries: b/two.md, c/two.md\n'))
+
+
 if __name__ == "__main__":
     unittest.main()

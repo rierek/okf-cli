@@ -5873,6 +5873,103 @@ def cmd_ctx_read(root, args):
         sys.exit(1)
 
 
+def cmd_ctx_toc(root, args):
+    blocks = []
+    for m in _ctx_members(root, args.slug)[1]:
+        lines = ["# {}{}".format(m["path"], "" if m["alive"] else " [DEAD]")]
+        if m["alive"]:
+            hs = []
+            if m["path"].endswith(".md"):
+                body = split_frontmatter(read_file(m["abspath"]))[1]
+                hs = ["{} {}".format("#" * min(lv + 1, 6), t) for lv, t in iter_headings(body)
+                      if not args.depth or lv <= args.depth]
+            lines += hs or ["(no headings)"]
+        blocks.append("\n".join(lines))
+    print("\n\n".join(blocks))
+
+
+def _ctx_same_file(a, b):
+    """build_ref_matrix rule: exact abspath, or case-insensitive equal and the same existing file."""
+    return a == b or (a.lower() == b.lower() and os.path.exists(a) and os.path.samefile(a, b))
+
+
+def _ctx_nav(root, args, direction):
+    """Shared body of ctx inbound/outbound."""
+    _c, ms = _ctx_members(root, args.slug)
+    for m in ms:
+        m["abs"] = os.path.abspath(m["abspath"])
+    shown = ms
+    if args.file:
+        x = args.file.lower()
+        shown = [m for m in ms if x in (m["title"].lower(), m["path"].lower(),
+                                        os.path.splitext(os.path.basename(m["path"]))[0].lower())]
+        if not shown:
+            _ctx_die('no entry in {} matches --file "{}"'.format(args.slug, args.file))
+        if len(shown) > 1:
+            _ctx_die('--file "{}" matches several entries: {}'.format(
+                args.file, ", ".join(m["path"] for m in shown)))
+    by_lower = {}
+    for m in ms:
+        by_lower.setdefault(m["abs"].lower(), []).append(m)
+
+    def owners(ap):
+        return [m for m in by_lower.get(ap.lower(), []) if _ctx_same_file(ap, m["abs"])]
+
+    links = {id(m): [] for m in ms}
+    inbound = direction == "inbound"
+    if inbound:
+        # ponytail: one catalogue scan per call; links bucketed by member afterwards
+        for rel, raw, resolved in iter_md_links(root):
+            if rel.startswith(CTX_DIR + "/"):
+                continue
+            for m in owners(resolved):
+                if args.include_internal or not owners(os.path.abspath(os.path.join(root, rel))):
+                    links[id(m)].append({"source": rel, "link": raw})
+    else:
+        for m in shown:
+            if m["alive"] and m["path"].endswith(".md"):
+                for raw, target, exists in outbound_links(root, m["abs"]):
+                    if args.include_internal or not owners(target):
+                        links[id(m)].append({"target": _refs_display(root, target),
+                                             "link": raw, "exists": exists})
+    if args.json:
+        rows = []
+        for m in shown:
+            row = {"path": m["path"]}
+            if not inbound:
+                row["dead"] = not m["alive"]
+            row["links"] = links[id(m)]
+            rows.append(row)
+        print(json.dumps({"slug": args.slug, "direction": direction,
+                          "include_internal": args.include_internal, "members": rows},
+                         ensure_ascii=False, indent=2))
+        return
+    out = ["{} \u2014 ctx {}, {} member(s), {}:".format(
+        direction, args.slug, len(shown),
+        "including internal links" if args.include_internal
+        else "external {} only".format("sources" if inbound else "targets"))]
+    for m in shown:
+        if not inbound and not m["alive"]:
+            out.append(m["path"] + " [DEAD]")
+            continue
+        out.append(m["path"])
+        for l in links[id(m)]:
+            out.append("  <- {}  ({})".format(l["source"], l["link"]) if inbound else
+                       "  -> {}  ({}){}".format(l["target"], l["link"],
+                                               "" if l["exists"] else "  [missing]"))
+        if not links[id(m)]:
+            out.append("  (none)")
+    print("\n".join(out))
+
+
+def cmd_ctx_inbound(root, args):
+    _ctx_nav(root, args, "inbound")
+
+
+def cmd_ctx_outbound(root, args):
+    _ctx_nav(root, args, "outbound")
+
+
 def _ctx_editable(root, slug):
     """Load a ctx for a row edit: refuse when rows are unparsable (a save would drop them).
     Returns (ctx, required entries in pos order, other entries)."""
@@ -5975,8 +6072,10 @@ def cmd_ctx_remove(root, args):
 
 
 CTX_DISPATCH = {"add": cmd_ctx_add, "create": cmd_ctx_create, "drop": cmd_ctx_drop,
-                "list": cmd_ctx_list, "move": cmd_ctx_move, "read": cmd_ctx_read,
-                "remove": cmd_ctx_remove, "rename": cmd_ctx_rename, "show": cmd_ctx_show}
+                "inbound": cmd_ctx_inbound, "list": cmd_ctx_list, "move": cmd_ctx_move,
+                "outbound": cmd_ctx_outbound, "read": cmd_ctx_read,
+                "remove": cmd_ctx_remove, "rename": cmd_ctx_rename, "show": cmd_ctx_show,
+                "toc": cmd_ctx_toc}
 
 
 def cmd_ctx(root, args):
@@ -6338,6 +6437,21 @@ def build_parser():
     pcxm.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
     pcxm.add_argument("--pos", type=int, help="required position (clamped to 1..n)")
     pcxm.add_argument("--mode", choices=CTX_MODES, help="new mode")
+    pcxo = ctx_verbs.add_parser(
+        "outbound", help="list the links each entry points to",
+        description="per entry, markdown link targets; missing targets are marked [missing], "
+                    "dead entries [DEAD]; other members are excluded unless --include-internal")
+    pcxi = ctx_verbs.add_parser(
+        "inbound", help="list the files that link to each entry",
+        description="per entry, the files linking to it; other members are excluded unless "
+                    "--include-internal; files under _ctx/ are always excluded")
+    for pn in (pcxi, pcxo):
+        pn.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+        pn.add_argument("--file", metavar="X",
+                        help="only the entry whose title, path or stem equals X (case-insensitive)")
+        pn.add_argument("--include-internal", action="store_true",
+                        help="also list links between members of the ctx")
+        pn.add_argument("--json", action="store_true", help="machine-readable output")
     pcxr = ctx_verbs.add_parser(
         "read", help="print the full content of every required entry",
         description="print every required entry of a ctx in position order, each after a "
@@ -6361,6 +6475,13 @@ def build_parser():
     pcxs.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
     pcxs.add_argument("--json", action="store_true",
                       help="machine-readable output (stdout carries only the JSON object)")
+    pcxt = ctx_verbs.add_parser(
+        "toc", help="print the headings of every entry",
+        description="print per entry an H1 with the entry path, then the member's headings "
+                    "demoted by one level; dead entries are marked [DEAD]")
+    pcxt.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxt.add_argument("--depth", type=int, default=0, metavar="N",
+                      help="only headings of original level <= N (default 0 = all)")
     pf = _sub(sub, "find", "search",
               "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
               formatter_class=argparse.RawDescriptionHelpFormatter,
