@@ -5790,7 +5790,7 @@ def _ctx_members(root, slug):
             if ap.endswith(".md"):
                 typ, title, desc = meta_of(ap)
             chars = len(read_file(ap))
-        out.append({"pos": e["pos"] if e["mode"] == "pflicht" else None, "mode": e["mode"],
+        out.append({"pos": e["pos"], "mode": e["mode"],
                     "path": e["path"], "abspath": ap, "title": title, "type": typ,
                     "description": desc, "comment": e["comment"], "alive": alive,
                     "chars": chars,
