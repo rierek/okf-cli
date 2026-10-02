@@ -24,6 +24,7 @@ import sqlite3
 import struct
 import subprocess
 import sys
+import shlex
 import textwrap
 import unicodedata
 import urllib.error
@@ -204,6 +205,53 @@ def render_ctx(slug, description, entries):
         out.append("| {} | {} | {} | {} |".format("-" if e["pos"] is None else e["pos"],
                                                    e["mode"], cell, comment))
     return "\n".join(out) + "\n"
+
+
+def ctx_findings(root, ap, stale=False):
+    """(errors, warnings) message lists for one _ctx/<slug>.md."""
+    text = read_file(ap)
+    fm, _body = split_frontmatter(text)
+    desc, entries, problems = parse_ctx(text)
+    errors, warnings = [], []
+    typ = fm.get("type", "").strip()
+    if typ != CTX_TYPE:
+        errors.append('type is "{}", expected "{}"'.format(typ, CTX_TYPE))
+    stem = os.path.basename(ap)[:-3]
+    bad = ctx_slug_problem(stem)
+    if bad:
+        errors.append('slug "{}" invalid: {}'.format(stem, bad))
+    errors += problems
+
+    def pos_s(e):
+        return "-" if e["pos"] is None else str(e["pos"])
+
+    for e in entries:
+        if e["mode"] not in CTX_MODES:
+            errors.append('pos {}: mode "{}" is not pflicht or nachschlag'.format(pos_s(e), e["mode"]))
+    req = [e for e in entries if e["mode"] == "pflicht"]
+    if [e["pos"] for e in req] != list(range(1, len(req) + 1)):
+        errors.append("required positions are not 1..{} in table order: {}".format(
+            len(req), ", ".join(pos_s(e) for e in req)))
+    for e in entries:
+        if e["mode"] == "nachschlag" and e["pos"] is not None:
+            errors.append("reference entry carries pos {} (use -)".format(e["pos"]))
+    seen, late = set(), []
+    for e in entries:
+        p = e["path"]
+        if p in seen:
+            errors.append("duplicate entry: " + p)
+        seen.add(p)
+        mp = ctx_entry_abspath(root, p)
+        if not os.path.isfile(mp):
+            errors.append("dead entry: " + p)
+        elif stale and os.path.getmtime(mp) > os.path.getmtime(ap):
+            # ponytail: mtime comparison; switch to git dates if checkouts reset mtimes
+            late.append("stale: {} changed after this ctx file".format(p))
+    if not desc.strip():
+        warnings.append("empty description")
+    warnings += ["entry under _archive/: " + e["path"] for e in entries
+                 if e["path"].startswith("_archive/")]
+    return errors, warnings + late
 
 
 def load_ctx(root, slug):
@@ -4801,6 +4849,12 @@ def cmd_wikilinks(root, args):
         len(links), totals["resolved"], totals["ambiguous"], totals["unresolved"]))
 
 
+def _ctx_check_of(c, i):
+    if c["bundle"] != CTX_DIR or c["is_reserved"]:
+        return []
+    return ctx_findings(c["root"], c["ap"])[i]
+
+
 def run_checks(root, target, types_source=None):
     """Run the full pluggable conformance scan over `target` (bundle or
     bundle/subdir), or the whole catalogue when target is None.
@@ -4851,6 +4905,8 @@ def run_checks(root, target, types_source=None):
         ("sync-block", "error", lambda c: check_sync_integrity(c, canon_index)),
         ("sync-stale", "warning", lambda c: check_sync_stale(c, canon_index)),
         ("canon-block", "error", check_canon_blocks),
+        ("ctx", "error", lambda c: _ctx_check_of(c, 0)),
+        ("ctx", "warning", lambda c: _ctx_check_of(c, 1)),
     ]
 
     errors, warnings = [], []
@@ -4878,8 +4934,12 @@ def cmd_check(root, args):
                                   types_source=getattr(args, "types", None))
     if args.strict:
         errors, warnings = errors + warnings, []
-    if args.json:
-        import json
+    _print_findings(errors, warnings, args.json)
+    sys.exit(1 if errors else 0)
+
+
+def _print_findings(errors, warnings, as_json):
+    if as_json:
         print(json.dumps({
             "errors": [{"check": n, "path": p, "message": m} for n, p, m in errors],
             "warnings": [{"check": n, "path": p, "message": m} for n, p, m in warnings],
@@ -4890,7 +4950,6 @@ def cmd_check(root, args):
         for name, path, msg in warnings:
             print("WARNING  {:<20} {}  ({})".format(name, path, msg))
         print("OK — 0 violations" if not errors else "{} VIOLATIONS".format(len(errors)))
-    sys.exit(1 if errors else 0)
 
 
 def bundle_of(root, abspath):
@@ -6044,6 +6103,33 @@ def cmd_ctx_move(root, args):
     print("moved {} in {} to {}".format(norm, args.slug, where))
 
 
+def _ctx_report(root, slugs, stale, as_json):
+    errors, warnings = [], []
+    for s in slugs:
+        es, ws = ctx_findings(root, ctx_file(root, s), stale)
+        rel = "{}/{}.md".format(CTX_DIR, s)
+        errors += [("ctx", rel, m) for m in es]
+        warnings += [("ctx", rel, m) for m in ws]
+    _print_findings(errors, warnings, as_json)
+    sys.exit(1 if errors else 0)
+
+
+def cmd_ctx_check(root, args):
+    if args.slug:
+        load_ctx(root, args.slug)
+    _ctx_report(root, [args.slug] if args.slug else ctx_slugs(root), args.stale, args.json)
+
+
+def cmd_ctx_edit(root, args):
+    load_ctx(root, args.slug)
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+    rc = subprocess.call(shlex.split(editor) + [ctx_file(root, args.slug)])
+    if rc:
+        _ctx_die("editor exited {}".format(rc))
+    reindex_tree(root, ctx_dir(root))
+    _ctx_report(root, [args.slug], False, False)
+
+
 def cmd_ctx_rename(root, args):
     c = load_ctx(root, args.old)
     problem = ctx_slug_problem(args.new)
@@ -6071,7 +6157,8 @@ def cmd_ctx_remove(root, args):
             print("  " + s)
 
 
-CTX_DISPATCH = {"add": cmd_ctx_add, "create": cmd_ctx_create, "drop": cmd_ctx_drop,
+CTX_DISPATCH = {"add": cmd_ctx_add, "check": cmd_ctx_check, "create": cmd_ctx_create,
+                "drop": cmd_ctx_drop, "edit": cmd_ctx_edit,
                 "inbound": cmd_ctx_inbound, "list": cmd_ctx_list, "move": cmd_ctx_move,
                 "outbound": cmd_ctx_outbound, "read": cmd_ctx_read,
                 "remove": cmd_ctx_remove, "rename": cmd_ctx_rename, "show": cmd_ctx_show,
@@ -6403,6 +6490,13 @@ def build_parser():
     pcxa.add_argument("--pos", type=int, help="required position (clamped to 1..n+1)")
     pcxa.add_argument("--mode", choices=CTX_MODES, default="pflicht", help="entry mode")
     pcxa.add_argument("--comment", default="", help="entry comment")
+    pcxk = ctx_verbs.add_parser(
+        "check", help="validate ctx bundles",
+        description="report ctx errors and warnings in the `check` line format; exit 1 on any error")
+    pcxk.add_argument("slug", nargs="?", help="ctx slug (default: all)").completer = _complete_ctx_slugs
+    pcxk.add_argument("--stale", action="store_true",
+                      help="warn for every member modified after the ctx file")
+    pcxk.add_argument("--json", action="store_true", help="machine-readable output")
     pcxc = ctx_verbs.add_parser(
         "create", help="create a ctx bundle from paths and/or an import file",
         description="create _ctx/<slug>.md; every path becomes a required entry, "
@@ -6422,6 +6516,11 @@ def build_parser():
                     "renumbered 1..n")
     pcxd.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
     pcxd.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
+    pcxe = ctx_verbs.add_parser(
+        "edit", help="open a ctx bundle in $VISUAL/$EDITOR/vi and validate it",
+        description="open _ctx/<slug>.md in $VISUAL, else $EDITOR, else vi; afterwards refresh "
+                    "the _ctx index and run `ctx check` on the file; exit 1 on errors")
+    pcxe.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
     pcxl = ctx_verbs.add_parser(
         "list", help="list ctx bundles with entry and required counts",
         description="list ctx bundles: slug, description, entry and required counts")

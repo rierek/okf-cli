@@ -6,6 +6,7 @@ Run: python3 -m unittest test_okf_ctx -v
 import contextlib
 import importlib.util
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -1033,6 +1034,212 @@ class CtxNavigate(CtxCatalogue):
         r = self._cli("ctx", "outbound", "demo", "--file", "two")
         self.assertEqual((r.returncode, r.stdout, r.stderr),
                          (2, "", 'ctx: --file "two" matches several entries: b/two.md, c/two.md\n'))
+
+
+class CtxFindings(CtxCatalogue):
+    """ctx_findings, the `ctx` entries of run_checks and `ctx check`."""
+
+    def _ctx(self, slug="demo", entries=None, desc="Demo", typ="Context"):
+        if entries is None:
+            entries = [E(1, "pflicht", "b/one.md"), E(2, "pflicht", "b/two.md")]
+        text = okf.render_ctx(slug, desc, entries).replace("type: Context", "type: " + typ, 1)
+        self._w("_ctx/{}.md".format(slug), text)
+        return os.path.join(self.root, "_ctx", slug + ".md")
+
+    def _f(self, ap, **kw):
+        return okf.ctx_findings(self.root, ap, **kw)
+
+    def _run_checks_ctx(self):
+        errs, warns = okf.run_checks(self.root, None)
+        return ([m for n, _, m in errs if n == "ctx"], [m for n, _, m in warns if n == "ctx"])
+
+    def _sc01(self):
+        return self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(3, "pflicht", "b/two.md"),
+                                  E(None, "nachschlag", "b/one.md"),
+                                  E(None, "nachschlag", "b/gone.md")])
+
+    SC01 = ["required positions are not 1..2 in table order: 1, 3",
+            "duplicate entry: b/one.md", "dead entry: b/gone.md"]
+
+    def test_sc01_check_and_ctx_check_three_errors(self):
+        ap = self._sc01()
+        self.assertEqual(self._f(ap), (self.SC01, []))
+        self.assertEqual(self._run_checks_ctx(), (self.SC01, []))
+        r = self._cli("ctx", "check")
+        self.assertEqual((r.returncode, r.stderr), (1, ""))
+        self.assertEqual(r.stdout.splitlines(), [
+            "ERROR    ctx                  _ctx/demo.md  ({})".format(m) for m in self.SC01]
+            + ["3 VIOLATIONS"])
+
+    def test_sc02_clean_ctx(self):
+        ap = self._ctx()
+        self.assertEqual(self._f(ap), ([], []))
+        self.assertEqual(self._run_checks_ctx(), ([], []))
+        for argv in (("ctx", "check"), ("ctx", "check", "demo")):
+            r = self._cli(*argv)
+            self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "OK — 0 violations\n", ""))
+
+    def test_wrong_type(self):
+        self.assertEqual(self._f(self._ctx(typ="Concept"))[0],
+                         ['type is "Concept", expected "Context"'])
+
+    def test_invalid_slug(self):
+        ap = self._ctx(slug="Bad_Slug")
+        self.assertEqual(self._f(ap)[0],
+                         ['slug "Bad_Slug" invalid: use lowercase letters, digits and hyphens'])
+
+    def test_parse_problems_unchanged(self):
+        self._w("_ctx/demo.md", "---\ntype: Context\ndescription: \"d\"\n---\n\n# demo\n\nno table\n")
+        self.assertEqual(self._f(os.path.join(self.root, "_ctx", "demo.md"))[0],
+                         ['no table with header "pos | mode | path | comment"'])
+
+    def test_unknown_mode_with_and_without_pos(self):
+        ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(2, "maybe", "b/two.md"),
+                                E(None, "wat", "ext/three.md")])
+        self.assertEqual(self._f(ap)[0], ['pos 2: mode "maybe" is not pflicht or nachschlag',
+                                          'pos -: mode "wat" is not pflicht or nachschlag'])
+
+    def test_required_positions_not_1_to_n(self):
+        ap = self._ctx(entries=[E(2, "pflicht", "b/one.md"), E(1, "pflicht", "b/two.md")])
+        self.assertEqual(self._f(ap)[0],
+                         ["required positions are not 1..2 in table order: 2, 1"])
+        ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(None, "pflicht", "b/two.md")])
+        self.assertEqual(self._f(ap)[0],
+                         ["required positions are not 1..2 in table order: 1, -"])
+
+    def test_reference_entry_with_pos(self):
+        ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(5, "nachschlag", "b/two.md")])
+        self.assertEqual(self._f(ap)[0], ["reference entry carries pos 5 (use -)"])
+
+    def test_dead_entry_only(self):
+        ap = self._ctx(entries=[E(1, "pflicht", "b/gone.md")])
+        self.assertEqual(self._f(ap)[0], ["dead entry: b/gone.md"])
+
+    def test_duplicate_entry_only(self):
+        ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(None, "nachschlag", "b/one.md")])
+        self.assertEqual(self._f(ap)[0], ["duplicate entry: b/one.md"])
+
+    def test_empty_description_is_warning_only(self):
+        ap = self._ctx(desc="")
+        self.assertEqual(self._f(ap), ([], ["empty description"]))
+        self.assertEqual(self._run_checks_ctx(), ([], ["empty description"]))
+
+    def test_archive_entry_is_warning_only(self):
+        self._w("_archive/b/old.md", "---\ntype: Concept\n---\n\n# Old\n")
+        ap = self._ctx(entries=[E(1, "pflicht", "_archive/b/old.md")])
+        self.assertEqual(self._f(ap), ([], ["entry under _archive/: _archive/b/old.md"]))
+
+    def test_stale_member_warns_only_with_flag(self):
+        ap = self._ctx()
+        os.utime(ap, (1000, 1000))
+        os.utime(os.path.join(self.root, "b", "one.md"), (2000, 2000))
+        os.utime(os.path.join(self.root, "b", "two.md"), (500, 500))
+        self.assertEqual(self._f(ap), ([], []))
+        self.assertEqual(self._f(ap, stale=True),
+                         ([], ["stale: b/one.md changed after this ctx file"]))
+
+    def test_stale_skips_dead_members(self):
+        ap = self._ctx(entries=[E(1, "pflicht", "b/gone.md")])
+        self.assertEqual(self._f(ap, stale=True), (["dead entry: b/gone.md"], []))
+
+    def test_only_ctx_bundle_files_are_checked(self):
+        # a Concept file elsewhere with a ctx-looking table is not a ctx
+        self._w("b/three.md", "---\ntype: Concept\n---\n\n| pos | mode | path | comment |\n"
+                              "|---|---|---|---|\n| 1 | pflicht | [x](/b/nope.md) | |\n")
+        self.assertEqual(self._run_checks_ctx(), ([], []))
+
+    def test_ctx_check_one_slug_unknown_json_stale_warning_exit(self):
+        self._ctx(slug="bad", entries=[E(1, "pflicht", "b/gone.md")])
+        self._ctx(slug="good", desc="")
+        r = self._cli("ctx", "check", "good")
+        self.assertEqual((r.returncode, r.stdout),
+                         (0, "WARNING  ctx                  _ctx/good.md  (empty description)\n"
+                             "OK — 0 violations\n"))
+        r = self._cli("ctx", "check", "nope")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", "ctx: unknown slug: nope\n"))
+        r = self._cli("ctx", "check", "--json")
+        self.assertEqual((r.returncode, json.loads(r.stdout)), (1, {
+            "errors": [{"check": "ctx", "path": "_ctx/bad.md", "message": "dead entry: b/gone.md"}],
+            "warnings": [{"check": "ctx", "path": "_ctx/good.md", "message": "empty description"}]}))
+        ap = os.path.join(self.root, "_ctx", "good.md")
+        os.utime(ap, (1000, 1000))
+        os.utime(os.path.join(self.root, "b", "two.md"), (500, 500))
+        r = self._cli("ctx", "check", "good", "--stale")
+        self.assertEqual((r.returncode, r.stdout.splitlines()[:2]), (0, [
+            "WARNING  ctx                  _ctx/good.md  (empty description)",
+            "WARNING  ctx                  _ctx/good.md  (stale: b/one.md changed after this ctx file)"]))
+
+
+class CtxEdit(CtxCatalogue):
+    """`ctx edit`: editor chain, validation after exit. Editor = script in tmp dir."""
+
+    def setUp(self):
+        super().setUp()
+        self.bin = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.bin, True)
+        self.log = os.path.join(self.bin, "log")
+        okf.save_ctx(self.root, {"slug": "demo", "description": "Demo", "entries": [
+            E(1, "pflicht", "b/one.md")]})
+        self.good = okf.render_ctx("demo", "Edited", [E(1, "pflicht", "b/two.md")])
+        self.bad = okf.render_ctx("demo", "Edited", [E(1, "pflicht", "b/gone.md")])
+
+    def _editor(self, name, text, rc=0):
+        p = os.path.join(self.bin, name)
+        with open(p, "w") as f:
+            f.write("#!/bin/sh\necho {} \"$@\" >> '{}'\nfor a; do t=\"$a\"; done\n"
+                    "cat '{}' > \"$t\"\nexit {}\n".format(name, self.log, p + ".txt", rc))
+        os.chmod(p, 0o755)
+        with open(p + ".txt", "w") as f:
+            f.write(text)
+        return p
+
+    def _edit(self, slug="demo", **env):
+        e = {k: v for k, v in os.environ.items() if k not in ("VISUAL", "EDITOR")}
+        e.update(HOME=self.home, PATH=self.bin + os.pathsep + os.environ["PATH"], **env)
+        return subprocess.run([sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root",
+                               self.root, "ctx", "edit", slug], capture_output=True, text=True, env=e)
+
+    def _calls(self):
+        return open(self.log).read().splitlines() if os.path.exists(self.log) else []
+
+    def test_visual_beats_editor(self):
+        v = self._editor("vis", self.good)
+        ed = self._editor("ed", self.bad)
+        r = self._edit(VISUAL=v, EDITOR=ed)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "OK — 0 violations\n", ""))
+        self.assertEqual([c.split()[0] for c in self._calls()], ["vis"])
+
+    def test_editor_used_when_no_visual_and_args_are_split(self):
+        ed = self._editor("ed", self.good)
+        r = self._edit(EDITOR=ed + " --wait")
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(self._calls()[0].split()[:2], ["ed", "--wait"])
+        self.assertTrue(self._calls()[0].endswith(os.path.join("_ctx", "demo.md")))
+
+    def test_vi_fallback(self):
+        self._editor("vi", self.good)
+        r = self._edit()
+        self.assertEqual((r.returncode, r.stdout), (0, "OK — 0 violations\n"))
+        self.assertEqual([c.split()[0] for c in self._calls()], ["vi"])
+
+    def test_errors_after_edit_exit_1(self):
+        r = self._edit(EDITOR=self._editor("ed", self.bad))
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (1, 
+            "ERROR    ctx                  _ctx/demo.md  (dead entry: b/gone.md)\n1 VIOLATIONS\n", ""))
+
+    def test_editor_nonzero_exit(self):
+        r = self._edit(EDITOR=self._editor("ed", self.good, rc=3))
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", "ctx: editor exited 3\n"))
+
+    def test_unknown_slug_never_starts_editor(self):
+        r = self._edit("nope", EDITOR=self._editor("ed", self.good))
+        self.assertEqual((r.returncode, r.stdout, r.stderr),
+                         (2, "", "ctx: unknown slug: nope\n"))
+        self.assertEqual(self._calls(), [])
+
+    def test_index_refreshed_after_edit(self):
+        self._edit(EDITOR=self._editor("ed", self.good))
+        self.assertIn("Edited", okf.read_file(os.path.join(self.root, "_ctx", "index.md")))
 
 
 if __name__ == "__main__":
