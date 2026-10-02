@@ -624,6 +624,28 @@ class CtxShowRead(CtxCatalogue):
         shutil.rmtree(os.path.join(self.root, "_ctx"))
         self.assertNotIn("ctx bundles", okf.render_catalogue_state(self.root))
 
+    def test_show_dead_reference_counts(self):
+        import json
+        os.remove(self.out)
+        r = self._cli("ctx", "show", "demo")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("  - [DEAD] {}\n     why: background\n".format(self.out), r.stdout)
+        self.assertIn("WARNING: 1 dead entry", r.stdout)
+        j = self._cli("ctx", "show", "demo", "--json")
+        self.assertEqual((j.returncode, json.loads(j.stdout)["dead"]), (1, 1))
+
+    def test_show_orders_required_by_pos_not_file_order(self):
+        self._w("_ctx/hand.md", okf.render_ctx("hand", "", [
+            {"pos": 9, "mode": "pflicht", "path": "b/two.md", "comment": ""},
+            {"pos": 2, "mode": "pflicht", "path": "b/one.md", "comment": ""}]))
+        out = self._cli("ctx", "show", "hand").stdout
+        self.assertLess(out.index("one.md"), out.index("two.md"))
+
+    def test_show_reference_description_not_printed(self):
+        okf.save_ctx(self.root, {"slug": "r", "description": "", "entries": [
+            {"mode": "nachschlag", "path": "b/one.md", "comment": ""}]})
+        self.assertNotIn("first", self._cli("ctx", "show", "r").stdout)
+
     def test_non_md_member_metadata(self):
         import json
         with open(os.path.join(self.home, "notes", "a.txt"), "w", encoding="utf-8") as f:
