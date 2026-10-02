@@ -438,6 +438,22 @@ class CtxListCreate(CtxCatalogue):
         r = self._cli("ctx", "list", "--for", "b/nope.md", "--json")
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "[]"))
 
+    def test_list_fields_each_observed_text_and_json(self):
+        okf.save_ctx(self.root, {"slug": "alpha", "description": "Alpha desc", "entries": [
+            E(1, "pflicht", "b/one.md"), E(2, "pflicht", "b/two.md"),
+            E(None, "nachschlag", "ext/three.md")]})
+        okf.save_ctx(self.root, {"slug": "be", "description": "Be desc", "entries": [
+            E(1, "pflicht", "b/one.md")]})
+        data = __import__("json").loads(self._cli("ctx", "list", "--json").stdout)
+        self.assertEqual(data, [
+            {"slug": "alpha", "description": "Alpha desc", "entries": 3, "required": 2,
+             "path": "_ctx/alpha.md"},
+            {"slug": "be", "description": "Be desc", "entries": 1, "required": 1,
+             "path": "_ctx/be.md"}])
+        self.assertEqual(self._cli("ctx", "list").stdout,
+                         "  alpha  Alpha desc  (3 entries, 2 required)\n"
+                         "  be     Be desc  (1 entries, 1 required)\n")
+
     def test_create_import_comments_skips_and_dedup(self):
         imp = os.path.join(self.home, "in.txt")
         with open(imp, "w", encoding="utf-8") as f:

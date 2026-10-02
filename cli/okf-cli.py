@@ -6092,7 +6092,8 @@ def build_parser():
     pcx = _sub(sub, "ctx", "navigation",
                "context bundles: curated, ordered reading lists per topic "
                "(`ctx` lists them, `ctx <slug>` shows one)")
-    ctx_verbs = pcx.add_subparsers(dest="ctx_verb", required=True, help="ctx verb to run")
+    ctx_verbs = pcx.add_subparsers(dest="ctx_verb", required=True, metavar="VERB",
+                                   help="ctx verb; `ctx <slug>` is short for `ctx show <slug>`")
     pcxc = ctx_verbs.add_parser(
         "create", help="create a ctx bundle from paths and/or an import file",
         description="create _ctx/<slug>.md; every path becomes a required entry, "
