@@ -1142,6 +1142,11 @@ class CtxFindings(CtxCatalogue):
         ap = self._ctx(entries=[E(1, "pflicht", "b/gone.md")])
         self.assertEqual(self._f(ap, stale=True), (["dead entry: b/gone.md"], []))
 
+    def test_reserved_index_of_ctx_bundle_is_skipped(self):
+        okf.save_ctx(self.root, {"slug": "demo", "description": "D", "entries": []})
+        self.assertTrue(os.path.isfile(os.path.join(self.root, "_ctx", "index.md")))
+        self.assertEqual(self._run_checks_ctx(), ([], []))
+
     def test_only_ctx_bundle_files_are_checked(self):
         # a Concept file elsewhere with a ctx-looking table is not a ctx
         self._w("b/three.md", "---\ntype: Concept\n---\n\n| pos | mode | path | comment |\n"
@@ -1178,6 +1183,7 @@ class CtxEdit(CtxCatalogue):
         self.bin = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.bin, True)
         self.log = os.path.join(self.bin, "log")
+        self._editor("vi", "")  # guard: a mutant that reaches the fallback never starts a real vi
         okf.save_ctx(self.root, {"slug": "demo", "description": "Demo", "entries": [
             E(1, "pflicht", "b/one.md")]})
         self.good = okf.render_ctx("demo", "Edited", [E(1, "pflicht", "b/two.md")])
