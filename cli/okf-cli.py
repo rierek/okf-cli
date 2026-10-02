@@ -95,7 +95,200 @@ def catalogue_root(explicit):
 
 
 def is_bundle_dir(name):
-    return not name.startswith(".") and not name.startswith("_")
+    return name == CTX_DIR or (not name.startswith(".") and not name.startswith("_"))
+
+
+# --- ctx: curated reading lists stored as _ctx/<slug>.md ---------------------
+
+CTX_DIR = "_ctx"
+CTX_TYPE = "Context"
+CTX_MODES = ("pflicht", "nachschlag")
+CTX_VERBS = frozenset({"add", "check", "create", "drop", "edit", "inbound", "list",
+                       "move", "outbound", "read", "remove", "rename", "show", "toc"})
+CTX_RESERVED_SLUGS = CTX_VERBS | {"index", "log", "readme", "index-map"}
+CTX_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_CTX_COLS = ["pos", "mode", "path", "comment"]
+_CTX_INDEX_SKELETON = (
+    "# Context bundles\n\n"
+    "Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.\n\n"
+    "## Contents\n\n" + MARK_START + "\n" + MARK_END + "\n")
+
+
+def _ctx_die(msg):
+    print("ctx: {}".format(msg), file=sys.stderr)
+    sys.exit(2)
+
+
+def ctx_dir(root):
+    return os.path.join(root, CTX_DIR)
+
+
+def ctx_file(root, slug):
+    return os.path.join(ctx_dir(root), slug + ".md")
+
+
+def ctx_slugs(root):
+    d = ctx_dir(root)
+    if not os.path.isdir(d):
+        return []
+    return sorted(fn[:-3] for fn in os.listdir(d)
+                  if fn.endswith(".md") and fn.lower() not in RESERVED)
+
+
+def ctx_slug_problem(slug):
+    if not CTX_SLUG_RE.match(slug):
+        return "use lowercase letters, digits and hyphens"
+    if slug in CTX_RESERVED_SLUGS:
+        return '"{}" is a reserved name'.format(slug)
+    return None
+
+
+def _ctx_cells(line):
+    body = line.strip()[1:]
+    if body.endswith("|") and not body.endswith("\\|"):
+        body = body[:-1]
+    return [c.strip() for c in re.split(r"(?<!\\)\|", body)]
+
+
+def parse_ctx(text):
+    fm, body = split_frontmatter(text)
+    desc = _dequote(fm.get("description", "")).replace('\\"', '"')
+    lines = body.splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.startswith("|")
+                  and [c.lower() for c in _ctx_cells(ln)] == _CTX_COLS), None)
+    if start is None:
+        return desc, [], ['no table with header "pos | mode | path | comment"']
+    entries, problems = [], []
+    n = 0
+    for ln in lines[start + 2:]:
+        if not ln.startswith("|"):
+            break
+        n += 1
+        cells = _ctx_cells(ln)
+        if len(cells) != 4:
+            problems.append("row {}: expected 4 cells, found {}".format(n, len(cells)))
+            continue
+        pos_s, mode, path_c, comment = cells
+        if pos_s == "-":
+            pos = None
+        elif re.fullmatch(r"-?\d+", pos_s):
+            pos = int(pos_s)
+        else:
+            problems.append('row {}: pos "{}" is neither an integer nor -'.format(n, pos_s))
+            continue
+        m = re.fullmatch(r"\[[^\]]*\]\(([^)]*)\)", path_c)
+        if m:
+            path = m.group(1)[1:] if m.group(1).startswith("/") else m.group(1)
+        else:
+            m = re.fullmatch(r"`([^`]+)`", path_c)
+            if not m:
+                problems.append("row {}: path cell is neither a catalogue link nor a code span".format(n))
+                continue
+            path = m.group(1)
+        entries.append({"pos": pos, "mode": mode.lower(), "path": path,
+                        "comment": comment.replace("\\|", "|")})
+    return desc, entries, problems
+
+
+def render_ctx(slug, description, entries):
+    out = ['---', 'type: ' + CTX_TYPE,
+           'description: "{}"'.format(description.replace('"', '\\"')), '---', '',
+           '# ' + slug, '', '| pos | mode | path | comment |', '|---|---|---|---|']
+    for e in entries:
+        p = e["path"]
+        if p.startswith(("~", "/")):
+            cell = "`{}`".format(p)
+        else:
+            cell = "[{}](/{})".format(os.path.splitext(os.path.basename(p))[0], p)
+        comment = re.sub(r"\r?\n", " ", e["comment"]).replace("|", "\\|")
+        out.append("| {} | {} | {} | {} |".format("-" if e["pos"] is None else e["pos"],
+                                                   e["mode"], cell, comment))
+    return "\n".join(out) + "\n"
+
+
+def load_ctx(root, slug):
+    f = ctx_file(root, slug)
+    if not os.path.isfile(f):
+        _ctx_die("unknown slug: {}".format(slug))
+    desc, entries, problems = parse_ctx(read_file(f))
+    return {"slug": slug, "description": desc, "entries": entries, "problems": problems}
+
+
+def save_ctx(root, ctx):
+    es = ctx["entries"]
+    pf = [dict(e) for e in es if e["mode"] == "pflicht"]
+    rest = [dict(e) for e in es if e["mode"] != "pflicht"]
+    for i, e in enumerate(pf, 1):
+        e["pos"] = i
+    for e in rest:
+        e["pos"] = None
+    os.makedirs(ctx_dir(root), exist_ok=True)
+    write_file(ctx_file(root, ctx["slug"]), render_ctx(ctx["slug"], ctx["description"], pf + rest))
+    idx = os.path.join(ctx_dir(root), "index.md")
+    if not os.path.exists(idx):
+        write_file(idx, _CTX_INDEX_SKELETON)
+    reindex_tree(root, ctx_dir(root))
+
+
+def _under(path, base):
+    return path == base or path.startswith(base.rstrip(os.sep) + os.sep)
+
+
+def ctx_normalize_path(root, raw, must_exist=True):
+    raw = raw.strip()
+    root_abs = os.path.abspath(root)
+
+    def cat_exists(rel):
+        p = os.path.join(root, rel)
+        return os.path.exists(p) or os.path.exists(p + ".md")
+
+    def catalogue(rel):
+        norm = os.path.normpath(rel)
+        if norm.startswith(".."):
+            return filesystem(os.path.abspath(os.path.join(root, rel)))
+        if not os.path.exists(os.path.join(root, norm)) and os.path.exists(os.path.join(root, norm + ".md")):
+            norm += ".md"
+        return norm.replace(os.sep, "/")
+
+    def filesystem(p):
+        ap = os.path.abspath(p)
+        if _under(ap, root_abs):
+            return os.path.relpath(ap, root_abs).replace(os.sep, "/")
+        real = os.path.realpath(ap)
+        for b in list_bundles(root):
+            bp = os.path.join(root, b)
+            if os.path.islink(bp) and _under(real, os.path.realpath(bp)):
+                return b + "/" + os.path.relpath(real, os.path.realpath(bp)).replace(os.sep, "/")
+        home = os.path.abspath(os.path.expanduser("~"))
+        if _under(ap, home):
+            return "~/" + os.path.relpath(ap, home).replace(os.sep, "/")
+        return ap
+
+    if raw.startswith("~"):
+        res = filesystem(os.path.expanduser(raw))
+    elif raw.startswith("/"):
+        res = catalogue(raw[1:]) if cat_exists(raw[1:]) else filesystem(raw)
+    elif cat_exists(raw):
+        res = catalogue(raw)
+    elif os.path.exists(os.path.abspath(raw)):
+        res = filesystem(raw)
+    else:
+        res = catalogue(raw)
+    if must_exist and not os.path.exists(ctx_entry_abspath(root, res)):
+        return None
+    return res
+
+
+def ctx_entry_abspath(root, path):
+    if path.startswith(("~", "/")):
+        return os.path.expanduser(path)
+    return os.path.join(root, path)
+
+
+def ctx_memberships(root, path):
+    norm = ctx_normalize_path(root, path, must_exist=False)
+    return [(s, e) for s in ctx_slugs(root) for e in load_ctx(root, s)["entries"]
+            if e["path"] == norm]
 
 
 def require_bundle_dir(root, bundle):
