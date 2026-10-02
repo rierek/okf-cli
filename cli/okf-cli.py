@@ -5708,6 +5708,104 @@ def cmd_archive(root, args):
         _prune_empty_archive_dirs(root, os.path.dirname(src_abs))
 
 
+def _ctx_list_rows(root, for_path):
+    keep = None
+    if for_path is not None:
+        keep = {s for s, _e in ctx_memberships(root, for_path)}
+    rows = []
+    for slug in ctx_slugs(root):
+        if keep is not None and slug not in keep:
+            continue
+        c = load_ctx(root, slug)
+        rows.append({"slug": slug, "description": c["description"],
+                     "entries": len(c["entries"]),
+                     "required": sum(1 for e in c["entries"] if e["mode"] == "pflicht"),
+                     "path": "{}/{}.md".format(CTX_DIR, slug)})
+    return rows
+
+
+def cmd_ctx_list(root, args):
+    rows = _ctx_list_rows(root, args.for_path)
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return
+    if not rows:
+        if args.for_path is None:
+            print("no ctx bundles under {}".format(ctx_dir(root)))
+        return
+    w = max(len(r["slug"]) for r in rows)
+    for r in rows:
+        print("  {:<{w}}  {}  ({} entries, {} required)".format(
+            r["slug"], r["description"], r["entries"], r["required"], w=w))
+
+
+def cmd_ctx_create(root, args):
+    problem = ctx_slug_problem(args.slug)
+    if problem:
+        _ctx_die('invalid slug "{}": {}'.format(args.slug, problem))
+    if os.path.exists(ctx_file(root, args.slug)):
+        _ctx_die("{} already exists".format(args.slug))
+    raw = [(p, "") for p in args.paths]
+    if args.import_file:
+        if not os.path.isfile(args.import_file):
+            _ctx_die("import file not found: {}".format(args.import_file))
+        for line in read_file(args.import_file).splitlines():
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            p, _t, comment = line.partition("\t")
+            raw.append((p, comment.strip()))
+    if not raw:
+        _ctx_die("create needs at least one path")
+    seen, entries, missing = set(), [], []
+    for p, comment in raw:
+        norm = ctx_normalize_path(root, p)
+        if norm is None:
+            missing.append(p)
+        elif norm not in seen:
+            seen.add(norm)
+            entries.append({"mode": "pflicht", "path": norm, "comment": comment})
+    if missing:
+        for p in missing:
+            print("ctx: not found: {}".format(p), file=sys.stderr)
+        sys.exit(2)
+    entries.sort(key=lambda e: e["path"].casefold())
+    save_ctx(root, {"slug": args.slug, "description": args.description or "",
+                    "entries": entries})
+    print("created {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(entries)))
+
+
+CTX_DISPATCH = {"list": cmd_ctx_list, "create": cmd_ctx_create}
+
+
+def cmd_ctx(root, args):
+    CTX_DISPATCH[args.ctx_verb](root, args)
+
+
+def _ctx_shorthand(argv):
+    """`ctx` -> `ctx list`, `ctx --list` -> `ctx list`, `ctx <slug>` -> `ctx show <slug>`.
+    Acts only when the first command token (after global options) is `ctx`."""
+    i = 0
+    while i < len(argv) and argv[i].startswith("-"):
+        i += 2 if argv[i] == "--root" else 1
+    if i >= len(argv) or argv[i] != "ctx":
+        return argv
+    rest = argv[i + 1:]
+    if not rest:
+        rest = ["list"]
+    elif rest[0] == "--list":
+        rest = ["list"] + rest[1:]
+    elif rest[0] not in CTX_VERBS and not rest[0].startswith("-"):
+        rest = ["show"] + rest
+    return argv[:i + 1] + rest
+
+
+def _complete_ctx_slugs(parsed_args, **_):
+    root = _completion_root(parsed_args)
+    if root is None:
+        return {}
+    return {s: load_ctx(root, s)["description"] for s in ctx_slugs(root)}
+
+
 COMMAND_DISPATCH = {
     "prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
     "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
@@ -5725,6 +5823,7 @@ COMMAND_DISPATCH = {
     "wikilinks": cmd_wikilinks,
     "sync-export": cmd_sync_export, "sync-insert": cmd_sync_insert,
     "sync-status": cmd_sync_status, "sync-update": cmd_sync_update,
+    "ctx": cmd_ctx,
 }
 
 
@@ -5990,6 +6089,30 @@ def build_parser():
     pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
     pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
+    pcx = _sub(sub, "ctx", "navigation",
+               "context bundles: curated, ordered reading lists per topic "
+               "(`ctx` lists them, `ctx <slug>` shows one)")
+    ctx_verbs = pcx.add_subparsers(dest="ctx_verb", required=True, help="ctx verb to run")
+    pcxc = ctx_verbs.add_parser(
+        "create", help="create a ctx bundle from paths and/or an import file",
+        description="create _ctx/<slug>.md; every path becomes a required entry, "
+                    "ordered alphabetically by normalised path")
+    pcxc.add_argument("slug", help="new ctx slug: lowercase letters, digits, hyphens"
+                      ).completer = _complete_ctx_slugs
+    pcxc.add_argument("paths", nargs="*", metavar="PATH",
+                      help="concept or file path to add as required entry"
+                      ).completer = _complete_concepts
+    pcxc.add_argument("--import", dest="import_file", metavar="FILE",
+                      help="read one path per line (blank and # lines skipped, "
+                           "text after a TAB is the entry comment)").completer = _complete_files
+    pcxc.add_argument("--description", help="one-line description of the bundle")
+    pcxl = ctx_verbs.add_parser(
+        "list", help="list ctx bundles with entry and required counts",
+        description="list ctx bundles: slug, description, entry and required counts")
+    pcxl.add_argument("--for", dest="for_path", metavar="PATH",
+                      help="only bundles whose entries contain PATH (also when the file is gone)"
+                      ).completer = _complete_files
+    pcxl.add_argument("--json", action="store_true", help="machine-readable output")
     pf = _sub(sub, "find", "search",
               "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
               formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -6210,7 +6333,7 @@ def main():
         # only on a completion run, which argcomplete ends via os._exit.
         import argcomplete
         argcomplete.autocomplete(ap, default_completer=argcomplete.SuppressCompleter())
-    args = ap.parse_args()
+    args = ap.parse_args(_ctx_shorthand(sys.argv[1:]))
     root = catalogue_root(args.root)
     if root is None:
         sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")

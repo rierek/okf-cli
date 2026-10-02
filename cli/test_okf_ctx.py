@@ -368,5 +368,111 @@ class CtxSaveEffects(CtxCatalogue):
         self.assertEqual([okf.read_file(p) for p in paths], before)
 
 
+class CtxShorthand(unittest.TestCase):
+    def test_rewrites(self):
+        S = okf._ctx_shorthand
+        self.assertEqual(S(["ctx"]), ["ctx", "list"])
+        self.assertEqual(S(["--root", "r", "ctx"]), ["--root", "r", "ctx", "list"])
+        self.assertEqual(S(["--root=r", "ctx", "--list"]), ["--root=r", "ctx", "list"])
+        self.assertEqual(S(["ctx", "demo"]), ["ctx", "show", "demo"])
+        self.assertEqual(S(["ctx", "create", "x"]), ["ctx", "create", "x"])
+        self.assertEqual(S(["ctx", "--help"]), ["ctx", "--help"])
+
+    def test_other_commands_untouched(self):
+        for argv in (["list", "ctx"], ["find", "ctx", "x"], ["--root", "ctx", "read", "a"],
+                     ["read", "b/ctx"], []):
+            self.assertEqual(okf._ctx_shorthand(argv), argv)
+
+
+class CtxListCreate(CtxCatalogue):
+    def _create(self, *argv):
+        return self._cli("ctx", "create", *argv)
+
+    def test_create_orders_and_list_counts(self):
+        r = self._create("demo", "b/two", "b/one")
+        self.assertEqual((r.returncode, r.stdout), (0, "created _ctx/demo.md (2 entries)\n"))
+        c = okf.load_ctx(self.root, "demo")
+        self.assertEqual([(e["pos"], e["mode"], e["path"]) for e in c["entries"]],
+                         [(1, "pflicht", "b/one.md"), (2, "pflicht", "b/two.md")])
+        r = self._cli("ctx", "list")
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("demo", r.stdout)
+        self.assertIn("(2 entries, 2 required)", r.stdout)
+
+    def test_bare_ctx_and_flag_equal_list(self):
+        self._create("demo", "b/one", "--description", "Demo ctx")
+        want = self._cli("ctx", "list")
+        self.assertIn("Demo ctx", want.stdout)
+        for argv in (("ctx",), ("ctx", "--list")):
+            got = self._cli(*argv)
+            self.assertEqual((got.returncode, got.stdout), (want.returncode, want.stdout))
+
+    def test_list_empty_text_and_json(self):
+        r = self._cli("ctx", "list")
+        self.assertEqual((r.returncode, r.stdout),
+                         (0, "no ctx bundles under %s\n" % os.path.join(self.root, "_ctx")))
+        r = self._cli("ctx", "list", "--json")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "[]"))
+
+    def test_list_slug_order_alignment_and_json_keys(self):
+        self._create("zz", "b/one")
+        self._create("a", "b/one", "b/two")
+        lines = self._cli("ctx", "list").stdout.splitlines()
+        self.assertEqual([l.split()[0] for l in lines], ["a", "zz"])
+        self.assertEqual(lines[0].index("("), lines[1].index("("))  # w = longest slug... padded
+        import json
+        data = json.loads(self._cli("ctx", "list", "--json").stdout)
+        self.assertEqual(data[0], {"slug": "a", "description": "", "entries": 2,
+                                   "required": 2, "path": "_ctx/a.md"})
+
+    def test_list_for_filters_even_for_missing_file(self):
+        self._create("one", "b/one")
+        self._create("both", "b/one", "b/two")
+        r = self._cli("ctx", "list", "--for", "b/two.md", "--json")
+        self.assertEqual([d["slug"] for d in __import__("json").loads(r.stdout)], ["both"])
+        os.remove(os.path.join(self.root, "b", "two.md"))
+        r = self._cli("ctx", "list", "--for", "b/two.md", "--json")
+        self.assertEqual([d["slug"] for d in __import__("json").loads(r.stdout)], ["both"])
+        r = self._cli("ctx", "list", "--for", "b/nope.md")
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+        r = self._cli("ctx", "list", "--for", "b/nope.md", "--json")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "[]"))
+
+    def test_create_import_comments_skips_and_dedup(self):
+        imp = os.path.join(self.home, "in.txt")
+        with open(imp, "w", encoding="utf-8") as f:
+            f.write("# head\n\nb/two\tsecond one\nb/one.md\tdup\n  \nb/one\n")
+        r = subprocess.run(
+            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", self.root,
+             "ctx", "create", "imp", "b/one", "--import", "in.txt"],
+            capture_output=True, text=True, cwd=self.home, env={**os.environ, "HOME": self.home})
+        self.assertEqual((r.returncode, r.stdout), (0, "created _ctx/imp.md (2 entries)\n"))
+        es = okf.load_ctx(self.root, "imp")["entries"]
+        self.assertEqual([(e["path"], e["comment"]) for e in es],
+                         [("b/one.md", ""), ("b/two.md", "second one")])
+
+    def test_create_errors_write_nothing(self):
+        self._create("old", "b/one")
+        cases = [
+            (("Bad", "b/one"), 'ctx: invalid slug "Bad": use lowercase letters, digits and hyphens'),
+            (("show", "b/one"), 'ctx: invalid slug "show": "show" is a reserved name'),
+            (("old", "b/two"), "ctx: old already exists"),
+            (("new",), "ctx: create needs at least one path"),
+            (("new", "b/one", "--import", "nofile.txt"), "ctx: import file not found: nofile.txt"),
+        ]
+        for argv, msg in cases:
+            r = self._create(*argv)
+            self.assertEqual((r.returncode, r.stdout), (2, ""), argv)
+            self.assertEqual(r.stderr.strip(), msg, argv)
+        self.assertEqual(okf.ctx_slugs(self.root), ["old"])
+        self.assertEqual(len(okf.load_ctx(self.root, "old")["entries"]), 1)
+
+    def test_create_missing_paths_each_reported(self):
+        r = self._create("new", "b/one", "b/x", "b/y")
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.stderr.splitlines(), ["ctx: not found: b/x", "ctx: not found: b/y"])
+        self.assertEqual(okf.ctx_slugs(self.root), [])
+
+
 if __name__ == "__main__":
     unittest.main()
