@@ -5569,7 +5569,17 @@ def _complete_types(parsed_args, **_):
     if root is None:
         return []
     # Same source resolution as run_checks: .okf.toml types_source, else <root>/TYPES.md.
-    return sorted(load_types(root, load_okf_config(root).get("types_source")) or ())
+    src = load_okf_config(root).get("types_source") or os.path.join(root, "TYPES.md")
+    if not os.path.isfile(src):
+        return []
+    out = {}
+    for line in read_file(src).splitlines():
+        m = re.match(r"\|\s*`([^`]+)`\s*\|(.*)\|\s*$", line)
+        if m:
+            # Description = last table cell, first sentence (rank/mapping cells sit before it).
+            cells = [c.strip() for c in m.group(2).split("|") if c.strip()]
+            out[m.group(1)] = re.split(r"(?<=[.!?])\s", cells[-1], maxsplit=1)[0][:100] if cells else ""
+    return dict(sorted(out.items()))
 
 
 def _complete_tags(parsed_args, **_):

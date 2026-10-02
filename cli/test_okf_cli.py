@@ -5146,7 +5146,8 @@ class ShellCompletion(unittest.TestCase):
         return [v for v, _ in self._complete(words) if not v.startswith("-")]
 
     def test_type_values_come_from_the_root_on_the_line(self):
-        self.assertEqual(self._values("find q --type "), ["Concept", "Decision"])
+        self.assertEqual([c for c in self._complete("find q --type ") if not c[0].startswith("-")],
+                         [("Concept", "a"), ("Decision", "b")])
 
     def test_tag_values_most_used_first_with_counts(self):
         self.assertEqual(self._complete("find q --tag "),
