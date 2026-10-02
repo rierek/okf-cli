@@ -5873,8 +5873,110 @@ def cmd_ctx_read(root, args):
         sys.exit(1)
 
 
-CTX_DISPATCH = {"create": cmd_ctx_create, "list": cmd_ctx_list, "read": cmd_ctx_read,
-                "show": cmd_ctx_show}
+def _ctx_editable(root, slug):
+    """Load a ctx for a row edit: refuse when rows are unparsable (a save would drop them).
+    Returns (ctx, required entries in pos order, other entries)."""
+    c = load_ctx(root, slug)
+    if c["problems"]:
+        _ctx_die("{} has {} parse problem(s) — fix with okf ctx edit, see okf ctx check"
+                 .format(slug, len(c["problems"])))
+    es = c["entries"]
+    pf = sorted((e for e in es if e["mode"] == "pflicht"), key=lambda e: e["pos"])
+    return c, pf, [e for e in es if e["mode"] != "pflicht"]
+
+
+def _ctx_where(pf, e):
+    return "pos {}".format(pf.index(e) + 1) if e in pf else "reference"
+
+
+def _ctx_find(root, c, raw):
+    norm = ctx_normalize_path(root, raw, must_exist=False)
+    return norm, next((e for e in c["entries"] if e["path"] == norm), None)
+
+
+def _ctx_put(root, c, pf, rest, e, mode, pos):
+    """Place e (not in pf/rest) as mode/pos, save, return its `where`."""
+    e["mode"] = mode
+    if mode == "pflicht":
+        pf.insert((len(pf) if pos is None else max(1, min(pos, len(pf) + 1)) - 1), e)
+    else:
+        rest.append(e)
+    c["entries"] = pf + rest
+    save_ctx(root, c)
+    return _ctx_where(pf, e)
+
+
+def cmd_ctx_add(root, args):
+    c, pf, rest = _ctx_editable(root, args.slug)
+    if args.pos is not None and args.mode != "pflicht":
+        _ctx_die("--pos applies only to mode pflicht")
+    norm = ctx_normalize_path(root, args.path)
+    if norm is None:
+        _ctx_die("not found: {}".format(args.path))
+    old = next((e for e in c["entries"] if e["path"] == norm), None)
+    if old:
+        _ctx_die("{} is already in {} ({})".format(norm, args.slug, _ctx_where(pf, old)))
+    where = _ctx_put(root, c, pf, rest, {"pos": None, "path": norm, "comment": args.comment},
+                     args.mode, args.pos)
+    print("added {} to {} ({})".format(norm, args.slug, where))
+
+
+def cmd_ctx_drop(root, args):
+    c, pf, rest = _ctx_editable(root, args.slug)
+    norm, e = _ctx_find(root, c, args.path)
+    if e is None:
+        _ctx_die("{} is not in {}".format(norm, args.slug))
+    c["entries"] = [x for x in pf + rest if x is not e]
+    save_ctx(root, c)
+    print("dropped {} from {}".format(norm, args.slug))
+
+
+def cmd_ctx_move(root, args):
+    c, pf, rest = _ctx_editable(root, args.slug)
+    if args.pos is None and args.mode is None:
+        _ctx_die("move needs --pos or --mode")
+    norm, e = _ctx_find(root, c, args.path)
+    if e is None:
+        _ctx_die("{} is not in {}".format(norm, args.slug))
+    mode = args.mode or e["mode"]
+    if args.pos is not None and mode != "pflicht":
+        _ctx_die("--pos applies only to mode pflicht")
+    pf = [x for x in pf if x is not e]
+    rest = [x for x in rest if x is not e]
+    where = _ctx_put(root, c, pf, rest, e, mode, args.pos)
+    print("moved {} in {} to {}".format(norm, args.slug, where))
+
+
+def cmd_ctx_rename(root, args):
+    c = load_ctx(root, args.old)
+    problem = ctx_slug_problem(args.new)
+    if problem:
+        _ctx_die('invalid slug "{}": {}'.format(args.new, problem))
+    if os.path.exists(ctx_file(root, args.new)):
+        _ctx_die("{} already exists".format(args.new))
+    perform_rename(root, ctx_file(root, args.old), ctx_file(root, args.new), True, False)
+    if not c["problems"]:
+        save_ctx(root, load_ctx(root, args.new))  # refreshes the H1 (D-pzho-16)
+
+
+def cmd_ctx_remove(root, args):
+    c = load_ctx(root, args.slug)
+    f = ctx_file(root, args.slug)
+    # one build_ref_matrix row per link: dedup by source file, first-seen order
+    srcs = list(dict.fromkeys(s for s, _ in build_ref_matrix(root, f)
+                              if s.replace(os.sep, "/") != CTX_DIR + "/index.md"))
+    os.remove(f)
+    reindex_tree(root, ctx_dir(root))
+    print("removed {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(c["entries"])))
+    if srcs:
+        print("warning: {} file(s) still link to {}/{}.md:".format(len(srcs), CTX_DIR, args.slug))
+        for s in srcs:
+            print("  " + s)
+
+
+CTX_DISPATCH = {"add": cmd_ctx_add, "create": cmd_ctx_create, "drop": cmd_ctx_drop,
+                "list": cmd_ctx_list, "move": cmd_ctx_move, "read": cmd_ctx_read,
+                "remove": cmd_ctx_remove, "rename": cmd_ctx_rename, "show": cmd_ctx_show}
 
 
 def cmd_ctx(root, args):
@@ -6194,6 +6296,14 @@ def build_parser():
                "(`ctx` lists them, `ctx <slug>` shows one)")
     ctx_verbs = pcx.add_subparsers(dest="ctx_verb", required=True, metavar="VERB",
                                    help="ctx verb; `ctx <slug>` is short for `ctx show <slug>`")
+    pcxa = ctx_verbs.add_parser(
+        "add", help="add one entry to a ctx bundle",
+        description="add PATH as required entry (default: last position) or as reference entry")
+    pcxa.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxa.add_argument("path", metavar="PATH", help="concept or file path").completer = _complete_concepts
+    pcxa.add_argument("--pos", type=int, help="required position (clamped to 1..n+1)")
+    pcxa.add_argument("--mode", choices=CTX_MODES, default="pflicht", help="entry mode")
+    pcxa.add_argument("--comment", default="", help="entry comment")
     pcxc = ctx_verbs.add_parser(
         "create", help="create a ctx bundle from paths and/or an import file",
         description="create _ctx/<slug>.md; every path becomes a required entry, "
@@ -6207,6 +6317,12 @@ def build_parser():
                       help="read one path per line (blank and # lines skipped, "
                            "text after a TAB is the entry comment)").completer = _complete_files
     pcxc.add_argument("--description", help="one-line description of the bundle")
+    pcxd = ctx_verbs.add_parser(
+        "drop", help="remove one entry from a ctx bundle",
+        description="remove an entry (also when its file is gone); required positions are "
+                    "renumbered 1..n")
+    pcxd.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxd.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
     pcxl = ctx_verbs.add_parser(
         "list", help="list ctx bundles with entry and required counts",
         description="list ctx bundles: slug, description, entry and required counts")
@@ -6214,12 +6330,30 @@ def build_parser():
                       help="only bundles whose entries contain PATH (also when the file is gone)"
                       ).completer = _complete_files
     pcxl.add_argument("--json", action="store_true", help="machine-readable output")
+    pcxm = ctx_verbs.add_parser(
+        "move", help="reorder an entry or change its mode",
+        description="move an entry to required position N (--pos) and/or change its mode; "
+                    "required positions are renumbered 1..n")
+    pcxm.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxm.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
+    pcxm.add_argument("--pos", type=int, help="required position (clamped to 1..n)")
+    pcxm.add_argument("--mode", choices=CTX_MODES, help="new mode")
     pcxr = ctx_verbs.add_parser(
         "read", help="print the full content of every required entry",
         description="print every required entry of a ctx in position order, each after a "
                     "`===== i/p <abspath> =====` separator; reference entries are not printed; "
                     "exit 1 when a required entry is dead")
     pcxr.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxrm = ctx_verbs.add_parser(
+        "remove", help="delete a ctx bundle and list files that still link to it",
+        description="delete _ctx/<slug>.md, refresh the _ctx index and list every file "
+                    "that still links to the removed ctx")
+    pcxrm.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxrn = ctx_verbs.add_parser(
+        "rename", help="rename a ctx bundle and rewrite inbound links",
+        description="move _ctx/<old>.md to _ctx/<new>.md; inbound links and the _ctx index follow")
+    pcxrn.add_argument("old", help="current ctx slug").completer = _complete_ctx_slugs
+    pcxrn.add_argument("new", help="new ctx slug: lowercase letters, digits, hyphens")
     pcxs = ctx_verbs.add_parser(
         "show", help="list a ctx in reading order with live metadata and token estimates",
         description="list the required entries in reading order, then the reference entries; "

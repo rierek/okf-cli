@@ -657,5 +657,226 @@ class CtxShowRead(CtxCatalogue):
                          ("", "a.txt", "", 30, 8))
 
 
+class CtxMaintain(CtxCatalogue):
+    """add / drop / move / rename / remove (OKFT-jetz)."""
+
+    def setUp(self):
+        super().setUp()
+        okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+            E(1, "pflicht", "b/one.md", "c-one"), E(2, "pflicht", "b/two.md", "c|two"),
+            E(None, "nachschlag", "ext/three.md", "c-three")]})
+
+    def _rows(self, slug="demo"):
+        return [(e["pos"], e["mode"], e["path"], e["comment"])
+                for e in okf.load_ctx(self.root, slug)["entries"]]
+
+    def _bytes(self, slug="demo"):
+        with open(okf.ctx_file(self.root, slug), "rb") as f:
+            return f.read()
+
+    def _broken(self):
+        """demo with one valid row and one 3-cell row (AC-11)."""
+        ap = okf.ctx_file(self.root, "demo")
+        with open(ap, "a", encoding="utf-8") as f:
+            f.write("| 3 | pflicht | [x](/b/x.md) |\n")
+        return self._bytes()
+
+    # --- add
+    def test_add_appends_as_last_required(self):
+        self._w("b/four.md", "# Four\n")
+        r = self._cli("ctx", "add", "demo", "b/four.md")
+        self.assertEqual((r.returncode, r.stdout), (0, "added b/four.md to demo (pos 3)\n"), r.stderr)
+        self.assertEqual(self._rows(), [
+            (1, "pflicht", "b/one.md", "c-one"), (2, "pflicht", "b/two.md", "c|two"),
+            (3, "pflicht", "b/four.md", ""), (None, "nachschlag", "ext/three.md", "c-three")])
+
+    def test_add_pos_inserts_and_renumbers(self):
+        self._w("b/four.md", "# Four\n")
+        r = self._cli("ctx", "add", "demo", "b/four.md", "--pos", "1", "--comment", "new")
+        self.assertEqual((r.returncode, r.stdout), (0, "added b/four.md to demo (pos 1)\n"), r.stderr)
+        self.assertEqual([x[:3] for x in self._rows()][:3], [
+            (1, "pflicht", "b/four.md"), (2, "pflicht", "b/one.md"), (3, "pflicht", "b/two.md")])
+        self.assertEqual(self._rows()[0][3], "new")
+
+    def test_add_pos_is_clamped(self):
+        self._w("b/four.md", "# Four\n")
+        r = self._cli("ctx", "add", "demo", "b/four.md", "--pos", "99")
+        self.assertEqual(r.stdout, "added b/four.md to demo (pos 3)\n")
+        self._w("b/five.md", "# Five\n")
+        r = self._cli("ctx", "add", "demo", "b/five.md", "--pos", "0")
+        self.assertEqual(r.stdout, "added b/five.md to demo (pos 1)\n")
+
+    def test_add_nachschlag_appends_reference(self):
+        self._w("b/four.md", "# Four\n")
+        r = self._cli("ctx", "add", "demo", "b/four.md", "--mode", "nachschlag")
+        self.assertEqual((r.returncode, r.stdout), (0, "added b/four.md to demo (reference)\n"), r.stderr)
+        self.assertEqual(self._rows()[-1], (None, "nachschlag", "b/four.md", ""))
+        self.assertEqual(self._rows()[1][0], 2)
+
+    def test_add_pos_with_nachschlag_refused(self):
+        before = self._bytes()
+        r = self._cli("ctx", "add", "demo", "b/one.md", "--mode", "nachschlag", "--pos", "1")
+        self.assertEqual((r.returncode, r.stderr), (2, "ctx: --pos applies only to mode pflicht\n"))
+        self.assertEqual(self._bytes(), before)
+
+    def test_add_duplicate_refused_unchanged(self):
+        before = self._bytes()
+        r = self._cli("ctx", "add", "demo", "b/two.md")
+        self.assertEqual((r.returncode, r.stderr), (2, "ctx: b/two.md is already in demo (pos 2)\n"))
+        r = self._cli("ctx", "add", "demo", "ext/three.md")
+        self.assertEqual(r.stderr, "ctx: ext/three.md is already in demo (reference)\n")
+        self.assertEqual(self._bytes(), before)
+
+    def test_add_missing_file_refused(self):
+        before = self._bytes()
+        r = self._cli("ctx", "add", "demo", "b/nope.md")
+        self.assertEqual((r.returncode, r.stderr), (2, "ctx: not found: b/nope.md\n"))
+        self.assertEqual(self._bytes(), before)
+
+    # --- drop
+    def test_drop_renumbers(self):
+        r = self._cli("ctx", "drop", "demo", "b/one.md")
+        self.assertEqual((r.returncode, r.stdout), (0, "dropped b/one.md from demo\n"), r.stderr)
+        self.assertEqual(self._rows(), [
+            (1, "pflicht", "b/two.md", "c|two"), (None, "nachschlag", "ext/three.md", "c-three")])
+
+    def test_drop_works_when_file_is_gone(self):
+        os.remove(os.path.join(self.root, "b", "one.md"))
+        r = self._cli("ctx", "drop", "demo", "b/one.md")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual([x[2] for x in self._rows()], ["b/two.md", "ext/three.md"])
+        self.assertEqual(self._rows()[0][0], 1)
+
+    def test_drop_absent_refused(self):
+        before = self._bytes()
+        r = self._cli("ctx", "drop", "demo", "b/gone.md")
+        self.assertEqual((r.returncode, r.stderr), (2, "ctx: b/gone.md is not in demo\n"))
+        self.assertEqual(self._bytes(), before)
+
+    # --- move
+    def test_move_pos_reorders(self):
+        r = self._cli("ctx", "move", "demo", "b/two.md", "--pos", "1")
+        self.assertEqual((r.returncode, r.stdout), (0, "moved b/two.md in demo to pos 1\n"), r.stderr)
+        self.assertEqual(self._rows()[:2], [(1, "pflicht", "b/two.md", "c|two"),
+                                            (2, "pflicht", "b/one.md", "c-one")])
+
+    def test_move_pos_is_clamped(self):
+        r = self._cli("ctx", "move", "demo", "b/one.md", "--pos", "99")
+        self.assertEqual(r.stdout, "moved b/one.md in demo to pos 2\n")
+        self.assertEqual([x[2] for x in self._rows()][:2], ["b/two.md", "b/one.md"])
+
+    def test_move_to_nachschlag_goes_behind_required(self):
+        r = self._cli("ctx", "move", "demo", "b/one.md", "--mode", "nachschlag")
+        self.assertEqual((r.returncode, r.stdout), (0, "moved b/one.md in demo to reference\n"), r.stderr)
+        self.assertEqual(self._rows(), [
+            (1, "pflicht", "b/two.md", "c|two"),
+            (None, "nachschlag", "ext/three.md", "c-three"),
+            (None, "nachschlag", "b/one.md", "c-one")])
+
+    def test_move_to_pflicht_without_pos_is_last_required(self):
+        r = self._cli("ctx", "move", "demo", "ext/three.md", "--mode", "pflicht")
+        self.assertEqual((r.returncode, r.stdout), (0, "moved ext/three.md in demo to pos 3\n"), r.stderr)
+        self.assertEqual(self._rows()[2], (3, "pflicht", "ext/three.md", "c-three"))
+
+    def test_move_to_pflicht_with_pos(self):
+        r = self._cli("ctx", "move", "demo", "ext/three.md", "--mode", "pflicht", "--pos", "1")
+        self.assertEqual(r.stdout, "moved ext/three.md in demo to pos 1\n")
+        self.assertEqual([x[:3] for x in self._rows()], [
+            (1, "pflicht", "ext/three.md"), (2, "pflicht", "b/one.md"), (3, "pflicht", "b/two.md")])
+
+    def test_move_refusals_leave_file_unchanged(self):
+        before = self._bytes()
+        for argv, msg in (
+                (["b/one.md"], "ctx: move needs --pos or --mode\n"),
+                (["b/gone.md", "--pos", "1"], "ctx: b/gone.md is not in demo\n"),
+                (["b/one.md", "--pos", "1", "--mode", "nachschlag"],
+                 "ctx: --pos applies only to mode pflicht\n"),
+                (["ext/three.md", "--pos", "1"], "ctx: --pos applies only to mode pflicht\n")):
+            r = self._cli("ctx", "move", "demo", *argv)
+            self.assertEqual((r.returncode, r.stderr), (2, msg), argv)
+            self.assertEqual(self._bytes(), before, argv)
+
+    def test_sequences_keep_positions_gapless(self):
+        for p in ("b/four.md", "b/five.md"):
+            self._w(p, "# X\n")
+        for argv in (["add", "demo", "b/four.md", "--pos", "2"],
+                     ["move", "demo", "b/one.md", "--pos", "3"],
+                     ["drop", "demo", "b/two.md"],
+                     ["add", "demo", "b/five.md"],
+                     ["move", "demo", "b/four.md", "--mode", "nachschlag"],
+                     ["move", "demo", "ext/three.md", "--mode", "pflicht", "--pos", "1"]):
+            self.assertEqual(self._cli("ctx", *argv).returncode, 0, argv)
+            req = [r[0] for r in self._rows() if r[1] == "pflicht"]
+            self.assertEqual(req, list(range(1, len(req) + 1)), argv)
+
+    # --- AC-11
+    def test_parse_problems_block_add_drop_move(self):
+        before = self._broken()
+        for argv in (["add", "demo", "b/one.md", "--mode", "nachschlag"],
+                     ["add", "demo", "ext/three.md"],
+                     ["drop", "demo", "b/one.md"],
+                     ["move", "demo", "b/one.md", "--pos", "2"]):
+            r = self._cli("ctx", *argv)
+            self.assertEqual((r.returncode, r.stderr),
+                             (2, "ctx: demo has 1 parse problem(s) — fix with okf ctx edit, "
+                                 "see okf ctx check\n"), argv)
+            self.assertEqual(self._bytes(), before, argv)
+
+    # --- rename
+    def test_rename_moves_rewrites_links_refreshes_h1(self):
+        self._w("b/ref.md", "---\ntype: Concept\ntitle: R\n---\n\nSee [d](/_ctx/demo.md).\n")
+        r = self._cli("ctx", "rename", "demo", "demo2")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(os.path.exists(okf.ctx_file(self.root, "demo")))
+        with open(os.path.join(self.root, "b", "ref.md"), encoding="utf-8") as f:
+            self.assertIn("(/_ctx/demo2.md)", f.read())
+        _, body = okf.split_frontmatter(self._bytes("demo2").decode())
+        self.assertTrue(body.lstrip().startswith("# demo2\n"), body)
+        self.assertEqual(self._rows("demo2")[1], (2, "pflicht", "b/two.md", "c|two"))
+        with open(os.path.join(self.root, "_ctx", "index.md"), encoding="utf-8") as f:
+            self.assertIn("demo2", f.read())
+
+    def test_rename_refusals_move_nothing(self):
+        okf.save_ctx(self.root, {"slug": "other", "description": "", "entries": []})
+        before = self._bytes()
+        for argv, msg in (
+                (["demo", "Bad_Slug"], 'ctx: invalid slug "Bad_Slug": use lowercase letters, digits and hyphens\n'),
+                (["demo", "list"], 'ctx: invalid slug "list": "list" is a reserved name\n'),
+                (["demo", "other"], "ctx: other already exists\n"),
+                (["nope", "fresh"], "ctx: unknown slug: nope\n")):
+            r = self._cli("ctx", "rename", *argv)
+            self.assertEqual((r.returncode, r.stderr), (2, msg), argv)
+            self.assertEqual(self._bytes(), before, argv)
+        self.assertEqual(okf.ctx_slugs(self.root), ["demo", "other"])
+
+    def test_rename_with_parse_problems_moves_but_keeps_content(self):
+        before = self._broken()
+        r = self._cli("ctx", "rename", "demo", "demo2")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self._bytes("demo2"), before)
+
+    # --- remove
+    def test_remove_deletes_and_lists_remaining_links(self):
+        self._w("b/ref.md", "[a](/_ctx/demo.md) and [b](/_ctx/demo.md#x)\n")
+        self._w("b/ref2.md", "[a](/_ctx/demo.md)\n")
+        r = self._cli("ctx", "remove", "demo")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.splitlines()[0], "removed _ctx/demo.md (3 entries)")
+        self.assertEqual(r.stdout.splitlines()[1:],
+                         ["warning: 2 file(s) still link to _ctx/demo.md:",
+                          "  b/ref.md", "  b/ref2.md"])
+        self.assertFalse(os.path.exists(okf.ctx_file(self.root, "demo")))
+        with open(os.path.join(self.root, "_ctx", "index.md"), encoding="utf-8") as f:
+            self.assertNotIn("demo", f.read())
+
+    def test_remove_without_inbound_links_is_silent_after_first_line(self):
+        r = self._cli("ctx", "remove", "demo")
+        self.assertEqual((r.returncode, r.stdout), (0, "removed _ctx/demo.md (3 entries)\n"), r.stderr)
+
+    def test_remove_unknown_slug_refused(self):
+        r = self._cli("ctx", "remove", "nope")
+        self.assertEqual((r.returncode, r.stderr), (2, "ctx: unknown slug: nope\n"))
+
+
 if __name__ == "__main__":
     unittest.main()
