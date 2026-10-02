@@ -905,6 +905,11 @@ class CtxNavigate(CtxCatalogue):
         r = self._cli("ctx", "toc", "demo", "--depth", "1")
         self.assertEqual(r.stdout, "# b/two.md\n## Two\n\n# b/four.md\n(no headings)\n")
 
+    def test_toc_non_md_member_has_no_headings(self):
+        self._w("b/a.txt", "# Not a heading\n")
+        self._set("b/a.txt")
+        self.assertEqual(self._cli("ctx", "toc", "demo").stdout, "# b/a.txt\n(no headings)\n")
+
     def test_inbound_external_only(self):
         r = self._cli("ctx", "inbound", "demo")
         self.assertEqual((r.returncode, r.stderr), (0, ""))
