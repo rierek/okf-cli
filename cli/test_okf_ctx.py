@@ -275,5 +275,33 @@ class CtxEntryAbspathMemberships(CtxCatalogue):
             self.assertEqual(okf.ctx_memberships(self.root, "b/gone.md"), [])
 
 
+class CtxSaveEffects(CtxCatalogue):
+    def _save_full(self):
+        okf.save_ctx(self.root, {"slug": "s", "description": "d", "entries": [
+            E(1, "pflicht", "b/one.md", "c1"), E(2, "pflicht", "ext/three.md", "c2"),
+            E(None, "nachschlag", "~/notes/out.md", "c3")]})
+
+    def test_saved_file_has_link_and_code_span_forms(self):
+        self._save_full()
+        text = okf.read_file(okf.ctx_file(self.root, "s"))
+        self.assertIn("| 1 | pflicht | [one](/b/one.md) | c1 |", text)
+        self.assertIn("| 2 | pflicht | [three](/ext/three.md) | c2 |", text)
+        self.assertIn("| - | nachschlag | `~/notes/out.md` | c3 |", text)
+
+    def test_check_reports_nothing_for_ctx(self):
+        self._save_full()
+        errors, warnings = okf.run_checks(self.root, None)
+        names = ("entry-file-description", "asset-placement", "type-registered")
+        bad = [x for x in errors + warnings if x[0] in names and "_ctx" in repr(x)]
+        self.assertEqual(bad, [])
+
+    def test_save_leaves_members_byte_identical(self):
+        paths = [os.path.join(self.root, "b", "one.md"), os.path.join(self.ext, "three.md"),
+                 os.path.join(self.home, "notes", "out.md")]
+        before = [okf.read_file(p) for p in paths]
+        self._save_full()
+        self.assertEqual([okf.read_file(p) for p in paths], before)
+
+
 if __name__ == "__main__":
     unittest.main()
