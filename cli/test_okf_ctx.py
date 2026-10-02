@@ -999,6 +999,30 @@ class CtxNavigate(CtxCatalogue):
             self.assertIn("b/two.md\n", r.stdout)
             self.assertNotIn("b/one.md\n", r.stdout)
 
+    def test_toc_skips_frontmatter(self):
+        self._w("b/fm.md", "---\ntype: Concept\n# yaml comment\n---\n# Real\n")
+        self._set("b/fm.md")
+        self.assertEqual(self._cli("ctx", "toc", "demo").stdout, "# b/fm.md\n## Real\n")
+
+    def test_file_matches_each_alternative(self):
+        self._w("b/five.md", "---\ntype: Concept\ntitle: Fancy Name\n---\n# F\n")
+        self._set("b/two.md", "b/five.md")
+        for sel in ("fancy NAME", "B/Five.md", "FIVE"):  # live title / stored path / stem
+            r = self._cli("ctx", "outbound", "demo", "--file", sel)
+            self.assertEqual((r.returncode, r.stdout), (0, "outbound \u2014 ctx demo, 1 member(s), "
+                             "external targets only:\nb/five.md\n  (none)\n"), sel)
+
+    def test_outbound_case_insensitive_member(self):
+        self._w("b/three.md", "[u](TWO.md)\n")
+        if not os.path.exists(os.path.join(self.root, "b/TWO.md")):
+            self.skipTest("case-sensitive filesystem")
+        self._set("b/three.md", "b/two.md")
+        r = self._cli("ctx", "outbound", "demo")
+        self.assertEqual(r.stdout, "outbound \u2014 ctx demo, 2 member(s), external targets only:\n"
+                                   "b/three.md\n  (none)\nb/two.md\n  (none)\n")
+        r = self._cli("ctx", "outbound", "demo", "--include-internal")
+        self.assertIn("b/three.md\n  -> b/TWO.md  (TWO.md)\n", r.stdout)
+
     def test_file_no_match_and_ambiguous(self):
         self._set("b/one.md", "b/two.md")
         r = self._cli("ctx", "inbound", "demo", "--file", "zzz")
