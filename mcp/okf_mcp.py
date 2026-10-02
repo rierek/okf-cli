@@ -34,10 +34,12 @@ _COMMANDS = {
     "sync-insert": (["consumer", "concept", "block_id"], False),
     "sync-status": (["target"], True),
     "sync-update": (["target"], False),
+    "ctx":   (["verb", "slug"], True),
 }
 # optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
-          "scope": "--scope", "source": "--source", "block": "--block"}
+          "scope": "--scope", "source": "--source", "block": "--block",
+          "for_path": "--for"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
                "compact": "--compact", "include_archive": "--include-archive",
@@ -103,7 +105,7 @@ MAX_OUTPUT_CHARS = int(os.environ.get("OKF_MCP_MAX_CHARS", "120000"))
 # report/gate verbs, and the report is on stdout. `sync-status` exits 1 on any
 # drift, `sync-update` on a refused or unresolvable block — raising there would
 # hide the very list the caller asked for.
-EXIT_CODE_IS_DATA = {"check", "sync-status", "sync-update"}
+EXIT_CODE_IS_DATA = {"check", "sync-status", "sync-update", "ctx"}
 
 
 def run_okf(root, command, params):
@@ -120,7 +122,8 @@ def run_okf(root, command, params):
     and mixing stderr in would break every consumer of those tools."""
     argv = build_argv(root, command, params)
     proc = subprocess.run(["python3", OKF_CLI] + argv, capture_output=True, text=True)
-    if proc.returncode != 0 and command not in EXIT_CODE_IS_DATA:
+    if proc.returncode != 0 and (command not in EXIT_CODE_IS_DATA
+                                 or (command == "ctx" and not proc.stdout.strip())):
         raise RuntimeError("okf-cli {} failed: {}".format(command, proc.stderr.strip()))
     out = proc.stdout
     if len(out) > MAX_OUTPUT_CHARS:
@@ -219,6 +222,18 @@ def _register(server):
         reindexes affected bundles. Defaults to a dry-run preview; pass apply=True
         to perform the move (git mv, staged). Reference-integrity step b."""
         return run_okf(root, "rename", {"old": old, "new": new, "apply": apply, "force": force})
+
+    @server.tool()
+    def okf_ctx_list(root: str = "", *, for_path: str = "") -> list:
+        """Curated ctx bundles (_ctx/<slug>.md): slug, description, entry counts.
+        for_path limits the result to bundles that list that file."""
+        return run_okf(root, "ctx", {"verb": "list", "for_path": for_path})
+
+    @server.tool()
+    def okf_ctx_show(root: str = "", *, slug: str) -> dict:
+        """One ctx bundle in reading order: entries with live title, type,
+        description, comment, alive flag and token estimate."""
+        return run_okf(root, "ctx", {"verb": "show", "slug": slug})
 
     @server.tool()
     def okf_wikilinks(root: str = "", target: str = "", unresolved: bool = False) -> dict:
