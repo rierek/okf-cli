@@ -531,7 +531,10 @@ def auto_embed_new_tags(root, tags):
 
 def cmd_tags(root, args):
     if getattr(args, "register", None):
-        added, already = register_tags(root, args.register)
+        try:
+            added, already = register_tags(root, args.register)
+        except ValueError as e:
+            sys.exit("ERROR: {}".format(e))
         if added:
             print("registered {} new tag(s) in TAGS.md: {}".format(len(added), ", ".join(added)))
             auto_embed_new_tags(root, added)
@@ -547,8 +550,8 @@ def cmd_tags(root, args):
         for t in unknown:
             print("UNKNOWN  {}".format(t))
         print("OK — all {} known".format(len(args.validate)) if not unknown
-              else "{} UNKNOWN — register with: okf-cli.py tags --register {}".format(
-                  len(unknown), " ".join(unknown)))
+              else "{} UNKNOWN — register with: okf-cli.py tags --register <tag> \"<description, max {} chars>\"".format(
+                  len(unknown), TAG_DESC_MAX))
         sys.exit(1 if unknown else 0)
     counts = all_tags(root)
     if not args.query:
@@ -3184,7 +3187,7 @@ TAGS_HEADER = (
     "# TAGS.md — Registered Tag Vocabulary\n\n"
     "Closed vocabulary for concept `tags:`. The `tag-registered` conformance check\n"
     "(warning; `check --strict` escalates to error) flags any tag not listed here.\n"
-    "Add a new tag only via `okf-cli.py tags --register <tag>` — reuse an existing\n"
+    "Add a new tag only via `okf-cli.py tags --register <tag> <description>` — reuse an existing\n"
     "tag over minting a near-duplicate. A tag earns its place by aggregating content.\n\n"
     "| Tag | Description |\n|-----|-------------|\n"
 )
@@ -3207,16 +3210,33 @@ def write_tags_registry(root, rows):
         f.write(TAGS_HEADER + body)
 
 
-def register_tags(root, new_tags):
-    """Add tags to TAGS.md (creating it if absent). Returns (added, already)."""
+TAG_DESC_MAX = 150
+
+
+def register_tags(root, entries):
+    """Add [(tag, description)] to TAGS.md (creating it if absent). Returns
+    (added, already). Every description is validated before anything is
+    written: non-empty, at most TAG_DESC_MAX chars, one line, no `|` (it would
+    split the table cell). A tag already registered keeps its description."""
+    for tag, desc in entries:
+        desc = desc.strip()
+        if not desc:
+            raise ValueError("tag {!r}: description must not be empty".format(tag))
+        if len(desc) > TAG_DESC_MAX:
+            raise ValueError("tag {!r}: description is {} chars, limit is {}".format(
+                tag, len(desc), TAG_DESC_MAX))
+        if "|" in desc or "\n" in desc or "\r" in desc:
+            raise ValueError("tag {!r}: description must be one line without '|'".format(tag))
     rows = _read_tag_rows(root)
-    added = [t for t in dict.fromkeys(new_tags) if t not in rows]
-    already = [t for t in dict.fromkeys(new_tags) if t in rows]
-    for t in added:
-        rows[t] = ""
-    if added:
+    new = {}
+    for tag, desc in entries:
+        if tag not in rows:
+            new.setdefault(tag, desc.strip())
+    already = [t for t in dict.fromkeys(t for t, _ in entries) if t in rows]
+    rows.update(new)
+    if new:
         write_tags_registry(root, rows)
-    return added, already
+    return list(new), already
 
 
 def _strip_toml_comment(line):
@@ -5884,8 +5904,9 @@ def build_parser():
     pg.add_argument("--limit", type=int, default=8, help="max matches per candidate (default 8)")
     pg.add_argument("--singletons", action="store_true",
                     help="full-dump mode only: show tags used exactly once")
-    pg.add_argument("--register", nargs="+", metavar="TAG",
-                    help="add tag(s) to the TAGS.md registry (closed-vocabulary allow-list)")
+    pg.add_argument("--register", nargs=2, action="append", metavar=("TAG", "DESCRIPTION"),
+                    help="add a tag to the TAGS.md registry (closed-vocabulary allow-list); "
+                         "DESCRIPTION is required, max 150 chars; repeat the option for several tags")
     pg.add_argument("--validate", nargs="+", metavar="TAG",
                     help="check tag(s) against TAGS.md; exit 1 if any are unregistered").completer = _complete_tags
     pt = _sub(sub, "toc", "navigation",

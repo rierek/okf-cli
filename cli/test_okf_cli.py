@@ -1440,23 +1440,40 @@ class TagRegistryGate(unittest.TestCase):
         self.assertNotIn("tag-registered", self._names(warnings))
 
     def test_register_creates_and_appends(self):
-        added, already = okf.register_tags(self.tmp, ["zebra", "alpha"])
+        added, already = okf.register_tags(self.tmp, [("zebra", "z"), ("alpha", "a")])
         self.assertEqual(set(added), {"zebra", "alpha"})
         self.assertEqual(already, [])
         self.assertEqual(okf.load_tags(self.tmp), {"zebra", "alpha"})
         # idempotent + casefold-sorted output (alpha before zebra)
-        added2, already2 = okf.register_tags(self.tmp, ["alpha", "mid"])
+        added2, already2 = okf.register_tags(self.tmp, [("alpha", "other"), ("mid", "m")])
         self.assertEqual(added2, ["mid"])
         self.assertEqual(already2, ["alpha"])
         body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
         self.assertLess(body.index("`alpha`"), body.index("`mid`"))
         self.assertLess(body.index("`mid`"), body.index("`zebra`"))
+        self.assertIn("| `alpha` | a |", body)  # existing description is kept, not overwritten
 
     def test_register_preserves_descriptions(self):
         self._w("TAGS.md", okf.TAGS_HEADER + "| `a` | keep me |\n")
-        okf.register_tags(self.tmp, ["b"])
+        okf.register_tags(self.tmp, [("b", "bee")])
         body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
         self.assertIn("| `a` | keep me |", body)
+        self.assertIn("| `b` | bee |", body)
+
+    def test_description_limit_is_150_and_nothing_is_written_on_refusal(self):
+        okf.register_tags(self.tmp, [("ok", "x" * 150)])
+        for bad in ("x" * 151, "", "   ", "a|b", "a\nb"):
+            with self.assertRaises(ValueError):
+                okf.register_tags(self.tmp, [("fine", "good"), ("bad", bad)])
+        self.assertEqual(okf.load_tags(self.tmp), {"ok"})
+
+    def test_register_option_needs_tag_and_description(self):
+        ap = okf.build_parser()
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                ap.parse_args(["tags", "--register", "only-a-tag"])
+        ns = ap.parse_args(["tags", "--register", "a", "da", "--register", "b", "db"])
+        self.assertEqual(ns.register, [["a", "da"], ["b", "db"]])
 
 
 class AutoEmbedOnRegister(unittest.TestCase):
@@ -1480,7 +1497,7 @@ class AutoEmbedOnRegister(unittest.TestCase):
     def test_register_command_auto_embeds_without_manual_produce(self):
         import types
         self.bt.embed_bge_m3 = lambda texts: [[0.1, 0.2, 0.3] for _ in texts]
-        args = types.SimpleNamespace(register=["freshly-minted"])
+        args = types.SimpleNamespace(register=[["freshly-minted", "a fresh tag"]])
         okf.cmd_tags(self.tmp, args)
         db_path = os.path.join(self.tmp, ".tagvec", "tag_vectors.sqlite")
         delta_after = self.bt.plan_delta({"freshly-minted"}, "bge-m3", db_path)
@@ -1491,7 +1508,7 @@ class AutoEmbedOnRegister(unittest.TestCase):
         def _boom(texts):
             raise RuntimeError("connection refused")
         self.bt.embed_bge_m3 = _boom
-        args = types.SimpleNamespace(register=["still-registered"])
+        args = types.SimpleNamespace(register=[["still-registered", "stays registered"]])
         okf.cmd_tags(self.tmp, args)  # must not raise
         self.assertEqual(okf.load_tags(self.tmp), {"still-registered"})
 
