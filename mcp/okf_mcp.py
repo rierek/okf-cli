@@ -208,7 +208,7 @@ def _register(server):
 
     @server.tool()
     def okf_refs(root: str = "", *, path: str, scan_root: str = "") -> dict:
-        """Inbound markdown references to a file (reference-integrity step a)."""
+        """Inbound and outbound markdown references of a file (reference-integrity step a)."""
         return run_okf(root, "refs", {"path": path, "scan_root": scan_root})
 
     @server.tool()

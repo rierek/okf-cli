@@ -2252,44 +2252,78 @@ def _find_reserved_name(filenames, name="index.md"):
     return None
 
 
+def resolve_md_link(scan_root, src_abs, raw):
+    """Absolute path a markdown link `raw` written in `src_abs` points at, or
+    None for an empty target, a `<scheme>://` URL or mailto:. Leading / = scan_root
+    (OKF catalogue-root convention, = Obsidian vault root), NOT the bundle."""
+    tgt = raw.split("#", 1)[0].split("?", 1)[0].strip()
+    if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
+        return None
+    if tgt.startswith("/"):
+        return os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
+    return os.path.abspath(os.path.join(os.path.dirname(src_abs), tgt))
+
+
+_MD_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+
+
+def _file_md_links(scan_root, ap):
+    """(raw, resolved_abs) per markdown link of one file, over the masked text."""
+    text = read_file(ap)
+    for m in _MD_LINK_RE.finditer(wikilink_scan_text(text)):
+        raw = text[m.start(1):m.end(1)]
+        resolved = resolve_md_link(scan_root, ap, raw)
+        if resolved is not None:
+            yield raw, resolved
+
+
+def iter_md_links(scan_root):
+    """Yield (source_rel, raw, resolved_abs) for every markdown link in every file
+    of iter_rename_scan_md(scan_root). Same traversal and same dead-zone mask as
+    the wikilink half of a rename, so the two halves of one move cannot disagree
+    about which files and which occurrences they cover. A root-level walk alone
+    cannot enter a symlinked bundle, which left a mounted file with its wikilink
+    rewritten and its markdown link dangling in the same line."""
+    for ap in iter_rename_scan_md(scan_root):
+        rel = os.path.relpath(ap, scan_root).replace(os.sep, "/")
+        for raw, resolved in _file_md_links(scan_root, ap):
+            yield rel, raw, resolved
+
+
+def outbound_links(root, src_abs):
+    """[(raw, target_abs, exists)] for the markdown links of src_abs, file order."""
+    return [(raw, resolved, os.path.exists(resolved))
+            for raw, resolved in _file_md_links(root, os.path.abspath(src_abs))]
+
+
 def build_ref_matrix(scan_root, target_abspath):
     """List every markdown link under scan_root that resolves to target_abspath.
-    Returns [(source_rel, raw_link), ...]. Reuses the bundle_graph link regex,
-    strips fenced code, ignores http(s)/mailto and anchors. Both relative and
-    catalogue-root-absolute (leading /) links are resolved path-wise."""
+    Returns [(source_rel, raw_link), ...]. Strips fenced code, ignores
+    http(s)/mailto and anchors. Both relative and catalogue-root-absolute
+    (leading /) links are resolved path-wise."""
     target_abspath = os.path.abspath(target_abspath)
-    link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     hits = []
-    # Same traversal and same dead-zone mask as the wikilink half of a rename,
-    # so the two halves of one move cannot disagree about which files and which
-    # occurrences they cover. A root-level walk alone cannot enter a symlinked
-    # bundle, which left a mounted file with its wikilink rewritten and its
-    # markdown link dangling in the same line.
-    for ap in iter_rename_scan_md(scan_root):
-        dirpath = os.path.dirname(ap)
-        text = read_file(ap)
-        for m in link_re.finditer(wikilink_scan_text(text)):
-            raw = text[m.start(1):m.end(1)]
-            tgt = raw.split("#", 1)[0].split("?", 1)[0].strip()
-            if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
+    for rel, raw, resolved in iter_md_links(scan_root):
+        if resolved != target_abspath:
+            # A link may spell its target in a different case than the disk
+            # does; on a case-insensitive filesystem that link is live and
+            # must be rewritten too. samefile only runs on a case-equal
+            # near-miss, so this stays correct on a case-sensitive one.
+            if (resolved.lower() != target_abspath.lower()
+                    or not os.path.exists(resolved)
+                    or not os.path.samefile(resolved, target_abspath)):
                 continue
-            if tgt.startswith("/"):
-                # OKF (catalogue-root convention): leading / = scan_root
-                # (= catalogue root = Obsidian vault root), NOT the bundle.
-                resolved = os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
-            else:
-                resolved = os.path.abspath(os.path.join(dirpath, tgt))
-            if resolved != target_abspath:
-                # A link may spell its target in a different case than the disk
-                # does; on a case-insensitive filesystem that link is live and
-                # must be rewritten too. samefile only runs on a case-equal
-                # near-miss, so this stays correct on a case-sensitive one.
-                if (resolved.lower() != target_abspath.lower()
-                        or not os.path.exists(resolved)
-                        or not os.path.samefile(resolved, target_abspath)):
-                    continue
-            hits.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), raw))
+        hits.append((rel, raw))
     return hits
+
+
+def _refs_display(scan_root, p):
+    """Scan-root-relative POSIX path when under it, else ~/… under $HOME, else absolute."""
+    for base, prefix in ((scan_root, ""), (os.path.expanduser("~"), "~/")):
+        rel = os.path.relpath(p, base)
+        if rel != ".." and not rel.startswith(".." + os.sep) and not os.path.isabs(rel):
+            return prefix + rel.replace(os.sep, "/")
+    return p
 
 
 def cmd_refs(root, args):
@@ -2305,17 +2339,34 @@ def cmd_refs(root, args):
     if not os.path.exists(target):
         sys.stderr.write("refs: target not found: {}\n".format(args.path))
         sys.exit(2)
-    hits = build_ref_matrix(scan_root, target)
+    only_in = getattr(args, "only_in", False)
+    only_out = getattr(args, "only_out", False)
+    want_in, want_out = not only_out, not only_in
+    hits = build_ref_matrix(scan_root, target) if want_in else []
+    out = []
+    if want_out and target.endswith(".md") and os.path.isfile(target):
+        out = [(raw, _refs_display(scan_root, t), ex)
+               for raw, t, ex in outbound_links(scan_root, target)]
     if getattr(args, "json", False):
-        print(json.dumps({
-            "target": os.path.relpath(os.path.abspath(target), scan_root).replace(os.sep, "/"),
-            "inbound": [{"source": s, "link": l} for s, l in hits],
-        }))
-    else:
-        if not hits:
-            print("no inbound references")
+        d = {"target": os.path.relpath(os.path.abspath(target), scan_root).replace(os.sep, "/")}
+        if want_in:
+            d["inbound"] = [{"source": s, "link": l} for s, l in hits]
+        if want_out:
+            d["outbound"] = [{"link": l, "target": t, "exists": ex} for l, t, ex in out]
+        print(json.dumps(d))
+        return
+    if want_in:
+        print("inbound ({}):".format(len(hits)))
         for s, l in hits:
-            print("{}  ->  {}".format(s, l))
+            print("  {}  ->  {}".format(s, l))
+        if not hits:
+            print("  (none)")
+    if want_out:
+        print("outbound ({}):".format(len(out)))
+        for l, t, ex in out:
+            print("  {}  ->  {}{}".format(l, t, "" if ex else "  [missing]"))
+        if not out:
+            print("  (none)")
 
 
 REWRITE_EXTS = (".md", ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".rb",
@@ -5830,11 +5881,14 @@ def build_parser():
     prc.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
     prc.add_argument("--json", action="store_true", help="machine-readable output")
     prf = _sub(sub, "refs", "search",
-               "list inbound markdown references to a file")
+               "list inbound and outbound markdown links of a file")
     prf.add_argument("path", help="target file (abs, or relative to --root)").completer = _complete_concept_files
     prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide").completer = _complete_dirs
     prf.add_argument("--json", action="store_true",
                      help="machine-readable output")
+    prf_dir = prf.add_mutually_exclusive_group()
+    prf_dir.add_argument("--in", dest="only_in", action="store_true", help="only inbound links")
+    prf_dir.add_argument("--out", dest="only_out", action="store_true", help="only outbound links")
     px = _sub(sub, "reindex", "maintenance",
               "(re)generate marker-bounded index listings: index.md one level, "
               "index-map.md the whole subtree")

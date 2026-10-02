@@ -1262,6 +1262,67 @@ class CmdRefs(unittest.TestCase):
         out = json.loads(buf.getvalue())
         self.assertEqual([h["source"] for h in out["inbound"]], ["README.md"])
 
+    def _refs(self, path, **flags):
+        import io, json, contextlib, types
+        args = types.SimpleNamespace(path=path, scan_root=self.tmp, json=False,
+                                     only_in=False, only_out=False)
+        for k, v in flags.items():
+            setattr(args, k, v)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_refs(self.tmp, args)
+        return json.loads(buf.getvalue()) if args.json else buf.getvalue()
+
+    def _link_fixture(self):
+        self._w("b/one.md", "---\ntype: Concept\n---\n[T](/b/two.md) [G](gone.md#x) "
+                            "[W](http://x.org/a.md)\n```\n[F](/b/fenced.md)\n```\n")
+        self._w("b/two.md", "# two\n")
+
+    def test_text_has_inbound_and_outbound_sections(self):
+        self._link_fixture()
+        self.assertEqual(self._refs("b/two.md"),
+                         "inbound (1):\n  b/one.md  ->  /b/two.md\noutbound (0):\n  (none)\n")
+        self.assertEqual(self._refs("b/one.md"),
+                         "inbound (0):\n  (none)\noutbound (2):\n"
+                         "  /b/two.md  ->  b/two.md\n"
+                         "  gone.md#x  ->  b/gone.md  [missing]\n")
+
+    def test_in_and_out_flags_select_one_section(self):
+        self._link_fixture()
+        self.assertEqual(self._refs("b/one.md", only_in=True), "inbound (0):\n  (none)\n")
+        self.assertEqual(self._refs("b/one.md", only_out=True).splitlines()[0], "outbound (2):")
+        self.assertNotIn("inbound", self._refs("b/one.md", only_out=True))
+
+    def test_json_outbound_and_flag_omissions(self):
+        self._link_fixture()
+        full = self._refs("b/one.md", json=True)
+        self.assertEqual(full["inbound"], [])
+        self.assertEqual(full["outbound"], [
+            {"link": "/b/two.md", "target": "b/two.md", "exists": True},
+            {"link": "gone.md#x", "target": "b/gone.md", "exists": False}])
+        self.assertNotIn("outbound", self._refs("b/two.md", json=True, only_in=True))
+        self.assertNotIn("inbound", self._refs("b/two.md", json=True, only_out=True))
+
+    def test_non_markdown_target_has_no_outbound(self):
+        self._w("notes.txt", "[T](/b/two.md)\n")
+        self._w("b/two.md", "# two\n")
+        self.assertEqual(self._refs("notes.txt", only_out=True), "outbound (0):\n  (none)\n")
+
+    def test_target_outside_scan_root_is_absolute(self):
+        self._w("a.md", "[O](../../outside.md)\n")
+        out = self._refs("a.md", json=True)["outbound"][0]
+        self.assertEqual(out["target"], os.path.abspath(os.path.join(self.tmp, "../../outside.md")))
+
+    def test_outbound_links_and_matrix_share_resolution(self):
+        self._w("d/a.md", "[x]( ../e/t.md?q ) [m](mailto:a@b)\n")
+        self._w("e/t.md", "t\n")
+        ap = os.path.join(self.tmp, "d/a.md")
+        tgt = os.path.join(self.tmp, "e/t.md")
+        self.assertEqual(okf.outbound_links(self.tmp, ap), [(" ../e/t.md?q ", tgt, True)])
+        self.assertEqual(list(okf.iter_md_links(self.tmp)), [("d/a.md", " ../e/t.md?q ", tgt)])
+        self.assertEqual(okf.build_ref_matrix(self.tmp, tgt), [("d/a.md", " ../e/t.md?q ")])
+        self.assertEqual(okf.resolve_md_link(self.tmp, ap, "mailto:a@b"), None)
+
     def test_missing_target_exits_nonzero(self):
         import types
         args = types.SimpleNamespace(path="ghost.md", scan_root=self.tmp, json=True)
