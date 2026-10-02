@@ -65,6 +65,71 @@ def E(pos, mode, path, comment=""):
     return {"pos": pos, "mode": mode, "path": path, "comment": comment}
 
 
+class CtxRenameArchive(CtxCatalogue):
+    def _demo(self, text=None):
+        if text is None:
+            okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+                E(1, "pflicht", "b/two.md", "c")]})
+        else:
+            self._w("_ctx/demo.md", text)
+
+    def _read(self, rel):
+        with open(os.path.join(self.root, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_preview_prints_ctx_line_with_position_and_changes_nothing(self):
+        self._demo()
+        before = self._read("_ctx/demo.md")
+        r = self._cli("rename", "b/two.md", "b/zwei.md")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("  ctx        demo (pos 1)\n", r.stdout)
+        self.assertEqual(self._read("_ctx/demo.md"), before)
+
+    def test_rename_apply_refreshes_entry_and_lists_membership(self):
+        self._demo()
+        r = self._cli("rename", "b/two.md", "b/zwei.md", "--apply")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("[zwei](/b/zwei.md)", self._read("_ctx/demo.md"))
+        self.assertNotIn("[two]", self._read("_ctx/demo.md"))
+        with self._home():
+            e = okf.load_ctx(self.root, "demo")["entries"][0]
+        self.assertTrue(os.path.exists(okf.ctx_entry_abspath(self.root, e["path"])))
+        self.assertIn("listed in 1 ctx bundle(s): demo (pos 1)\n", r.stdout)
+
+    def test_archive_apply_points_entry_at_archive_path(self):
+        self._demo()
+        r = self._cli("archive", "b/two.md", "--apply")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("(/_archive/b/two.md)", self._read("_ctx/demo.md"))
+        self.assertIn("listed in 1 ctx bundle(s): demo (pos 1)\n", r.stdout)
+
+    def test_reference_entry_reports_reference(self):
+        okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+            E(None, "nachschlag", "b/two.md", "c")]})
+        r = self._cli("rename", "b/two.md", "b/zwei.md")
+        self.assertIn("  ctx        demo (reference)\n", r.stdout)
+
+    def test_no_membership_prints_no_ctx_line(self):
+        r = self._cli("rename", "b/two.md", "b/zwei.md", "--apply")
+        self.assertNotIn("  ctx        ", r.stdout)
+        self.assertNotIn("listed in", r.stdout)
+
+    def test_parse_problems_skip_save_and_warn(self):
+        text = ("---\ntype: Context\ndescription: \"d\"\n---\n\n# demo\n\n"
+                "| pos | mode | path | comment |\n|---|---|---|---|\n"
+                "| 1 | pflicht | [two](/b/two.md) | c |\n"
+                "| 2 | pflicht | broken row |\n")
+        self._demo(text)
+        r = self._cli("rename", "b/two.md", "b/zwei.md", "--apply")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self._read("_ctx/demo.md"), text.replace(
+            "(/b/two.md)", "(/b/zwei.md)"))
+        lines = r.stdout.splitlines()
+        i = lines.index("listed in 1 ctx bundle(s): demo (pos 1)")
+        self.assertEqual(lines[i + 1], "  ctx        demo: not refreshed, 1 parse "
+                         "problem(s) — run okf ctx check")
+
+
 class CtxBundleGate(CtxCatalogue):
     def test_ctx_dir_is_bundle_other_underscore_and_dot_are_not(self):
         self.assertTrue(okf.is_bundle_dir("_ctx"))

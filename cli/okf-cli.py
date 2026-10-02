@@ -5447,6 +5447,9 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
         plan = plan_rename(root, old_abs, new_abs)
     old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
     new_rel = os.path.relpath(new_abs, root).replace(os.sep, "/")
+    ctx_hits = ctx_memberships(root, old_rel)
+    ctx_where = ["{} ({})".format(s, "reference" if e["pos"] is None
+                                  else "pos {}".format(e["pos"])) for s, e in ctx_hits]
 
     wl_rewrite = [r for r in plan["wikilinks"] if r["status"] == "rewrite"]
     wl_skipped = [r for r in plan["wikilinks"] if r["status"] == "skipped-ambiguous"]
@@ -5488,6 +5491,8 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
                 r["source"], r["region"], r["raw"], r["new_raw"]))
         for consumer_rel, n in plan["sync_sources"]:
             print("  sync-source  {}   {} block(s)".format(consumer_rel, n))
+        for w in ctx_where:
+            print("  ctx        " + w)
         _print_skipped()
         print("  reindex    {}".format(", ".join(plan["bundles"])))
         print("rename (dry-run): {} inbound, {} outbound link(s), {} wikilink(s) "
@@ -5532,6 +5537,14 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
         # wikilink pass above.
         ap = new_abs if consumer_rel == old_rel else os.path.join(root, consumer_rel)
         n_sync += _apply_sync_source_rewrites(ap, old_source, new_source)
+    ctx_notes = []
+    for slug in dict.fromkeys(s for s, _ in ctx_hits):
+        c = load_ctx(root, slug)
+        if c["problems"]:
+            ctx_notes.append("  ctx        {}: not refreshed, {} parse problem(s) — "
+                             "run okf ctx check".format(slug, len(c["problems"])))
+        else:
+            save_ctx(root, c)
     reidx = []
     for b in plan["bundles"]:
         reidx += reindex_tree(root, os.path.join(root, b))
@@ -5556,6 +5569,10 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
     print("rewrote {} wikilink(s) in {} file(s)".format(len(wl_rewrite), len(wl_by_src)))
     print("rewrote {} sync source(s) in {} file(s)".format(
         n_sync, len(plan["sync_sources"])))
+    if ctx_where:
+        print("listed in {} ctx bundle(s): {}".format(len(ctx_where), ", ".join(ctx_where)))
+        for note in ctx_notes:
+            print(note)
     _print_skipped()
     print("reindexed {} index file(s) across: {}".format(len(reidx), ", ".join(plan["bundles"])))
     print("staged for commit — run `okf-cli.py check` before committing.")
