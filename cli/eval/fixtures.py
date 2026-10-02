@@ -62,8 +62,8 @@ Fixture = collections.namedtuple(
 # GoldenBundleConsistencyTest, so the two files cannot drift silently.
 # Changing either constant without updating golden.json (or vice versa)
 # fails that guard immediately.
-CORRECT_BUNDLE = "agent-memory"
-WRONG_BUNDLE = "ai-wiki"
+CORRECT_BUNDLE = "knowledge-management"
+WRONG_BUNDLE = "testing-quality"
 
 
 def _pick_bundles(root):
