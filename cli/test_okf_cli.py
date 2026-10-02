@@ -5099,6 +5099,75 @@ class CommandHelpConformance(unittest.TestCase):
         self.assertEqual(missing, [])
 
 
+@unittest.skipUnless(importlib.util.find_spec("argcomplete"),
+                     "argcomplete not installed (just setup)")
+class ShellCompletion(unittest.TestCase):
+    """TAB completion, driven through the real cli/okf-cli.py with the env
+    protocol the zsh glue cli/_okf-cli speaks. --root is the raw shell word
+    `~/cat`, as the glue delivers it from an alias."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        for rel, text in {
+            "stray.txt": "x",
+            "cat/TYPES.md": "| Type | Note |\n|---|---|\n| `Concept` | a |\n| `Decision` | b |\n",
+            "cat/b1/alpha.md": "---\ntitle: Alpha\ntype: Concept\ntags: [x, y]\n---\nbody\n",
+            "cat/b1/sub/beta.md": ("---\ntitle: Beta\ntype: Decision\ntags: [x]\n---\n"
+                                   "<!-- okf:canon id=blk-1 -->\npayload\n<!-- /okf:canon -->\n"),
+            "cat/_archive/b1/old.md": "---\ntitle: Old\n---\n",
+        }.items():
+            path = os.path.join(self.tmp, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+
+    def _complete(self, words):
+        import subprocess
+        import sys
+        line = "okf-cli --root ~/cat " + words
+        out = os.path.join(self.tmp, "out")
+        env = dict(os.environ, HOME=self.tmp, COMP_LINE=line, COMP_POINT=str(len(line)),
+                   _ARGCOMPLETE="1", _ARGCOMPLETE_SHELL="zsh",
+                   _ARGCOMPLETE_SUPPRESS_SPACE="1", _ARGCOMPLETE_STDOUT_FILENAME=out)
+        subprocess.run([sys.executable, os.path.join(_HERE, "okf-cli.py")],
+                       env=env, cwd=self.tmp, capture_output=True)
+        if not os.path.exists(out):
+            return []
+        with open(out, encoding="utf-8") as f:
+            raw = f.read()
+        if not raw:
+            return []
+        return [tuple(e.split(":", 1)) if ":" in e else (e, "") for e in raw.split("\x0b")]
+
+    def _values(self, words):
+        """Candidates minus option strings: argcomplete offers `-h/--help`
+        next to positional values."""
+        return [v for v, _ in self._complete(words) if not v.startswith("-")]
+
+    def test_type_values_come_from_the_root_on_the_line(self):
+        self.assertEqual(self._values("find q --type "), ["Concept", "Decision"])
+
+    def test_tag_values_most_used_first_with_counts(self):
+        self.assertEqual(self._complete("find q --tag "),
+                         [("x", "concepts: 2"), ("y", "concepts: 1")])
+
+    def test_scope_values_are_bundles_and_concept_dirs(self):
+        self.assertEqual(self._values("list --scope "), ["b1", "b1/sub"])
+
+    def test_concept_refs_and_archive_on_restore(self):
+        self.assertEqual(self._values("read "), ["b1/alpha", "b1/sub/beta"])
+        self.assertEqual(self._values("archive --restore "), ["_archive/b1/old"])
+
+    def test_block_ids_come_from_the_concept_on_the_line(self):
+        self.assertEqual(self._values("sync-export b1/sub/beta "), ["blk-1"])
+
+    def test_free_text_offers_options_not_cwd_files(self):
+        values = [v for v, _ in self._complete("find ")]
+        self.assertIn("--type", values)
+        self.assertNotIn("stray.txt", values)
+
+
 def _cli(root, *argv):
     """Drive the REAL cli/okf-cli.py as a subprocess. The `command:` acceptance
     criteria of docs/wikilink-awareness/SPEC.md are written against the shell

@@ -13,6 +13,14 @@ default:
 test *ARGS:
     cd {{cli_dir}} && python3 -m unittest {{ if ARGS == "" { "discover -p 'test_*.py'" } else { ARGS } }}
 
+# Shell-TAB-Completion einrichten: argcomplete ins okf-cli-Python, zsh-Glue in den fpath
+setup python="python3" completions=(env_var("HOME") + "/.zsh/completions"):
+    {{python}} -m pip install "argcomplete>=3"
+    mkdir -p {{completions}}
+    ln -sf {{justfile_directory()}}/{{cli_dir}}/_okf-cli {{completions}}/_okf-cli
+    rm -f "${ZDOTDIR:-$HOME}/.zcompdump"
+    @echo "neue Shell oeffnen (exec zsh), dann: okf find x --type <TAB>"
+
 # Konformitaets-Scan des Catalogue (§9 + lokale Invarianten)
 check root=catalogue:
     python3 {{cli_dir}}/okf-cli.py --root {{root}} check

@@ -54,6 +54,14 @@ The verbs, by what they are for:
 
 Both indexes are built, not live. A catalogue that changed since the last build makes `find` print a staleness note rather than silently ranking against yesterday.
 
+## Shell completion (zsh)
+
+```bash
+just setup         # pip install argcomplete into python3, link cli/_okf-cli into ~/.zsh/completions
+```
+
+Open a new shell, then `okf-cli find x --type <TAB>` completes types, tags, scopes, concept refs and canon block ids from the catalogue named by `--root`. `argcomplete` is optional: a normal run never imports it. The glue reads the alias-expanded command line, so `alias okf='okf-cli --root …'` works only when the alias starts with `okf-cli` (found via `PATH`), not an absolute path.
+
 ## MCP
 
 ```json

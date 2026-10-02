@@ -1,0 +1,23 @@
+#compdef okf-cli
+# zsh TAB completion for okf-cli, answered by argcomplete inside okf-cli.py.
+# Protocol copied from argcomplete's own zsh shellcode
+# (`register-python-argcomplete`), with one change: COMP_LINE is joined from
+# $words, which zsh fills with the alias already expanded, instead of $BUFFER.
+# So `alias okf='okf-cli --root ~/…'` completes against the root the alias
+# passes, not against whatever catalogue the cwd sits in.
+# Install: `just setup` (symlinks this file into a fpath directory).
+local IFS=$'\013'
+local line="${(j: :)words[1,CURRENT]}"
+local -a completions nospace
+completions=($(IFS="$IFS" \
+    COMP_LINE="$line" \
+    COMP_POINT="${#line}" \
+    _ARGCOMPLETE=1 \
+    _ARGCOMPLETE_SHELL="zsh" \
+    _ARGCOMPLETE_SUPPRESS_SPACE=1 \
+    okf-cli 8>&1 9>&2 1>/dev/null 2>&1 </dev/null))
+if [[ "${completions-}" =~ ([^\\\\]): && "${match[1]}" =~ [=/:] ]]; then
+    nospace=(-S '')
+fi
+# ponytail: -o nosort needs zsh >= 5.8 (host: 5.9); add an is-at-least guard if an older zsh shows up
+_describe okf-cli completions -o nosort "${nospace[@]}"

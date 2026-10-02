@@ -5546,17 +5546,132 @@ rank / score lines:
 """
 
 
+# --- shell TAB completion (argcomplete; optional dependency) ---------------
+# main() hands the parser to argcomplete only when the zsh glue cli/_okf-cli
+# runs us with _ARGCOMPLETE set; a normal run never imports it. Each
+# value-taking argument names its completer via `.completer` in build_parser;
+# argcomplete calls it as completer(prefix=, action=, parser=, parsed_args=).
+# Arguments without one complete to nothing (main() passes SuppressCompleter
+# as the default): free text like a find query must not offer cwd files.
+
+
+def _completion_root(parsed_args):
+    """The catalogue root a completer reads, or None. --root arrives as the raw
+    shell word: the glue joins zsh's alias-expanded $words, so
+    `alias okf='okf-cli --root ~/…'` delivers an unexpanded `~`."""
+    explicit = getattr(parsed_args, "root", None)
+    root = catalogue_root(os.path.expanduser(explicit) if explicit else None)
+    return root if root and os.path.isdir(root) else None
+
+
+def _complete_types(parsed_args, **_):
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    # Same source resolution as run_checks: .okf.toml types_source, else <root>/TYPES.md.
+    return sorted(load_types(root, load_okf_config(root).get("types_source")) or ())
+
+
+def _complete_tags(parsed_args, **_):
+    """Tags in use, most used first, usage count as the description."""
+    root = _completion_root(parsed_args)
+    if root is None:
+        return {}
+    ranked = sorted(all_tags(root).items(), key=lambda kv: (-kv[1], kv[0]))
+    return {tag: "concepts: {}".format(n) for tag, n in ranked}
+
+
+def _complete_bundles(parsed_args, **_):
+    root = _completion_root(parsed_args)
+    return list_bundles(root) if root else []
+
+
+def _complete_scopes(parsed_args, **_):
+    """<bundle> and every <bundle>/<subdir> that holds a concept."""
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    out = set()
+    for b in list_bundles(root):
+        out.add(b)
+        for cid, _ap in iter_concepts(os.path.join(root, b)):
+            parts = cid.split("/")[:-1]
+            for i in range(1, len(parts) + 1):
+                out.add("/".join([b] + parts[:i]))
+    return sorted(out)
+
+
+def _complete_concepts(prefix, parsed_args, suffix="", **_):
+    """<bundle>/<concept-id> refs; the `_archive/` mirror once the prefix
+    starts with `_archive/` or `archive --restore` is on the line."""
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    lead = ""
+    if prefix.startswith("_archive/") or getattr(parsed_args, "restore", False):
+        root, lead = os.path.join(root, "_archive"), "_archive/"
+        if not os.path.isdir(root):
+            return []
+    return sorted("{}{}/{}{}".format(lead, b, cid, suffix)
+                  for b in list_bundles(root)
+                  for cid, _ap in iter_concepts(os.path.join(root, b)))
+
+
+def _complete_concept_files(**kwargs):
+    """The same refs with `.md`, for arguments that take a file path."""
+    return _complete_concepts(suffix=".md", **kwargs)
+
+
+def _complete_block_ids(parsed_args, **_):
+    """Canon block ids declared in the concept already on the line. An unknown
+    concept makes resolve_concept exit, which ends the completion run with no
+    candidates: the right answer."""
+    root = _completion_root(parsed_args)
+    concept = getattr(parsed_args, "concept", None)
+    if root is None or not concept:
+        return []
+    _fm, body = split_frontmatter(read_file(resolve_concept(root, concept)))
+    return [blk["id"] for blk in parse_canon_blocks(body)]
+
+
+def _complete_canon_sources(parsed_args, **_):
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    return sorted({"/" + rel for rel, _bid in build_canon_block_index(root)})
+
+
+def _complete_canon_block_ids(parsed_args, **_):
+    """Every declared canon block id, narrowed to --source when given."""
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    source = getattr(parsed_args, "source", None)
+    return sorted({bid for rel, bid in build_canon_block_index(root)
+                   if not source or rel == source.lstrip("/")})
+
+
+def _complete_files(**kwargs):
+    import argcomplete
+    return argcomplete.FilesCompleter()(**kwargs)
+
+
+def _complete_dirs(**kwargs):
+    import argcomplete
+    return argcomplete.DirectoriesCompleter()(**kwargs)
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="catalogue root (default: auto-detect from cwd; "
-                    "hard-fails if none found)")
+                    "hard-fails if none found)").completer = _complete_dirs
     sub = ap.add_subparsers(dest="cmd", required=True)
     pah = _sub(sub, "archive", "maintenance",
                "move a concept into _archive/<bundle>/, or back with --restore (dry-run default)")
     pah.add_argument("path", help="<bundle>/<concept>[.md]; with --restore: "
                                    "_archive/<bundle>/<concept>[.md]. The other end is derived, "
-                                   "never typed")
+                                   "never typed").completer = _complete_concepts
     pah.add_argument("--restore", action="store_true",
                      help="move the path back out of _archive/ instead of into it")
     pah.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
@@ -5580,10 +5695,10 @@ def build_parser():
                            "(default: always fill the delta)")
     pc = _sub(sub, "check", "maintenance",
               "conformance scan: §9 hard rules + local invariants")
-    pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
-    pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)")
+    pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
     pf = _sub(sub, "find", "search",
               "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
               formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -5592,10 +5707,10 @@ def build_parser():
     pf.add_argument("--include-topics", action="store_true", help="widen beyond .okf.toml declared bundle to topic folders")
     pf.add_argument("--limit", type=int, default=10,
                     help="max results to print (default 10)")
-    pf.add_argument("--type", help="filter by frontmatter `type` (exact match)")
-    pf.add_argument("--tag", help="filter by tag (exact match)")
+    pf.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
+    pf.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
     pf.add_argument("--scope", metavar="TARGET",
-                    help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+                    help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
     pf.add_argument("--include-archive", action="store_true",
                     help="also search _archive/<bundle>/<cid>; excluded by "
                          "default (combine with --scope to reach the "
@@ -5611,7 +5726,7 @@ def build_parser():
                          "stays off by default (Q05/D17)")
     pfx = _sub(sub, "fix-crosslinks", "maintenance",
                "rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
-    pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
     pfx.add_argument("--include-reserved", action="store_true",
                       dest="include_reserved",
@@ -5622,13 +5737,13 @@ def build_parser():
                            "default)")
     pfxt = _sub(sub, "fix-xml-tags", "maintenance",
                 "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
-    pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
     pi = _sub(sub, "index", "navigation",
               "catalogue TOC (bundle names + one-line descriptions), or one "
               "bundle's index.md")
     pi.add_argument("bundle", nargs="?",
-                    help="bundle to print (default: the whole catalogue TOC)")
+                    help="bundle to print (default: the whole catalogue TOC)").completer = _complete_bundles
     pi.add_argument("--full", action="store_true",
                     help="catalogue TOC: print the structured per-bundle block "
                          "(description, concept count, directories, types, tags) "
@@ -5640,10 +5755,10 @@ def build_parser():
          "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
     pls = _sub(sub, "list", "navigation",
                "list concepts filtered by frontmatter type and/or tag")
-    pls.add_argument("--type", help="filter by frontmatter `type` (exact match)")
-    pls.add_argument("--tag", help="filter by tag (exact match)")
+    pls.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
+    pls.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
     pls.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
     pls.add_argument("--include-archive", action="store_true",
                     help="also list _archive/<bundle>/<cid>; excluded by "
                          "default (combine with --scope to reach the "
@@ -5651,15 +5766,15 @@ def build_parser():
     pls.add_argument("--json", action="store_true", help="machine-readable output")
     pmt = _sub(sub, "merge-tags", "tags",
                "merge/rename one or more tags into a target tag across concept frontmatter")
-    pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows")
-    pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name")
+    pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows").completer = _complete_tags
+    pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name").completer = _complete_tags
     pmt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pnt = _sub(sub, "normalize-tags", "tags",
                "convert inline `tags: [...]` fields to YAML block-list form (local convention)")
     pnt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pp = _sub(sub, "prime", "navigation",
               "one-shot agent onboarding: usage guide, command directory, "
@@ -5674,26 +5789,26 @@ def build_parser():
                           "(~2s on a large catalogue) instead of reporting only "
                           "whether the semantic index is present")
     pr = _sub(sub, "read", "navigation", "print one concept page")
-    pr.add_argument("path", help="<bundle>/<concept-id> of the page to print")
+    pr.add_argument("path", help="<bundle>/<concept-id> of the page to print").completer = _complete_concepts
     prc = _sub(sub, "recent", "navigation",
                "list the most recently created concepts, newest first")
     prc.add_argument("--limit", type=int, default=10,
                      help="max results to print (default 10)")
     prc.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
-    prc.add_argument("--type", help="filter by frontmatter `type` (exact match)")
-    prc.add_argument("--tag", help="filter by tag (exact match)")
+                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
+    prc.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
+    prc.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
     prc.add_argument("--json", action="store_true", help="machine-readable output")
     prf = _sub(sub, "refs", "search",
                "list inbound markdown references to a file")
-    prf.add_argument("path", help="target file (abs, or relative to --root)")
-    prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide")
+    prf.add_argument("path", help="target file (abs, or relative to --root)").completer = _complete_concept_files
+    prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide").completer = _complete_dirs
     prf.add_argument("--json", action="store_true",
                      help="machine-readable output")
     px = _sub(sub, "reindex", "maintenance",
               "(re)generate marker-bounded index listings: index.md one level, "
               "index-map.md the whole subtree")
-    px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
+    px.add_argument("target", help="<bundle> or <bundle>/<subdir>").completer = _complete_scopes
     px.add_argument("--init", action="store_true",
                     help="recursively migrate marker-less flat index.md in the subtree to "
                          "managed marker blocks (bespoke multi-section indexes are skipped + flagged)")
@@ -5703,14 +5818,14 @@ def build_parser():
                     help="with --init, also flatten a pure multi-section listing (prose/tables still refuse)")
     prt = _sub(sub, "remove-tags", "tags",
                "remove one or more tags from concept frontmatter (no merge target)")
-    prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft")
+    prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft").completer = _complete_tags
     prt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     prn = _sub(sub, "rename", "maintenance",
                "move a concept + rewrite every inbound/outbound link + reindex (dry-run default)")
-    prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)")
-    prn.add_argument("new", help="destination path (same or different bundle)")
+    prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)").completer = _complete_concept_files
+    prn.add_argument("new", help="destination path (same or different bundle)").completer = _complete_concept_files
     prn.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
     prn.add_argument("--force", action="store_true",
                      help="overwrite an existing destination, and proceed when the new "
@@ -5719,35 +5834,35 @@ def build_parser():
                "literal path-string rewrite across text files")
     prw.add_argument("old", help="literal path string to replace")
     prw.add_argument("new", help="replacement path string")
-    prw.add_argument("--scan-root", help="dir to scan (default: --root)")
+    prw.add_argument("--scan-root", help="dir to scan (default: --root)").completer = _complete_dirs
     prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
     pse = _sub(sub, "sync-export", "navigation",
                "print a canonical block's payload for materialisation elsewhere")
-    pse.add_argument("concept", help="canonical concept (<bundle>/<concept-id>)")
+    pse.add_argument("concept", help="canonical concept (<bundle>/<concept-id>)").completer = _complete_concepts
     pse.add_argument("block_id", metavar="block-id",
-                     help="canon block id declared in that concept")
+                     help="canon block id declared in that concept").completer = _complete_block_ids
     psi = _sub(sub, "sync-insert", "maintenance",
                "materialise a canonical block inside a consumer concept (dry-run default)")
-    psi.add_argument("consumer", help="consumer concept to insert into (<bundle>/<concept-id>)")
-    psi.add_argument("concept", help="canonical owner concept (<bundle>/<concept-id>)")
-    psi.add_argument("block_id", metavar="block-id", help="canon block id to materialise")
+    psi.add_argument("consumer", help="consumer concept to insert into (<bundle>/<concept-id>)").completer = _complete_concepts
+    psi.add_argument("concept", help="canonical owner concept (<bundle>/<concept-id>)").completer = _complete_concepts
+    psi.add_argument("block_id", metavar="block-id", help="canon block id to materialise").completer = _complete_block_ids
     psi.add_argument("--apply", action="store_true",
                      help="write the block (default: dry-run preview only)")
     pss = _sub(sub, "sync-status", "maintenance",
                "drift report for every materialised canon block")
     pss.add_argument("target", nargs="?",
-                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pss.add_argument("--source",
-                     help="only blocks whose canonical source is this path (/bundle/concept.md)")
-    pss.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id")
+                     help="only blocks whose canonical source is this path (/bundle/concept.md)").completer = _complete_canon_sources
+    pss.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id").completer = _complete_canon_block_ids
     pss.add_argument("--json", action="store_true", help="machine-readable output")
     psu = _sub(sub, "sync-update", "maintenance",
                "re-materialise outdated consumer blocks from their canon owner (dry-run default)")
     psu.add_argument("target", nargs="?",
-                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     psu.add_argument("--source",
-                     help="only blocks whose canonical source is this path (/bundle/concept.md)")
-    psu.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id")
+                     help="only blocks whose canonical source is this path (/bundle/concept.md)").completer = _complete_canon_sources
+    psu.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id").completer = _complete_canon_block_ids
     psu.add_argument("--apply", action="store_true",
                      help="write changes (default: dry-run preview only)")
     psu.add_argument("--force", action="store_true",
@@ -5762,21 +5877,21 @@ def build_parser():
     pg.add_argument("--register", nargs="+", metavar="TAG",
                     help="add tag(s) to the TAGS.md registry (closed-vocabulary allow-list)")
     pg.add_argument("--validate", nargs="+", metavar="TAG",
-                    help="check tag(s) against TAGS.md; exit 1 if any are unregistered")
+                    help="check tag(s) against TAGS.md; exit 1 if any are unregistered").completer = _complete_tags
     pt = _sub(sub, "toc", "navigation",
               "print a concept's headings (default: h2 only)")
-    pt.add_argument("path", help="<bundle>/<concept-id> to list headings for")
+    pt.add_argument("path", help="<bundle>/<concept-id> to list headings for").completer = _complete_concepts
     pt.add_argument("--level", type=int, default=2,
                     help="heading level to list (default 2 = h2); 0 = full indented tree")
     pv = _sub(sub, "visualize", "navigation",
               "write a viz.html concept graph for a bundle "
               "(embeds every concept body; needs network for cytoscape/marked)")
-    pv.add_argument("bundle", help="bundle to render the graph for")
-    pv.add_argument("--out", help="output path (default: <bundle>/assets/viz.html)")
+    pv.add_argument("bundle", help="bundle to render the graph for").completer = _complete_bundles
+    pv.add_argument("--out", help="output path (default: <bundle>/assets/viz.html)").completer = _complete_files
     pwl = _sub(sub, "wikilinks", "maintenance",
                "report Obsidian wikilinks ([[…]]) and whether each resolves to a concept")
     pwl.add_argument("target", nargs="?",
-                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pwl.add_argument("--unresolved", action="store_true",
                      help="list only unresolved and ambiguous occurrences (summary stays complete)")
     pwl.add_argument("--json", action="store_true", help="machine-readable output")
@@ -5794,7 +5909,13 @@ def _silence_broken_pipe_streams():
 
 
 def main():
-    args = build_parser().parse_args()
+    ap = build_parser()
+    if "_ARGCOMPLETE" in os.environ:
+        # Shell TAB completion (cli/_okf-cli): optional dependency, imported
+        # only on a completion run, which argcomplete ends via os._exit.
+        import argcomplete
+        argcomplete.autocomplete(ap, default_completer=argcomplete.SuppressCompleter())
+    args = ap.parse_args()
     root = catalogue_root(args.root)
     if root is None:
         sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
