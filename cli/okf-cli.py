@@ -177,7 +177,7 @@ def parse_ctx(text):
         else:
             problems.append('row {}: pos "{}" is neither an integer nor -'.format(n, pos_s))
             continue
-        m = re.fullmatch(r"\[[^\]]*\]\(([^)]*)\)", path_c)
+        m = re.fullmatch(r"\[[^\]]*\]\((.*)\)", path_c)
         if m:
             path = m.group(1)[1:] if m.group(1).startswith("/") else m.group(1)
         else:

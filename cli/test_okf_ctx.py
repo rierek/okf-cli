@@ -184,6 +184,7 @@ class CtxParseRender(CtxCatalogue):
 
     def test_roundtrip(self):
         entries = [E(1, "pflicht", "b/one.md", "a|b c"),
+                   E(2, "pflicht", "b/notes (draft).md", ""),
                    E(None, "nachschlag", "~/notes/out.md", "x")]
         desc, got, problems = okf.parse_ctx(okf.render_ctx("s", 'q"q', entries))
         self.assertEqual((desc, got, problems), ('q"q', entries, []))
