@@ -13,6 +13,19 @@ default:
 test *ARGS:
     cd {{cli_dir}} && python3 -m unittest {{ if ARGS == "" { "discover -p 'test_*.py'" } else { ARGS } }}
 
+# Gate A (EARS-Form der Acceptance Criteria) gegen rohe .beans/-Dateien, z.B. `just gate-a ../.beans/OKFT-xxxx--slug.md`. Exit 0 = sauber, 1 = Befund, 2 = Fehlaufruf.
+gate-a *ARGS:
+    @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }
+    @cd "{{invocation_directory()}}" && ahm gate-a {{ARGS}}
+
+# Shell-TAB-Completion einrichten: argcomplete ins okf-cli-Python, zsh-Glue in den fpath
+setup python="python3" completions=(env_var("HOME") + "/.zsh/completions"):
+    {{python}} -m pip install "argcomplete>=3"
+    mkdir -p {{completions}}
+    ln -sf {{justfile_directory()}}/{{cli_dir}}/_okf-cli {{completions}}/_okf-cli
+    rm -f "${ZDOTDIR:-$HOME}/.zcompdump"
+    @echo "neue Shell oeffnen (exec zsh), dann: okf find x --type <TAB>"
+
 # Konformitaets-Scan des Catalogue (§9 + lokale Invarianten)
 check root=catalogue:
     python3 {{cli_dir}}/okf-cli.py --root {{root}} check

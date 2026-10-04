@@ -435,6 +435,7 @@ class McpToolSignatureContract(unittest.TestCase):
 
     REQUIRED_KEYWORD_ONLY = {
         "okf_find": {"query"},
+        "okf_ctx_show": {"slug"},
         "okf_read": {"path"},
         "okf_toc": {"path"},
         "okf_reindex": {"target"},
@@ -558,6 +559,47 @@ class McpWikilinksBoundary(McpBoundaryTestBase):
         _w(self.root, "other/x.md", "---\ntype: Runbook\n---\nSee [[phantom]].\n")
         out = self._tool("okf_wikilinks")(root=self.root, target="other")
         self.assertEqual(sorted(out["by_bundle"]), ["other"])
+
+
+class McpCtxBoundary(McpBoundaryTestBase):
+    """OKFT-eyhm — okf_ctx_list / okf_ctx_show over the real CLI."""
+
+    def _ctx_create(self, slug, *paths):
+        subprocess.run(["python3", mcp.OKF_CLI, "--root", self.root, "ctx",
+                        "create", slug, *paths], check=True, capture_output=True)
+
+    def _tool(self, name):
+        return mcp._register(_ToolCollector()).tools[name]
+
+    def test_list_and_show_on_one_ctx(self):
+        self._ctx_create("alpha", "b/one.md", "b/two.md")
+        listed = self._tool("okf_ctx_list")(root=self.root)
+        self.assertEqual([c["slug"] for c in listed], ["alpha"])
+        self.assertIn("entries", listed[0])
+        shown = self._tool("okf_ctx_show")(root=self.root, slug="alpha")
+        self.assertEqual([e["path"] for e in shown["entries"]],
+                         ["b/one.md", "b/two.md"])
+
+    def test_show_dead_entry_returns_object_with_dead_count(self):
+        self._ctx_create("alpha", "b/one.md", "b/two.md")
+        os.remove(os.path.join(self.root, "b/two.md"))
+        shown = self._tool("okf_ctx_show")(root=self.root, slug="alpha")
+        self.assertGreater(shown["dead"], 0)
+
+    def test_show_unknown_slug_raises_with_cli_stderr(self):
+        with self.assertRaises(RuntimeError) as cm:
+            self._tool("okf_ctx_show")(root=self.root, slug="nope")
+        self.assertIn("ctx: unknown slug: nope", str(cm.exception))
+
+    def test_list_for_path_limits_to_bundles_listing_the_file(self):
+        self._ctx_create("alpha", "b/one.md")
+        self._ctx_create("beta", "b/two.md")
+        out = self._tool("okf_ctx_list")(root=self.root, for_path="b/one.md")
+        self.assertEqual([c["slug"] for c in out], ["alpha"])
+
+    def test_nonzero_empty_stdout_still_returns_empty_for_other_commands(self):
+        self.assertEqual(
+            mcp.run_okf(self.root, "check", {"target": "nonexist"}), {})
 
 
 class McpBuildSemanticIndexSurface(unittest.TestCase):

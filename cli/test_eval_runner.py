@@ -528,6 +528,10 @@ class GoldenBundleConsistencyTest(unittest.TestCase):
             if isinstance(query, dict) and "bundle" in query:
                 if query["bundle"] != want:
                     mismatches.append((row["id"], "query.bundle", query["bundle"], want))
+            # scope always names CORRECT_BUNDLE, also on S2 rows (location probe)
+            if isinstance(query, dict) and "scope" in query:
+                if query["scope"] != fixtures.CORRECT_BUNDLE:
+                    mismatches.append((row["id"], "query.scope", query["scope"], fixtures.CORRECT_BUNDLE))
         self.assertEqual(
             mismatches, [],
             "golden.json bundle literal(s) diverge from fixtures.py pin "

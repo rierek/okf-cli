@@ -24,6 +24,7 @@ import sqlite3
 import struct
 import subprocess
 import sys
+import shlex
 import textwrap
 import unicodedata
 import urllib.error
@@ -95,7 +96,247 @@ def catalogue_root(explicit):
 
 
 def is_bundle_dir(name):
-    return not name.startswith(".") and not name.startswith("_")
+    return name == CTX_DIR or (not name.startswith(".") and not name.startswith("_"))
+
+
+# --- ctx: curated reading lists stored as _ctx/<slug>.md ---------------------
+
+CTX_DIR = "_ctx"
+CTX_TYPE = "Context"
+CTX_MODES = ("pflicht", "nachschlag")
+CTX_VERBS = frozenset({"add", "check", "create", "drop", "edit", "inbound", "list",
+                       "move", "outbound", "read", "remove", "rename", "show", "toc"})
+CTX_RESERVED_SLUGS = CTX_VERBS | {"index", "log", "readme", "index-map"}
+CTX_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_CTX_COLS = ["pos", "mode", "path", "comment"]
+_CTX_INDEX_SKELETON = (
+    "# Context bundles\n\n"
+    "Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.\n\n"
+    "## Contents\n\n" + MARK_START + "\n" + MARK_END + "\n")
+
+
+def _ctx_die(msg):
+    print("ctx: {}".format(msg), file=sys.stderr)
+    sys.exit(2)
+
+
+def ctx_dir(root):
+    return os.path.join(root, CTX_DIR)
+
+
+def ctx_file(root, slug):
+    return os.path.join(ctx_dir(root), slug + ".md")
+
+
+def ctx_slugs(root):
+    d = ctx_dir(root)
+    if not os.path.isdir(d):
+        return []
+    return sorted(fn[:-3] for fn in os.listdir(d)
+                  if fn.endswith(".md") and fn.lower() not in RESERVED)
+
+
+def ctx_slug_problem(slug):
+    if not CTX_SLUG_RE.match(slug):
+        return "use lowercase letters, digits and hyphens"
+    if slug in CTX_RESERVED_SLUGS:
+        return '"{}" is a reserved name'.format(slug)
+    return None
+
+
+def _ctx_cells(line):
+    body = line.strip()[1:]
+    if body.endswith("|") and not body.endswith("\\|"):
+        body = body[:-1]
+    return [c.strip() for c in re.split(r"(?<!\\)\|", body)]
+
+
+def parse_ctx(text):
+    fm, body = split_frontmatter(text)
+    desc = _dequote(fm.get("description", "")).replace('\\"', '"')
+    lines = body.splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.startswith("|")
+                  and [c.lower() for c in _ctx_cells(ln)] == _CTX_COLS), None)
+    if start is None:
+        return desc, [], ['no table with header "pos | mode | path | comment"']
+    entries, problems = [], []
+    n = 0
+    for ln in lines[start + 2:]:
+        if not ln.startswith("|"):
+            break
+        n += 1
+        cells = _ctx_cells(ln)
+        if len(cells) != 4:
+            problems.append("row {}: expected 4 cells, found {}".format(n, len(cells)))
+            continue
+        pos_s, mode, path_c, comment = cells
+        if pos_s == "-":
+            pos = None
+        elif re.fullmatch(r"-?\d+", pos_s):
+            pos = int(pos_s)
+        else:
+            problems.append('row {}: pos "{}" is neither an integer nor -'.format(n, pos_s))
+            continue
+        m = re.fullmatch(r"\[[^\]]*\]\((.*)\)", path_c)
+        if m:
+            path = m.group(1)[1:] if m.group(1).startswith("/") else m.group(1)
+        else:
+            m = re.fullmatch(r"`([^`]+)`", path_c)
+            if not m:
+                problems.append("row {}: path cell is neither a catalogue link nor a code span".format(n))
+                continue
+            path = m.group(1)
+        entries.append({"pos": pos, "mode": mode.lower(), "path": path,
+                        "comment": comment.replace("\\|", "|")})
+    return desc, entries, problems
+
+
+def render_ctx(slug, description, entries):
+    out = ['---', 'type: ' + CTX_TYPE,
+           'description: "{}"'.format(description.replace('"', '\\"')), '---', '',
+           '# ' + slug, '', '| pos | mode | path | comment |', '|---|---|---|---|']
+    for e in entries:
+        p = e["path"]
+        if p.startswith(("~", "/")):
+            cell = "`{}`".format(p)
+        else:
+            cell = "[{}](/{})".format(os.path.splitext(os.path.basename(p))[0], p)
+        comment = re.sub(r"\r?\n", " ", e["comment"]).replace("|", "\\|")
+        out.append("| {} | {} | {} | {} |".format("-" if e["pos"] is None else e["pos"],
+                                                   e["mode"], cell, comment))
+    return "\n".join(out) + "\n"
+
+
+def ctx_findings(root, ap, stale=False):
+    """(errors, warnings) message lists for one _ctx/<slug>.md."""
+    text = read_file(ap)
+    fm, _body = split_frontmatter(text)
+    desc, entries, problems = parse_ctx(text)
+    errors, warnings = [], []
+    typ = fm.get("type", "").strip()
+    if typ != CTX_TYPE:
+        errors.append('type is "{}", expected "{}"'.format(typ, CTX_TYPE))
+    stem = os.path.basename(ap)[:-3]
+    bad = ctx_slug_problem(stem)
+    if bad:
+        errors.append('slug "{}" invalid: {}'.format(stem, bad))
+    errors += problems
+
+    def pos_s(e):
+        return "-" if e["pos"] is None else str(e["pos"])
+
+    for e in entries:
+        if e["mode"] not in CTX_MODES:
+            errors.append('pos {}: mode "{}" is not pflicht or nachschlag'.format(pos_s(e), e["mode"]))
+    req = [e for e in entries if e["mode"] == "pflicht"]
+    if [e["pos"] for e in req] != list(range(1, len(req) + 1)):
+        errors.append("required positions are not 1..{} in table order: {}".format(
+            len(req), ", ".join(pos_s(e) for e in req)))
+    for e in entries:
+        if e["mode"] == "nachschlag" and e["pos"] is not None:
+            errors.append("reference entry carries pos {} (use -)".format(e["pos"]))
+    seen, late = set(), []
+    for e in entries:
+        p = e["path"]
+        if p in seen:
+            errors.append("duplicate entry: " + p)
+        seen.add(p)
+        mp = ctx_entry_abspath(root, p)
+        if not os.path.isfile(mp):
+            errors.append("dead entry: " + p)
+        elif stale and os.path.getmtime(mp) > os.path.getmtime(ap):
+            # ponytail: mtime comparison; switch to git dates if checkouts reset mtimes
+            late.append("stale: {} changed after this ctx file".format(p))
+    if not desc.strip():
+        warnings.append("empty description")
+    warnings += ["entry under _archive/: " + e["path"] for e in entries
+                 if e["path"].startswith("_archive/")]
+    return errors, warnings + late
+
+
+def load_ctx(root, slug):
+    f = ctx_file(root, slug)
+    if not os.path.isfile(f):
+        _ctx_die("unknown slug: {}".format(slug))
+    desc, entries, problems = parse_ctx(read_file(f))
+    return {"slug": slug, "description": desc, "entries": entries, "problems": problems}
+
+
+def save_ctx(root, ctx):
+    es = ctx["entries"]
+    pf = [dict(e) for e in es if e["mode"] == "pflicht"]
+    rest = [dict(e) for e in es if e["mode"] != "pflicht"]
+    for i, e in enumerate(pf, 1):
+        e["pos"] = i
+    for e in rest:
+        e["pos"] = None
+    os.makedirs(ctx_dir(root), exist_ok=True)
+    write_file(ctx_file(root, ctx["slug"]), render_ctx(ctx["slug"], ctx["description"], pf + rest))
+    idx = os.path.join(ctx_dir(root), "index.md")
+    if not os.path.exists(idx):
+        write_file(idx, _CTX_INDEX_SKELETON)
+    reindex_tree(root, ctx_dir(root))
+
+
+def _under(path, base):
+    return path == base or path.startswith(base.rstrip(os.sep) + os.sep)
+
+
+def ctx_normalize_path(root, raw, must_exist=True):
+    raw = raw.strip()
+    root_abs = os.path.abspath(root)
+
+    def cat_exists(rel):
+        p = os.path.join(root, rel)
+        return os.path.exists(p) or os.path.exists(p + ".md")
+
+    def catalogue(rel):
+        norm = os.path.normpath(rel)
+        if norm.startswith(".."):
+            return filesystem(os.path.abspath(os.path.join(root, rel)))
+        if not os.path.exists(os.path.join(root, norm)) and os.path.exists(os.path.join(root, norm + ".md")):
+            norm += ".md"
+        return norm.replace(os.sep, "/")
+
+    def filesystem(p):
+        ap = os.path.abspath(p)
+        if _under(ap, root_abs):
+            return os.path.relpath(ap, root_abs).replace(os.sep, "/")
+        real = os.path.realpath(ap)
+        for b in list_bundles(root):
+            bp = os.path.join(root, b)
+            if os.path.islink(bp) and _under(real, os.path.realpath(bp)):
+                return b + "/" + os.path.relpath(real, os.path.realpath(bp)).replace(os.sep, "/")
+        home = os.path.abspath(os.path.expanduser("~"))
+        if _under(ap, home):
+            return "~/" + os.path.relpath(ap, home).replace(os.sep, "/")
+        return ap
+
+    if raw.startswith("~"):
+        res = filesystem(os.path.expanduser(raw))
+    elif raw.startswith("/"):
+        res = catalogue(raw[1:]) if cat_exists(raw[1:]) else filesystem(raw)
+    elif cat_exists(raw):
+        res = catalogue(raw)
+    elif os.path.exists(os.path.abspath(raw)):
+        res = filesystem(raw)
+    else:
+        res = catalogue(raw)
+    if must_exist and not os.path.exists(ctx_entry_abspath(root, res)):
+        return None
+    return res
+
+
+def ctx_entry_abspath(root, path):
+    if path.startswith(("~", "/")):
+        return os.path.expanduser(path)
+    return os.path.join(root, path)
+
+
+def ctx_memberships(root, path):
+    norm = ctx_normalize_path(root, path, must_exist=False)
+    return [(s, e) for s in ctx_slugs(root) for e in load_ctx(root, s)["entries"]
+            if e["path"] == norm]
 
 
 def require_bundle_dir(root, bundle):
@@ -531,7 +772,10 @@ def auto_embed_new_tags(root, tags):
 
 def cmd_tags(root, args):
     if getattr(args, "register", None):
-        added, already = register_tags(root, args.register)
+        try:
+            added, already = register_tags(root, args.register)
+        except ValueError as e:
+            sys.exit("ERROR: {}".format(e))
         if added:
             print("registered {} new tag(s) in TAGS.md: {}".format(len(added), ", ".join(added)))
             auto_embed_new_tags(root, added)
@@ -547,8 +791,8 @@ def cmd_tags(root, args):
         for t in unknown:
             print("UNKNOWN  {}".format(t))
         print("OK — all {} known".format(len(args.validate)) if not unknown
-              else "{} UNKNOWN — register with: okf-cli.py tags --register {}".format(
-                  len(unknown), " ".join(unknown)))
+              else "{} UNKNOWN — register with: okf-cli.py tags --register <tag> \"<description, max {} chars>\"".format(
+                  len(unknown), TAG_DESC_MAX))
         sys.exit(1 if unknown else 0)
     counts = all_tags(root)
     if not args.query:
@@ -2118,6 +2362,10 @@ def render_catalogue_state(root, thorough=False):
     else:
         lines.append("tag vocabulary: closed — {} tags in TAGS.md; check a new one with "
                      "`tags --validate`, adopt it with `tags --register`".format(len(registered)))
+    slugs = ctx_slugs(root)
+    if slugs:
+        lines.append("ctx bundles: {} — {} — `ctx show <slug>` lists one".format(
+            len(slugs), " · ".join(slugs)))
     docs = [d for d in ("README.md", "SPEC.md", "TYPES.md", "PROPERTIES.md", "TAGS.md")
             if os.path.isfile(os.path.join(root, d))]
     if docs:
@@ -2249,44 +2497,78 @@ def _find_reserved_name(filenames, name="index.md"):
     return None
 
 
+def resolve_md_link(scan_root, src_abs, raw):
+    """Absolute path a markdown link `raw` written in `src_abs` points at, or
+    None for an empty target, a `<scheme>://` URL or mailto:. Leading / = scan_root
+    (OKF catalogue-root convention, = Obsidian vault root), NOT the bundle."""
+    tgt = raw.split("#", 1)[0].split("?", 1)[0].strip()
+    if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
+        return None
+    if tgt.startswith("/"):
+        return os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
+    return os.path.abspath(os.path.join(os.path.dirname(src_abs), tgt))
+
+
+_MD_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+
+
+def _file_md_links(scan_root, ap):
+    """(raw, resolved_abs) per markdown link of one file, over the masked text."""
+    text = read_file(ap)
+    for m in _MD_LINK_RE.finditer(wikilink_scan_text(text)):
+        raw = text[m.start(1):m.end(1)]
+        resolved = resolve_md_link(scan_root, ap, raw)
+        if resolved is not None:
+            yield raw, resolved
+
+
+def iter_md_links(scan_root):
+    """Yield (source_rel, raw, resolved_abs) for every markdown link in every file
+    of iter_rename_scan_md(scan_root). Same traversal and same dead-zone mask as
+    the wikilink half of a rename, so the two halves of one move cannot disagree
+    about which files and which occurrences they cover. A root-level walk alone
+    cannot enter a symlinked bundle, which left a mounted file with its wikilink
+    rewritten and its markdown link dangling in the same line."""
+    for ap in iter_rename_scan_md(scan_root):
+        rel = os.path.relpath(ap, scan_root).replace(os.sep, "/")
+        for raw, resolved in _file_md_links(scan_root, ap):
+            yield rel, raw, resolved
+
+
+def outbound_links(root, src_abs):
+    """[(raw, target_abs, exists)] for the markdown links of src_abs, file order."""
+    return [(raw, resolved, os.path.exists(resolved))
+            for raw, resolved in _file_md_links(root, os.path.abspath(src_abs))]
+
+
 def build_ref_matrix(scan_root, target_abspath):
     """List every markdown link under scan_root that resolves to target_abspath.
-    Returns [(source_rel, raw_link), ...]. Reuses the bundle_graph link regex,
-    strips fenced code, ignores http(s)/mailto and anchors. Both relative and
-    catalogue-root-absolute (leading /) links are resolved path-wise."""
+    Returns [(source_rel, raw_link), ...]. Strips fenced code, ignores
+    http(s)/mailto and anchors. Both relative and catalogue-root-absolute
+    (leading /) links are resolved path-wise."""
     target_abspath = os.path.abspath(target_abspath)
-    link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     hits = []
-    # Same traversal and same dead-zone mask as the wikilink half of a rename,
-    # so the two halves of one move cannot disagree about which files and which
-    # occurrences they cover. A root-level walk alone cannot enter a symlinked
-    # bundle, which left a mounted file with its wikilink rewritten and its
-    # markdown link dangling in the same line.
-    for ap in iter_rename_scan_md(scan_root):
-        dirpath = os.path.dirname(ap)
-        text = read_file(ap)
-        for m in link_re.finditer(wikilink_scan_text(text)):
-            raw = text[m.start(1):m.end(1)]
-            tgt = raw.split("#", 1)[0].split("?", 1)[0].strip()
-            if not tgt or re.match(r"^[a-z][a-z0-9+.-]*://", tgt) or tgt.startswith("mailto:"):
+    for rel, raw, resolved in iter_md_links(scan_root):
+        if resolved != target_abspath:
+            # A link may spell its target in a different case than the disk
+            # does; on a case-insensitive filesystem that link is live and
+            # must be rewritten too. samefile only runs on a case-equal
+            # near-miss, so this stays correct on a case-sensitive one.
+            if (resolved.lower() != target_abspath.lower()
+                    or not os.path.exists(resolved)
+                    or not os.path.samefile(resolved, target_abspath)):
                 continue
-            if tgt.startswith("/"):
-                # OKF (catalogue-root convention): leading / = scan_root
-                # (= catalogue root = Obsidian vault root), NOT the bundle.
-                resolved = os.path.abspath(os.path.join(scan_root, tgt.lstrip("/")))
-            else:
-                resolved = os.path.abspath(os.path.join(dirpath, tgt))
-            if resolved != target_abspath:
-                # A link may spell its target in a different case than the disk
-                # does; on a case-insensitive filesystem that link is live and
-                # must be rewritten too. samefile only runs on a case-equal
-                # near-miss, so this stays correct on a case-sensitive one.
-                if (resolved.lower() != target_abspath.lower()
-                        or not os.path.exists(resolved)
-                        or not os.path.samefile(resolved, target_abspath)):
-                    continue
-            hits.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), raw))
+        hits.append((rel, raw))
     return hits
+
+
+def _refs_display(scan_root, p):
+    """Scan-root-relative POSIX path when under it, else ~/… under $HOME, else absolute."""
+    for base, prefix in ((scan_root, ""), (os.path.expanduser("~"), "~/")):
+        rel = os.path.relpath(p, base)
+        if rel != ".." and not rel.startswith(".." + os.sep) and not os.path.isabs(rel):
+            return prefix + rel.replace(os.sep, "/")
+    return p
 
 
 def cmd_refs(root, args):
@@ -2302,17 +2584,34 @@ def cmd_refs(root, args):
     if not os.path.exists(target):
         sys.stderr.write("refs: target not found: {}\n".format(args.path))
         sys.exit(2)
-    hits = build_ref_matrix(scan_root, target)
+    only_in = getattr(args, "only_in", False)
+    only_out = getattr(args, "only_out", False)
+    want_in, want_out = not only_out, not only_in
+    hits = build_ref_matrix(scan_root, target) if want_in else []
+    out = []
+    if want_out and target.endswith(".md") and os.path.isfile(target):
+        out = [(raw, _refs_display(scan_root, t), ex)
+               for raw, t, ex in outbound_links(scan_root, target)]
     if getattr(args, "json", False):
-        print(json.dumps({
-            "target": os.path.relpath(os.path.abspath(target), scan_root).replace(os.sep, "/"),
-            "inbound": [{"source": s, "link": l} for s, l in hits],
-        }))
-    else:
-        if not hits:
-            print("no inbound references")
+        d = {"target": os.path.relpath(os.path.abspath(target), scan_root).replace(os.sep, "/")}
+        if want_in:
+            d["inbound"] = [{"source": s, "link": l} for s, l in hits]
+        if want_out:
+            d["outbound"] = [{"link": l, "target": t, "exists": ex} for l, t, ex in out]
+        print(json.dumps(d))
+        return
+    if want_in:
+        print("inbound ({}):".format(len(hits)))
         for s, l in hits:
-            print("{}  ->  {}".format(s, l))
+            print("  {}  ->  {}".format(s, l))
+        if not hits:
+            print("  (none)")
+    if want_out:
+        print("outbound ({}):".format(len(out)))
+        for l, t, ex in out:
+            print("  {}  ->  {}{}".format(l, t, "" if ex else "  [missing]"))
+        if not out:
+            print("  (none)")
 
 
 REWRITE_EXTS = (".md", ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".rb",
@@ -3184,7 +3483,7 @@ TAGS_HEADER = (
     "# TAGS.md — Registered Tag Vocabulary\n\n"
     "Closed vocabulary for concept `tags:`. The `tag-registered` conformance check\n"
     "(warning; `check --strict` escalates to error) flags any tag not listed here.\n"
-    "Add a new tag only via `okf-cli.py tags --register <tag>` — reuse an existing\n"
+    "Add a new tag only via `okf-cli.py tags --register <tag> <description>` — reuse an existing\n"
     "tag over minting a near-duplicate. A tag earns its place by aggregating content.\n\n"
     "| Tag | Description |\n|-----|-------------|\n"
 )
@@ -3207,16 +3506,33 @@ def write_tags_registry(root, rows):
         f.write(TAGS_HEADER + body)
 
 
-def register_tags(root, new_tags):
-    """Add tags to TAGS.md (creating it if absent). Returns (added, already)."""
+TAG_DESC_MAX = 150
+
+
+def register_tags(root, entries):
+    """Add [(tag, description)] to TAGS.md (creating it if absent). Returns
+    (added, already). Every description is validated before anything is
+    written: non-empty, at most TAG_DESC_MAX chars, one line, no `|` (it would
+    split the table cell). A tag already registered keeps its description."""
+    for tag, desc in entries:
+        desc = desc.strip()
+        if not desc:
+            raise ValueError("tag {!r}: description must not be empty".format(tag))
+        if len(desc) > TAG_DESC_MAX:
+            raise ValueError("tag {!r}: description is {} chars, limit is {}".format(
+                tag, len(desc), TAG_DESC_MAX))
+        if "|" in desc or "\n" in desc or "\r" in desc:
+            raise ValueError("tag {!r}: description must be one line without '|'".format(tag))
     rows = _read_tag_rows(root)
-    added = [t for t in dict.fromkeys(new_tags) if t not in rows]
-    already = [t for t in dict.fromkeys(new_tags) if t in rows]
-    for t in added:
-        rows[t] = ""
-    if added:
+    new = {}
+    for tag, desc in entries:
+        if tag not in rows:
+            new.setdefault(tag, desc.strip())
+    already = [t for t in dict.fromkeys(t for t, _ in entries) if t in rows]
+    rows.update(new)
+    if new:
         write_tags_registry(root, rows)
-    return added, already
+    return list(new), already
 
 
 def _strip_toml_comment(line):
@@ -4533,6 +4849,12 @@ def cmd_wikilinks(root, args):
         len(links), totals["resolved"], totals["ambiguous"], totals["unresolved"]))
 
 
+def _ctx_check_of(c, i):
+    if c["bundle"] != CTX_DIR or c["is_reserved"]:
+        return []
+    return ctx_findings(c["root"], c["ap"])[i]
+
+
 def run_checks(root, target, types_source=None):
     """Run the full pluggable conformance scan over `target` (bundle or
     bundle/subdir), or the whole catalogue when target is None.
@@ -4583,6 +4905,8 @@ def run_checks(root, target, types_source=None):
         ("sync-block", "error", lambda c: check_sync_integrity(c, canon_index)),
         ("sync-stale", "warning", lambda c: check_sync_stale(c, canon_index)),
         ("canon-block", "error", check_canon_blocks),
+        ("ctx", "error", lambda c: _ctx_check_of(c, 0)),
+        ("ctx", "warning", lambda c: _ctx_check_of(c, 1)),
     ]
 
     errors, warnings = [], []
@@ -4610,8 +4934,12 @@ def cmd_check(root, args):
                                   types_source=getattr(args, "types", None))
     if args.strict:
         errors, warnings = errors + warnings, []
-    if args.json:
-        import json
+    _print_findings(errors, warnings, args.json)
+    sys.exit(1 if errors else 0)
+
+
+def _print_findings(errors, warnings, as_json):
+    if as_json:
         print(json.dumps({
             "errors": [{"check": n, "path": p, "message": m} for n, p, m in errors],
             "warnings": [{"check": n, "path": p, "message": m} for n, p, m in warnings],
@@ -4622,7 +4950,6 @@ def cmd_check(root, args):
         for name, path, msg in warnings:
             print("WARNING  {:<20} {}  ({})".format(name, path, msg))
         print("OK — 0 violations" if not errors else "{} VIOLATIONS".format(len(errors)))
-    sys.exit(1 if errors else 0)
 
 
 def bundle_of(root, abspath):
@@ -5183,6 +5510,9 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
         plan = plan_rename(root, old_abs, new_abs)
     old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
     new_rel = os.path.relpath(new_abs, root).replace(os.sep, "/")
+    ctx_hits = ctx_memberships(root, old_rel)
+    ctx_where = ["{} ({})".format(s, "reference" if e["pos"] is None
+                                  else "pos {}".format(e["pos"])) for s, e in ctx_hits]
 
     wl_rewrite = [r for r in plan["wikilinks"] if r["status"] == "rewrite"]
     wl_skipped = [r for r in plan["wikilinks"] if r["status"] == "skipped-ambiguous"]
@@ -5224,6 +5554,8 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
                 r["source"], r["region"], r["raw"], r["new_raw"]))
         for consumer_rel, n in plan["sync_sources"]:
             print("  sync-source  {}   {} block(s)".format(consumer_rel, n))
+        for w in ctx_where:
+            print("  ctx        " + w)
         _print_skipped()
         print("  reindex    {}".format(", ".join(plan["bundles"])))
         print("rename (dry-run): {} inbound, {} outbound link(s), {} wikilink(s) "
@@ -5268,6 +5600,14 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
         # wikilink pass above.
         ap = new_abs if consumer_rel == old_rel else os.path.join(root, consumer_rel)
         n_sync += _apply_sync_source_rewrites(ap, old_source, new_source)
+    ctx_notes = []
+    for slug in dict.fromkeys(s for s, _ in ctx_hits):
+        c = load_ctx(root, slug)
+        if c["problems"]:
+            ctx_notes.append("  ctx        {}: not refreshed, {} parse problem(s) — "
+                             "run okf ctx check".format(slug, len(c["problems"])))
+        else:
+            save_ctx(root, c)
     reidx = []
     for b in plan["bundles"]:
         reidx += reindex_tree(root, os.path.join(root, b))
@@ -5292,6 +5632,10 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
     print("rewrote {} wikilink(s) in {} file(s)".format(len(wl_rewrite), len(wl_by_src)))
     print("rewrote {} sync source(s) in {} file(s)".format(
         n_sync, len(plan["sync_sources"])))
+    if ctx_where:
+        print("listed in {} ctx bundle(s): {}".format(len(ctx_where), ", ".join(ctx_where)))
+        for note in ctx_notes:
+            print(note)
     _print_skipped()
     print("reindexed {} index file(s) across: {}".format(len(reidx), ", ".join(plan["bundles"])))
     print("staged for commit — run `okf-cli.py check` before committing.")
@@ -5427,6 +5771,429 @@ def cmd_archive(root, args):
         _prune_empty_archive_dirs(root, os.path.dirname(src_abs))
 
 
+def _ctx_list_rows(root, for_path):
+    keep = None
+    if for_path is not None:
+        keep = {s for s, _e in ctx_memberships(root, for_path)}
+    rows = []
+    for slug in ctx_slugs(root):
+        if keep is not None and slug not in keep:
+            continue
+        c = load_ctx(root, slug)
+        rows.append({"slug": slug, "description": c["description"],
+                     "entries": len(c["entries"]),
+                     "required": sum(1 for e in c["entries"] if e["mode"] == "pflicht"),
+                     "path": "{}/{}.md".format(CTX_DIR, slug)})
+    return rows
+
+
+def cmd_ctx_list(root, args):
+    rows = _ctx_list_rows(root, args.for_path)
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return
+    if not rows:
+        if args.for_path is None:
+            print("no ctx bundles under {}".format(ctx_dir(root)))
+        return
+    w = max(len(r["slug"]) for r in rows)
+    for r in rows:
+        print("  {:<{w}}  {}  ({} entries, {} required)".format(
+            r["slug"], r["description"], r["entries"], r["required"], w=w))
+
+
+def cmd_ctx_create(root, args):
+    problem = ctx_slug_problem(args.slug)
+    if problem:
+        _ctx_die('invalid slug "{}": {}'.format(args.slug, problem))
+    if os.path.exists(ctx_file(root, args.slug)):
+        _ctx_die("{} already exists".format(args.slug))
+    raw = [(p, "") for p in args.paths]
+    if args.import_file:
+        if not os.path.isfile(args.import_file):
+            _ctx_die("import file not found: {}".format(args.import_file))
+        for line in read_file(args.import_file).splitlines():
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            p, _t, comment = line.partition("\t")
+            raw.append((p, comment.strip()))
+    if not raw:
+        _ctx_die("create needs at least one path")
+    seen, entries, missing = set(), [], []
+    for p, comment in raw:
+        norm = ctx_normalize_path(root, p)
+        if norm is None:
+            missing.append(p)
+        elif norm not in seen:
+            seen.add(norm)
+            entries.append({"mode": "pflicht", "path": norm, "comment": comment})
+    if missing:
+        for p in missing:
+            print("ctx: not found: {}".format(p), file=sys.stderr)
+        sys.exit(2)
+    entries.sort(key=lambda e: e["path"].casefold())
+    save_ctx(root, {"slug": args.slug, "description": args.description or "",
+                    "entries": entries})
+    print("created {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(entries)))
+
+
+def _ctx_members(root, slug):
+    """Entries of a ctx with live metadata; required first in pos order."""
+    c = load_ctx(root, slug)
+    out = []
+    for e in c["entries"]:
+        ap = ctx_entry_abspath(root, e["path"])
+        alive = os.path.isfile(ap)
+        typ, title, desc, chars = "", os.path.basename(ap), "", 0
+        if alive:
+            if ap.endswith(".md"):
+                typ, title, desc = meta_of(ap)
+            chars = len(read_file(ap))
+        out.append({"pos": e["pos"], "mode": e["mode"],
+                    "path": e["path"], "abspath": ap, "title": title, "type": typ,
+                    "description": desc, "comment": e["comment"], "alive": alive,
+                    "chars": chars,
+                    # ponytail: chars/4 heuristic; use a tokenizer if budgets get tight
+                    "tokens": (chars + 3) // 4})
+    req = sorted((m for m in out if m["mode"] == "pflicht"), key=lambda m: m["pos"])
+    return c, req + [m for m in out if m["mode"] != "pflicht"]
+
+
+def _ctx_dead_warning(slug, k):
+    return ("WARNING: {} dead entr{} — this list is incomplete; fix with `ctx edit {}`"
+            .format(k, "y" if k == 1 else "ies", slug))
+
+
+def cmd_ctx_show(root, args):
+    c, ms = _ctx_members(root, args.slug)
+    req = [m for m in ms if m["mode"] == "pflicht"]
+    ref = [m for m in ms if m["mode"] != "pflicht"]
+    dead = sum(1 for m in ms if not m["alive"])
+    t_req = sum(m["tokens"] for m in req)
+    if args.json:
+        print(json.dumps({"slug": args.slug, "description": c["description"],
+                          "path": "{}/{}.md".format(CTX_DIR, args.slug), "entries": ms,
+                          "dead": dead, "tokens_required": t_req},
+                         ensure_ascii=False, indent=2))
+        if dead:
+            print(_ctx_dead_warning(args.slug, dead), file=sys.stderr)
+            sys.exit(1)
+        return
+
+    def block(m, head):
+        if not m["alive"]:
+            lines = ["{}[DEAD] {}".format(head, m["abspath"])]
+        else:
+            lines = ["{}{}{}  ~{} tok".format(
+                head, m["abspath"], "  [{}] {}".format(m["type"], m["title"]) if m["type"]
+                else "  " + m["title"], m["tokens"])]
+            if m["description"] and m["mode"] == "pflicht":
+                lines.append("     " + m["description"])
+        if m["comment"]:
+            lines.append("     why: " + m["comment"])
+        return lines
+
+    out = ["ctx {}{}".format(args.slug, " — " + c["description"] if c["description"] else ""),
+           "", "required — read in this order:"]
+    for m in req:
+        out += block(m, "  {}. ".format(m["pos"]))
+    if not req:
+        out.append("  (none)")
+    if ref:
+        out.append("reference — query when needed:")
+        for m in ref:
+            out += block(m, "  - ")
+    out += ["", "{} entries ({} required, {} reference), ~{} tokens for the required set".format(
+        len(ms), len(req), len(ref), t_req)]
+    if dead:
+        out.append(_ctx_dead_warning(args.slug, dead))
+    print("\n".join(out))
+    if dead:
+        sys.exit(1)
+
+
+def cmd_ctx_read(root, args):
+    _c, ms = _ctx_members(root, args.slug)
+    req = [m for m in ms if m["mode"] == "pflicht"]
+    r = len(ms) - len(req)
+    dead = False
+    for i, m in enumerate(req, 1):
+        if not m["alive"]:
+            dead = True
+            print("===== {}/{} [DEAD] {} =====".format(i, len(req), m["abspath"]))
+            continue
+        print("===== {}/{} {} =====".format(i, len(req), m["abspath"]))
+        text = read_file(m["abspath"])
+        print(text, end="" if text.endswith("\n") else "\n")
+    if r:
+        print("===== {} reference entr{} not printed — ctx show {} =====".format(
+            r, "y" if r == 1 else "ies", args.slug))
+    if dead:
+        sys.exit(1)
+
+
+def cmd_ctx_toc(root, args):
+    blocks = []
+    for m in _ctx_members(root, args.slug)[1]:
+        lines = ["# {}{}".format(m["path"], "" if m["alive"] else " [DEAD]")]
+        if m["alive"]:
+            hs = []
+            if m["path"].endswith(".md"):
+                body = split_frontmatter(read_file(m["abspath"]))[1]
+                hs = ["{} {}".format("#" * min(lv + 1, 6), t) for lv, t in iter_headings(body)
+                      if not args.depth or lv <= args.depth]
+            lines += hs or ["(no headings)"]
+        blocks.append("\n".join(lines))
+    print("\n\n".join(blocks))
+
+
+def _ctx_same_file(a, b):
+    """build_ref_matrix rule: exact abspath, or case-insensitive equal and the same existing file."""
+    return a == b or (a.lower() == b.lower() and os.path.exists(a) and os.path.samefile(a, b))
+
+
+def _ctx_nav(root, args, direction):
+    """Shared body of ctx inbound/outbound."""
+    _c, ms = _ctx_members(root, args.slug)
+    for m in ms:
+        m["abs"] = os.path.abspath(m["abspath"])
+    shown = ms
+    if args.file:
+        x = args.file.lower()
+        shown = [m for m in ms if x in (m["title"].lower(), m["path"].lower(),
+                                        os.path.splitext(os.path.basename(m["path"]))[0].lower())]
+        if not shown:
+            _ctx_die('no entry in {} matches --file "{}"'.format(args.slug, args.file))
+        if len(shown) > 1:
+            _ctx_die('--file "{}" matches several entries: {}'.format(
+                args.file, ", ".join(m["path"] for m in shown)))
+    by_lower = {}
+    for m in ms:
+        by_lower.setdefault(m["abs"].lower(), []).append(m)
+
+    def owners(ap):
+        return [m for m in by_lower.get(ap.lower(), []) if _ctx_same_file(ap, m["abs"])]
+
+    links = {id(m): [] for m in ms}
+    inbound = direction == "inbound"
+    if inbound:
+        # ponytail: one catalogue scan per call; links bucketed by member afterwards
+        for rel, raw, resolved in iter_md_links(root):
+            if rel.startswith(CTX_DIR + "/"):
+                continue
+            for m in owners(resolved):
+                if args.include_internal or not owners(os.path.abspath(os.path.join(root, rel))):
+                    links[id(m)].append({"source": rel, "link": raw})
+    else:
+        for m in shown:
+            if m["alive"] and m["path"].endswith(".md"):
+                for raw, target, exists in outbound_links(root, m["abs"]):
+                    if args.include_internal or not owners(target):
+                        links[id(m)].append({"target": _refs_display(root, target),
+                                             "link": raw, "exists": exists})
+    if args.json:
+        rows = []
+        for m in shown:
+            row = {"path": m["path"]}
+            if not inbound:
+                row["dead"] = not m["alive"]
+            row["links"] = links[id(m)]
+            rows.append(row)
+        print(json.dumps({"slug": args.slug, "direction": direction,
+                          "include_internal": args.include_internal, "members": rows},
+                         ensure_ascii=False, indent=2))
+        return
+    out = ["{} \u2014 ctx {}, {} member(s), {}:".format(
+        direction, args.slug, len(shown),
+        "including internal links" if args.include_internal
+        else "external {} only".format("sources" if inbound else "targets"))]
+    for m in shown:
+        if not inbound and not m["alive"]:
+            out.append(m["path"] + " [DEAD]")
+            continue
+        out.append(m["path"])
+        for l in links[id(m)]:
+            out.append("  <- {}  ({})".format(l["source"], l["link"]) if inbound else
+                       "  -> {}  ({}){}".format(l["target"], l["link"],
+                                               "" if l["exists"] else "  [missing]"))
+        if not links[id(m)]:
+            out.append("  (none)")
+    print("\n".join(out))
+
+
+def cmd_ctx_inbound(root, args):
+    _ctx_nav(root, args, "inbound")
+
+
+def cmd_ctx_outbound(root, args):
+    _ctx_nav(root, args, "outbound")
+
+
+def _ctx_editable(root, slug):
+    """Load a ctx for a row edit: refuse when rows are unparsable (a save would drop them).
+    Returns (ctx, required entries in pos order, other entries)."""
+    c = load_ctx(root, slug)
+    if c["problems"]:
+        _ctx_die("{} has {} parse problem(s) — fix with okf ctx edit, see okf ctx check"
+                 .format(slug, len(c["problems"])))
+    es = c["entries"]
+    pf = sorted((e for e in es if e["mode"] == "pflicht"), key=lambda e: e["pos"])
+    return c, pf, [e for e in es if e["mode"] != "pflicht"]
+
+
+def _ctx_where(pf, e):
+    return "pos {}".format(pf.index(e) + 1) if e in pf else "reference"
+
+
+def _ctx_find(root, c, raw):
+    norm = ctx_normalize_path(root, raw, must_exist=False)
+    return norm, next((e for e in c["entries"] if e["path"] == norm), None)
+
+
+def _ctx_put(root, c, pf, rest, e, mode, pos):
+    """Place e (not in pf/rest) as mode/pos, save, return its `where`."""
+    e["mode"] = mode
+    if mode == "pflicht":
+        pf.insert((len(pf) if pos is None else max(1, min(pos, len(pf) + 1)) - 1), e)
+    else:
+        rest.append(e)
+    c["entries"] = pf + rest
+    save_ctx(root, c)
+    return _ctx_where(pf, e)
+
+
+def cmd_ctx_add(root, args):
+    c, pf, rest = _ctx_editable(root, args.slug)
+    if args.pos is not None and args.mode != "pflicht":
+        _ctx_die("--pos applies only to mode pflicht")
+    norm = ctx_normalize_path(root, args.path)
+    if norm is None:
+        _ctx_die("not found: {}".format(args.path))
+    old = next((e for e in c["entries"] if e["path"] == norm), None)
+    if old:
+        _ctx_die("{} is already in {} ({})".format(norm, args.slug, _ctx_where(pf, old)))
+    where = _ctx_put(root, c, pf, rest, {"pos": None, "path": norm, "comment": args.comment},
+                     args.mode, args.pos)
+    print("added {} to {} ({})".format(norm, args.slug, where))
+
+
+def cmd_ctx_drop(root, args):
+    c, pf, rest = _ctx_editable(root, args.slug)
+    norm, e = _ctx_find(root, c, args.path)
+    if e is None:
+        _ctx_die("{} is not in {}".format(norm, args.slug))
+    c["entries"] = [x for x in pf + rest if x is not e]
+    save_ctx(root, c)
+    print("dropped {} from {}".format(norm, args.slug))
+
+
+def cmd_ctx_move(root, args):
+    c, pf, rest = _ctx_editable(root, args.slug)
+    if args.pos is None and args.mode is None:
+        _ctx_die("move needs --pos or --mode")
+    norm, e = _ctx_find(root, c, args.path)
+    if e is None:
+        _ctx_die("{} is not in {}".format(norm, args.slug))
+    mode = args.mode or e["mode"]
+    if args.pos is not None and mode != "pflicht":
+        _ctx_die("--pos applies only to mode pflicht")
+    pf = [x for x in pf if x is not e]
+    rest = [x for x in rest if x is not e]
+    where = _ctx_put(root, c, pf, rest, e, mode, args.pos)
+    print("moved {} in {} to {}".format(norm, args.slug, where))
+
+
+def _ctx_report(root, slugs, stale, as_json):
+    errors, warnings = [], []
+    for s in slugs:
+        es, ws = ctx_findings(root, ctx_file(root, s), stale)
+        rel = "{}/{}.md".format(CTX_DIR, s)
+        errors += [("ctx", rel, m) for m in es]
+        warnings += [("ctx", rel, m) for m in ws]
+    _print_findings(errors, warnings, as_json)
+    sys.exit(1 if errors else 0)
+
+
+def cmd_ctx_check(root, args):
+    if args.slug:
+        load_ctx(root, args.slug)
+    _ctx_report(root, [args.slug] if args.slug else ctx_slugs(root), args.stale, args.json)
+
+
+def cmd_ctx_edit(root, args):
+    load_ctx(root, args.slug)
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+    rc = subprocess.call(shlex.split(editor) + [ctx_file(root, args.slug)])
+    if rc:
+        _ctx_die("editor exited {}".format(rc))
+    reindex_tree(root, ctx_dir(root))
+    _ctx_report(root, [args.slug], False, False)
+
+
+def cmd_ctx_rename(root, args):
+    c = load_ctx(root, args.old)
+    problem = ctx_slug_problem(args.new)
+    if problem:
+        _ctx_die('invalid slug "{}": {}'.format(args.new, problem))
+    if os.path.exists(ctx_file(root, args.new)):
+        _ctx_die("{} already exists".format(args.new))
+    perform_rename(root, ctx_file(root, args.old), ctx_file(root, args.new), True, False)
+    if not c["problems"]:
+        save_ctx(root, load_ctx(root, args.new))  # refreshes the H1 (D-pzho-16)
+
+
+def cmd_ctx_remove(root, args):
+    c = load_ctx(root, args.slug)
+    f = ctx_file(root, args.slug)
+    # one build_ref_matrix row per link: dedup by source file, first-seen order
+    srcs = list(dict.fromkeys(s for s, _ in build_ref_matrix(root, f)
+                              if s.replace(os.sep, "/") != CTX_DIR + "/index.md"))
+    os.remove(f)
+    reindex_tree(root, ctx_dir(root))
+    print("removed {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(c["entries"])))
+    if srcs:
+        print("warning: {} file(s) still link to {}/{}.md:".format(len(srcs), CTX_DIR, args.slug))
+        for s in srcs:
+            print("  " + s)
+
+
+CTX_DISPATCH = {"add": cmd_ctx_add, "check": cmd_ctx_check, "create": cmd_ctx_create,
+                "drop": cmd_ctx_drop, "edit": cmd_ctx_edit,
+                "inbound": cmd_ctx_inbound, "list": cmd_ctx_list, "move": cmd_ctx_move,
+                "outbound": cmd_ctx_outbound, "read": cmd_ctx_read,
+                "remove": cmd_ctx_remove, "rename": cmd_ctx_rename, "show": cmd_ctx_show,
+                "toc": cmd_ctx_toc}
+
+
+def cmd_ctx(root, args):
+    CTX_DISPATCH[args.ctx_verb](root, args)
+
+
+def _ctx_shorthand(argv):
+    """`ctx` -> `ctx list`, `ctx --list` -> `ctx list`, `ctx <slug>` -> `ctx show <slug>`.
+    Acts only when the first command token (after global options) is `ctx`."""
+    i = 0
+    while i < len(argv) and argv[i].startswith("-"):
+        i += 2 if argv[i] == "--root" else 1
+    if i >= len(argv) or argv[i] != "ctx":
+        return argv
+    rest = argv[i + 1:]
+    if not rest:
+        rest = ["list"]
+    elif rest[0] == "--list":
+        rest = ["list"] + rest[1:]
+    elif rest[0] not in CTX_VERBS and not rest[0].startswith("-"):
+        rest = ["show"] + rest
+    return argv[:i + 1] + rest
+
+
+def _complete_ctx_slugs(parsed_args, **_):
+    root = _completion_root(parsed_args)
+    if root is None:
+        return {}
+    return {s: load_ctx(root, s)["description"] for s in ctx_slugs(root)}
+
+
 COMMAND_DISPATCH = {
     "prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
     "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
@@ -5444,6 +6211,7 @@ COMMAND_DISPATCH = {
     "wikilinks": cmd_wikilinks,
     "sync-export": cmd_sync_export, "sync-insert": cmd_sync_insert,
     "sync-status": cmd_sync_status, "sync-update": cmd_sync_update,
+    "ctx": cmd_ctx,
 }
 
 
@@ -5546,17 +6314,142 @@ rank / score lines:
 """
 
 
+# --- shell TAB completion (argcomplete; optional dependency) ---------------
+# main() hands the parser to argcomplete only when the zsh glue cli/_okf-cli
+# runs us with _ARGCOMPLETE set; a normal run never imports it. Each
+# value-taking argument names its completer via `.completer` in build_parser;
+# argcomplete calls it as completer(prefix=, action=, parser=, parsed_args=).
+# Arguments without one complete to nothing (main() passes SuppressCompleter
+# as the default): free text like a find query must not offer cwd files.
+
+
+def _completion_root(parsed_args):
+    """The catalogue root a completer reads, or None. --root arrives as the raw
+    shell word: the glue joins zsh's alias-expanded $words, so
+    `alias okf='okf-cli --root ~/…'` delivers an unexpanded `~`."""
+    explicit = getattr(parsed_args, "root", None)
+    root = catalogue_root(os.path.expanduser(explicit) if explicit else None)
+    return root if root and os.path.isdir(root) else None
+
+
+def _complete_types(parsed_args, **_):
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    # Same source resolution as run_checks: .okf.toml types_source, else <root>/TYPES.md.
+    src = load_okf_config(root).get("types_source") or os.path.join(root, "TYPES.md")
+    if not os.path.isfile(src):
+        return []
+    out = {}
+    for line in read_file(src).splitlines():
+        m = re.match(r"\|\s*`([^`]+)`\s*\|(.*)\|\s*$", line)
+        if m:
+            # Description = last table cell, first sentence (rank/mapping cells sit before it).
+            cells = [c.strip() for c in m.group(2).split("|") if c.strip()]
+            out[m.group(1)] = re.split(r"(?<=[.!?])\s", cells[-1], maxsplit=1)[0][:100] if cells else ""
+    return dict(sorted(out.items()))
+
+
+def _complete_tags(parsed_args, **_):
+    """Tags in use, most used first, usage count as the description."""
+    root = _completion_root(parsed_args)
+    if root is None:
+        return {}
+    ranked = sorted(all_tags(root).items(), key=lambda kv: (-kv[1], kv[0]))
+    return {tag: "concepts: {}".format(n) for tag, n in ranked}
+
+
+def _complete_bundles(parsed_args, **_):
+    root = _completion_root(parsed_args)
+    return list_bundles(root) if root else []
+
+
+def _complete_scopes(parsed_args, **_):
+    """<bundle> and every <bundle>/<subdir> that holds a concept."""
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    out = set()
+    for b in list_bundles(root):
+        out.add(b)
+        for cid, _ap in iter_concepts(os.path.join(root, b)):
+            parts = cid.split("/")[:-1]
+            for i in range(1, len(parts) + 1):
+                out.add("/".join([b] + parts[:i]))
+    return sorted(out)
+
+
+def _complete_concepts(prefix, parsed_args, suffix="", **_):
+    """<bundle>/<concept-id> refs; the `_archive/` mirror once the prefix
+    starts with `_archive/` or `archive --restore` is on the line."""
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    lead = ""
+    if prefix.startswith("_archive/") or getattr(parsed_args, "restore", False):
+        root, lead = os.path.join(root, "_archive"), "_archive/"
+        if not os.path.isdir(root):
+            return []
+    return sorted("{}{}/{}{}".format(lead, b, cid, suffix)
+                  for b in list_bundles(root)
+                  for cid, _ap in iter_concepts(os.path.join(root, b)))
+
+
+def _complete_concept_files(**kwargs):
+    """The same refs with `.md`, for arguments that take a file path."""
+    return _complete_concepts(suffix=".md", **kwargs)
+
+
+def _complete_block_ids(parsed_args, **_):
+    """Canon block ids declared in the concept already on the line. An unknown
+    concept makes resolve_concept exit, which ends the completion run with no
+    candidates: the right answer."""
+    root = _completion_root(parsed_args)
+    concept = getattr(parsed_args, "concept", None)
+    if root is None or not concept:
+        return []
+    _fm, body = split_frontmatter(read_file(resolve_concept(root, concept)))
+    return [blk["id"] for blk in parse_canon_blocks(body)]
+
+
+def _complete_canon_sources(parsed_args, **_):
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    return sorted({"/" + rel for rel, _bid in build_canon_block_index(root)})
+
+
+def _complete_canon_block_ids(parsed_args, **_):
+    """Every declared canon block id, narrowed to --source when given."""
+    root = _completion_root(parsed_args)
+    if root is None:
+        return []
+    source = getattr(parsed_args, "source", None)
+    return sorted({bid for rel, bid in build_canon_block_index(root)
+                   if not source or rel == source.lstrip("/")})
+
+
+def _complete_files(**kwargs):
+    import argcomplete
+    return argcomplete.FilesCompleter()(**kwargs)
+
+
+def _complete_dirs(**kwargs):
+    import argcomplete
+    return argcomplete.DirectoriesCompleter()(**kwargs)
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="okf-cli.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="catalogue root (default: auto-detect from cwd; "
-                    "hard-fails if none found)")
+                    "hard-fails if none found)").completer = _complete_dirs
     sub = ap.add_subparsers(dest="cmd", required=True)
     pah = _sub(sub, "archive", "maintenance",
                "move a concept into _archive/<bundle>/, or back with --restore (dry-run default)")
     pah.add_argument("path", help="<bundle>/<concept>[.md]; with --restore: "
                                    "_archive/<bundle>/<concept>[.md]. The other end is derived, "
-                                   "never typed")
+                                   "never typed").completer = _complete_concepts
     pah.add_argument("--restore", action="store_true",
                      help="move the path back out of _archive/ instead of into it")
     pah.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
@@ -5580,10 +6473,114 @@ def build_parser():
                            "(default: always fill the delta)")
     pc = _sub(sub, "check", "maintenance",
               "conformance scan: §9 hard rules + local invariants")
-    pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
-    pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)")
+    pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
+    pcx = _sub(sub, "ctx", "navigation",
+               "context bundles: curated, ordered reading lists per topic "
+               "(`ctx` lists them, `ctx <slug>` shows one)")
+    ctx_verbs = pcx.add_subparsers(dest="ctx_verb", required=True, metavar="VERB",
+                                   help="ctx verb; `ctx <slug>` is short for `ctx show <slug>`")
+    pcxa = ctx_verbs.add_parser(
+        "add", help="add one entry to a ctx bundle",
+        description="add PATH as required entry (default: last position) or as reference entry")
+    pcxa.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxa.add_argument("path", metavar="PATH", help="concept or file path").completer = _complete_concepts
+    pcxa.add_argument("--pos", type=int, help="required position (clamped to 1..n+1)")
+    pcxa.add_argument("--mode", choices=CTX_MODES, default="pflicht", help="entry mode")
+    pcxa.add_argument("--comment", default="", help="entry comment")
+    pcxk = ctx_verbs.add_parser(
+        "check", help="validate ctx bundles",
+        description="report ctx errors and warnings in the `check` line format; exit 1 on any error")
+    pcxk.add_argument("slug", nargs="?", help="ctx slug (default: all)").completer = _complete_ctx_slugs
+    pcxk.add_argument("--stale", action="store_true",
+                      help="warn for every member modified after the ctx file")
+    pcxk.add_argument("--json", action="store_true", help="machine-readable output")
+    pcxc = ctx_verbs.add_parser(
+        "create", help="create a ctx bundle from paths and/or an import file",
+        description="create _ctx/<slug>.md; every path becomes a required entry, "
+                    "ordered alphabetically by normalised path")
+    pcxc.add_argument("slug", help="new ctx slug: lowercase letters, digits, hyphens"
+                      ).completer = _complete_ctx_slugs
+    pcxc.add_argument("paths", nargs="*", metavar="PATH",
+                      help="concept or file path to add as required entry"
+                      ).completer = _complete_concepts
+    pcxc.add_argument("--import", dest="import_file", metavar="FILE",
+                      help="read one path per line (blank and # lines skipped, "
+                           "text after a TAB is the entry comment)").completer = _complete_files
+    pcxc.add_argument("--description", help="one-line description of the bundle")
+    pcxd = ctx_verbs.add_parser(
+        "drop", help="remove one entry from a ctx bundle",
+        description="remove an entry (also when its file is gone); required positions are "
+                    "renumbered 1..n")
+    pcxd.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxd.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
+    pcxe = ctx_verbs.add_parser(
+        "edit", help="open a ctx bundle in $VISUAL/$EDITOR/vi and validate it",
+        description="open _ctx/<slug>.md in $VISUAL, else $EDITOR, else vi; afterwards refresh "
+                    "the _ctx index and run `ctx check` on the file; exit 1 on errors")
+    pcxe.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxl = ctx_verbs.add_parser(
+        "list", help="list ctx bundles with entry and required counts",
+        description="list ctx bundles: slug, description, entry and required counts")
+    pcxl.add_argument("--for", dest="for_path", metavar="PATH",
+                      help="only bundles whose entries contain PATH (also when the file is gone)"
+                      ).completer = _complete_files
+    pcxl.add_argument("--json", action="store_true", help="machine-readable output")
+    pcxm = ctx_verbs.add_parser(
+        "move", help="reorder an entry or change its mode",
+        description="move an entry to required position N (--pos) and/or change its mode; "
+                    "required positions are renumbered 1..n")
+    pcxm.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxm.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
+    pcxm.add_argument("--pos", type=int, help="required position (clamped to 1..n)")
+    pcxm.add_argument("--mode", choices=CTX_MODES, help="new mode")
+    pcxo = ctx_verbs.add_parser(
+        "outbound", help="list the links each entry points to",
+        description="per entry, markdown link targets; missing targets are marked [missing], "
+                    "dead entries [DEAD]; other members are excluded unless --include-internal")
+    pcxi = ctx_verbs.add_parser(
+        "inbound", help="list the files that link to each entry",
+        description="per entry, the files linking to it; other members are excluded unless "
+                    "--include-internal; files under _ctx/ are always excluded")
+    for pn in (pcxi, pcxo):
+        pn.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+        pn.add_argument("--file", metavar="X",
+                        help="only the entry whose title, path or stem equals X (case-insensitive)")
+        pn.add_argument("--include-internal", action="store_true",
+                        help="also list links between members of the ctx")
+        pn.add_argument("--json", action="store_true", help="machine-readable output")
+    pcxr = ctx_verbs.add_parser(
+        "read", help="print the full content of every required entry",
+        description="print every required entry of a ctx in position order, each after a "
+                    "`===== i/p <abspath> =====` separator; reference entries are not printed; "
+                    "exit 1 when a required entry is dead")
+    pcxr.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxrm = ctx_verbs.add_parser(
+        "remove", help="delete a ctx bundle and list files that still link to it",
+        description="delete _ctx/<slug>.md, refresh the _ctx index and list every file "
+                    "that still links to the removed ctx")
+    pcxrm.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxrn = ctx_verbs.add_parser(
+        "rename", help="rename a ctx bundle and rewrite inbound links",
+        description="move _ctx/<old>.md to _ctx/<new>.md; inbound links and the _ctx index follow")
+    pcxrn.add_argument("old", help="current ctx slug").completer = _complete_ctx_slugs
+    pcxrn.add_argument("new", help="new ctx slug: lowercase letters, digits, hyphens")
+    pcxs = ctx_verbs.add_parser(
+        "show", help="list a ctx in reading order with live metadata and token estimates",
+        description="list the required entries in reading order, then the reference entries; "
+                    "`ctx <slug>` is short for `ctx show <slug>`; exit 1 when an entry is dead")
+    pcxs.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxs.add_argument("--json", action="store_true",
+                      help="machine-readable output (stdout carries only the JSON object)")
+    pcxt = ctx_verbs.add_parser(
+        "toc", help="print the headings of every entry",
+        description="print per entry an H1 with the entry path, then the member's headings "
+                    "demoted by one level; dead entries are marked [DEAD]")
+    pcxt.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    pcxt.add_argument("--depth", type=int, default=0, metavar="N",
+                      help="only headings of original level <= N (default 0 = all)")
     pf = _sub(sub, "find", "search",
               "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm",
               formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -5592,10 +6589,10 @@ def build_parser():
     pf.add_argument("--include-topics", action="store_true", help="widen beyond .okf.toml declared bundle to topic folders")
     pf.add_argument("--limit", type=int, default=10,
                     help="max results to print (default 10)")
-    pf.add_argument("--type", help="filter by frontmatter `type` (exact match)")
-    pf.add_argument("--tag", help="filter by tag (exact match)")
+    pf.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
+    pf.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
     pf.add_argument("--scope", metavar="TARGET",
-                    help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+                    help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
     pf.add_argument("--include-archive", action="store_true",
                     help="also search _archive/<bundle>/<cid>; excluded by "
                          "default (combine with --scope to reach the "
@@ -5611,7 +6608,7 @@ def build_parser():
                          "stays off by default (Q05/D17)")
     pfx = _sub(sub, "fix-crosslinks", "maintenance",
                "rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
-    pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
     pfx.add_argument("--include-reserved", action="store_true",
                       dest="include_reserved",
@@ -5622,13 +6619,13 @@ def build_parser():
                            "default)")
     pfxt = _sub(sub, "fix-xml-tags", "maintenance",
                 "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
-    pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+    pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
     pi = _sub(sub, "index", "navigation",
               "catalogue TOC (bundle names + one-line descriptions), or one "
               "bundle's index.md")
     pi.add_argument("bundle", nargs="?",
-                    help="bundle to print (default: the whole catalogue TOC)")
+                    help="bundle to print (default: the whole catalogue TOC)").completer = _complete_bundles
     pi.add_argument("--full", action="store_true",
                     help="catalogue TOC: print the structured per-bundle block "
                          "(description, concept count, directories, types, tags) "
@@ -5640,10 +6637,10 @@ def build_parser():
          "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
     pls = _sub(sub, "list", "navigation",
                "list concepts filtered by frontmatter type and/or tag")
-    pls.add_argument("--type", help="filter by frontmatter `type` (exact match)")
-    pls.add_argument("--tag", help="filter by tag (exact match)")
+    pls.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
+    pls.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
     pls.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
     pls.add_argument("--include-archive", action="store_true",
                     help="also list _archive/<bundle>/<cid>; excluded by "
                          "default (combine with --scope to reach the "
@@ -5651,15 +6648,15 @@ def build_parser():
     pls.add_argument("--json", action="store_true", help="machine-readable output")
     pmt = _sub(sub, "merge-tags", "tags",
                "merge/rename one or more tags into a target tag across concept frontmatter")
-    pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows")
-    pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name")
+    pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows").completer = _complete_tags
+    pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name").completer = _complete_tags
     pmt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pnt = _sub(sub, "normalize-tags", "tags",
                "convert inline `tags: [...]` fields to YAML block-list form (local convention)")
     pnt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     pp = _sub(sub, "prime", "navigation",
               "one-shot agent onboarding: usage guide, command directory, "
@@ -5674,26 +6671,29 @@ def build_parser():
                           "(~2s on a large catalogue) instead of reporting only "
                           "whether the semantic index is present")
     pr = _sub(sub, "read", "navigation", "print one concept page")
-    pr.add_argument("path", help="<bundle>/<concept-id> of the page to print")
+    pr.add_argument("path", help="<bundle>/<concept-id> of the page to print").completer = _complete_concepts
     prc = _sub(sub, "recent", "navigation",
                "list the most recently created concepts, newest first")
     prc.add_argument("--limit", type=int, default=10,
                      help="max results to print (default 10)")
     prc.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)")
-    prc.add_argument("--type", help="filter by frontmatter `type` (exact match)")
-    prc.add_argument("--tag", help="filter by tag (exact match)")
+                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
+    prc.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
+    prc.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
     prc.add_argument("--json", action="store_true", help="machine-readable output")
     prf = _sub(sub, "refs", "search",
-               "list inbound markdown references to a file")
-    prf.add_argument("path", help="target file (abs, or relative to --root)")
-    prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide")
+               "list inbound and outbound markdown links of a file")
+    prf.add_argument("path", help="target file (abs, or relative to --root)").completer = _complete_concept_files
+    prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide").completer = _complete_dirs
     prf.add_argument("--json", action="store_true",
                      help="machine-readable output")
+    prf_dir = prf.add_mutually_exclusive_group()
+    prf_dir.add_argument("--in", dest="only_in", action="store_true", help="only inbound links")
+    prf_dir.add_argument("--out", dest="only_out", action="store_true", help="only outbound links")
     px = _sub(sub, "reindex", "maintenance",
               "(re)generate marker-bounded index listings: index.md one level, "
               "index-map.md the whole subtree")
-    px.add_argument("target", help="<bundle> or <bundle>/<subdir>")
+    px.add_argument("target", help="<bundle> or <bundle>/<subdir>").completer = _complete_scopes
     px.add_argument("--init", action="store_true",
                     help="recursively migrate marker-less flat index.md in the subtree to "
                          "managed marker blocks (bespoke multi-section indexes are skipped + flagged)")
@@ -5703,14 +6703,14 @@ def build_parser():
                     help="with --init, also flatten a pure multi-section listing (prose/tables still refuse)")
     prt = _sub(sub, "remove-tags", "tags",
                "remove one or more tags from concept frontmatter (no merge target)")
-    prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft")
+    prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft").completer = _complete_tags
     prt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     prn = _sub(sub, "rename", "maintenance",
                "move a concept + rewrite every inbound/outbound link + reindex (dry-run default)")
-    prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)")
-    prn.add_argument("new", help="destination path (same or different bundle)")
+    prn.add_argument("old", help="source concept path (<bundle>/<concept>.md, abs or --root-relative)").completer = _complete_concept_files
+    prn.add_argument("new", help="destination path (same or different bundle)").completer = _complete_concept_files
     prn.add_argument("--apply", action="store_true", help="perform the move (default: dry-run preview only)")
     prn.add_argument("--force", action="store_true",
                      help="overwrite an existing destination, and proceed when the new "
@@ -5719,35 +6719,35 @@ def build_parser():
                "literal path-string rewrite across text files")
     prw.add_argument("old", help="literal path string to replace")
     prw.add_argument("new", help="replacement path string")
-    prw.add_argument("--scan-root", help="dir to scan (default: --root)")
+    prw.add_argument("--scan-root", help="dir to scan (default: --root)").completer = _complete_dirs
     prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
     pse = _sub(sub, "sync-export", "navigation",
                "print a canonical block's payload for materialisation elsewhere")
-    pse.add_argument("concept", help="canonical concept (<bundle>/<concept-id>)")
+    pse.add_argument("concept", help="canonical concept (<bundle>/<concept-id>)").completer = _complete_concepts
     pse.add_argument("block_id", metavar="block-id",
-                     help="canon block id declared in that concept")
+                     help="canon block id declared in that concept").completer = _complete_block_ids
     psi = _sub(sub, "sync-insert", "maintenance",
                "materialise a canonical block inside a consumer concept (dry-run default)")
-    psi.add_argument("consumer", help="consumer concept to insert into (<bundle>/<concept-id>)")
-    psi.add_argument("concept", help="canonical owner concept (<bundle>/<concept-id>)")
-    psi.add_argument("block_id", metavar="block-id", help="canon block id to materialise")
+    psi.add_argument("consumer", help="consumer concept to insert into (<bundle>/<concept-id>)").completer = _complete_concepts
+    psi.add_argument("concept", help="canonical owner concept (<bundle>/<concept-id>)").completer = _complete_concepts
+    psi.add_argument("block_id", metavar="block-id", help="canon block id to materialise").completer = _complete_block_ids
     psi.add_argument("--apply", action="store_true",
                      help="write the block (default: dry-run preview only)")
     pss = _sub(sub, "sync-status", "maintenance",
                "drift report for every materialised canon block")
     pss.add_argument("target", nargs="?",
-                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pss.add_argument("--source",
-                     help="only blocks whose canonical source is this path (/bundle/concept.md)")
-    pss.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id")
+                     help="only blocks whose canonical source is this path (/bundle/concept.md)").completer = _complete_canon_sources
+    pss.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id").completer = _complete_canon_block_ids
     pss.add_argument("--json", action="store_true", help="machine-readable output")
     psu = _sub(sub, "sync-update", "maintenance",
                "re-materialise outdated consumer blocks from their canon owner (dry-run default)")
     psu.add_argument("target", nargs="?",
-                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     psu.add_argument("--source",
-                     help="only blocks whose canonical source is this path (/bundle/concept.md)")
-    psu.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id")
+                     help="only blocks whose canonical source is this path (/bundle/concept.md)").completer = _complete_canon_sources
+    psu.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id").completer = _complete_canon_block_ids
     psu.add_argument("--apply", action="store_true",
                      help="write changes (default: dry-run preview only)")
     psu.add_argument("--force", action="store_true",
@@ -5759,24 +6759,25 @@ def build_parser():
     pg.add_argument("--limit", type=int, default=8, help="max matches per candidate (default 8)")
     pg.add_argument("--singletons", action="store_true",
                     help="full-dump mode only: show tags used exactly once")
-    pg.add_argument("--register", nargs="+", metavar="TAG",
-                    help="add tag(s) to the TAGS.md registry (closed-vocabulary allow-list)")
+    pg.add_argument("--register", nargs=2, action="append", metavar=("TAG", "DESCRIPTION"),
+                    help="add a tag to the TAGS.md registry (closed-vocabulary allow-list); "
+                         "DESCRIPTION is required, max 150 chars; repeat the option for several tags")
     pg.add_argument("--validate", nargs="+", metavar="TAG",
-                    help="check tag(s) against TAGS.md; exit 1 if any are unregistered")
+                    help="check tag(s) against TAGS.md; exit 1 if any are unregistered").completer = _complete_tags
     pt = _sub(sub, "toc", "navigation",
               "print a concept's headings (default: h2 only)")
-    pt.add_argument("path", help="<bundle>/<concept-id> to list headings for")
+    pt.add_argument("path", help="<bundle>/<concept-id> to list headings for").completer = _complete_concepts
     pt.add_argument("--level", type=int, default=2,
                     help="heading level to list (default 2 = h2); 0 = full indented tree")
     pv = _sub(sub, "visualize", "navigation",
               "write a viz.html concept graph for a bundle "
               "(embeds every concept body; needs network for cytoscape/marked)")
-    pv.add_argument("bundle", help="bundle to render the graph for")
-    pv.add_argument("--out", help="output path (default: <bundle>/assets/viz.html)")
+    pv.add_argument("bundle", help="bundle to render the graph for").completer = _complete_bundles
+    pv.add_argument("--out", help="output path (default: <bundle>/assets/viz.html)").completer = _complete_files
     pwl = _sub(sub, "wikilinks", "maintenance",
                "report Obsidian wikilinks ([[…]]) and whether each resolves to a concept")
     pwl.add_argument("target", nargs="?",
-                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)")
+                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pwl.add_argument("--unresolved", action="store_true",
                      help="list only unresolved and ambiguous occurrences (summary stays complete)")
     pwl.add_argument("--json", action="store_true", help="machine-readable output")
@@ -5794,7 +6795,13 @@ def _silence_broken_pipe_streams():
 
 
 def main():
-    args = build_parser().parse_args()
+    ap = build_parser()
+    if "_ARGCOMPLETE" in os.environ:
+        # Shell TAB completion (cli/_okf-cli): optional dependency, imported
+        # only on a completion run, which argcomplete ends via os._exit.
+        import argcomplete
+        argcomplete.autocomplete(ap, default_completer=argcomplete.SuppressCompleter())
+    args = ap.parse_args(_ctx_shorthand(sys.argv[1:]))
     root = catalogue_root(args.root)
     if root is None:
         sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")

@@ -1262,6 +1262,67 @@ class CmdRefs(unittest.TestCase):
         out = json.loads(buf.getvalue())
         self.assertEqual([h["source"] for h in out["inbound"]], ["README.md"])
 
+    def _refs(self, path, **flags):
+        import io, json, contextlib, types
+        args = types.SimpleNamespace(path=path, scan_root=self.tmp, json=False,
+                                     only_in=False, only_out=False)
+        for k, v in flags.items():
+            setattr(args, k, v)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf.cmd_refs(self.tmp, args)
+        return json.loads(buf.getvalue()) if args.json else buf.getvalue()
+
+    def _link_fixture(self):
+        self._w("b/one.md", "---\ntype: Concept\n---\n[T](/b/two.md) [G](gone.md#x) "
+                            "[W](http://x.org/a.md)\n```\n[F](/b/fenced.md)\n```\n")
+        self._w("b/two.md", "# two\n")
+
+    def test_text_has_inbound_and_outbound_sections(self):
+        self._link_fixture()
+        self.assertEqual(self._refs("b/two.md"),
+                         "inbound (1):\n  b/one.md  ->  /b/two.md\noutbound (0):\n  (none)\n")
+        self.assertEqual(self._refs("b/one.md"),
+                         "inbound (0):\n  (none)\noutbound (2):\n"
+                         "  /b/two.md  ->  b/two.md\n"
+                         "  gone.md#x  ->  b/gone.md  [missing]\n")
+
+    def test_in_and_out_flags_select_one_section(self):
+        self._link_fixture()
+        self.assertEqual(self._refs("b/one.md", only_in=True), "inbound (0):\n  (none)\n")
+        self.assertEqual(self._refs("b/one.md", only_out=True).splitlines()[0], "outbound (2):")
+        self.assertNotIn("inbound", self._refs("b/one.md", only_out=True))
+
+    def test_json_outbound_and_flag_omissions(self):
+        self._link_fixture()
+        full = self._refs("b/one.md", json=True)
+        self.assertEqual(full["inbound"], [])
+        self.assertEqual(full["outbound"], [
+            {"link": "/b/two.md", "target": "b/two.md", "exists": True},
+            {"link": "gone.md#x", "target": "b/gone.md", "exists": False}])
+        self.assertNotIn("outbound", self._refs("b/two.md", json=True, only_in=True))
+        self.assertNotIn("inbound", self._refs("b/two.md", json=True, only_out=True))
+
+    def test_non_markdown_target_has_no_outbound(self):
+        self._w("notes.txt", "[T](/b/two.md)\n")
+        self._w("b/two.md", "# two\n")
+        self.assertEqual(self._refs("notes.txt", only_out=True), "outbound (0):\n  (none)\n")
+
+    def test_target_outside_scan_root_is_absolute(self):
+        self._w("a.md", "[O](../../outside.md)\n")
+        out = self._refs("a.md", json=True)["outbound"][0]
+        self.assertEqual(out["target"], os.path.abspath(os.path.join(self.tmp, "../../outside.md")))
+
+    def test_outbound_links_and_matrix_share_resolution(self):
+        self._w("d/a.md", "[x]( ../e/t.md?q ) [m](mailto:a@b)\n")
+        self._w("e/t.md", "t\n")
+        ap = os.path.join(self.tmp, "d/a.md")
+        tgt = os.path.join(self.tmp, "e/t.md")
+        self.assertEqual(okf.outbound_links(self.tmp, ap), [(" ../e/t.md?q ", tgt, True)])
+        self.assertEqual(list(okf.iter_md_links(self.tmp)), [("d/a.md", " ../e/t.md?q ", tgt)])
+        self.assertEqual(okf.build_ref_matrix(self.tmp, tgt), [("d/a.md", " ../e/t.md?q ")])
+        self.assertEqual(okf.resolve_md_link(self.tmp, ap, "mailto:a@b"), None)
+
     def test_missing_target_exits_nonzero(self):
         import types
         args = types.SimpleNamespace(path="ghost.md", scan_root=self.tmp, json=True)
@@ -1440,23 +1501,40 @@ class TagRegistryGate(unittest.TestCase):
         self.assertNotIn("tag-registered", self._names(warnings))
 
     def test_register_creates_and_appends(self):
-        added, already = okf.register_tags(self.tmp, ["zebra", "alpha"])
+        added, already = okf.register_tags(self.tmp, [("zebra", "z"), ("alpha", "a")])
         self.assertEqual(set(added), {"zebra", "alpha"})
         self.assertEqual(already, [])
         self.assertEqual(okf.load_tags(self.tmp), {"zebra", "alpha"})
         # idempotent + casefold-sorted output (alpha before zebra)
-        added2, already2 = okf.register_tags(self.tmp, ["alpha", "mid"])
+        added2, already2 = okf.register_tags(self.tmp, [("alpha", "other"), ("mid", "m")])
         self.assertEqual(added2, ["mid"])
         self.assertEqual(already2, ["alpha"])
         body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
         self.assertLess(body.index("`alpha`"), body.index("`mid`"))
         self.assertLess(body.index("`mid`"), body.index("`zebra`"))
+        self.assertIn("| `alpha` | a |", body)  # existing description is kept, not overwritten
 
     def test_register_preserves_descriptions(self):
         self._w("TAGS.md", okf.TAGS_HEADER + "| `a` | keep me |\n")
-        okf.register_tags(self.tmp, ["b"])
+        okf.register_tags(self.tmp, [("b", "bee")])
         body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
         self.assertIn("| `a` | keep me |", body)
+        self.assertIn("| `b` | bee |", body)
+
+    def test_description_limit_is_150_and_nothing_is_written_on_refusal(self):
+        okf.register_tags(self.tmp, [("ok", "x" * 150)])
+        for bad in ("x" * 151, "", "   ", "a|b", "a\nb"):
+            with self.assertRaises(ValueError):
+                okf.register_tags(self.tmp, [("fine", "good"), ("bad", bad)])
+        self.assertEqual(okf.load_tags(self.tmp), {"ok"})
+
+    def test_register_option_needs_tag_and_description(self):
+        ap = okf.build_parser()
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                ap.parse_args(["tags", "--register", "only-a-tag"])
+        ns = ap.parse_args(["tags", "--register", "a", "da", "--register", "b", "db"])
+        self.assertEqual(ns.register, [["a", "da"], ["b", "db"]])
 
 
 class AutoEmbedOnRegister(unittest.TestCase):
@@ -1480,7 +1558,7 @@ class AutoEmbedOnRegister(unittest.TestCase):
     def test_register_command_auto_embeds_without_manual_produce(self):
         import types
         self.bt.embed_bge_m3 = lambda texts: [[0.1, 0.2, 0.3] for _ in texts]
-        args = types.SimpleNamespace(register=["freshly-minted"])
+        args = types.SimpleNamespace(register=[["freshly-minted", "a fresh tag"]])
         okf.cmd_tags(self.tmp, args)
         db_path = os.path.join(self.tmp, ".tagvec", "tag_vectors.sqlite")
         delta_after = self.bt.plan_delta({"freshly-minted"}, "bge-m3", db_path)
@@ -1491,7 +1569,7 @@ class AutoEmbedOnRegister(unittest.TestCase):
         def _boom(texts):
             raise RuntimeError("connection refused")
         self.bt.embed_bge_m3 = _boom
-        args = types.SimpleNamespace(register=["still-registered"])
+        args = types.SimpleNamespace(register=[["still-registered", "stays registered"]])
         okf.cmd_tags(self.tmp, args)  # must not raise
         self.assertEqual(okf.load_tags(self.tmp), {"still-registered"})
 
@@ -5097,6 +5175,76 @@ class CommandHelpConformance(unittest.TestCase):
                    if not isinstance(act, argparse._SubParsersAction)
                    and not (act.help or "").strip()]
         self.assertEqual(missing, [])
+
+
+@unittest.skipUnless(importlib.util.find_spec("argcomplete"),
+                     "argcomplete not installed (just setup)")
+class ShellCompletion(unittest.TestCase):
+    """TAB completion, driven through the real cli/okf-cli.py with the env
+    protocol the zsh glue cli/_okf-cli speaks. --root is the raw shell word
+    `~/cat`, as the glue delivers it from an alias."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        for rel, text in {
+            "stray.txt": "x",
+            "cat/TYPES.md": "| Type | Note |\n|---|---|\n| `Concept` | a |\n| `Decision` | b |\n",
+            "cat/b1/alpha.md": "---\ntitle: Alpha\ntype: Concept\ntags: [x, y]\n---\nbody\n",
+            "cat/b1/sub/beta.md": ("---\ntitle: Beta\ntype: Decision\ntags: [x]\n---\n"
+                                   "<!-- okf:canon id=blk-1 -->\npayload\n<!-- /okf:canon -->\n"),
+            "cat/_archive/b1/old.md": "---\ntitle: Old\n---\n",
+        }.items():
+            path = os.path.join(self.tmp, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+
+    def _complete(self, words):
+        import subprocess
+        import sys
+        line = "okf-cli --root ~/cat " + words
+        out = os.path.join(self.tmp, "out")
+        env = dict(os.environ, HOME=self.tmp, COMP_LINE=line, COMP_POINT=str(len(line)),
+                   _ARGCOMPLETE="1", _ARGCOMPLETE_SHELL="zsh",
+                   _ARGCOMPLETE_SUPPRESS_SPACE="1", _ARGCOMPLETE_STDOUT_FILENAME=out)
+        subprocess.run([sys.executable, os.path.join(_HERE, "okf-cli.py")],
+                       env=env, cwd=self.tmp, capture_output=True)
+        if not os.path.exists(out):
+            return []
+        with open(out, encoding="utf-8") as f:
+            raw = f.read()
+        if not raw:
+            return []
+        return [tuple(e.split(":", 1)) if ":" in e else (e, "") for e in raw.split("\x0b")]
+
+    def _values(self, words):
+        """Candidates minus option strings: argcomplete offers `-h/--help`
+        next to positional values."""
+        return [v for v, _ in self._complete(words) if not v.startswith("-")]
+
+    def test_type_values_come_from_the_root_on_the_line(self):
+        self.assertEqual([c for c in self._complete("find q --type ") if not c[0].startswith("-")],
+                         [("Concept", "a"), ("Decision", "b")])
+
+    def test_tag_values_most_used_first_with_counts(self):
+        self.assertEqual(self._complete("find q --tag "),
+                         [("x", "concepts: 2"), ("y", "concepts: 1")])
+
+    def test_scope_values_are_bundles_and_concept_dirs(self):
+        self.assertEqual(self._values("list --scope "), ["b1", "b1/sub"])
+
+    def test_concept_refs_and_archive_on_restore(self):
+        self.assertEqual(self._values("read "), ["b1/alpha", "b1/sub/beta"])
+        self.assertEqual(self._values("archive --restore "), ["_archive/b1/old"])
+
+    def test_block_ids_come_from_the_concept_on_the_line(self):
+        self.assertEqual(self._values("sync-export b1/sub/beta "), ["blk-1"])
+
+    def test_free_text_offers_options_not_cwd_files(self):
+        values = [v for v, _ in self._complete("find ")]
+        self.assertIn("--type", values)
+        self.assertNotIn("stray.txt", values)
 
 
 def _cli(root, *argv):
