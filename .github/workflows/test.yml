@@ -14,12 +14,17 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # tomllib (okf-cli.py) braucht >= 3.11
+        os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          # APFS ist case-insensitiv: nur hier laufen die 4 Case-Tests.
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

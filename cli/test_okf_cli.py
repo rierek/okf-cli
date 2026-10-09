@@ -18,6 +18,16 @@ import tempfile
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _fs_is_case_insensitive():
+    with tempfile.TemporaryDirectory() as d:
+        open(os.path.join(d, "a"), "w").close()
+        return os.path.exists(os.path.join(d, "A"))
+
+
+needs_case_insensitive_fs = unittest.skipUnless(
+    _fs_is_case_insensitive(), "braucht case-insensitives Dateisystem (APFS)")
 _spec = importlib.util.spec_from_file_location("okf_cli", os.path.join(_HERE, "okf-cli.py"))
 okf = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(okf)
@@ -6370,6 +6380,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self._rename("a/Old2.md", "a/fresh.md", apply=True)
         self.assertIn("[[fresh]]", self._r("a/src.md"))
 
+    @needs_case_insensitive_fs
     def test_differently_cased_source_path_still_matches(self):
         """On a case-insensitive filesystem `A/old.md` reaches `a/old.md`, so
         the path the caller typed and the path in the index differ in case. A
@@ -6379,6 +6390,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self._rename("A/old.md", "A/new.md", apply=True)
         self.assertIn("[[new]]", self._r("a/src.md"))
 
+    @needs_case_insensitive_fs
     def test_differently_cased_source_path_still_places_a_self_reference(self):
         """D14 — the source has to be respelled the way the filesystem stores it
         before `old_rel` is derived, because cmd_rename compares that string
@@ -6486,6 +6498,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self._w("a/x.md", "---\ntype: Concept\n---\n# X\n")
         self._rename_fails("a/x.md", "a/y#z.md", "forbidden char")
 
+    @needs_case_insensitive_fs
     def test_differently_cased_markdown_link_is_rewritten_too(self):
         """A link may spell its target in a different case than the disk does;
         on this filesystem that link is live. The wikilink half followed it and
@@ -7281,6 +7294,7 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
             okf.wikilink_checked_bundles(okf.load_okf_config(self.tmp), self.tmp)
         self.assertIn("nosuchbundle", err.getvalue())
 
+    @needs_case_insensitive_fs
     def test_case_variant_bundle_name_does_not_defeat_the_gate(self):
         """The store's filesystem is case-insensitive, so `check A` reaches
         bundle `a` with ctx["bundle"] reading "A". An exact-string gate switched
