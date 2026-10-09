@@ -1,4 +1,4 @@
-# okf-tools — CLI and MCP server for Open Knowledge Format (OKF) v0.2 catalogues
+# okf-cli — CLI and MCP server for Open Knowledge Format (OKF) v0.2 catalogues
 
 Search, navigate, validate and refactor a **catalogue of [Open Knowledge Format (OKF) v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) bundles** — markdown files with YAML frontmatter, built for humans and AI agents.
 
@@ -13,7 +13,7 @@ Keywords: Open Knowledge Format, OKF v0.2, knowledge base CLI, markdown frontmat
 ## Quick start
 
 ```bash
-git clone https://github.com/xRiErOS/okf-tools && cd okf-tools
+git clone https://github.com/xRiErOS/okf-cli && cd okf-cli
 python3 cli/okf-cli.py --root /path/to/catalogue prime          # agent onboarding
 python3 cli/okf-cli.py --root /path/to/catalogue find "query"   # ranked search
 python3 cli/okf-cli.py --root /path/to/catalogue check          # conformance scan
@@ -25,7 +25,7 @@ Run inside the catalogue root to drop `--root`. Requires Python 3.
 
 [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) is a vendor-neutral format from Google Cloud: knowledge as plain markdown files with YAML frontmatter in a directory hierarchy, linked by normal markdown links, indexed by generated `index.md` files. Version 0.2 adds provenance and freshness signals in frontmatter (`sources`, `generated`, `verified`, `status`, `stale_after`). A directory of such files is a *bundle*.
 
-`okf-tools` treats a directory of bundles as one **catalogue**:
+`okf-cli` treats a directory of bundles as one **catalogue**:
 
 ```
 catalogue/
@@ -72,7 +72,7 @@ Indexes are built, not live. A changed catalogue makes `find` print a staleness 
 ```json
 {
   "mcpServers": {
-    "okf": { "command": "python3", "args": ["/path/to/okf-tools/mcp/okf_mcp.py"] }
+    "okf": { "command": "python3", "args": ["/path/to/okf-cli/mcp/okf_mcp.py"] }
   }
 }
 ```
@@ -89,7 +89,7 @@ just setup    # installs argcomplete, links cli/_okf-cli into ~/.zsh/completions
 
 ## How it differs
 
-| | okf-tools | single-bundle tools |
+| | okf-cli | single-bundle tools |
 |---|---|---|
 | scope | catalogue of many bundles | one bundle |
 | dependencies | none (stdlib) | varies |
@@ -107,3 +107,7 @@ just prime
 ```
 
 `just test` must be green before anything in `cli/` or `mcp/` is committed. Tests never write into a real catalogue.
+
+## License
+
+[Apache-2.0](LICENSE)
