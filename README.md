@@ -8,7 +8,7 @@ Search, navigate, validate and refactor a **catalogue of [Open Knowledge Format 
 - **Agent-ready.** MCP server with 15 tools; `prime` onboards a fresh agent session in one call.
 - **Catalogue-aware.** Works across many bundles at once, not only one.
 
-Keywords: Open Knowledge Format, OKF v0.2, knowledge base CLI, markdown frontmatter, MCP server, Claude Code, agent memory, Obsidian, BM25, link checker.
+Keywords: Open Knowledge Format, OKF v0.2, knowledge base CLI, markdown frontmatter, MCP server, Claude Code, agent memory, Obsidian, BM25, link checker, wikilinks.
 
 ## Quick start
 
@@ -78,6 +78,10 @@ Indexes are built, not live. A changed catalogue makes `find` print a staleness 
 ### Context bundles
 
 `ctx` lists curated, ordered reading lists per topic (`_ctx/<slug>.md`); `ctx <slug>` shows one.
+
+## Works with Obsidian
+
+A catalogue is plain markdown with YAML frontmatter, so it opens as an [Obsidian](https://obsidian.md) vault unchanged: edit and browse in Obsidian, search, validate and refactor with `okf-cli`. `wikilinks` reports `[[wikilinks]]` and whether they resolve; `rename` also rewrites unambiguous wikilinks. To enforce OKF v0.2 inside Obsidian itself, see the [okf-enforcer](https://github.com/MartinForReal/okf-enforcer) plugin.
 
 ## Use with AI agents (MCP)
 
