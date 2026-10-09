@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "okf-cli"
+version = "0.1.0"
+description = "CLI and MCP server for Open Knowledge Format (OKF) v0.2 catalogues"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Erik Riedel", email = "mail@erikriedel.de" }]
+# tomllib (okf-cli.py) needs 3.11
+requires-python = ">=3.11"
+dependencies = []
+keywords = ["open-knowledge-format", "okf", "knowledge-base", "markdown", "mcp", "cli"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+
+[project.optional-dependencies]
+# the MCP server (`okf-cli install` registers it through `uv run --with "mcp<2"`,
+# so this extra is only for running mcp/okf_mcp.py with a plain python3)
+mcp = ["mcp<2"]
+# shell TAB completion
+completion = ["argcomplete>=3"]
+
+[project.urls]
+Homepage = "https://github.com/xRiErOS/okf-cli"
+Issues = "https://github.com/xRiErOS/okf-cli/issues"
+
+[project.scripts]
+okf-cli = "okf_cli:main"
+
+# Single source of truth: nothing below is a copy. The repo keeps cli/, mcp/ and
+# skills/ as they are; the wheel maps them into the okf_cli package with the SAME
+# relative layout, so cli/okf-cli.py (hyphenated, not importable), mcp/okf_mcp.py
+# and cli/embeddings find their siblings by relative path in both layouts.
+[tool.hatch.build.targets.wheel]
+packages = ["okf_cli"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"cli/okf-cli.py" = "okf_cli/cli/okf-cli.py"
+"cli/_okf-cli" = "okf_cli/cli/_okf-cli"
+"cli/embeddings" = "okf_cli/cli/embeddings"
+"mcp/okf_mcp.py" = "okf_cli/mcp/okf_mcp.py"
+"skills/okf" = "okf_cli/skills/okf"
+
+[tool.hatch.build.targets.sdist]
+include = ["/okf_cli", "/cli", "/mcp", "/skills", "/README.md", "/LICENSE", "/pyproject.toml"]
