@@ -35,11 +35,6 @@ _spec = importlib.util.spec_from_file_location("okf_cli", _CLI_PATH)
 okf = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(okf)
 
-# Canonical real catalogue — matches PLAN.md's "Catalogue root under test".
-# Only used as the argparse default; every function below takes an explicit
-# root so callers (tests, runner, CI) can pin it.
-DEFAULT_ROOT = os.path.expanduser("~/Obsidian/Knowledge-Catalogue")
-
 # Rare token unlikely to collide with real content — the shared "secret" the
 # golden queries (Task 3) search for.
 SEED_TOKEN = "zqxeval"
@@ -208,11 +203,7 @@ def teardown(root):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument(
-        "--root",
-        default=DEFAULT_ROOT,
-        help="catalogue root (default: {})".format(DEFAULT_ROOT),
-    )
+    p.add_argument("--root", required=True, help="catalogue root")
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--seed", action="store_true", help="seed S1-S4 fixtures")
     g.add_argument("--teardown", action="store_true", help="remove S1-S4 fixtures")

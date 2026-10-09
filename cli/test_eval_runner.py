@@ -314,3 +314,54 @@ class FixtureSpecGoldenAlignmentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunnerAgainstTmpCatalogueTest(unittest.TestCase):
+    """Integration — Wegwerf-Catalogue im tmpdir, echte Subprozess-Grenze."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = tempfile.mkdtemp(prefix="okfeval-run-")
+        for b in (fixtures.CORRECT_BUNDLE, fixtures.WRONG_BUNDLE):
+            os.makedirs(os.path.join(cls.root, b))
+        fixtures.seed(cls.root)
+        cls.result = runner.run(cls.root, GOLDEN_PATH)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def _row(self, row_id):
+        return next(r for r in self.result["per_row"] if r["id"] == row_id)
+
+    def test_literal_s1_ranks_first(self):
+        self.assertEqual(self._row("s1-literal")["rank"], 1)
+        self.assertGreater(self.result["metrics"]["recall_at_1"], 0)
+
+    def test_blob_has_all_eight_metrics(self):
+        self.assertEqual(set(self.result["metrics"]), {
+            "recall_at_1", "recall_at_5", "mrr",
+            "zero_hit_rate_literal", "zero_hit_rate_paraphrase",
+            "mean_score_ratio", "location_correct_rate", "metadata_hit_rate",
+        })
+        for row in self.result["per_row"]:
+            self.assertIn("rank", row)
+
+    def test_location_and_metadata_rows_fully_correct(self):
+        self.assertEqual(self.result["metrics"]["location_correct_rate"], 1.0)
+        self.assertEqual(self.result["metrics"]["metadata_hit_rate"], 1.0)
+
+    def test_paraphrase_without_hit_gets_rank_inf(self):
+        self.assertEqual(self._row("s1-paraphrase")["rank"], float("inf"))
+
+    def test_index_walk_row_ranks_first(self):
+        self.assertEqual(self._row("s4-index-walk")["rank"], 1)
+
+    def test_main_writes_result_json(self):
+        out = os.path.join(self.root, "out.json")
+        rc = runner.main(["--root", self.root, "--golden", GOLDEN_PATH,
+                          "--out", out])
+        self.assertEqual(rc, 0)
+        with open(out, encoding="utf-8") as f:
+            blob = json.load(f)
+        self.assertEqual(set(blob), {"metrics", "catalogue_rev", "per_row"})

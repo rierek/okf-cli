@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Tests for cli/eval/fixtures.py — stdlib unittest, no deps.
 
-Runs against the REAL catalogue (D11: fixtures live in the real catalogue,
-not a tmp fixture dir) — that is the point of this module. teardown() is
-called in a finally-block so a failed assertion never leaves residue.
+Runs against a throwaway catalogue in a tmpdir, never the live vault.
+teardown() runs in setUp/tearDown so a failed assertion leaves no residue.
 
 Run: python3 -m unittest test_eval_fixtures -v
 """
 import importlib.util
 import io
 import os
+import shutil
+import tempfile
 import types
 import unittest
 from contextlib import redirect_stdout
@@ -28,7 +29,18 @@ _fx_spec = importlib.util.spec_from_file_location(
 fixtures = importlib.util.module_from_spec(_fx_spec)
 _fx_spec.loader.exec_module(fixtures)
 
-CATALOGUE_ROOT = fixtures.DEFAULT_ROOT
+CATALOGUE_ROOT = None
+
+
+def setUpModule():
+    global CATALOGUE_ROOT
+    CATALOGUE_ROOT = tempfile.mkdtemp(prefix="okfeval-fixtures-")
+    for b in (fixtures.CORRECT_BUNDLE, fixtures.WRONG_BUNDLE):
+        os.makedirs(os.path.join(CATALOGUE_ROOT, b))
+
+
+def tearDownModule():
+    shutil.rmtree(CATALOGUE_ROOT, ignore_errors=True)
 
 
 def _capture_stdout(fn):
@@ -51,11 +63,6 @@ class SeedThenTeardownIsClean(unittest.TestCase):
     exist after seed, 0 exist after teardown (idempotent)."""
 
     def setUp(self):
-        self.assertTrue(
-            os.path.isdir(CATALOGUE_ROOT),
-            "real catalogue not found at {} — fixtures.py targets the real "
-            "catalogue by design (D11)".format(CATALOGUE_ROOT),
-        )
         # Defensive pre-clean in case a prior run left residue.
         fixtures.teardown(CATALOGUE_ROOT)
 
