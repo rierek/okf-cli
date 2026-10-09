@@ -39,6 +39,16 @@ catalogue/
 
 A bundle is an immediate subdirectory not starting with `.` or `_`.
 
+## Demo
+
+Ranked search over a catalogue:
+
+![okf-cli find: ranked results with title, type, path and snippet](assets/find.png)
+
+Link-safe rename (dry-run) rewrites the inbound link in another concept:
+
+![okf-cli rename dry-run listing the rewritten inbound link](assets/rename.png)
+
 ## Commands
 
 `okf-cli.py --help` lists all commands; `okf-cli.py <command> --help` shows options. Both are generated from the parser, so this README carries no hand-maintained list.
