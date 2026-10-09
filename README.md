@@ -25,6 +25,8 @@ Run inside the catalogue root to drop `--root`. Requires Python 3.
 
 [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) is a vendor-neutral format from Google Cloud: knowledge as plain markdown files with YAML frontmatter in a directory hierarchy, linked by normal markdown links, indexed by generated `index.md` files. Version 0.2 adds provenance and freshness signals in frontmatter (`sources`, `generated`, `verified`, `status`, `stale_after`). A directory of such files is a *bundle*.
 
+New to OKF? Read the [annotated guide on okf.md](https://okf.md/spec/) (community walkthrough, still labelled v0.1) first; the normative text is the [v0.2 SPEC.md](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md).
+
 `okf-cli` treats a directory of bundles as one **catalogue**:
 
 ```
