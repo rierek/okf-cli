@@ -83,6 +83,10 @@ Indexes are built, not live. A changed catalogue makes `find` print a staleness 
 
 A catalogue is plain markdown with YAML frontmatter, so it opens as an [Obsidian](https://obsidian.md) vault unchanged: edit and browse in Obsidian, search, validate and refactor with `okf-cli`. `wikilinks` reports `[[wikilinks]]` and whether they resolve; `rename` also rewrites unambiguous wikilinks. To enforce OKF v0.2 inside Obsidian itself, see the [okf-enforcer](https://github.com/MartinForReal/okf-enforcer) plugin.
 
+## Works with git
+
+Git is the recommended way to distribute OKF bundles: markdown gives clean diffs, the commit log records who changed which concept, branches and PRs propose knowledge changes. `okf-cli` leaves version control to git. Use `rename` and `archive` instead of `mv`/`rm`, so one commit carries the move and every rewritten link.
+
 ## Use with AI agents (MCP)
 
 ```json
@@ -114,6 +118,13 @@ just setup    # installs argcomplete, links cli/_okf-cli into ~/.zsh/completions
 
 Catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`. Related OKF projects: [open-knowledge-format](https://github.com/GoogleCloudPlatform/open-knowledge-format) (spec), [openknowledge-sh/openknowledge](https://github.com/openknowledge-sh/openknowledge), [okf-enforcer](https://github.com/MartinForReal/okf-enforcer) (Obsidian).
 
+## Learn more
+
+- [Google Cloud blog: How the Open Knowledge Format can improve data sharing](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing) — the original announcement
+- [OKF v0.2 specification](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) and [reference repository](https://github.com/GoogleCloudPlatform/open-knowledge-format)
+- [okf.md](https://okf.md/) — community guide: [spec walkthrough](https://okf.md/spec/), [FAQ](https://okf.md/faq/), [tools](https://okf.md/tools/), [ecosystem map](https://okf.md/ecosystem-map/)
+- [Karpathy's LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — the idea that inspired much of the ecosystem
+
 ## Development
 
 ```bash
@@ -123,6 +134,10 @@ just prime
 ```
 
 `just test` must be green before anything in `cli/` or `mcp/` is committed. Tests never write into a real catalogue.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Spec changes go upstream to [open-knowledge-format](https://github.com/GoogleCloudPlatform/open-knowledge-format).
 
 ## License
 
