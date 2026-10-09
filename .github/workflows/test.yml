@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
       # Optionale Abhaengigkeiten: ohne sie werden 6 Tests uebersprungen.
       - run: python -m pip install argcomplete mcp
       # Leeres HOME: beweist, dass die Suite keinen Live-Vault
