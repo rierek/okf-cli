@@ -1689,8 +1689,11 @@ def _rank_lexically(root, query, terms, limit, filters, notify=True):
 SEMANTIC_MARGIN_RATIO = 0.5  # top1 >= (1 + ratio) * top2, i.e. top1 must
                               # lead the runner-up by at least 1.5x to count
                               # as "confident" enough for the lexical arm to
-                              # OWN the ranking (D12). Measured value —
-                              # eval/hybrid_eval.py:151 — not a tuning knob.
+                              # OWN the ranking (D12). Copied from
+                              # eval/hybrid_eval.py:151, NOT calibrated: on
+                              # the real catalogue it fires ~1 of 48 queries
+                              # (OKFT-8l96 SC-001), so R43 ~ semantic arm
+                              # alone. Honest fallback, not a tuning knob.
 # SEMANTIC_NOISE_RATIO removed (T08/D12): it was a crutch for the old
 # pin+blend rule, forcing the backstop to fire against a noisy substring
 # top-1 regardless of margin. Under conditional handover a noisy lexical
