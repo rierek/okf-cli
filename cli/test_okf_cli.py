@@ -5188,7 +5188,7 @@ class CommandHelpConformance(unittest.TestCase):
 
 
 @unittest.skipUnless(importlib.util.find_spec("argcomplete"),
-                     "argcomplete not installed (just setup)")
+                     "argcomplete not installed (pip install argcomplete)")
 class ShellCompletion(unittest.TestCase):
     """TAB completion, driven through the real cli/okf-cli.py with the env
     protocol the zsh glue cli/_okf-cli speaks. --root is the raw shell word

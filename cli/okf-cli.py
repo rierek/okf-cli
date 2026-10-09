@@ -6197,9 +6197,30 @@ def _complete_ctx_slugs(parsed_args, **_):
     return {s: load_ctx(root, s)["description"] for s in ctx_slugs(root)}
 
 
+def cmd_install(_root, args):
+    """`install` never touches a catalogue (main() hands it no root). Its code
+    lives in okf_install.py next to this file, loaded only when it runs. The
+    path is resolved first: a symlink to okf-cli.py is how people put it on PATH."""
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "okf_install.py")
+    if not os.path.isfile(path):  # okf-cli.py copied out of its clone on its own
+        sys.exit("ERROR: install needs okf_install.py next to okf-cli.py ({}); run it from a full clone "
+                 "or use pipx / uv tool install".format(os.path.dirname(path)))
+    spec = importlib.util.spec_from_file_location("okf_install", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    code = mod.run(args)
+    if code:
+        sys.exit(code)
+
+
+# commands main() runs without resolving a catalogue root
+CATALOGUE_FREE = frozenset({"install"})
+
+
 COMMAND_DISPATCH = {
     "prime": cmd_prime, "index": cmd_index, "find": cmd_find, "list": cmd_list,
-    "read": cmd_read, "info": cmd_info, "toc": cmd_toc, "visualize": cmd_visualize,
+    "read": cmd_read, "info": cmd_info, "install": cmd_install, "toc": cmd_toc,
+    "visualize": cmd_visualize,
     "refs": cmd_refs,
     "rewrite-path": cmd_rewrite_path, "rename": cmd_rename, "archive": cmd_archive,
     "build-index": cmd_build_index,
@@ -6318,9 +6339,11 @@ rank / score lines:
 
 
 # --- shell TAB completion (argcomplete; optional dependency) ---------------
-# main() hands the parser to argcomplete only when the zsh glue cli/_okf-cli
-# runs us with _ARGCOMPLETE set; a normal run never imports it. Each
-# value-taking argument names its completer via `.completer` in build_parser;
+# main() hands the parser to argcomplete only when a shell's completion glue
+# (cli/_okf-cli for zsh; argcomplete's own shellcode for bash and fish, all
+# placed by `install`) runs us with _ARGCOMPLETE set; a normal run never
+# imports it. Each value-taking argument names its completer via
+# `.completer` in build_parser;
 # argcomplete calls it as completer(prefix=, action=, parser=, parsed_args=).
 # Arguments without one complete to nothing (main() passes SuppressCompleter
 # as the default): free text like a find query must not offer cwd files.
@@ -6638,6 +6661,18 @@ def build_parser():
     pi.add_argument("--json", action="store_true", help="machine-readable output")
     _sub(sub, "info", "navigation",
          "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
+    pin = _sub(sub, "install", "maintenance",
+               "register okf-cli, its agent skill, MCP server and shell completion with this "
+               "machine's agents and shells (dry-run default; needs no catalogue)")
+    pin.add_argument("--apply", action="store_true",
+                     help="perform the plan (default: print the plan, change nothing)")
+    pin.add_argument("--uninstall", action="store_true",
+                     help="plan, or with --apply perform, the removal of everything install created")
+    pin.add_argument("--only", metavar="NAMES",
+                     help="comma-separated subset: claude, omp, codex, opencode, kimi, openclaw, hermes "
+                          "(agents), zsh, bash, fish (shells). Default: install for every agent and "
+                          "shell found on this machine; uninstall covers all of them")
+    pin.add_argument("--json", action="store_true", help="machine-readable output")
     pls = _sub(sub, "list", "navigation",
                "list concepts filtered by frontmatter type and/or tag")
     pls.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
@@ -6800,11 +6835,14 @@ def _silence_broken_pipe_streams():
 def main():
     ap = build_parser()
     if "_ARGCOMPLETE" in os.environ:
-        # Shell TAB completion (cli/_okf-cli): optional dependency, imported
-        # only on a completion run, which argcomplete ends via os._exit.
+        # Shell TAB completion (glue installed by `install`): optional
+        # dependency, imported only on a completion run, which argcomplete
+        # ends via os._exit.
         import argcomplete
         argcomplete.autocomplete(ap, default_completer=argcomplete.SuppressCompleter())
     args = ap.parse_args(_ctx_shorthand(sys.argv[1:]))
+    if args.cmd in CATALOGUE_FREE:
+        return COMMAND_DISPATCH[args.cmd](None, args)
     root = catalogue_root(args.root)
     if root is None:
         sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
