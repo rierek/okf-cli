@@ -1,0 +1,84 @@
+{
+  "skill_name": "okf",
+  "description": "Scenario evals for the okf skill. Run each in a fresh temporary directory: write the listed files, run the setup commands there, then give the agent the prompt with the okf skill installed. Grade the transcript and the final files against the assertions. Run every scenario once on a small and once on a large model.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "stale-index-retrieval-with-superseded-decision",
+      "files": [
+        {"path": "cat/.okf.toml", "content": "# okf-cli catalogue marker\n"},
+        {"path": "cat/TYPES.md", "content": "# Types\n\n| Type | Use for |\n|---|---|\n| `Decision` | A decision |\n"},
+        {"path": "cat/eng/index.md", "content": "# Engineering\n\nEngineering decisions.\n\n## Contents\n\n<!-- okf:index -->\n<!-- /okf:index -->\n"},
+        {"path": "cat/eng/decisions/index.md", "content": "# Decisions\n\nDatabase and platform decisions.\n\n## Contents\n\n<!-- okf:index -->\n<!-- /okf:index -->\n"},
+        {"path": "cat/eng/decisions/use-mysql.md", "content": "---\ntype: Decision\ntitle: Use MySQL for orders\ndescription: Orders are stored in MySQL.\nsuperseded_by: /eng/decisions/use-postgres.md\n---\n\n# Use MySQL for orders\n\nOrders are stored in MySQL.\n"}
+      ],
+      "setup": [
+        "okf-cli --root cat reindex eng",
+        "okf-cli --root cat build-index",
+        "write cat/eng/decisions/use-postgres.md: frontmatter type Decision, title 'Use Postgres for orders', description 'Orders moved from MySQL to Postgres.', body stating the move; do not rebuild the index"
+      ],
+      "prompt": "Using the OKF catalogue in ./cat: which database stores our orders?",
+      "expected_output": "Postgres, citing eng/decisions/use-postgres and noting that the MySQL decision is superseded.",
+      "assertions": [
+        "Runs prime (or okf_prime) before searching",
+        "Keeps stderr visible and reacts to the note 'lexical index is stale' by running build-index, or reads the superseded_by target directly",
+        "Reads /eng/decisions/use-postgres.md before answering",
+        "Answers Postgres, not MySQL",
+        "Writes no file other than the search index"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "add-decision-and-rename-without-mv",
+      "files": [
+        {"path": "cat/.okf.toml", "content": "# okf-cli catalogue marker\n"},
+        {"path": "cat/TYPES.md", "content": "# Types\n\n| Type | Use for |\n|---|---|\n| `Decision` | A decision |\n| `Concept` | An idea |\n"},
+        {"path": "cat/eng/index.md", "content": "# Engineering\n\nEngineering decisions.\n\n## Contents\n\n<!-- okf:index -->\n<!-- /okf:index -->\n"},
+        {"path": "cat/eng/decisions/index.md", "content": "# Decisions\n\nDatabase and platform decisions.\n\n## Contents\n\n<!-- okf:index -->\n<!-- /okf:index -->\n"},
+        {"path": "cat/eng/decisions/old-db.md", "content": "---\ntype: Decision\ntitle: Old database\ndescription: The first database choice.\n---\n\n# Old database\n\nWe started on MySQL.\n"},
+        {"path": "cat/eng/overview.md", "content": "---\ntype: Concept\ntitle: Overview\ndescription: Entry page.\n---\n\n# Overview\n\nSee [the old decision](/eng/decisions/old-db.md).\n"}
+      ],
+      "setup": [
+        "git -C cat init",
+        "okf-cli --root cat reindex eng"
+      ],
+      "prompt": "In the OKF catalogue ./cat, record the decision that orders now live in Postgres because MySQL lacked the JSON features we need, and rename eng/decisions/old-db.md to eng/decisions/use-mysql-legacy.md.",
+      "expected_output": "A new Decision concept in eng/decisions, the old concept renamed with its inbound link in eng/overview.md rewritten, listings regenerated, check clean, no commit.",
+      "assertions": [
+        "Renames with okf-cli rename: a preview run first, then --apply; never mv, git mv or rm",
+        "eng/overview.md links to /eng/decisions/use-mysql-legacy.md afterwards",
+        "The new concept has type Decision, a one-sentence description and generated.by naming the agent itself, not an invented human",
+        "No verified field is added",
+        "Runs reindex and ends with check reporting 'OK — 0 violations'",
+        "Creates no git commit, because the user did not ask for one"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "v01-to-v02-migration-without-invented-trust",
+      "files": [
+        {"path": "cat/.okf.toml", "content": "# okf-cli catalogue marker\n"},
+        {"path": "cat/TYPES.md", "content": "# Types\n\n| Type | Use for |\n|---|---|\n| `Metric` | A measurable quantity |\n"},
+        {"path": "cat/finance/index.md", "content": "# Finance\n\nFinance metrics.\n\n## Concepts\n\n* [Revenue](metrics/revenue.md) - Recognized revenue.\n"},
+        {"path": "cat/finance/metrics/revenue.md", "content": "---\ntype: Metric\ntitle: Revenue\ndescription: Recognized revenue for a fiscal year.\ntags: [finance]\ntimestamp: '2026-05-28T22:53:05+00:00'\nauthor: alice\n---\n\nRevenue sums amount per fiscal year. See [the handbook](../handbook.md).\n\n# Citations\n\n- https://wiki.example/finance/revenue-recognition\n"}
+      ],
+      "setup": [
+        "git -C cat init",
+        "git -C cat add .okf.toml TYPES.md finance",
+        "git -C cat commit -m baseline"
+      ],
+      "prompt": "Upgrade the finance bundle in the OKF catalogue ./cat to OKF v0.2.",
+      "expected_output": "finance/metrics/revenue.md carries generated and sources with a footnote, no timestamp, no Citations section; the subdirectory has a managed index.md; check --strict is clean or every remaining warning is reported; no verified or stale_after invented.",
+      "assertions": [
+        "Runs the phase 0 baseline (check, reindex --check, grep) before editing",
+        "Asks the user whether alice wrote the current text, or keeps author as an extra key, instead of assuming",
+        "Converts timestamp to generated.at with the same instant",
+        "Moves the Citations item into sources with an id and cites it with a footnote",
+        "Adds no verified entry and no stale_after without a user statement",
+        "Creates finance/metrics/index.md with markers and converts finance/index.md to a managed listing",
+        "Reports the unresolved link to ../handbook.md instead of inventing a target",
+        "Creates no git commit unless the user asked for commits"
+      ]
+    }
+  ]
+}
