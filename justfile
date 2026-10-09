@@ -18,13 +18,9 @@ gate-a *ARGS:
     @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }
     @cd "{{invocation_directory()}}" && ahm gate-a {{ARGS}}
 
-# Shell-TAB-Completion einrichten: argcomplete ins okf-cli-Python, zsh-Glue in den fpath
-setup python="python3" completions=(env_var("HOME") + "/.zsh/completions"):
-    {{python}} -m pip install "argcomplete>=3"
-    mkdir -p {{completions}}
-    ln -sf {{justfile_directory()}}/{{cli_dir}}/_okf-cli {{completions}}/_okf-cli
-    rm -f "${ZDOTDIR:-$HOME}/.zcompdump"
-    @echo "neue Shell oeffnen (exec zsh), dann: okf find x --type <TAB>"
+# okf-cli bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf-cli.py install --help`)
+setup *ARGS:
+    python3 {{cli_dir}}/okf-cli.py install {{ARGS}}
 
 # Konformitaets-Scan des Catalogue (§9 + lokale Invarianten)
 check root=catalogue:

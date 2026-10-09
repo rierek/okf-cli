@@ -2,24 +2,39 @@
 
 Search, navigate, validate and refactor a **catalogue of [Open Knowledge Format (OKF) v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) bundles** — markdown files with YAML frontmatter, built for humans and AI agents.
 
-- **Zero install.** One Python file, standard library only. No pip, no build.
+- **Zero install.** One Python file, standard library only. Run it from a clone: no pip, no build.
 - **Hybrid search.** Local SQLite FTS5/BM25 plus optional semantic arm (Voyage embeddings).
 - **Safe refactoring.** `rename` and `archive` move a concept and rewrite every inbound and outbound link.
-- **Agent-ready.** MCP server with 15 tools; `prime` onboards a fresh agent session in one call.
+- **Agent-ready.** One command registers an MCP server and an agent skill with Claude Code, Codex, opencode, omp, Kimi Code, OpenClaw and Hermes; `prime` onboards a fresh agent session in one call.
 - **Catalogue-aware.** Works across many bundles at once, not only one.
 
 Keywords: Open Knowledge Format, OKF v0.2, knowledge base CLI, markdown frontmatter, MCP server, Claude Code, agent memory, Obsidian, BM25, link checker, wikilinks.
 
-## Quick start
+## Install
+
+Run it from a clone, or install it as a tool. Both end in the same step, `okf-cli install`: it wires okf-cli into your coding agents and shells, and previews before it writes anything.
 
 ```bash
+# From a clone: runs in place, `git pull` updates it
 git clone https://github.com/xRiErOS/okf-cli && cd okf-cli
-python3 cli/okf-cli.py --root /path/to/catalogue prime          # agent onboarding
-python3 cli/okf-cli.py --root /path/to/catalogue find "query"   # ranked search
-python3 cli/okf-cli.py --root /path/to/catalogue check          # conformance scan
+python3 cli/okf-cli.py install            # prints the plan, changes nothing
+python3 cli/okf-cli.py install --apply    # performs it
+
+# As a tool (Python >= 3.11)
+pipx install git+https://github.com/xRiErOS/okf-cli      # or: uv tool install git+https://github.com/xRiErOS/okf-cli
+okf-cli install
+okf-cli install --apply
 ```
 
-Run inside the catalogue root to drop `--root`. Requires Python 3.
+Then use it from any directory (run inside a catalogue root to drop `--root`):
+
+```bash
+okf-cli --root /path/to/catalogue prime          # agent onboarding
+okf-cli --root /path/to/catalogue find "query"   # ranked search
+okf-cli --root /path/to/catalogue check          # conformance scan
+```
+
+From a clone without `install`, `python3 cli/okf-cli.py --root … <command>` works the same. Details of what `install` writes, and how to undo it: [agents and shells](#use-with-ai-agents-and-shells).
 
 ## What is OKF?
 
@@ -87,25 +102,49 @@ A catalogue is plain markdown with YAML frontmatter, so it opens as an [Obsidian
 
 Git is the recommended way to distribute OKF bundles: markdown gives clean diffs, the commit log records who changed which concept, branches and PRs propose knowledge changes. `okf-cli` leaves version control to git. Use `rename` and `archive` instead of `mv`/`rm`, so one commit carries the move and every rewritten link.
 
-## Use with AI agents (MCP)
+## Use with AI agents and shells
+
+`okf-cli install` finds the coding agents and shells on this machine and wires up each one. The plan lists every file first; `--apply` writes them; a second `--apply` changes nothing.
+
+| Agent | Skill (`skills/okf`) | MCP server `okf` |
+|---|---|---|
+| Claude Code | `~/.claude/skills/okf` | `claude mcp add --scope user` (else the key in `~/.claude.json`) |
+| Codex | shared `~/.agents/skills/okf` | `codex mcp add` (else a marked block in `~/.codex/config.toml`) |
+| opencode | shared | `mcp.okf` in `~/.config/opencode/opencode.json` |
+| omp | shared | `mcpServers.okf` in `~/.omp/agent/mcp.json` |
+| Kimi Code | shared | `mcpServers.okf` in `~/.kimi-code/mcp.json` |
+| OpenClaw | shared | `openclaw mcp set` |
+| Hermes | `~/.hermes/skills/okf` | marked block in `~/.hermes/config.yaml` |
+
+The shared copy in `~/.agents/skills/okf` is read by Codex, opencode, Kimi Code, omp and OpenClaw, so it is installed once. The MCP server is registered as `uv run --with "mcp<2" <install dir>/mcp/okf_mcp.py`: `uv` must be on `PATH`, otherwise only the MCP step is blocked and the plan says how to fix it. One tool per CLI verb, each with `root` as first argument; the server is a thin subprocess wrapper, all logic stays in the CLI. To register it by hand in any MCP client:
 
 ```json
 {
   "mcpServers": {
-    "okf": { "command": "python3", "args": ["/path/to/okf-cli/mcp/okf_mcp.py"] }
+    "okf": { "command": "uv", "args": ["run", "--with", "mcp<2", "/path/to/okf-cli/mcp/okf_mcp.py"] }
   }
 }
 ```
 
-15 tools, one per CLI verb, each with `root` as first argument. Works with any MCP client (Claude Code, Codex, Cursor, …). The server is a thin subprocess wrapper; all logic stays in the CLI.
+### Shell PATH and completion
 
-## Shell completion (zsh)
+| Shell | TAB completion | rc change |
+|---|---|---|
+| zsh | `~/.zsh/completions/_okf-cli` | block in `${ZDOTDIR:-~}/.zshrc`: `fpath` and `compinit`, only where missing |
+| bash | `~/.local/share/bash-completion/completions/okf-cli`, sourced from the rc block | `~/.bashrc`; on macOS the login file: the first of `~/.bash_profile`, `~/.bash_login`, `~/.profile` that exists, else `~/.bash_profile` |
+| fish | `~/.config/fish/completions/okf-cli.fish` | `~/.config/fish/conf.d/okf-cli.fish` |
 
-```bash
-just setup    # installs argcomplete, links cli/_okf-cli into ~/.zsh/completions
-```
+From a clone, `install` also creates `~/.local/bin/okf-cli` and puts `~/.local/bin` on `PATH` in that rc block (skipped when `okf-cli` is already on `PATH`, as after pipx or uv). Completion needs `argcomplete` in the Python that runs okf-cli; if it is missing, the plan prints the exact command for your install (`pipx inject okf-cli argcomplete`, `uv tool install --with argcomplete …`, or `python3 -m pip install argcomplete`). `okf-cli find x --type <TAB>` completes types, tags, scopes, concept refs and canon block ids from the catalogue. `argcomplete` is optional; a normal run never imports it. An alias must start with `okf-cli` (found via `PATH`), not an absolute path.
 
-`okf-cli find x --type <TAB>` completes types, tags, scopes, concept refs and canon block ids from the catalogue. `argcomplete` is optional; a normal run never imports it. An alias must start with `okf-cli` (found via `PATH`), not an absolute path.
+### How `install` behaves
+
+- **Selection.** Agents and shells are detected by their binary on `PATH` or their config directory (shells: rc file, config directory or login shell). `--only claude,codex,zsh` names them explicitly, detected or not: `claude omp codex opencode kimi openclaw hermes zsh bash fish`.
+- **Clone or tool.** A clone links the skills and the zsh glue, so `git pull` updates them. A pipx or uv install copies them: re-run `okf-cli install --apply` after an upgrade. Hermes, and OpenClaw with a custom `OPENCLAW_STATE_DIR`, always get copies.
+- **Safe edits.** JSON configs get a key-scoped merge; rc files, TOML and YAML get one block between `# >>> okf-cli >>>` and `# <<< okf-cli <<<`. Writes are atomic, symlinked dotfiles are written through, and the first edit of a file keeps `<file>.okf-cli.bak`. A config that cannot be edited safely (JSON with comments, unusual YAML, a foreign `okf` entry) is reported as BLOCKED with the exact manual edit; nothing is guessed.
+- **Uninstall.** `okf-cli install --uninstall` previews, `--uninstall --apply` removes exactly what `install` created.
+- **Locations.** `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, `CODEX_HOME`, `OPENCODE_CONFIG`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `KIMI_CODE_HOME`, `OPENCLAW_STATE_DIR`, `HERMES_HOME` and `ZDOTDIR` are honoured.
+- **Scripting.** No prompts, no network, timeouts on every agent CLI call. `--json` prints one object with a status per step. Exit code 0: done or nothing to do; 1: a step is blocked or failed; 2: usage error.
+- **Platforms.** macOS and Linux, Python 3.11 or newer.
 
 ## How it differs
 
@@ -131,6 +170,7 @@ Catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`. Relate
 just test     # unittest discovery over cli/test_*.py
 just check    # conformance scan against a real catalogue
 just prime
+just setup    # the okf-cli install plan; add --apply to perform it
 ```
 
 `just test` must be green before anything in `cli/` or `mcp/` is committed. Tests never write into a real catalogue.
