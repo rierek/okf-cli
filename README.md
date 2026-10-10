@@ -2,7 +2,7 @@
 
 Search, navigate, validate and refactor a **catalogue of [Open Knowledge Format (OKF) v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) bundles** — markdown files with YAML frontmatter, built for humans and AI agents.
 
-- **Zero install.** One Python file, standard library only. Run it from a clone: no pip, no build.
+- **Zero install.** Standard library only: `cli/okf-cli.py` and its `cli/okf/` package. Run it from a clone: no pip, no build.
 - **Hybrid search.** Local SQLite FTS5/BM25 plus optional semantic arm (Voyage embeddings).
 - **Safe refactoring.** `rename` and `archive` move a concept and rewrite every inbound and outbound link.
 - **Agent-ready.** One command registers an MCP server and an agent skill with Claude Code, Codex, opencode, omp, Kimi Code, OpenClaw and Hermes; `prime` onboards a fresh agent session in one call.
