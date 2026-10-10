@@ -21,12 +21,8 @@ if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks i
     sys.path.insert(0, _HERE)
 
 from okf import catalogue as okf_catalogue
-
-_cli_spec = importlib.util.spec_from_file_location(
-    "okf_cli", os.path.join(_HERE, "okf-cli.py")
-)
-okf = importlib.util.module_from_spec(_cli_spec)
-_cli_spec.loader.exec_module(okf)
+from okf import find as okf_find
+from okf import semantic as okf_semantic
 
 _fx_spec = importlib.util.spec_from_file_location(
     "eval_fixtures", os.path.join(_HERE, "eval", "fixtures.py")
@@ -57,7 +53,7 @@ def _capture_stdout(fn):
 
 def _find_hits(root, query):
     args = types.SimpleNamespace(query=query, limit=50)
-    out = _capture_stdout(lambda: okf.cmd_find(root, args))
+    out = _capture_stdout(lambda: okf_find.cmd_find(root, args))
     if out.startswith("(no matches"):
         return []
     return [line for line in out.splitlines() if line.startswith("path: ")]
@@ -106,12 +102,12 @@ class SeedThenTeardownIsClean(unittest.TestCase):
         # call to raise, which triggers the documented degradation (semantic
         # arm -> [] + one stderr note, lexical path unaffected) so this test
         # stays network-free, per SC-NET.
-        orig_embed = okf._embed_query_voyage
+        orig_embed = okf_semantic._embed_query_voyage
 
         def _raise(_text):
             raise RuntimeError("network disabled under test")
 
-        okf._embed_query_voyage = _raise
+        okf_semantic._embed_query_voyage = _raise
         try:
             self.assertEqual(
                 _find_hits(CATALOGUE_ROOT, fixtures.SEED_TOKEN),
@@ -120,7 +116,7 @@ class SeedThenTeardownIsClean(unittest.TestCase):
                 "before seed",
             )
         finally:
-            okf._embed_query_voyage = orig_embed
+            okf_semantic._embed_query_voyage = orig_embed
 
     def test_seed_writes_four_files_teardown_removes_them(self):
         written = fixtures.seed(CATALOGUE_ROOT)
