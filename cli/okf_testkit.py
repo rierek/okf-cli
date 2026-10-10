@@ -1,6 +1,15 @@
 """Helpers shared by several test modules. Not a test module: the name has no
 test_ prefix, so unittest discovery never collects it."""
+import argparse
+import contextlib
+import io
+import os
+import shutil
+import tempfile
+
+from okf import catalogue as okf_catalogue
 from okf import find as okf_find
+from okf import sync as okf_sync
 
 
 def run_find(root, query, **kw):
@@ -21,3 +30,67 @@ def run_find(root, query, **kw):
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
         okf_find.cmd_find(root, args)
     return buf.getvalue()
+
+
+# --- canon block synchronisation -------------------------------------------
+
+
+class SyncFixtureMixin:
+    """A two-bundle throwaway catalogue: one canon owner, one consumer."""
+
+    OWNER_PAYLOAD = "Jede normative Aussage hat genau einen Owner.\n"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._w(".okf.toml", "")
+        self._w("kc-gov/ownership.md",
+                "---\ntype: Rule\ndescription: d\n---\n\n# Ownership\n\n"
+                "<!-- okf:canon id=ownership-rule -->\n"
+                + self.OWNER_PAYLOAD
+                + "<!-- /okf:canon -->\n")
+        self._w("kc-proj/setup.md",
+                "---\ntype: Runbook\ndescription: d\n---\n\n# Setup\n\nLokal.\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def _run(self, fn, **kw):
+        """Call a handler with a namespace, capturing stdout and exit code."""
+        buf = io.StringIO()
+        code = 0
+        try:
+            with contextlib.redirect_stdout(buf):
+                fn(self.tmp, argparse.Namespace(**kw))
+        except SystemExit as e:
+            code = e.code or 0
+        return buf.getvalue(), code
+
+    def _insert(self, **over):
+        kw = dict(consumer="kc-proj/setup", concept="kc-gov/ownership",
+                  block_id="ownership-rule", apply=True)
+        kw.update(over)
+        return self._run(okf_sync.cmd_sync_insert, **kw)
+
+    def _status(self, **over):
+        kw = dict(target=None, source=None, block=None, json=True)
+        kw.update(over)
+        return self._run(okf_sync.cmd_sync_status, **kw)
+
+    def _update(self, **over):
+        kw = dict(target=None, source=None, block=None, apply=True, force=False)
+        kw.update(over)
+        return self._run(okf_sync.cmd_sync_update, **kw)
+
+    def _payload_of(self, rel):
+        _, body = okf_catalogue.split_frontmatter(self._r(rel))
+        return okf_sync.parse_sync_blocks(body)[0]["payload"]
