@@ -19,23 +19,22 @@ import re
 import subprocess
 import sys
 import shlex
-import unicodedata
 
-from okf import catalogue, find, fts, index, linkscan, recent, semantic, sync, tags
+from okf import (
+    catalogue, check, find, fts, index, linkscan, recent, semantic, sync, tags, wikilinks,
+)
 from okf.catalogue import (
-    CANON_END, CROSSLINK_RE, CTX_DIR, CTX_MODES, CTX_VERBS, FM_DELIM, RESERVED, SYNC_OPEN_LIT,
-    SYNC_OPEN_RE, SYNC_SPAN_RE, _ctx_die, _dequote, _mask_managed_block, _prune_walk_dirs,
-    _split_managed_block, catalogue_root, ctx_dir, ctx_entry_abspath, ctx_file, ctx_findings,
-    ctx_memberships, ctx_normalize_path, ctx_slug_problem, ctx_slugs, extract_tags,
-    index_h1_and_desc, iter_all_md, iter_concepts, iter_headings, list_bundles, load_ctx,
-    load_okf_config, load_tags, load_types, meta_of, read_file, read_file_verbatim, reindex_tree,
-    require_bundle_dir, resolve_concept, resolve_scopes, save_ctx, split_frontmatter, write_file,
-    write_file_verbatim,
+    CROSSLINK_RE, CTX_DIR, CTX_MODES, CTX_VERBS, RESERVED, SYNC_OPEN_LIT, SYNC_OPEN_RE, _ctx_die,
+    _prune_walk_dirs, catalogue_root, ctx_dir, ctx_entry_abspath, ctx_file, ctx_findings,
+    ctx_memberships, ctx_normalize_path, ctx_slug_problem, ctx_slugs, extract_tags, iter_all_md,
+    iter_concepts, iter_headings, list_bundles, load_ctx, load_tags, meta_of, read_file,
+    read_file_verbatim, reindex_tree, require_bundle_dir, resolve_concept, resolve_scopes,
+    save_ctx, split_frontmatter, write_file_verbatim,
 )
 from okf.fts import _fts_db_path
 from okf.index import render_bundle_block, render_bundle_line
 from okf.linkscan import (
-    _refs_display, iter_md_links, iter_rename_scan_md, wikilink_regions, wikilink_scan_text,
+    _refs_display, iter_md_links, iter_rename_scan_md, wikilink_scan_text,
 )
 from okf.parser_support import (
     _complete_bundles, _complete_concept_files, _complete_concepts, _complete_dirs, _complete_files,
@@ -43,7 +42,7 @@ from okf.parser_support import (
     render_command_overview, subcommand_parsers,
 )
 from okf.semantic import _tagvec_db_path, semantic_coverage
-from okf.sync import classify_sync_block, parse_canon_blocks, parse_sync_blocks
+from okf.sync import parse_sync_blocks
 
 
 def cmd_list(root, args):
@@ -482,866 +481,6 @@ document.getElementById('s').addEventListener('input',ev=>{const q=ev.target.val
 </script></body></html>"""
 
 
-# --- check: pluggable conformance scan (§9 hard rules + local invariants) ---
-
-FILENAME_FORBIDDEN_CHARS = set('#^[]|\\:?*"<>%')
-GERMAN_FM_KEYS = {"titel", "beschreibung", "typ", "stichworte", "datum", "zusammenfassung"}
-
-
-def gather_file_context(root, bundle, ap):
-    text = read_file(ap)
-    fm, body = split_frontmatter(text)
-    has_fm = text.startswith(FM_DELIM) and text.find("\n" + FM_DELIM, len(FM_DELIM)) != -1
-    fn = os.path.basename(ap)
-    return {
-        "root": root, "bundle": bundle, "ap": ap,
-        "rel": os.path.relpath(ap, root).replace(os.sep, "/"),
-        "fn": fn, "text": text, "fm": fm, "body": body,
-        "has_fm": has_fm, "is_reserved": fn.lower() in RESERVED,
-    }
-
-
-def check_fm_parseable(ctx):
-    if ctx["is_reserved"]:
-        return []
-    return [] if ctx["has_fm"] else ["no parseable frontmatter"]
-
-
-def check_type_nonempty(ctx):
-    if ctx["is_reserved"] or not ctx["has_fm"]:
-        return []
-    return [] if ctx["fm"].get("type", "").strip() else ["missing/empty `type`"]
-
-
-def check_reserved_no_type(ctx):
-    if not ctx["is_reserved"] or not ctx["has_fm"]:
-        return []
-    return ["reserved file must not carry `type`"] if ctx["fm"].get("type", "").strip() else []
-
-
-def check_filename_chars(ctx):
-    if ctx["is_reserved"]:
-        return []
-    bad = FILENAME_FORBIDDEN_CHARS & set(ctx["fn"][:-3])
-    return ["forbidden char(s) in filename: {}".format("".join(sorted(bad)))] if bad else []
-
-
-def check_type_registered(ctx, types_set):
-    if ctx["is_reserved"] or not ctx["has_fm"] or types_set is None:
-        return []
-    t = ctx["fm"].get("type", "").strip()
-    return ["type `{}` not registered in TYPES.md".format(t)] if t and t not in types_set else []
-
-
-def check_tag_registered(ctx, tags_set):
-    """Closed-vocabulary gate: every frontmatter tag must be in TAGS.md.
-    No-op when TAGS.md is absent (tags_set is None). Severity is warning, so it
-    surfaces new tags without blocking; `check --strict` escalates to error.
-    Keeps agents from exploding the tag vocabulary with creative one-offs — a tag
-    only aggregates content if it is reused, not minted fresh each write."""
-    if ctx["is_reserved"] or not ctx["has_fm"] or tags_set is None:
-        return []
-    return ["tag `{}` not registered in TAGS.md".format(t)
-            for t in extract_tags(ctx["text"]) if t not in tags_set]
-
-
-def check_english_keys(ctx):
-    if ctx["is_reserved"] or not ctx["has_fm"]:
-        return []
-    hits = GERMAN_FM_KEYS & set(ctx["fm"].keys())
-    return ["German frontmatter key(s): {}".format(", ".join(sorted(hits)))] if hits else []
-
-
-def check_tags_block_form(ctx):
-    """Local convention (this catalogue, not OKF spec): `tags` must be a YAML
-    block-list, not inline `[a, b]`. Empty `[]` is fine (nothing to convert)."""
-    if ctx["is_reserved"] or not ctx["has_fm"]:
-        return []
-    raw = ctx["fm"].get("tags", "").strip()
-    if raw.startswith("[") and raw.endswith("]") and raw[1:-1].strip():
-        return ["tags field uses inline form — local convention requires YAML block-list"]
-    return []
-
-
-def check_crosslink_format(ctx):
-    """Cross-links must be catalogue-root-absolute (`/bundle/subdir/concept.md`,
-    leading `/` = catalogue root = Obsidian vault root). Flags (a) relative links
-    that resolve inconsistently and orphan in Obsidian, and (b) leading-`/` links
-    that do not resolve to a real file from the catalogue root (legacy bundle-
-    relative `/subdir/x.md` or typos — the phantom-orphan class).
-
-    D-rx51-01 (OKFT-rx51): RESERVED files (index.md, log.md, readme.md,
-    index-map.md) are scanned as a link source too — they routinely carry
-    hand-authored prose alongside or instead of the managed
-    `<!-- okf:index -->` block, and a crosslink an author writes there is a
-    real crosslink. The managed block itself is masked out first so its
-    generated links never trigger a warning; fix_crosslinks is untouched by
-    this — it still never rewrites a RESERVED file."""
-    # Symlinked external bundles keep the portable bundle-relative OKF form and are
-    # audited in their own repo — the catalogue-root convention does not apply here.
-    if os.path.islink(os.path.join(ctx["root"], ctx["bundle"])):
-        return []
-    relative, dangling = [], []
-    scan_body, _ = _mask_code_spans(_mask_managed_block(ctx["body"]))
-    # fenced/inline example links and the managed index block are not hand-authored links
-    for m in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", scan_body):
-        tgt = m.group(1).split("#")[0].split("?")[0].strip()
-        if not tgt.endswith(".md") or tgt.startswith(("http://", "https://", "mailto:")):
-            continue
-        if not tgt.startswith("/"):
-            relative.append(tgt)
-        elif not os.path.isfile(os.path.join(ctx["root"], tgt.lstrip("/"))):
-            dangling.append(tgt)
-    msgs = []
-    if relative:
-        msgs.append("non catalogue-absolute link(s) (use /bundle/…): {}".format(", ".join(relative)))
-    if dangling:
-        msgs.append("catalogue-absolute link(s) not resolving from root: {}".format(", ".join(dangling)))
-    return msgs
-
-
-def check_superseded_by_resolves(ctx):
-    """D01 (OKFT-gpcx) — `superseded_by` is a pointer, and a pointer to
-    nothing is the same violation class as a dead crosslink: ERROR, part of
-    the `0 violations` commit gate. Same catalogue-root-absolute resolution
-    check_crosslink_format uses (leading `/` = catalogue root)."""
-    if ctx["is_reserved"] or not ctx["has_fm"]:
-        return []
-    sb = _dequote(ctx["fm"].get("superseded_by", "").strip())
-    if not sb:
-        return []
-    if os.path.isfile(os.path.join(ctx["root"], sb.lstrip("/"))):
-        return []
-    return ["superseded_by target does not resolve: {}".format(sb)]
-
-
-def check_superseded_by_scope(ctx):
-    """D01 (OKFT-gpcx) — the scope guard: `superseded_by` is defined only for
-    `type: Decision` concepts. A concept of another type carrying the field
-    is not a hard failure (it may be an intentional early use or a schema
-    typo an author can fix at leisure) — WARNING, not ERROR."""
-    if ctx["is_reserved"] or not ctx["has_fm"]:
-        return []
-    sb = _dequote(ctx["fm"].get("superseded_by", "").strip())
-    if not sb:
-        return []
-    t = ctx["fm"].get("type", "").strip()
-    if t == "Decision":
-        return []
-    return ["superseded_by used on non-Decision concept (type={})".format(
-        t or "<empty>")]
-
-
-_TAG = r"</?[A-Za-z][\w:-]*>"
-XML_TAG_CHAIN_RE = re.compile(r"{t}(?:\.(?:{t}|[A-Za-z0-9_-]+))*".format(t=_TAG))
-SAFE_HTML_TAGS = {"br", "hr", "sub", "sup", "kbd", "mark", "code", "wbr"}
-AUTOLINK_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
-
-
-def _sync_records(ctx, canon_index):
-    """[(rec, status)] for one file, or [] without paying for the canon index.
-
-    The early exit IS the performance contract of the two check entries: a
-    catalogue with no materialised block must not trigger the catalogue walk
-    build_canon_block_index costs."""
-    if SYNC_OPEN_LIT not in ctx["body"]:
-        return []
-    canon = canon_index()
-    return [(r, classify_sync_block(r, canon))
-            for r in parse_sync_blocks(ctx["body"])]
-
-
-def check_sync_integrity(ctx, canon_index):
-    """Errors: a materialised canon block whose markers are broken, whose
-    owner is gone, or whose payload was edited locally.
-
-    `consumer-modified` is an error, not a warning: a consumer holding an
-    edited copy of foreign Canon has silently become a second authority, which
-    is precisely what this mechanism exists to prevent."""
-    return ["sync block `{}` from {}: {}".format(
-                rec["id"] or "?", rec["source"] or "?", status)
-            for rec, status in _sync_records(ctx, canon_index)
-            if status in ("malformed", "source-missing", "consumer-modified",
-                          "both-changed")]
-
-
-def check_sync_stale(ctx, canon_index):
-    """Warning: the owner's block moved on while the local copy is untouched —
-    mechanically repairable, so it never blocks."""
-    return ["sync block `{}` from {} is outdated — run sync-update".format(
-                rec["id"], rec["source"])
-            for rec, status in _sync_records(ctx, canon_index)
-            if status == "source-changed"]
-
-
-def check_canon_blocks(ctx):
-    """Owner-side integrity, index-free: an unterminated `okf:canon` marker,
-    or one id declared twice in the same concept — which would make
-    `(source, id)` addressing ambiguous for every consumer of it."""
-    out, seen = [], set()
-    for blk in parse_canon_blocks(ctx["body"]):
-        if blk["payload"] is None:
-            out.append("canon block `{}` has no closing {}".format(
-                blk["id"], CANON_END))
-        if blk["id"] in seen:
-            out.append("canon block id `{}` declared twice".format(blk["id"]))
-        seen.add(blk["id"])
-    return out
-
-
-def _mask_code_spans(body):
-    """Stash materialised canon blocks, fenced code blocks and inline code so
-    a pattern scan skips them.
-    Frontmatter is already split off by the caller (ctx["body"]/split_frontmatter),
-    so only sync blocks/fences/inline-code need masking here. Mirrors the
-    Vault-side wrap-hex-tags.js mask/unmask convention for the same class of
-    problem.
-
-    The sync stash runs FIRST, and it is not cosmetic: a materialised canon
-    block is owned by its canon concept, so every scanner reading through this
-    mask must neither report nor rewrite inside it. _unmask restores the
-    stashed text byte-identically, which is what keeps a rewriter (fix-
-    crosslinks, fix-xml-tags) from turning a synced payload into a false
-    `consumer-modified`."""
-    tokens = []
-
-    def stash(m):
-        tokens.append(m.group(0))
-        return "\x00{}\x00".format(len(tokens) - 1)
-
-    body = SYNC_SPAN_RE.sub(stash, body)
-    body = re.sub(r"(`{3,}|~{3,})[\s\S]*?\1", stash, body)
-    body = re.sub(r"`[^`\n]+`", stash, body)
-    return body, tokens
-
-
-def _unmask(text, tokens):
-    return re.sub(r"\x00(\d+)\x00", lambda m: tokens[int(m.group(1))], text)
-
-
-def _is_ignorable_chain(chain):
-    """Skip real HTML (`<br>`, `</br>`, ...) and markdown autolinks
-    (`<https://...>`) — only placeholder-shaped chains are violations."""
-    if "." not in chain and chain.strip("<>/").lower() in SAFE_HTML_TAGS:
-        return True
-    inner = chain.split(".", 1)[0][1:-1].lstrip("/")
-    return bool(AUTOLINK_RE.match(inner))
-
-
-def find_xml_like_tags(body):
-    """Angle-bracket placeholder chains like `<info>.<other>` or `<tag>.<tag2>.go`
-    outside code spans — Obsidian misreads these as unclosed XML/HTML tags."""
-    masked, _ = _mask_code_spans(body)
-    return [m for m in XML_TAG_CHAIN_RE.findall(masked) if not _is_ignorable_chain(m)]
-
-
-def check_xml_like_tags(ctx):
-    if ctx["is_reserved"]:
-        return []
-    hits = find_xml_like_tags(ctx["body"])
-    return ["angle-bracket placeholder(s) not in code-fence: {}".format(", ".join(sorted(set(hits))))] if hits else []
-
-
-def fix_xml_like_tags(root, target, dry_run=False):
-    """Wrap angle-bracket placeholder chains in inline code across every
-    non-reserved .md under `target` (bundle or bundle/subdir, or the whole
-    catalogue when None). Returns [(rel, count), ...]."""
-    touched = []
-    for bundle, bp in resolve_scopes(root, target):
-        for ap in iter_all_md(bp, prune_staging=False):
-            if os.path.basename(ap).lower() in RESERVED:
-                continue
-            text = read_file(ap)
-            _, body = split_frontmatter(text)
-            head = text[:len(text) - len(body)]
-            masked, tokens = _mask_code_spans(body)
-            count = 0
-
-            def repl(m):
-                nonlocal count
-                chain = m.group(0)
-                if _is_ignorable_chain(chain):
-                    return chain
-                count += 1
-                return "`" + chain + "`"
-
-            new_masked = XML_TAG_CHAIN_RE.sub(repl, masked)
-            new_body = _unmask(new_masked, tokens)
-            if count:
-                rel = os.path.relpath(ap, root).replace(os.sep, "/")
-                touched.append((rel, count))
-                if not dry_run:
-                    write_file(ap, head + new_body)
-    return touched
-
-
-def cmd_fix_xml_tags(root, args):
-    target = args.target
-    if target:
-        tp = os.path.join(root, target.rstrip("/"))
-        if not os.path.isdir(tp):
-            print("not a directory: {}".format(target), file=sys.stderr)
-            sys.exit(1)
-    touched = fix_xml_like_tags(root, target, dry_run=args.check)
-    verb = "would wrap" if args.check else "wrapped"
-    for rel, n in touched:
-        print("{:<12} {}  ({} chain(s))".format(verb, rel, n))
-    print("fix-xml-tags: {} file(s) {}, {} chain(s) total".format(
-        len(touched), verb, sum(n for _, n in touched)))
-
-
-def check_asset_placement(bundle_path):
-    """Non-md, non-hidden files that live outside <bundle>/assets/. Returns
-    a list of paths relative to bundle_path."""
-    bad = []
-    for dirpath, dirnames, filenames in os.walk(bundle_path):
-        dirnames[:] = [d for d in dirnames
-                       if not d.startswith(".") and not d.startswith("_") and d != "assets"]
-        for fn in filenames:
-            if fn.endswith(".md") or fn.startswith("."):
-                continue
-            bad.append(os.path.relpath(os.path.join(dirpath, fn), bundle_path).replace(os.sep, "/"))
-    return bad
-
-
-def check_entry_file_description(bundle_path):
-    """A bundle's entry file (INDEX-MAP.md preferred, else index.md) must carry
-    an H1 + a real intro paragraph — `index --full` surfaces this as the
-    bundle's `description`. Returns a list of violation messages (0..2)."""
-    for fn in ("INDEX-MAP.md", "index.md"):
-        fp = os.path.join(bundle_path, fn)
-        if os.path.isfile(fp):
-            h1, desc = index_h1_and_desc(fp)
-            msgs = []
-            if not h1:
-                msgs.append("{} missing H1".format(fn))
-            if not desc.strip():
-                msgs.append("{} missing intro paragraph (used as bundle description)".format(fn))
-            return msgs
-    return ["no entry file (INDEX-MAP.md/index.md) found"]
-
-
-def resolve_crosslink_target(root, bundle, cdir, tgt):
-    """Absolute filesystem path a link target `tgt` (found in bundle/cdir) points
-    at, then re-expressed as the canonical catalogue-root-absolute form
-    (`/bundle/subdir/concept.md`, leading `/` = catalogue root = Obsidian vault
-    root). Interpretations are tried in order so the same rewriter both migrates
-    legacy links and stays idempotent:
-      1. leading `/` as LEGACY bundle-root (`/subdir/x.md` -> bundle/subdir/x.md)
-      2. leading `/` as already-catalogue-root (`/bundle/subdir/x.md`)
-      3. relative to cdir within the bundle (`x.md`, `sub/x.md`, `../other/x.md`)
-    Returns the canonical `/…` string only if the target file really exists (the
-    safety anchor that leaves doc examples on non-existent paths untouched)."""
-    if tgt.startswith("/"):
-        p = tgt.lstrip("/")
-        dest = os.path.join(root, bundle, p)            # legacy bundle-root
-        if not os.path.isfile(dest):
-            dest = os.path.join(root, p)                 # already catalogue-root
-    else:
-        dest = os.path.normpath(os.path.join(root, bundle, cdir, tgt))
-        if not os.path.isfile(dest):
-            # mis-depthed cross-bundle relative link (`../other-bundle/x.md` whose
-            # `..` count never reaches the catalogue root): repoint from root iff
-            # the `../`-stripped tail is a real file — no guessing beyond existence.
-            tail = re.sub(r"^(?:\.\.?/)+", "", tgt)
-            cand = os.path.join(root, tail)
-            if os.path.isfile(cand):
-                dest = cand
-    if not os.path.isfile(dest):
-        return None
-    return "/" + os.path.relpath(dest, root).replace(os.sep, "/")
-
-
-def rewrite_crosslinks_in_body(root, bundle, cdir, body):
-    """Rewrite every resolvable markdown link to canonical catalogue-root-absolute
-    form (`/bundle/subdir/concept.md`). Migrates legacy bundle-relative (`/sub/x`)
-    and path-relative (`x`, `../other/x`) links alike; already-canonical links are
-    left byte-identical (idempotent). Skips http(s)/mailto/anchor-only, and
-    everything inside fenced or inline code — a link written between backticks
-    is prose *about* link syntax, which Obsidian never resolves. Masking it
-    keeps the OKF documentation bundles from reporting their own examples as
-    unresolved, and stops a fenced example whose path happens to resolve from
-    being silently rewritten. Mirrors check_crosslink_format, which masks the
-    same spans. Returns (new_body, changed_count, unresolved_targets)."""
-    changed = 0
-    unresolved = []
-
-    def repl(m):
-        nonlocal changed
-        label, target = m.group(1), m.group(2)
-        raw_tgt, _, anchor = target.partition("#")
-        raw_tgt = raw_tgt.strip()
-        if not raw_tgt.endswith(".md") or raw_tgt.startswith(("http://", "https://", "mailto:")):
-            return m.group(0)
-        resolved = resolve_crosslink_target(root, bundle, cdir, raw_tgt)
-        if resolved is None:
-            unresolved.append(raw_tgt)
-            return m.group(0)
-        new_target = resolved + ("#" + anchor if anchor else "")
-        if new_target == target:
-            return m.group(0)                            # already canonical
-        changed += 1
-        return "[{}]({})".format(label, new_target)
-
-    masked, tokens = _mask_code_spans(body)
-    new_body = _unmask(CROSSLINK_RE.sub(repl, masked), tokens)
-    return new_body, changed, unresolved
-
-
-def fix_crosslinks(root, target, dry_run=False, include_reserved=False):
-    """Rewrite crosslinks in every non-reserved .md under `target` (bundle or
-    bundle/subdir, or the whole catalogue when None) to catalogue-root-absolute
-    form. `include_reserved=True` (D-fxcr-01) additionally rewrites RESERVED
-    files (index.md, log.md, readme.md, index-map.md), narrowed to the text
-    outside the managed `<!-- okf:index -->` block via `_split_managed_block` —
-    the block itself is never handed to the rewriter, so it stays
-    byte-identical. Default (`include_reserved=False`) leaves RESERVED files
-    untouched, unchanged from before this parameter existed. Returns
-    (touched, unresolved): touched = [(rel, changed_count), ...],
-    unresolved = [(rel, target), ...]."""
-    touched, unresolved = [], []
-    for bundle, bp in resolve_scopes(root, target):
-        for ap in iter_all_md(bp, prune_staging=False):
-            is_reserved = os.path.basename(ap).lower() in RESERVED
-            if is_reserved and not include_reserved:
-                continue
-            text = read_file(ap)
-            _, body = split_frontmatter(text)
-            head = text[:len(text) - len(body)]
-            cdir = os.path.dirname(os.path.relpath(ap, bp))
-            rel = os.path.relpath(ap, root).replace(os.sep, "/")
-            if is_reserved:
-                before, block, after = _split_managed_block(body)
-                new_before, changed_before, unres_before = rewrite_crosslinks_in_body(
-                    root, bundle, cdir, before)
-                new_after, changed_after, unres_after = rewrite_crosslinks_in_body(
-                    root, bundle, cdir, after)
-                new_body = new_before + block + new_after
-                changed = changed_before + changed_after
-                unres = unres_before + unres_after
-            else:
-                new_body, changed, unres = rewrite_crosslinks_in_body(root, bundle, cdir, body)
-            for u in unres:
-                unresolved.append((rel, u))
-            if changed:
-                touched.append((rel, changed))
-                if not dry_run:
-                    write_file(ap, head + new_body)
-    return touched, unresolved
-
-
-def cmd_fix_crosslinks(root, args):
-    target = args.target
-    if target:
-        tp = os.path.join(root, target.rstrip("/"))
-        if not os.path.isdir(tp):
-            print("not a directory: {}".format(target), file=sys.stderr)
-            sys.exit(1)
-    touched, unresolved = fix_crosslinks(root, target, dry_run=args.check,
-                                          include_reserved=args.include_reserved)
-    verb = "would rewrite" if args.check else "rewrote"
-    for rel, n in touched:
-        print("{:<14} {}  ({} link(s))".format(verb, rel, n))
-    for rel, tgt in unresolved:
-        print("unresolved     {}  -> {}".format(rel, tgt))
-    print("fix-crosslinks: {} file(s) {}, {} unresolved link(s)".format(
-        len(touched), verb, len(unresolved)))
-
-
-# --- wikilinks -------------------------------------------------------------
-# Obsidian's native link form. Every markdown-link scanner in this module
-# anchors on "](" (CROSSLINK_RE plus its three inline copies), so none of them
-# can see a [[…]] — a rename rewrites the markdown links, reports success and
-# silently orphans every inbound wikilink. Everything below is the wikilink
-# counterpart of that machinery: parse, resolve, report, rewrite.
-
-WIKILINK_RE = re.compile(r"(!?)\[\[([^\[\]\n]+)\]\]")
-
-
-def _split_wikilink_inner(inner):
-    """(page, alias, suffix) for the text between `[[` and `]]`.
-
-    Obsidian's grammar is `[[page#suffix|alias]]` — the `#` binds to the page
-    part only. An alias may legitimately contain one (`[[dotnet|C#]]`,
-    `[[issue|bug #42]]`), so the alias segment is never re-split."""
-    page_part, sep, alias = inner.partition("|")
-    page, hsep, suffix = page_part.partition("#")
-    page = page.strip()
-    if page.lower().endswith(".md"):
-        # case-insensitively, like every other comparison here: `[[Old.MD]]`
-        # must not be the one spelling that fails to resolve.
-        page = page[:-3]
-    return (page,
-            alias.strip() if sep else None,
-            suffix.strip() if hsep and suffix.strip() else None)
-
-
-def parse_wikilinks(text, source=None):
-    """Every `[[…]]` occurrence in one file's text as a record, minus the
-    status/candidates the resolver fills in.
-
-    `raw` excludes a leading `!` — the embed marker lives in its own field,
-    which keeps `raw` a link token that can be substituted as-is. Each record
-    also carries `span`, the (start, end) offsets of `raw` in the ORIGINAL
-    text, which is what lets a rewrite touch exactly the occurrences this scan
-    accepted and nothing else."""
-    out = []
-    fm_end = wikilink_regions(text)[0][2]
-    for m in WIKILINK_RE.finditer(wikilink_scan_text(text)):
-        # Cut from the ORIGINAL, not the masked copy: a dead zone nested inside
-        # the brackets would otherwise put NUL bytes into `raw` and break the
-        # contract that `text[span] == raw`.
-        inner = text[m.start(2):m.end(2)]
-        page, alias, suffix = _split_wikilink_inner(inner)
-        if not page:
-            continue               # [[#heading]] — an in-file anchor, no target
-        out.append({
-            "source": source,
-            "region": "frontmatter" if m.start() < fm_end else "body",
-            "raw": "[[{}]]".format(inner),
-            "page": page,
-            "alias": alias,
-            "suffix": suffix,
-            "embed": bool(m.group(1)),
-            "span": (m.start(2) - 2, m.end(2) + 2),
-        })
-    return out
-
-
-def _apply_archive_precedence(candidates):
-    """R-06's precedence rule as a pure function over one basename's raw,
-    possibly-mixed candidate list: active candidates win outright whenever
-    at least one exists; archived candidates (`/_archive/<bundle>/...`) are
-    the fallback only when none do. Shared by build_concept_basename_index
-    (the real index) and _index_after_move (its move simulation, R-07,
-    docs/okf-archive-lifecycle/SPEC.md) so a change to the rule cannot land
-    in only one of the two — that drift is exactly what R-07 exists to
-    close: a dry run reporting an ambiguity that never materialises, or the
-    reverse."""
-    active = [c for c in candidates if not c.lower().startswith("/_archive/")]
-    return sorted(active) if active else sorted(candidates)
-
-
-def _normalize_key(s):
-    """Normalize and lowercase a basename key for case/NFC-insensitive matching.
-
-    Order matters: first normalize to NFC (canonical composition), then lowercase
-    (matching Obsidian's JavaScript toLowerCase()). This ensures keys derived from
-    filenames on APFS (which deliver NFD) match links typed in NFC and vice versa.
-    D06 is preserved: casefold() is avoided — [[STRASSE]] vs Straße stay unresolved.
-    """
-    return unicodedata.normalize('NFC', s).lower()
-
-
-def build_concept_basename_index(root):
-    """lowercased basename (no .md) -> sorted catalogue-root-absolute paths of
-    every non-reserved concept. A wikilink carries no path, so the basename IS
-    the address — this is the table it resolves against.
-
-    Case-insensitive because the store's filesystem is: `open("TYPES.md")` and
-    `open("types.MD")` reach the same file on macOS, and Obsidian resolves
-    `[[YAML]]` to `yaml.md` accordingly. A case-sensitive table reports 96 live
-    catalogue links as dead and lets `rename` orphan them unannounced — the
-    exact failure this feature exists to close.
-
-    `lower()`, not `casefold()`: Obsidian folds with JavaScript's
-    `toLowerCase()`, which leaves ß alone where casefold maps it to ss. Under
-    casefold `[[STRASSE]]` would resolve to `Straße.md` here and stay broken in
-    the app, and on a case-sensitive checkout `Straße.md` and `Strasse.md` would
-    collapse into one key and shadow each other.
-
-    Traverses with iter_all_md (minus reserved files) rather than
-    iter_concepts, so the set of resolution TARGETS is the same set of files
-    the reporting and check surfaces scan as SOURCES: iter_concepts descends
-    into `_`-prefixed staging directories, which would make a draft a valid
-    link target that no surface ever reports on. Walks per bundle because
-    os.walk does not descend into symlinked subdirectories and five catalogue
-    bundles are symlinks.
-
-    `_archive/<bundle>/**` is folded in as a second, lower-priority tier
-    (docs/okf-archive-lifecycle/SPEC.md R-05/R-06): without it, archiving a
-    concept turns every inbound `[[x]]` unresolved in files the archiver never
-    touched. Existing at least one ACTIVE candidate for a basename means the
-    archived candidates of that basename are dropped entirely, never merged
-    in — otherwise archive-then-recreate-under-the-same-name would turn a
-    clean resolution into `ambiguous` against a copy nobody meant to address,
-    and two active concepts sharing a basename would stop being `ambiguous`
-    the moment either one grew an archived namesake. Only a basename with NO
-    active candidate falls through to its archived candidate(s)."""
-    idx = {}
-    for b in list_bundles(root):
-        for ap in iter_all_md(os.path.join(root, b)):
-            fn = os.path.basename(ap)
-            if fn.lower() in RESERVED:
-                continue
-            idx.setdefault(_normalize_key(fn[:-3]), []).append(
-                "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
-    archive_root = os.path.join(root, "_archive")
-    if os.path.isdir(archive_root):
-        for b in list_bundles(archive_root):
-            for ap in iter_all_md(os.path.join(archive_root, b)):
-                fn = os.path.basename(ap)
-                if fn.lower() in RESERVED:
-                    continue
-                idx.setdefault(_normalize_key(fn[:-3]), []).append(
-                    "/" + os.path.relpath(ap, root).replace(os.sep, "/"))
-    for k in idx:
-        idx[k] = _apply_archive_precedence(idx[k])
-    return idx
-
-
-def resolve_wikilink(index, source_rel, page):
-    """(status, candidates) for one page part seen in `source_rel`.
-
-    Resolution order, matching how Obsidian narrows a target:
-      1. every concept whose basename equals the page part's last segment,
-         compared case-insensitively;
-      2. if the page part carries a path (`[[dir/name]]`), only the candidates
-         whose own path ends in that path — an author who spelled the directory
-         out meant it. A path matching nothing is `unresolved`, not a fallback
-         to the bare basename: the fallback answered with the very candidate the
-         spelling excludes, which is the failure this step exists to prevent;
-      3. on a remaining collision, the linking file's own bundle wins when
-         exactly one candidate lives there."""
-    cands = index.get(_normalize_key(page.rsplit("/", 1)[-1]), [])
-    if not cands:
-        return "unresolved", []
-    if "/" in page:
-        tail = "/{}.md".format(page.strip("/"))
-        cands = [c for c in cands if _normalize_key(c).endswith(_normalize_key(tail))]
-        if not cands:
-            return "unresolved", []
-    if len(cands) == 1:
-        return "resolved", list(cands)
-    own = (source_rel or "").split("/", 1)[0].lower()
-    same = [c for c in cands if c.lstrip("/").split("/", 1)[0].lower() == own]
-    if len(same) == 1:
-        return "resolved", same
-    return "ambiguous", list(cands)
-
-
-def resolve_wikilink_records(index, records):
-    """Fill status/candidates into parse_wikilinks() records, in place."""
-    for rec in records:
-        rec["status"], rec["candidates"] = resolve_wikilink(
-            index, rec["source"], rec["page"])
-    return records
-
-
-def scan_wikilinks(root, target=None, index=None):
-    """Every resolved wikilink record under `target` (bundle or bundle/subdir,
-    whole catalogue when None). Traverses with iter_all_md, so `_`-prefixed
-    staging dirs and assets/ are excluded and reserved files are included."""
-    if index is None:
-        index = build_concept_basename_index(root)
-    out = []
-    for _bundle, bp in resolve_scopes(root, target):
-        for ap in iter_all_md(bp):
-            rel = os.path.relpath(ap, root).replace(os.sep, "/")
-            out += resolve_wikilink_records(
-                index, parse_wikilinks(read_file(ap), rel))
-    return out
-
-
-def wikilink_checked_bundles(config, root=None):
-    """The opt-in set for the wikilink-resolvable check. Absent key or absent
-    .okf.toml means the empty set: the rule ships silent and is switched on per
-    bundle, so introducing it cannot bury a clean catalogue in warnings.
-
-    A value the gate cannot honour is announced on stderr rather than silently
-    disabling the rule — a config that reads as if it opted a bundle in, but
-    does not, is worse than no config at all."""
-    if "wikilink_checked_bundles" not in config:
-        return set()
-    v = config["wikilink_checked_bundles"]
-    if not isinstance(v, (list, tuple)) or not all(isinstance(x, str) for x in v):
-        sys.stderr.write("note: wikilink_checked_bundles must be an array of "
-                         "bundle names; got {!r} — wikilink check stays off\n".format(v))
-        return set()
-    # Casefolded: the store's filesystem is, so `check A` reaches bundle `a`
-    # and its ctx["bundle"] reads "A". An exact-string gate switched this one
-    # check off there while every other check kept firing.
-    out = {x.lower() for x in v}
-    if root is not None:
-        known = {b.lower() for b in list_bundles(root)}
-        unknown = sorted(x for x in v if x.lower() not in known)
-        if unknown:
-            sys.stderr.write("note: wikilink_checked_bundles names non-bundle(s): "
-                             "{} — no file will be checked for them\n".format(", ".join(unknown)))
-    return out
-
-
-def check_wikilink_resolvable(ctx, checked, index):
-    """One warning per file carrying at least one unresolved or ambiguous
-    wikilink, naming every such target. Reserved files and symlinked bundles
-    participate — unlike check_crosslink_format, whose early returns are
-    specific to the catalogue-absolute markdown convention."""
-    if not checked or ctx["bundle"].lower() not in checked:
-        return []
-    # iter_all_md prunes staging and assets from `dirnames`, never from the
-    # directory it is handed, so `check <bundle>/_plan` walked straight into a
-    # tree the Non-Goals exclude from every reporting surface.
-    if any(s.startswith((".", "_")) or s == "assets"
-           for s in ctx["rel"].split("/")[1:-1]):
-        return []
-    bad = [r["raw"] for r in resolve_wikilink_records(
-        index, parse_wikilinks(ctx["text"], ctx["rel"]))
-        if r["status"] != "resolved"]
-    if not bad:
-        return []
-    return ["unresolved wikilink target(s): {}".format(", ".join(bad))]
-
-
-def cmd_wikilinks(root, args):
-    if args.target:
-        norm = os.path.normpath(args.target).replace(os.sep, "/").strip("/")
-        segments = [s for s in norm.split("/") if s not in (".", "")]
-        tp = os.path.join(root, norm)
-        if not os.path.isdir(tp):
-            print("not a directory: {}".format(args.target), file=sys.stderr)
-            sys.exit(1)
-        # The target must name a bundle, or a subdirectory of one that
-        # iter_all_md would actually traverse. Without this, `wikilinks ..`
-        # walks out of the catalogue, and `wikilinks <bundle>/_plan` scans
-        # staging that the reporting surface is defined to exclude —
-        # iter_all_md prunes those names from `dirnames`, never from the
-        # directory it is handed as a starting point.
-        excluded = [s for s in segments if s.startswith((".", "_")) or s == "assets"]
-        if not segments or segments[0] not in list_bundles(root) or excluded:
-            print("not a scannable bundle path: {}".format(args.target), file=sys.stderr)
-            sys.exit(1)
-    links = scan_wikilinks(root, args.target)
-    totals = {"resolved": 0, "ambiguous": 0, "unresolved": 0}
-    for r in links:
-        totals[r["status"]] += 1
-    shown = [r for r in links if r["status"] != "resolved"] if args.unresolved else links
-    if args.json:
-        import json
-        # by_bundle counts what `links` carries, so the two never contradict
-        # each other; `totals` is always the unfiltered census and `filtered`
-        # says which of the two a consumer is looking at.
-        by_bundle = {}
-        for r in shown:
-            b = r["source"].split("/", 1)[0]
-            by_bundle.setdefault(b, {"resolved": 0, "ambiguous": 0, "unresolved": 0})
-            by_bundle[b][r["status"]] += 1
-        print(json.dumps({"links": shown, "by_bundle": by_bundle,
-                          "totals": totals, "filtered": bool(args.unresolved)}))
-        return
-    for r in shown:
-        line = "{:<10} {:<11} {}  {}{}".format(
-            r["status"], r["region"], r["source"], r["raw"],
-            "  (embed)" if r["embed"] else "")
-        if r["status"] == "ambiguous":
-            line += "  candidates: {}".format(", ".join(r["candidates"]))
-        print(line)
-    print("wikilinks: {} link(s), {} resolved, {} ambiguous, {} unresolved".format(
-        len(links), totals["resolved"], totals["ambiguous"], totals["unresolved"]))
-
-
-def _ctx_check_of(c, i):
-    if c["bundle"] != CTX_DIR or c["is_reserved"]:
-        return []
-    return ctx_findings(c["root"], c["ap"])[i]
-
-
-def run_checks(root, target, types_source=None):
-    """Run the full pluggable conformance scan over `target` (bundle or
-    bundle/subdir), or the whole catalogue when target is None.
-
-    types_source overrides <root>/TYPES.md; absent, falls back to the
-    .okf.toml `types_source` config key, then to <root>/TYPES.md.
-
-    Returns (errors, warnings), each a list of (check_name, rel_path, message).
-    """
-    scopes = resolve_scopes(root, target)
-    config = load_okf_config(root)
-    if types_source is None:
-        types_source = config.get("types_source")
-    types_set = load_types(root, types_source)
-    tags_set = load_tags(root)
-    # The basename index costs a full catalogue walk, so it is built only when
-    # a bundle IN THIS RUN'S SCOPE has opted in — an unconfigured catalogue, or
-    # a scan targeting a bundle that did not opt in, pays nothing.
-    wl_checked = (wikilink_checked_bundles(config, root)
-                  & {b.lower() for b, _ in scopes})
-    wl_index = build_concept_basename_index(root) if wl_checked else {}
-    # Same deliberate laziness as wl_index above: the canon index costs a full
-    # catalogue walk, and a catalogue with no materialised block never asks
-    # for it — check_sync_* return before calling this on such a file.
-    canon = {"loaded": False, "idx": {}}
-
-    def canon_index():
-        if not canon["loaded"]:
-            canon["idx"] = sync.build_canon_block_index(root)
-            canon["loaded"] = True
-        return canon["idx"]
-
-    per_file_checks = [
-        ("frontmatter-parseable", "error", check_fm_parseable),
-        ("type-nonempty", "error", check_type_nonempty),
-        ("reserved-no-type", "error", check_reserved_no_type),
-        ("filename-chars", "error", check_filename_chars),
-        ("type-registered", "warning", lambda c: check_type_registered(c, types_set)),
-        ("tag-registered", "warning", lambda c: check_tag_registered(c, tags_set)),
-        ("english-keys", "warning", check_english_keys),
-        ("crosslink-format", "warning", check_crosslink_format),
-        ("superseded-by-resolves", "error", check_superseded_by_resolves),
-        ("superseded-by-scope", "warning", check_superseded_by_scope),
-        ("tags-block-form", "warning", check_tags_block_form),
-        ("xml-like-tags", "warning", check_xml_like_tags),
-        ("wikilink-resolvable", "warning",
-         lambda c: check_wikilink_resolvable(c, wl_checked, wl_index)),
-        ("sync-block", "error", lambda c: check_sync_integrity(c, canon_index)),
-        ("sync-stale", "warning", lambda c: check_sync_stale(c, canon_index)),
-        ("canon-block", "error", check_canon_blocks),
-        ("ctx", "error", lambda c: _ctx_check_of(c, 0)),
-        ("ctx", "warning", lambda c: _ctx_check_of(c, 1)),
-    ]
-
-    errors, warnings = [], []
-    for bundle, bp in scopes:
-        for ap in iter_all_md(bp):
-            ctx = gather_file_context(root, bundle, ap)
-            for name, sev, fn in per_file_checks:
-                for msg in fn(ctx):
-                    (errors if sev == "error" else warnings).append((name, ctx["rel"], msg))
-        for rel in check_asset_placement(bp):
-            errors.append(("asset-placement", "{}/{}".format(bundle, rel), "non-md file outside assets/"))
-        for msg in check_entry_file_description(bp):
-            warnings.append(("entry-file-description", bundle, msg))
-    return errors, warnings
-
-
-def cmd_check(root, args):
-    target = getattr(args, "target", None)
-    if target and not os.path.isdir(os.path.join(root, os.path.normpath(target))):
-        # Without this a typo'd or renamed bundle scanned nothing and exited 0 —
-        # a clean bill of health for a directory that does not exist.
-        print("not a directory: {}".format(target), file=sys.stderr)
-        sys.exit(1)
-    errors, warnings = run_checks(root, getattr(args, "target", None),
-                                  types_source=getattr(args, "types", None))
-    if args.strict:
-        errors, warnings = errors + warnings, []
-    _print_findings(errors, warnings, args.json)
-    sys.exit(1 if errors else 0)
-
-
-def _print_findings(errors, warnings, as_json):
-    if as_json:
-        print(json.dumps({
-            "errors": [{"check": n, "path": p, "message": m} for n, p, m in errors],
-            "warnings": [{"check": n, "path": p, "message": m} for n, p, m in warnings],
-        }))
-    else:
-        for name, path, msg in errors:
-            print("ERROR    {:<20} {}  ({})".format(name, path, msg))
-        for name, path, msg in warnings:
-            print("WARNING  {:<20} {}  ({})".format(name, path, msg))
-        print("OK — 0 violations" if not errors else "{} VIOLATIONS".format(len(errors)))
-
-
 def bundle_of(root, abspath):
     """Top-level bundle dir a path lives in (its first component under root)."""
     rel = os.path.relpath(os.path.abspath(abspath), root).replace(os.sep, "/")
@@ -1455,7 +594,7 @@ def plan_wikilink_rewrites(root, old_abs, new_abs):
     rewritten: guessing which of several same-named concepts the author meant is
     not a rename, it is a coin flip."""
     old_base, new_base = os.path.basename(old_abs)[:-3], os.path.basename(new_abs)[:-3]
-    index = build_concept_basename_index(root)
+    index = wikilinks.build_concept_basename_index(root)
     old_link = "/" + os.path.relpath(old_abs, root).replace(os.sep, "/")
     new_link = "/" + os.path.relpath(new_abs, root).replace(os.sep, "/")
     files = list(iter_rename_scan_md(root))
@@ -1465,19 +604,19 @@ def plan_wikilink_rewrites(root, old_abs, new_abs):
     keep = {old_link.lower(), new_link.lower()}
     collisions = sorted(
         c for c in ("/" + os.path.relpath(ap, root).replace(os.sep, "/") for ap in files)
-        if _normalize_key(os.path.basename(c)[:-3]) == _normalize_key(new_base)
+        if wikilinks._normalize_key(os.path.basename(c)[:-3]) == wikilinks._normalize_key(new_base)
         and c.lower() not in keep)
     # Casefolded, because resolve_wikilink is (D06). A case-sensitive filter
     # here silently excluded every case-variant inbound link from the plan — the
     # 96 live links D06 exists to rescue would have been orphaned by the very
     # rename that was supposed to carry them.
-    old_key, new_key = _normalize_key(old_base), _normalize_key(new_base)
+    old_key, new_key = wikilinks._normalize_key(old_base), wikilinks._normalize_key(new_base)
     after = _index_after_move(index, old_link, new_link, collisions)
     out = []
     for ap in files:
         rel = os.path.relpath(ap, root).replace(os.sep, "/")
-        for rec in parse_wikilinks(read_file(ap), rel):
-            key = _normalize_key(rec["page"].rsplit("/", 1)[-1])
+        for rec in wikilinks.parse_wikilinks(read_file(ap), rel):
+            key = wikilinks._normalize_key(rec["page"].rsplit("/", 1)[-1])
             if key not in (old_key, new_key):
                 continue
             # Resolve the occurrence against the catalogue as it is and as it
@@ -1485,11 +624,11 @@ def plan_wikilink_rewrites(root, old_abs, new_abs):
             # token does not change but its meaning does — a basename-preserving
             # move into a bundle where another concept shares the name turned a
             # unique address ambiguous with nothing to rewrite and nothing said.
-            status, cands = resolve_wikilink(index, rel, rec["page"])
+            status, cands = wikilinks.resolve_wikilink(index, rel, rec["page"])
             was_ours = status == "resolved" and _same_path(cands, old_link)
             new_raw = _rewrite_wikilink_raw(rec["raw"], new_link) if was_ours else rec["raw"]
-            page_after = _split_wikilink_inner(new_raw[2:-2])[0]
-            status_after, cands_after = resolve_wikilink(after, rel, page_after)
+            page_after = wikilinks._split_wikilink_inner(new_raw[2:-2])[0]
+            status_after, cands_after = wikilinks.resolve_wikilink(after, rel, page_after)
             turns = status == "resolved" and status_after != "resolved"
             if was_ours and new_raw != rec["raw"]:
                 rec.update(status="rewrite", candidates=cands, new_raw=new_raw,
@@ -1534,7 +673,7 @@ def _index_after_move(index, old_link, new_link, collisions=()):
         if kept:
             out[k] = kept
     key = os.path.basename(new_link)[:-3].lower()
-    out[key] = _apply_archive_precedence(
+    out[key] = wikilinks._apply_archive_precedence(
         set(out.get(key, [])) | {new_link} | set(collisions))
     return out
 
@@ -1685,7 +824,7 @@ def _apply_wikilink_rewrites(abspath, rename_map):
         sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
         return
     out, last = [], 0
-    for rec in parse_wikilinks(text):
+    for rec in wikilinks.parse_wikilinks(text):
         new_raw = rename_map.get(rec["raw"])
         if new_raw is None:
             continue
@@ -1804,7 +943,7 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
     for p in (old_abs, new_abs):
         if os.path.relpath(p, root).count(os.sep) < 1:
             die("path must be inside a bundle (<bundle>/<concept>.md)")
-    badchars = FILENAME_FORBIDDEN_CHARS & set(os.path.basename(new_abs)[:-3])
+    badchars = check.FILENAME_FORBIDDEN_CHARS & set(os.path.basename(new_abs)[:-3])
     if badchars:
         die("forbidden char(s) in new filename: {}".format("".join(sorted(badchars))))
     # samefile: on a case-insensitive filesystem a case-only rename has a
@@ -2427,7 +1566,7 @@ def _ctx_report(root, slugs, stale, as_json):
         rel = "{}/{}.md".format(CTX_DIR, s)
         errors += [("ctx", rel, m) for m in es]
         warnings += [("ctx", rel, m) for m in ws]
-    _print_findings(errors, warnings, as_json)
+    check._print_findings(errors, warnings, as_json)
     sys.exit(1 if errors else 0)
 
 
@@ -2553,15 +1692,6 @@ def add_archive_parser(sub):
                           "basename is already taken and inbound wikilinks would turn ambiguous")
 
 
-def add_check_parser(sub):
-    pc = _sub(sub, "check", "maintenance",
-              "conformance scan: §9 hard rules + local invariants")
-    pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
-    pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
-    pc.add_argument("--json", action="store_true", help="machine-readable output")
-    pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
-
-
 def add_ctx_parser(sub):
     pcx = _sub(sub, "ctx", "navigation",
                "context bundles: curated, ordered reading lists per topic "
@@ -2669,27 +1799,6 @@ def add_ctx_parser(sub):
                       help="only headings of original level <= N (default 0 = all)")
 
 
-def add_fix_crosslinks_parser(sub):
-    pfx = _sub(sub, "fix-crosslinks", "maintenance",
-               "rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)")
-    pfx.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
-    pfx.add_argument("--check", action="store_true", help="dry-run: report without writing")
-    pfx.add_argument("--include-reserved", action="store_true",
-                      dest="include_reserved",
-                      help="also rewrite RESERVED files (index.md, log.md, "
-                           "readme.md, index-map.md), narrowed to the text "
-                           "outside the managed <!-- okf:index --> block, "
-                           "which stays byte-identical (D-fxcr-01, off by "
-                           "default)")
-
-
-def add_fix_xml_tags_parser(sub):
-    pfxt = _sub(sub, "fix-xml-tags", "maintenance",
-                "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
-    pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
-    pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
-
-
 def add_info_parser(sub):
     _sub(sub, "info", "navigation",
          "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
@@ -2792,22 +1901,9 @@ def add_visualize_parser(sub):
     pv.add_argument("--out", help="output path (default: <bundle>/assets/viz.html)").completer = _complete_files
 
 
-def add_wikilinks_parser(sub):
-    pwl = _sub(sub, "wikilinks", "maintenance",
-               "report Obsidian wikilinks ([[…]]) and whether each resolves to a concept")
-    pwl.add_argument("target", nargs="?",
-                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
-    pwl.add_argument("--unresolved", action="store_true",
-                     help="list only unresolved and ambiguous occurrences (summary stays complete)")
-    pwl.add_argument("--json", action="store_true", help="machine-readable output")
-
-
 COMMANDS = {
     "archive": (cmd_archive, add_archive_parser),
-    "check": (cmd_check, add_check_parser),
     "ctx": (cmd_ctx, add_ctx_parser),
-    "fix-crosslinks": (cmd_fix_crosslinks, add_fix_crosslinks_parser),
-    "fix-xml-tags": (cmd_fix_xml_tags, add_fix_xml_tags_parser),
     "info": (cmd_info, add_info_parser),
     "install": (cmd_install, add_install_parser),
     "list": (cmd_list, add_list_parser),
@@ -2818,14 +1914,13 @@ COMMANDS = {
     "rewrite-path": (cmd_rewrite_path, add_rewrite_path_parser),
     "toc": (cmd_toc, add_toc_parser),
     "visualize": (cmd_visualize, add_visualize_parser),
-    "wikilinks": (cmd_wikilinks, add_wikilinks_parser),
 }
 
 
 # Command modules under cli/okf/ that own their commands. Each defines COMMANDS in
 # the same {name: (handler, add_parser)} form; moving a command means moving its
 # COMMANDS entry into its module and listing the module here.
-COMMAND_MODULES = (find, fts, index, recent, semantic, sync, tags)
+COMMAND_MODULES = (check, find, fts, index, recent, semantic, sync, tags, wikilinks)
 
 COMMAND_TABLE = merge_commands(COMMANDS, *(module.COMMANDS for module in COMMAND_MODULES))
 COMMAND_DISPATCH = {name: handler for name, (handler, _add_parser) in COMMAND_TABLE.items()}
