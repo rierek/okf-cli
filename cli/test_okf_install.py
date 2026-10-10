@@ -897,8 +897,10 @@ class Packaging(unittest.TestCase):
         env = {"PYTHONPATH": site, "HOME": os.path.join(tmp, "home"), "PATH": bin_dir, "SHELL": "/bin/zsh"}
 
         def entry(*argv):  # what the pip-generated console script does: sys.exit(main())
+            # cwd outside the checkout: `-c` puts it first on sys.path, so a repo-root run would import the
+            # checkout's okf_cli instead of the copy under site-packages
             return subprocess.run([sys.executable, "-c", "import sys, okf_cli; sys.exit(okf_cli.main())"] + list(argv),
-                                  capture_output=True, text=True, env=env, timeout=60)
+                                  capture_output=True, text=True, env=env, timeout=60, cwd=tmp)
         self.assertEqual(entry("--help").returncode, 0)
         prime = entry("--root", cat, "prime")
         self.assertEqual(prime.returncode, 0, prime.stderr)
