@@ -1,7 +1,7 @@
 """The catalogue layer every command builds on: index and sync markers, the
-catalogue root, bundle and concept iteration, frontmatter and tags,
-configuration and registries, scopes, ctx storage, the managed index block and
-the loader of the embedding producer."""
+catalogue root, bundle and concept iteration, the bundle-argument gate,
+frontmatter and tags, configuration and registries, scopes, ctx storage, the
+managed index block and the loader of the embedding producer."""
 
 import importlib.util
 import os
@@ -77,6 +77,21 @@ def catalogue_root(explicit):
 
 def is_bundle_dir(name):
     return name == CTX_DIR or (not name.startswith(".") and not name.startswith("_"))
+
+
+def require_bundle_dir(root, bundle):
+    """Refuse a bundle argument that names no directory under root — the gate
+    `check` has carried alone (cmd_check: "a typo'd or renamed bundle scanned
+    nothing and exited 0 — a clean bill of health for a directory that does
+    not exist"). `index` printed an empty listing for one; `visualize` created
+    the directory to write into.
+
+    The test is existence, deliberately NOT is_bundle_dir(): a `_`-prefixed
+    directory is not a bundle for listing purposes but is a real, printable
+    directory, and refusing it here would break callers that name one."""
+    if not os.path.isdir(os.path.join(root, os.path.normpath(bundle))):
+        print("not a directory: {}".format(bundle), file=sys.stderr)
+        sys.exit(1)
 
 
 # --- ctx: curated reading lists stored as _ctx/<slug>.md ---------------------
@@ -690,6 +705,41 @@ def replace_managed_block(text, block):
         return text, False
     inner = "\n" + block + "\n" if block else "\n"
     return text[:si + len(MARK_START)] + inner + text[ei:], True
+
+
+def _mask_managed_block(body):
+    """Blank out the managed `<!-- okf:index -->`..`<!-- /okf:index -->` region
+    so a hand-authored-crosslink scan of a RESERVED file never flags a
+    generated link. Non-greedy: an unterminated/absent marker pair leaves
+    body untouched (find/find-based _replace_block behaves the same way)."""
+    return re.sub(re.escape(MARK_START) + r"[\s\S]*?" + re.escape(MARK_END), "", body)
+
+
+def _split_managed_block(body):
+    """Split `body` into (before, block, after) around the managed
+    `<!-- okf:index -->`..`<!-- /okf:index -->` region, for a rewrite that
+    must preserve the block byte-identical instead of deleting it like
+    `_mask_managed_block` does. Three cases:
+      - complete marker pair: `block` carries both markers and everything
+        between them; `before`/`after` are the surrounding text.
+      - `MARK_START` present without a matching `MARK_END` (malformed/
+        truncated file): `block` carries everything from `MARK_START` to
+        end-of-file — an unterminated marker cannot be told apart from a
+        marker whose close tag was itself mid-edit, so the conservative
+        choice protects it rather than guessing it is safe to rewrite.
+      - no `MARK_START` at all: `before` is the whole body, `block` and
+        `after` are empty — the caller rewrites everything, same as a
+        non-RESERVED file, with no special-casing needed.
+    A caller that only ever rewrites `before` and `after` gets the
+    byte-identical-block guarantee by construction, not by comparison."""
+    si = body.find(MARK_START)
+    if si == -1:
+        return body, "", ""
+    ei = body.find(MARK_END, si)
+    if ei == -1:
+        return body[:si], body[si:], ""
+    ei += len(MARK_END)
+    return body[:si], body[si:ei], body[ei:]
 
 
 def _git_toplevel(path):
