@@ -15,6 +15,8 @@ import types
 import unittest
 from contextlib import redirect_stdout
 
+from okf import catalogue as okf_catalogue
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 _cli_spec = importlib.util.spec_from_file_location(
@@ -126,9 +128,9 @@ class SeedThenTeardownIsClean(unittest.TestCase):
                 self.assertTrue(os.path.basename(p).startswith(fixtures.FIXTURE_PREFIX))
             # every fixture reachable by iter_concepts (okf-cli.py:89-98)
             reachable = set()
-            for b in okf.list_bundles(CATALOGUE_ROOT):
+            for b in okf_catalogue.list_bundles(CATALOGUE_ROOT):
                 bp = os.path.join(CATALOGUE_ROOT, b)
-                for _cid, ap in okf.iter_concepts(bp):
+                for _cid, ap in okf_catalogue.iter_concepts(bp):
                     reachable.add(os.path.abspath(ap))
             for p in written:
                 self.assertIn(os.path.abspath(p), reachable)

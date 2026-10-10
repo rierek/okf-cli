@@ -47,6 +47,7 @@ packages = ["okf_cli"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "cli/okf-cli.py" = "okf_cli/cli/okf-cli.py"
+"cli/okf" = "okf_cli/cli/okf"
 "cli/okf_install.py" = "okf_cli/cli/okf_install.py"
 "cli/_okf-cli" = "okf_cli/cli/_okf-cli"
 "cli/embeddings" = "okf_cli/cli/embeddings"

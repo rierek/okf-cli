@@ -22,6 +22,8 @@ import types
 import unittest
 from unittest import mock
 
+from okf import parser_support as okf_parser_support
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -933,7 +935,7 @@ class CommandLine(unittest.TestCase):
         self.assertIn("install", okf.CATALOGUE_FREE)
         self.assertLessEqual(okf.CATALOGUE_FREE, set(okf.COMMAND_DISPATCH))
         okf.build_parser()  # registration fills COMMAND_GROUPS
-        self.assertEqual(okf.COMMAND_GROUPS["install"], "maintenance")
+        self.assertEqual(okf_parser_support.COMMAND_GROUPS["install"], "maintenance")
 
     def test_plan_runs_with_no_catalogue_and_no_root(self):
         before = snap(self.tmp)
@@ -975,6 +977,8 @@ class CommandLine(unittest.TestCase):
         alone = os.path.join(self.tmp, "alone")
         os.makedirs(alone)
         shutil.copy(os.path.join(_HERE, "okf-cli.py"), alone)
+        shutil.copytree(os.path.join(_HERE, "okf"), os.path.join(alone, "okf"),
+                        ignore=shutil.ignore_patterns("__pycache__"))  # the package travels with the entry
         done = subprocess.run([sys.executable, os.path.join(alone, "okf-cli.py"), "install"], capture_output=True,
                               text=True, env=self.env, timeout=60)
         self.assertEqual(done.returncode, 1)

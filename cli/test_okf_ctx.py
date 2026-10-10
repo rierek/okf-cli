@@ -15,6 +15,9 @@ import tempfile
 import unittest
 from unittest import mock
 
+from okf import catalogue as okf_catalogue
+from okf import linkscan as okf_linkscan
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location("okf_cli", os.path.join(_HERE, "okf-cli.py"))
 okf = importlib.util.module_from_spec(_spec)
@@ -35,7 +38,7 @@ class CtxCatalogue(unittest.TestCase):
         self._w("TYPES.md", "| Type | Meaning | Example |\n|---|---|---|\n"
                             "| `Concept` | x | |\n| `Context` | x | |\n")
         self._w("b/index.md", "# B\n\nIntro.\n\n## Contents\n\n"
-                              + okf.MARK_START + "\n" + okf.MARK_END + "\n")
+                              + okf_catalogue.MARK_START + "\n" + okf_catalogue.MARK_END + "\n")
         self._w("b/one.md", "---\ntype: Concept\ntitle: One\ndescription: first\n---\n\n"
                             "# One\n\nSee [Two](/b/two.md).\n")
         self._w("b/two.md", "---\ntype: Concept\ntitle: Two\ndescription: second\n---\n\n"
@@ -69,7 +72,7 @@ def E(pos, mode, path, comment=""):
 class CtxRenameArchive(CtxCatalogue):
     def _demo(self, text=None):
         if text is None:
-            okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+            okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
                 E(1, "pflicht", "b/two.md", "c")]})
         else:
             self._w("_ctx/demo.md", text)
@@ -93,8 +96,8 @@ class CtxRenameArchive(CtxCatalogue):
         self.assertIn("[zwei](/b/zwei.md)", self._read("_ctx/demo.md"))
         self.assertNotIn("[two]", self._read("_ctx/demo.md"))
         with self._home():
-            e = okf.load_ctx(self.root, "demo")["entries"][0]
-        self.assertTrue(os.path.exists(okf.ctx_entry_abspath(self.root, e["path"])))
+            e = okf_catalogue.load_ctx(self.root, "demo")["entries"][0]
+        self.assertTrue(os.path.exists(okf_catalogue.ctx_entry_abspath(self.root, e["path"])))
         self.assertIn("listed in 1 ctx bundle(s): demo (pos 1)\n", r.stdout)
 
     def test_archive_apply_points_entry_at_archive_path(self):
@@ -105,7 +108,7 @@ class CtxRenameArchive(CtxCatalogue):
         self.assertIn("listed in 1 ctx bundle(s): demo (pos 1)\n", r.stdout)
 
     def test_reference_entry_reports_reference(self):
-        okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
             E(None, "nachschlag", "b/two.md", "c")]})
         r = self._cli("rename", "b/two.md", "b/zwei.md")
         self.assertIn("  ctx        demo (reference)\n", r.stdout)
@@ -133,44 +136,44 @@ class CtxRenameArchive(CtxCatalogue):
 
 class CtxBundleGate(CtxCatalogue):
     def test_ctx_dir_is_bundle_other_underscore_and_dot_are_not(self):
-        self.assertTrue(okf.is_bundle_dir("_ctx"))
-        self.assertFalse(okf.is_bundle_dir("_archive"))
-        self.assertFalse(okf.is_bundle_dir("_other"))
-        self.assertFalse(okf.is_bundle_dir(".fts"))
-        self.assertTrue(okf.is_bundle_dir("b"))
+        self.assertTrue(okf_catalogue.is_bundle_dir("_ctx"))
+        self.assertFalse(okf_catalogue.is_bundle_dir("_archive"))
+        self.assertFalse(okf_catalogue.is_bundle_dir("_other"))
+        self.assertFalse(okf_catalogue.is_bundle_dir(".fts"))
+        self.assertTrue(okf_catalogue.is_bundle_dir("b"))
 
     def test_list_bundles_includes_ctx_once_it_exists(self):
-        self.assertNotIn("_ctx", okf.list_bundles(self.root))
-        okf.save_ctx(self.root, {"slug": "a", "description": "d", "entries": []})
-        self.assertIn("_ctx", okf.list_bundles(self.root))
+        self.assertNotIn("_ctx", okf_catalogue.list_bundles(self.root))
+        okf_catalogue.save_ctx(self.root, {"slug": "a", "description": "d", "entries": []})
+        self.assertIn("_ctx", okf_catalogue.list_bundles(self.root))
 
 
 class CtxSlugs(CtxCatalogue):
     def test_paths(self):
-        self.assertEqual(okf.ctx_dir(self.root), os.path.join(self.root, "_ctx"))
-        self.assertEqual(okf.ctx_file(self.root, "x"), os.path.join(self.root, "_ctx", "x.md"))
+        self.assertEqual(okf_catalogue.ctx_dir(self.root), os.path.join(self.root, "_ctx"))
+        self.assertEqual(okf_catalogue.ctx_file(self.root, "x"), os.path.join(self.root, "_ctx", "x.md"))
 
     def test_slugs_missing_dir_is_empty(self):
-        self.assertEqual(okf.ctx_slugs(self.root), [])
+        self.assertEqual(okf_catalogue.ctx_slugs(self.root), [])
 
     def test_slugs_sorted_and_reserved_filenames_excluded(self):
         for n in ("zeta.md", "alpha.md", "index.md", "README.md", "log.md", "notes.txt"):
             self._w("_ctx/" + n, "x")
-        self.assertEqual(okf.ctx_slugs(self.root), ["alpha", "zeta"])
+        self.assertEqual(okf_catalogue.ctx_slugs(self.root), ["alpha", "zeta"])
 
     def test_slug_problem(self):
-        self.assertIsNone(okf.ctx_slug_problem("a-b1"))
-        self.assertIsNone(okf.ctx_slug_problem("1a"))
+        self.assertIsNone(okf_catalogue.ctx_slug_problem("a-b1"))
+        self.assertIsNone(okf_catalogue.ctx_slug_problem("1a"))
         msg = "use lowercase letters, digits and hyphens"
         for bad in ("A", "-a", "a_b", "a b", ""):
-            self.assertEqual(okf.ctx_slug_problem(bad), msg, bad)
+            self.assertEqual(okf_catalogue.ctx_slug_problem(bad), msg, bad)
         for res in ("add", "index", "index-map", "readme", "log", "toc"):
-            self.assertEqual(okf.ctx_slug_problem(res), '"%s" is a reserved name' % res)
+            self.assertEqual(okf_catalogue.ctx_slug_problem(res), '"%s" is a reserved name' % res)
 
 
 class CtxParseRender(CtxCatalogue):
     def test_render_exact(self):
-        out = okf.render_ctx("my-ctx", 'say "hi"', [
+        out = okf_catalogue.render_ctx("my-ctx", 'say "hi"', [
             E(1, "pflicht", "b/one.md", "a|b\nc"),
             E(None, "nachschlag", "~/notes/out.md", "x"),
             E(None, "nachschlag", "/abs/p.md", ""),
@@ -186,27 +189,27 @@ class CtxParseRender(CtxCatalogue):
         entries = [E(1, "pflicht", "b/one.md", "a|b c"),
                    E(2, "pflicht", "b/notes (draft).md", ""),
                    E(None, "nachschlag", "~/notes/out.md", "x")]
-        desc, got, problems = okf.parse_ctx(okf.render_ctx("s", 'q"q', entries))
+        desc, got, problems = okf_catalogue.parse_ctx(okf_catalogue.render_ctx("s", 'q"q', entries))
         self.assertEqual((desc, got, problems), ('q"q', entries, []))
 
     def test_parse_problems(self):
         base = "---\ntype: Context\ndescription: d\n---\n\n# s\n\n"
-        _, e, p = okf.parse_ctx(base + "no table\n")
+        _, e, p = okf_catalogue.parse_ctx(base + "no table\n")
         self.assertEqual((e, p), ([], ['no table with header "pos | mode | path | comment"']))
         hdr = "| Pos | Mode | Path | Comment |\n|---|---|---|---|\n"
-        _, e, p = okf.parse_ctx(base + hdr + "| 1 | pflicht | [a](/a.md) |\n")
+        _, e, p = okf_catalogue.parse_ctx(base + hdr + "| 1 | pflicht | [a](/a.md) |\n")
         self.assertEqual((e, p), ([], ["row 1: expected 4 cells, found 3"]))
-        _, e, p = okf.parse_ctx(base + hdr + "| 1 | pflicht | [a](/a.md) | c |\n| x | pflicht | [a](/a.md) | c |\n")
+        _, e, p = okf_catalogue.parse_ctx(base + hdr + "| 1 | pflicht | [a](/a.md) | c |\n| x | pflicht | [a](/a.md) | c |\n")
         self.assertEqual(p, ['row 2: pos "x" is neither an integer nor -'])
         self.assertEqual(len(e), 1)
-        _, e, p = okf.parse_ctx(base + hdr + "| 1 | pflicht | plain | c |\n")
+        _, e, p = okf_catalogue.parse_ctx(base + hdr + "| 1 | pflicht | plain | c |\n")
         self.assertEqual(p, ["row 1: path cell is neither a catalogue link nor a code span"])
 
     def test_parse_rows_end_at_first_non_table_line_and_mode_lowercased(self):
         text = ("---\ntype: Context\ndescription: d\n---\n\n# s\n\n"
                 "| pos | mode | path | comment |\n|---|---|---|---|\n"
                 "| 1 | PFLICHT | [a](/b/one.md) | c |\n\ntrailing | not | a | row |\n")
-        _, e, p = okf.parse_ctx(text)
+        _, e, p = okf_catalogue.parse_ctx(text)
         self.assertEqual(e, [E(1, "pflicht", "b/one.md", "c")])
         self.assertEqual(p, [])
 
@@ -214,7 +217,7 @@ class CtxParseRender(CtxCatalogue):
         text = ("---\ntype: Context\ndescription: d\n---\n\n"
                 "| pos | mode | path | comment |\n|---|---|---|---|\n"
                 "| 1 | pflicht | [whatever](/b/one.md) |  |\n")
-        self.assertEqual(okf.parse_ctx(text)[1][0]["path"], "b/one.md")
+        self.assertEqual(okf_catalogue.parse_ctx(text)[1][0]["path"], "b/one.md")
 
 
 class CtxLoadSave(CtxCatalogue):
@@ -224,8 +227,8 @@ class CtxLoadSave(CtxCatalogue):
             E(7, "pflicht", "b/one.md", "p1"),
             E(None, "bogus", "ext/three.md", "n2"),
             E(3, "pflicht", "~/notes/out.md", "p2")]}
-        okf.save_ctx(self.root, ctx)
-        got = okf.load_ctx(self.root, "s")
+        okf_catalogue.save_ctx(self.root, ctx)
+        got = okf_catalogue.load_ctx(self.root, "s")
         self.assertEqual(got["slug"], "s")
         self.assertEqual(got["description"], "d")
         self.assertEqual(got["problems"], [])
@@ -236,39 +239,39 @@ class CtxLoadSave(CtxCatalogue):
     def test_save_ignores_problems_key(self):
         ctx = {"slug": "s", "description": "d", "entries": [E(1, "pflicht", "b/one.md")],
                "problems": ["row 9: junk"]}
-        okf.save_ctx(self.root, ctx)
-        self.assertNotIn("junk", okf.read_file(okf.ctx_file(self.root, "s")))
+        okf_catalogue.save_ctx(self.root, ctx)
+        self.assertNotIn("junk", okf_catalogue.read_file(okf_catalogue.ctx_file(self.root, "s")))
 
     def test_save_creates_index_skeleton_and_refreshes_index(self):
-        okf.save_ctx(self.root, {"slug": "s", "description": "my desc", "entries": []})
-        idx = okf.read_file(os.path.join(self.root, "_ctx", "index.md"))
+        okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "my desc", "entries": []})
+        idx = okf_catalogue.read_file(os.path.join(self.root, "_ctx", "index.md"))
         self.assertTrue(idx.startswith(
             "# Context bundles\n\nCurated, ordered reading lists per topic — one file per ctx slug, "
-            "managed by `okf ctx`.\n\n## Contents\n\n" + okf.MARK_START + "\n"))
+            "managed by `okf ctx`.\n\n## Contents\n\n" + okf_catalogue.MARK_START + "\n"))
         self.assertIn("my desc", idx)
         self.assertIn("(/_ctx/s.md)", idx)
 
     def test_save_keeps_existing_index_text(self):
-        self._w("_ctx/index.md", "# Mine\n\nHand written.\n\n" + okf.MARK_START + "\n" + okf.MARK_END + "\n")
-        okf.save_ctx(self.root, {"slug": "s", "description": "d", "entries": []})
-        idx = okf.read_file(os.path.join(self.root, "_ctx", "index.md"))
+        self._w("_ctx/index.md", "# Mine\n\nHand written.\n\n" + okf_catalogue.MARK_START + "\n" + okf_catalogue.MARK_END + "\n")
+        okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "d", "entries": []})
+        idx = okf_catalogue.read_file(os.path.join(self.root, "_ctx", "index.md"))
         self.assertTrue(idx.startswith("# Mine\n\nHand written.\n"))
         self.assertIn("(/_ctx/s.md)", idx)
 
     def test_load_missing_slug_exits_2_with_message(self):
         err = io.StringIO()
         with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
-            okf.load_ctx(self.root, "nope")
+            okf_catalogue.load_ctx(self.root, "nope")
         self.assertEqual(cm.exception.code, 2)
         self.assertEqual(err.getvalue(), "ctx: unknown slug: nope\n")
 
     def test_load_reports_parse_problems(self):
         self._w("_ctx/s.md", "---\ntype: Context\ndescription: d\n---\n\n# s\n")
-        self.assertEqual(okf.load_ctx(self.root, "s")["problems"],
+        self.assertEqual(okf_catalogue.load_ctx(self.root, "s")["problems"],
                          ['no table with header "pos | mode | path | comment"'])
 
     def test_sc02_list_type_context_shows_saved_ctx(self):
-        okf.save_ctx(self.root, {"slug": "s", "description": "d", "entries": []})
+        okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "d", "entries": []})
         r = self._cli("list", "--type", "Context")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("_ctx/s", r.stdout)
@@ -277,7 +280,7 @@ class CtxLoadSave(CtxCatalogue):
 class CtxNormalize(CtxCatalogue):
     def n(self, raw, must_exist=True):
         with self._home():
-            return okf.ctx_normalize_path(self.root, raw, must_exist)
+            return okf_catalogue.ctx_normalize_path(self.root, raw, must_exist)
 
     def test_catalogue_forms(self):
         for raw in ("b/one.md", "b/one", "/b/one.md", "/b/one", "  b/../b/one  ", "./b/one"):
@@ -325,32 +328,32 @@ class CtxNormalize(CtxCatalogue):
 class CtxEntryAbspathMemberships(CtxCatalogue):
     def test_entry_abspath(self):
         with self._home():
-            self.assertEqual(okf.ctx_entry_abspath(self.root, "~/notes/out.md"),
+            self.assertEqual(okf_catalogue.ctx_entry_abspath(self.root, "~/notes/out.md"),
                              os.path.join(self.home, "notes", "out.md"))
-        self.assertEqual(okf.ctx_entry_abspath(self.root, "/abs/p.md"), "/abs/p.md")
-        self.assertEqual(okf.ctx_entry_abspath(self.root, "b/one.md"),
+        self.assertEqual(okf_catalogue.ctx_entry_abspath(self.root, "/abs/p.md"), "/abs/p.md")
+        self.assertEqual(okf_catalogue.ctx_entry_abspath(self.root, "b/one.md"),
                          os.path.join(self.root, "b", "one.md"))
 
     def test_memberships(self):
-        okf.save_ctx(self.root, {"slug": "a", "description": "d", "entries": [E(1, "pflicht", "b/one.md", "ca")]})
-        okf.save_ctx(self.root, {"slug": "b-ctx", "description": "d", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "a", "description": "d", "entries": [E(1, "pflicht", "b/one.md", "ca")]})
+        okf_catalogue.save_ctx(self.root, {"slug": "b-ctx", "description": "d", "entries": [
             E(None, "nachschlag", "b/one.md", "cb"), E(None, "nachschlag", "b/two.md", "x")]})
         with self._home():
-            got = okf.ctx_memberships(self.root, "/b/one")
+            got = okf_catalogue.ctx_memberships(self.root, "/b/one")
             self.assertEqual(got, [("a", E(1, "pflicht", "b/one.md", "ca")),
                                    ("b-ctx", E(None, "nachschlag", "b/one.md", "cb"))])
-            self.assertEqual(okf.ctx_memberships(self.root, "b/gone.md"), [])
+            self.assertEqual(okf_catalogue.ctx_memberships(self.root, "b/gone.md"), [])
 
 
 class CtxSaveEffects(CtxCatalogue):
     def _save_full(self):
-        okf.save_ctx(self.root, {"slug": "s", "description": "d", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "d", "entries": [
             E(1, "pflicht", "b/one.md", "c1"), E(2, "pflicht", "ext/three.md", "c2"),
             E(None, "nachschlag", "~/notes/out.md", "c3")]})
 
     def test_saved_file_has_link_and_code_span_forms(self):
         self._save_full()
-        text = okf.read_file(okf.ctx_file(self.root, "s"))
+        text = okf_catalogue.read_file(okf_catalogue.ctx_file(self.root, "s"))
         self.assertIn("| 1 | pflicht | [one](/b/one.md) | c1 |", text)
         self.assertIn("| 2 | pflicht | [three](/ext/three.md) | c2 |", text)
         self.assertIn("| - | nachschlag | `~/notes/out.md` | c3 |", text)
@@ -365,9 +368,9 @@ class CtxSaveEffects(CtxCatalogue):
     def test_save_leaves_members_byte_identical(self):
         paths = [os.path.join(self.root, "b", "one.md"), os.path.join(self.ext, "three.md"),
                  os.path.join(self.home, "notes", "out.md")]
-        before = [okf.read_file(p) for p in paths]
+        before = [okf_catalogue.read_file(p) for p in paths]
         self._save_full()
-        self.assertEqual([okf.read_file(p) for p in paths], before)
+        self.assertEqual([okf_catalogue.read_file(p) for p in paths], before)
 
 
 class CtxShorthand(unittest.TestCase):
@@ -393,7 +396,7 @@ class CtxListCreate(CtxCatalogue):
     def test_create_orders_and_list_counts(self):
         r = self._create("demo", "b/two", "b/one")
         self.assertEqual((r.returncode, r.stdout), (0, "created _ctx/demo.md (2 entries)\n"))
-        c = okf.load_ctx(self.root, "demo")
+        c = okf_catalogue.load_ctx(self.root, "demo")
         self.assertEqual([(e["pos"], e["mode"], e["path"]) for e in c["entries"]],
                          [(1, "pflicht", "b/one.md"), (2, "pflicht", "b/two.md")])
         r = self._cli("ctx", "list")
@@ -441,10 +444,10 @@ class CtxListCreate(CtxCatalogue):
         self.assertEqual((r.returncode, r.stdout.strip()), (0, "[]"))
 
     def test_list_fields_each_observed_text_and_json(self):
-        okf.save_ctx(self.root, {"slug": "alpha", "description": "Alpha desc", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "alpha", "description": "Alpha desc", "entries": [
             E(1, "pflicht", "b/one.md"), E(2, "pflicht", "b/two.md"),
             E(None, "nachschlag", "ext/three.md")]})
-        okf.save_ctx(self.root, {"slug": "be", "description": "Be desc", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "be", "description": "Be desc", "entries": [
             E(1, "pflicht", "b/one.md")]})
         data = __import__("json").loads(self._cli("ctx", "list", "--json").stdout)
         self.assertEqual(data, [
@@ -465,7 +468,7 @@ class CtxListCreate(CtxCatalogue):
              "ctx", "create", "imp", "b/one", "--import", "in.txt"],
             capture_output=True, text=True, cwd=self.home, env={**os.environ, "HOME": self.home})
         self.assertEqual((r.returncode, r.stdout), (0, "created _ctx/imp.md (2 entries)\n"))
-        es = okf.load_ctx(self.root, "imp")["entries"]
+        es = okf_catalogue.load_ctx(self.root, "imp")["entries"]
         self.assertEqual([(e["path"], e["comment"]) for e in es],
                          [("b/one.md", ""), ("b/two.md", "second one")])
 
@@ -482,14 +485,14 @@ class CtxListCreate(CtxCatalogue):
             r = self._create(*argv)
             self.assertEqual((r.returncode, r.stdout), (2, ""), argv)
             self.assertEqual(r.stderr.strip(), msg, argv)
-        self.assertEqual(okf.ctx_slugs(self.root), ["old"])
-        self.assertEqual(len(okf.load_ctx(self.root, "old")["entries"]), 1)
+        self.assertEqual(okf_catalogue.ctx_slugs(self.root), ["old"])
+        self.assertEqual(len(okf_catalogue.load_ctx(self.root, "old")["entries"]), 1)
 
     def test_create_missing_paths_each_reported(self):
         r = self._create("new", "b/one", "b/x", "b/y")
         self.assertEqual(r.returncode, 2)
         self.assertEqual(r.stderr.splitlines(), ["ctx: not found: b/x", "ctx: not found: b/y"])
-        self.assertEqual(okf.ctx_slugs(self.root), [])
+        self.assertEqual(okf_catalogue.ctx_slugs(self.root), [])
 
 
 class CtxShowRead(CtxCatalogue):
@@ -498,7 +501,7 @@ class CtxShowRead(CtxCatalogue):
         self.one = os.path.join(self.root, "b/one.md")
         self.three = os.path.join(self.root, "ext", "three.md")
         self.out = os.path.join(self.home, "notes", "out.md")
-        okf.save_ctx(self.root, {"slug": "demo", "description": "Demo ctx", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "Demo ctx", "entries": [
             {"mode": "pflicht", "path": "b/one.md", "comment": "start here"},
             {"mode": "pflicht", "path": "ext/three.md", "comment": ""},
             {"mode": "nachschlag", "path": "~/notes/out.md", "comment": "background"}]})
@@ -509,10 +512,10 @@ class CtxShowRead(CtxCatalogue):
     def test_show_text_exact(self):
         r = self._cli("ctx", "show", "demo")
         self.assertEqual((r.returncode, r.stderr), (0, ""))
-        one_chars = len(okf.read_file(self.one))
-        three_chars = len(okf.read_file(self.three))
+        one_chars = len(okf_catalogue.read_file(self.one))
+        three_chars = len(okf_catalogue.read_file(self.three))
         t1, t3 = (one_chars + 3) // 4, (three_chars + 3) // 4
-        t_out = (len(okf.read_file(self.out)) + 3) // 4
+        t_out = (len(okf_catalogue.read_file(self.out)) + 3) // 4
         self.assertEqual(r.stdout, (
             "ctx demo — Demo ctx\n\n"
             "required — read in this order:\n"
@@ -545,12 +548,12 @@ class CtxShowRead(CtxCatalogue):
             "WARNING: 1 dead entry — this list is incomplete; fix with `ctx edit demo`\n"))
 
     def test_show_empty_reference_and_none(self):
-        okf.save_ctx(self.root, {"slug": "refonly", "description": "", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "refonly", "description": "", "entries": [
             {"mode": "nachschlag", "path": "b/two.md", "comment": ""}]})
         out = self._cli("ctx", "show", "refonly").stdout
         self.assertTrue(out.startswith("ctx refonly\n\nrequired — read in this order:\n  (none)\n"
                                        "reference — query when needed:\n"))
-        okf.save_ctx(self.root, {"slug": "reqonly", "description": "", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "reqonly", "description": "", "entries": [
             {"mode": "pflicht", "path": "b/two.md", "comment": ""}]})
         self.assertNotIn("query when needed", self._cli("ctx", "show", "reqonly").stdout)
 
@@ -569,7 +572,7 @@ class CtxShowRead(CtxCatalogue):
         self.assertEqual((e3["pos"], e3["mode"], e3["type"], e3["title"]),
                          (None, "nachschlag", "", "out"))
         self.assertEqual(d["tokens_required"], e1["tokens"] + e2["tokens"])
-        self.assertEqual(e1["chars"], len(okf.read_file(self.one)))
+        self.assertEqual(e1["chars"], len(okf_catalogue.read_file(self.one)))
 
     def test_show_json_follows_title_change(self):
         import json
@@ -597,12 +600,12 @@ class CtxShowRead(CtxCatalogue):
             "===== 2/2 {three} =====\n{c3}"
             "===== 1 reference entry not printed — ctx show demo =====\n").format(
                 one=self.one, three=self.three,
-                c1=okf.read_file(self.one), c3=okf.read_file(self.three)))
+                c1=okf_catalogue.read_file(self.one), c3=okf_catalogue.read_file(self.three)))
         self.assertNotIn("# Out", r.stdout)
 
     def test_read_adds_missing_newline_and_plural(self):
         self._w("b/two.md", "no newline")
-        okf.save_ctx(self.root, {"slug": "p", "description": "", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "p", "description": "", "entries": [
             {"mode": "pflicht", "path": "b/two.md", "comment": ""},
             {"mode": "nachschlag", "path": "b/one.md", "comment": ""},
             {"mode": "nachschlag", "path": "ext/three.md", "comment": ""}]})
@@ -617,7 +620,7 @@ class CtxShowRead(CtxCatalogue):
             "===== 1/2 [DEAD] {} =====\n===== 2/2 ".format(self.one)))
 
     def test_prime_ctx_bundles_line(self):
-        okf.save_ctx(self.root, {"slug": "alpha", "description": "", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "alpha", "description": "", "entries": [
             {"mode": "pflicht", "path": "b/two.md", "comment": ""}]})
         out = okf.render_catalogue_state(self.root)
         self.assertIn("ctx bundles: 2 — alpha · demo — `ctx show <slug>` lists one", out)
@@ -637,14 +640,14 @@ class CtxShowRead(CtxCatalogue):
         self.assertEqual((j.returncode, json.loads(j.stdout)["dead"]), (1, 1))
 
     def test_show_orders_required_by_pos_not_file_order(self):
-        self._w("_ctx/hand.md", okf.render_ctx("hand", "", [
+        self._w("_ctx/hand.md", okf_catalogue.render_ctx("hand", "", [
             {"pos": 9, "mode": "pflicht", "path": "b/two.md", "comment": ""},
             {"pos": 2, "mode": "pflicht", "path": "b/one.md", "comment": ""}]))
         out = self._cli("ctx", "show", "hand").stdout
         self.assertLess(out.index("one.md"), out.index("two.md"))
 
     def test_show_reference_description_not_printed(self):
-        okf.save_ctx(self.root, {"slug": "r", "description": "", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "r", "description": "", "entries": [
             {"mode": "nachschlag", "path": "b/one.md", "comment": ""}]})
         self.assertNotIn("first", self._cli("ctx", "show", "r").stdout)
 
@@ -652,7 +655,7 @@ class CtxShowRead(CtxCatalogue):
         import json
         with open(os.path.join(self.home, "notes", "a.txt"), "w", encoding="utf-8") as f:
             f.write("---\ntype: X\ntitle: T\n---\nabcde")
-        okf.save_ctx(self.root, {"slug": "t", "description": "", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "t", "description": "", "entries": [
             {"mode": "pflicht", "path": "~/notes/a.txt", "comment": ""}]})
         e = json.loads(self._cli("ctx", "show", "t", "--json").stdout)["entries"][0]
         self.assertEqual((e["type"], e["title"], e["description"], e["chars"], e["tokens"]),
@@ -664,21 +667,21 @@ class CtxMaintain(CtxCatalogue):
 
     def setUp(self):
         super().setUp()
-        okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
             E(1, "pflicht", "b/one.md", "c-one"), E(2, "pflicht", "b/two.md", "c|two"),
             E(None, "nachschlag", "ext/three.md", "c-three")]})
 
     def _rows(self, slug="demo"):
         return [(e["pos"], e["mode"], e["path"], e["comment"])
-                for e in okf.load_ctx(self.root, slug)["entries"]]
+                for e in okf_catalogue.load_ctx(self.root, slug)["entries"]]
 
     def _bytes(self, slug="demo"):
-        with open(okf.ctx_file(self.root, slug), "rb") as f:
+        with open(okf_catalogue.ctx_file(self.root, slug), "rb") as f:
             return f.read()
 
     def _broken(self):
         """demo with one valid row and one 3-cell row (AC-11)."""
-        ap = okf.ctx_file(self.root, "demo")
+        ap = okf_catalogue.ctx_file(self.root, "demo")
         with open(ap, "a", encoding="utf-8") as f:
             f.write("| 3 | pflicht | [x](/b/x.md) |\n")
         return self._bytes()
@@ -829,17 +832,17 @@ class CtxMaintain(CtxCatalogue):
         self._w("b/ref.md", "---\ntype: Concept\ntitle: R\n---\n\nSee [d](/_ctx/demo.md).\n")
         r = self._cli("ctx", "rename", "demo", "demo2")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertFalse(os.path.exists(okf.ctx_file(self.root, "demo")))
+        self.assertFalse(os.path.exists(okf_catalogue.ctx_file(self.root, "demo")))
         with open(os.path.join(self.root, "b", "ref.md"), encoding="utf-8") as f:
             self.assertIn("(/_ctx/demo2.md)", f.read())
-        _, body = okf.split_frontmatter(self._bytes("demo2").decode())
+        _, body = okf_catalogue.split_frontmatter(self._bytes("demo2").decode())
         self.assertTrue(body.lstrip().startswith("# demo2\n"), body)
         self.assertEqual(self._rows("demo2")[1], (2, "pflicht", "b/two.md", "c|two"))
         with open(os.path.join(self.root, "_ctx", "index.md"), encoding="utf-8") as f:
             self.assertIn("demo2", f.read())
 
     def test_rename_refusals_move_nothing(self):
-        okf.save_ctx(self.root, {"slug": "other", "description": "", "entries": []})
+        okf_catalogue.save_ctx(self.root, {"slug": "other", "description": "", "entries": []})
         before = self._bytes()
         for argv, msg in (
                 (["demo", "Bad_Slug"], 'ctx: invalid slug "Bad_Slug": use lowercase letters, digits and hyphens\n'),
@@ -849,7 +852,7 @@ class CtxMaintain(CtxCatalogue):
             r = self._cli("ctx", "rename", *argv)
             self.assertEqual((r.returncode, r.stderr), (2, msg), argv)
             self.assertEqual(self._bytes(), before, argv)
-        self.assertEqual(okf.ctx_slugs(self.root), ["demo", "other"])
+        self.assertEqual(okf_catalogue.ctx_slugs(self.root), ["demo", "other"])
 
     def test_rename_with_parse_problems_moves_but_keeps_content(self):
         before = self._broken()
@@ -867,7 +870,7 @@ class CtxMaintain(CtxCatalogue):
         self.assertEqual(r.stdout.splitlines()[1:],
                          ["warning: 2 file(s) still link to _ctx/demo.md:",
                           "  b/ref.md", "  b/ref2.md"])
-        self.assertFalse(os.path.exists(okf.ctx_file(self.root, "demo")))
+        self.assertFalse(os.path.exists(okf_catalogue.ctx_file(self.root, "demo")))
         with open(os.path.join(self.root, "_ctx", "index.md"), encoding="utf-8") as f:
             self.assertNotIn("demo", f.read())
 
@@ -884,11 +887,11 @@ class CtxNavigate(CtxCatalogue):
     def setUp(self):
         super().setUp()
         self._w("b/three.md", "# Three\n\n[x](/b/two.md) [dead](nope.md)\n")
-        okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
             {"mode": "pflicht", "path": "b/two.md", "comment": ""}]})
 
     def _set(self, *paths):
-        okf.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
             {"mode": "pflicht", "path": p, "comment": ""} for p in paths]})
 
     def test_toc_exact(self):
@@ -962,7 +965,7 @@ class CtxNavigate(CtxCatalogue):
     def test_outbound_dead_and_nonmd(self):
         self._w("b/a.txt", "[l](two.md)\n")
         self._set("b/gone.md", "b/a.txt")
-        with mock.patch.object(okf, "outbound_links", side_effect=AssertionError):
+        with mock.patch.object(okf_linkscan, "outbound_links", side_effect=AssertionError):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 okf.cmd_ctx_outbound(self.root, mock.Mock(slug="demo", file=None,
@@ -1043,12 +1046,12 @@ class CtxFindings(CtxCatalogue):
     def _ctx(self, slug="demo", entries=None, desc="Demo", typ="Context"):
         if entries is None:
             entries = [E(1, "pflicht", "b/one.md"), E(2, "pflicht", "b/two.md")]
-        text = okf.render_ctx(slug, desc, entries).replace("type: Context", "type: " + typ, 1)
+        text = okf_catalogue.render_ctx(slug, desc, entries).replace("type: Context", "type: " + typ, 1)
         self._w("_ctx/{}.md".format(slug), text)
         return os.path.join(self.root, "_ctx", slug + ".md")
 
     def _f(self, ap, **kw):
-        return okf.ctx_findings(self.root, ap, **kw)
+        return okf_catalogue.ctx_findings(self.root, ap, **kw)
 
     def _run_checks_ctx(self):
         errs, warns = okf.run_checks(self.root, None)
@@ -1144,7 +1147,7 @@ class CtxFindings(CtxCatalogue):
         self.assertEqual(self._f(ap, stale=True), (["dead entry: b/gone.md"], []))
 
     def test_reserved_index_of_ctx_bundle_is_skipped(self):
-        okf.save_ctx(self.root, {"slug": "demo", "description": "D", "entries": []})
+        okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "D", "entries": []})
         self.assertTrue(os.path.isfile(os.path.join(self.root, "_ctx", "index.md")))
         self.assertEqual(self._run_checks_ctx(), ([], []))
 
@@ -1185,10 +1188,10 @@ class CtxEdit(CtxCatalogue):
         self.addCleanup(shutil.rmtree, self.bin, True)
         self.log = os.path.join(self.bin, "log")
         self._editor("vi", "")  # guard: a mutant that reaches the fallback never starts a real vi
-        okf.save_ctx(self.root, {"slug": "demo", "description": "Demo", "entries": [
+        okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "Demo", "entries": [
             E(1, "pflicht", "b/one.md")]})
-        self.good = okf.render_ctx("demo", "Edited", [E(1, "pflicht", "b/two.md")])
-        self.bad = okf.render_ctx("demo", "Edited", [E(1, "pflicht", "b/gone.md")])
+        self.good = okf_catalogue.render_ctx("demo", "Edited", [E(1, "pflicht", "b/two.md")])
+        self.bad = okf_catalogue.render_ctx("demo", "Edited", [E(1, "pflicht", "b/gone.md")])
 
     def _editor(self, name, text, rc=0):
         p = os.path.join(self.bin, name)
@@ -1246,7 +1249,7 @@ class CtxEdit(CtxCatalogue):
 
     def test_index_refreshed_after_edit(self):
         self._edit(EDITOR=self._editor("ed", self.good))
-        self.assertIn("Edited", okf.read_file(os.path.join(self.root, "_ctx", "index.md")))
+        self.assertIn("Edited", okf_catalogue.read_file(os.path.join(self.root, "_ctx", "index.md")))
 
 
 if __name__ == "__main__":

@@ -25,15 +25,13 @@ Usage:
 """
 import argparse
 import collections
-import importlib.util
 import os
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_CLI_PATH = os.path.join(_HERE, "..", "okf-cli.py")
-_spec = importlib.util.spec_from_file_location("okf_cli", _CLI_PATH)
-okf = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(okf)
+# Started by path, only cli/eval is on sys.path; the okf package sits in cli/.
+sys.path.insert(0, os.path.dirname(_HERE))
+from okf.catalogue import list_bundles  # noqa: E402
 
 # Rare token unlikely to collide with real content — the shared "secret" the
 # golden queries (Task 3) search for.
@@ -72,7 +70,7 @@ def _pick_bundles(root):
     bundle while golden.json kept expecting `agent-memory`). Pinning by
     name removes the coupling to catalogue sort order entirely."""
     real = {
-        b for b in okf.list_bundles(root)
+        b for b in list_bundles(root)
         if not os.path.islink(os.path.join(root, b))
     }
     missing = [b for b in (CORRECT_BUNDLE, WRONG_BUNDLE) if b not in real]
@@ -187,7 +185,7 @@ def teardown(root):
     every real (non-symlink) bundle. Idempotent — safe to call after a
     partial seed or with nothing seeded at all."""
     removed = []
-    for b in okf.list_bundles(root):
+    for b in list_bundles(root):
         bp = os.path.join(root, b)
         if os.path.islink(bp):
             continue

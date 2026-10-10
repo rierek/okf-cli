@@ -36,7 +36,6 @@ Run: python3 -m unittest cli.test_embeddings_tagvec -v
 """
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 import sqlite3
@@ -46,7 +45,7 @@ import time
 import urllib.request
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_CLI_PATH = os.path.join(_HERE, "..", "okf-cli.py")
+_CLI_DIR = os.path.dirname(_HERE)
 
 # model -> (embedding dim, network endpoint). Both rows in the live cache are
 # 1024-dim (627 bge-m3 + 650 voyage-3-large, RET10).
@@ -84,13 +83,14 @@ CONCEPT_SCHEMA = (
 )
 
 
-def _load_okf_cli():
-    """Import okf-cli.py (hyphenated filename, not an importable package) for
-    catalogue_root()/all_tags() — same importlib pattern as test_okf_cli.py."""
-    spec = importlib.util.spec_from_file_location("okf_cli", _CLI_PATH)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+def _load_catalogue():
+    """Import cli/okf/catalogue.py for catalogue_root()/all_tags()/list_bundles().
+    This file also runs by path, when only cli/embeddings is on sys.path, so
+    cli/, which holds the okf package, goes in first."""
+    if _CLI_DIR not in sys.path:
+        sys.path.insert(0, _CLI_DIR)
+    from okf import catalogue
+    return catalogue
 
 
 def slug_text(tag):
@@ -168,12 +168,12 @@ def existing_concept_keys(db_path):
         conn.close()
 
 
-def _iter_all_concepts(okf, root):
+def _iter_all_concepts(catalogue, root):
     """(path, abspath) for every concept in the catalogue, path = bundle/cid
     (no .md) — the same identity form okf-cli.py's find prints."""
-    for b in okf.list_bundles(root):
+    for b in catalogue.list_bundles(root):
         bp = os.path.join(root, b)
-        for cid, ap in okf.iter_concepts(bp):
+        for cid, ap in catalogue.iter_concepts(bp):
             yield "{}/{}".format(b, cid), ap
 
 
@@ -183,14 +183,14 @@ def plan_concept_delta(root, model, db_path, path_prefix=None, limit=None):
     scopes candidates (e.g. to one bundle or one fixture prefix) — useful
     to keep a manual --produce run small and deterministic; `limit` caps
     the count after that filter."""
-    okf = _load_okf_cli()
+    catalogue = _load_catalogue()
     have = existing_concept_keys(db_path)
     out = []
-    for path, ap in sorted(_iter_all_concepts(okf, root)):
+    for path, ap in sorted(_iter_all_concepts(catalogue, root)):
         if path_prefix and not path.startswith(path_prefix):
             continue
-        fm, body = okf.split_frontmatter(okf.read_file(ap))
-        title = okf._dequote(fm.get("title", "")) or os.path.basename(ap)[:-3]
+        fm, body = catalogue.split_frontmatter(catalogue.read_file(ap))
+        title = catalogue._dequote(fm.get("title", "")) or os.path.basename(ap)[:-3]
         text = concept_text(title, body)
         key = concept_cache_key(model, path, text)
         if key not in have:
@@ -364,15 +364,15 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    okf = _load_okf_cli()
-    root = okf.catalogue_root(args.root)
+    catalogue = _load_catalogue()
+    root = catalogue.catalogue_root(args.root)
     output = args.output or os.path.join(root, ".tagvec", "tag_vectors.sqlite")
     models = args.models or sorted(MODELS)
 
     do_tags = args.target in ("tags", "both")
     do_concepts = args.target in ("concepts", "both")
 
-    tags = set(okf.all_tags(root)) if do_tags else set()
+    tags = set(catalogue.all_tags(root)) if do_tags else set()
     total_delta = 0
 
     def _embed(model, texts):
