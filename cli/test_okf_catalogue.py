@@ -5,8 +5,13 @@ Run: python3 -m unittest test_okf_catalogue -v
 """
 import os
 import shutil
+import sys
 import tempfile
 import unittest
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+    sys.path.insert(0, _HERE)
 
 from okf import catalogue as okf_catalogue
 

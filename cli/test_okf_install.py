@@ -22,9 +22,11 @@ import types
 import unittest
 from unittest import mock
 
-from okf import parser_support as okf_parser_support
-
 _HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+    sys.path.insert(0, _HERE)
+
+from okf import parser_support as okf_parser_support
 
 
 def _load(name, filename):

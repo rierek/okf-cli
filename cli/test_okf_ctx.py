@@ -15,10 +15,13 @@ import tempfile
 import unittest
 from unittest import mock
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+    sys.path.insert(0, _HERE)
+
 from okf import catalogue as okf_catalogue
 from okf import linkscan as okf_linkscan
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location("okf_cli", os.path.join(_HERE, "okf-cli.py"))
 okf = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(okf)

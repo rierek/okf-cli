@@ -14,14 +14,17 @@ import re
 import shutil
 import sqlite3
 import struct
+import sys
 import tempfile
 import unittest
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+    sys.path.insert(0, _HERE)
 
 from okf import catalogue as okf_catalogue
 from okf import linkscan as okf_linkscan
 from okf import parser_support as okf_parser_support
-
-_HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def _fs_is_case_insensitive():

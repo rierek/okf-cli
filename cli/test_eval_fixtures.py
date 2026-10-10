@@ -10,14 +10,17 @@ import importlib.util
 import io
 import os
 import shutil
+import sys
 import tempfile
 import types
 import unittest
 from contextlib import redirect_stdout
 
-from okf import catalogue as okf_catalogue
-
 _HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+    sys.path.insert(0, _HERE)
+
+from okf import catalogue as okf_catalogue
 
 _cli_spec = importlib.util.spec_from_file_location(
     "okf_cli", os.path.join(_HERE, "okf-cli.py")
