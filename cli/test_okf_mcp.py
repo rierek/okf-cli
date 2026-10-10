@@ -14,11 +14,15 @@ import inspect
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+    sys.path.insert(0, _HERE)
+
 _spec = importlib.util.spec_from_file_location(
     "okf_mcp", os.path.join(_HERE, "..", "mcp", "okf_mcp.py"))
 mcp = importlib.util.module_from_spec(_spec)

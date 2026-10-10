@@ -23,6 +23,10 @@ import unittest
 from unittest import mock
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+    sys.path.insert(0, _HERE)
+
+from okf import parser_support as okf_parser_support
 
 
 def _load(name, filename):
@@ -893,8 +897,10 @@ class Packaging(unittest.TestCase):
         env = {"PYTHONPATH": site, "HOME": os.path.join(tmp, "home"), "PATH": bin_dir, "SHELL": "/bin/zsh"}
 
         def entry(*argv):  # what the pip-generated console script does: sys.exit(main())
+            # cwd outside the checkout: `-c` puts it first on sys.path, so a repo-root run would import the
+            # checkout's okf_cli instead of the copy under site-packages
             return subprocess.run([sys.executable, "-c", "import sys, okf_cli; sys.exit(okf_cli.main())"] + list(argv),
-                                  capture_output=True, text=True, env=env, timeout=60)
+                                  capture_output=True, text=True, env=env, timeout=60, cwd=tmp)
         self.assertEqual(entry("--help").returncode, 0)
         prime = entry("--root", cat, "prime")
         self.assertEqual(prime.returncode, 0, prime.stderr)
@@ -933,7 +939,7 @@ class CommandLine(unittest.TestCase):
         self.assertIn("install", okf.CATALOGUE_FREE)
         self.assertLessEqual(okf.CATALOGUE_FREE, set(okf.COMMAND_DISPATCH))
         okf.build_parser()  # registration fills COMMAND_GROUPS
-        self.assertEqual(okf.COMMAND_GROUPS["install"], "maintenance")
+        self.assertEqual(okf_parser_support.COMMAND_GROUPS["install"], "maintenance")
 
     def test_plan_runs_with_no_catalogue_and_no_root(self):
         before = snap(self.tmp)
@@ -975,6 +981,8 @@ class CommandLine(unittest.TestCase):
         alone = os.path.join(self.tmp, "alone")
         os.makedirs(alone)
         shutil.copy(os.path.join(_HERE, "okf-cli.py"), alone)
+        shutil.copytree(os.path.join(_HERE, "okf"), os.path.join(alone, "okf"),
+                        ignore=shutil.ignore_patterns("__pycache__"))  # the package travels with the entry
         done = subprocess.run([sys.executable, os.path.join(alone, "okf-cli.py"), "install"], capture_output=True,
                               text=True, env=self.env, timeout=60)
         self.assertEqual(done.returncode, 1)

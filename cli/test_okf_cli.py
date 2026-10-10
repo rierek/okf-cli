@@ -14,10 +14,17 @@ import re
 import shutil
 import sqlite3
 import struct
+import sys
 import tempfile
 import unittest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+    sys.path.insert(0, _HERE)
+
+from okf import catalogue as okf_catalogue
+from okf import linkscan as okf_linkscan
+from okf import parser_support as okf_parser_support
 
 
 def _fs_is_case_insensitive():
@@ -32,7 +39,7 @@ _spec = importlib.util.spec_from_file_location("okf_cli", os.path.join(_HERE, "o
 okf = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(okf)
 
-M0, M1 = okf.MARK_START, okf.MARK_END
+M0, M1 = okf_catalogue.MARK_START, okf_catalogue.MARK_END
 
 
 class ConvertFlatIndex(unittest.TestCase):
@@ -260,7 +267,7 @@ class ForceFlattenAndExempt(unittest.TestCase):
         try:
             os.makedirs(os.path.join(tmp, "b"))
             with open(os.path.join(tmp, "b", "index.md"), "w") as f:
-                f.write("# B\n\n" + okf.EXEMPT + "\n\ncurated content page\n")
+                f.write("# B\n\n" + okf_catalogue.EXEMPT + "\n\ncurated content page\n")
             with open(os.path.join(tmp, "b", "x.md"), "w") as f:
                 f.write("---\ntype: Concept\n---\n# X\n")
             un = okf.uncovered_index_dirs(tmp, os.path.join(tmp, "b"))
@@ -382,7 +389,7 @@ class CheckCommand(unittest.TestCase):
         prose, outside the managed `<!-- okf:index -->` block, is a real
         crosslink and must be caught the same as one in a concept file."""
         self._w("b/index.md", "# B\n\nSee [Old](old.md) for background.\n\n"
-                              + okf.MARK_START + "\n" + okf.MARK_END + "\n")
+                              + okf_catalogue.MARK_START + "\n" + okf_catalogue.MARK_END + "\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertIn("crosslink-format", self._names(warnings))
 
@@ -391,8 +398,8 @@ class CheckCommand(unittest.TestCase):
         generated (relative-by-convention) link inside it never warns —
         RESERVED files becoming a scan source must not regress the common
         case of an ordinary reindexed index.md."""
-        self._w("b/index.md", "# B\n\n" + okf.MARK_START + "\n* [X](x.md)\n"
-                              + okf.MARK_END + "\n")
+        self._w("b/index.md", "# B\n\n" + okf_catalogue.MARK_START + "\n* [X](x.md)\n"
+                              + okf_catalogue.MARK_END + "\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertNotIn("crosslink-format", self._names(warnings))
@@ -408,7 +415,7 @@ class CheckCommand(unittest.TestCase):
     def test_clean_bundle_has_zero_violations(self):
         self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
         self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n\n## Contents\n\n"
-                              + okf.MARK_START + "\n* [X](x.md)\n" + okf.MARK_END + "\n")
+                              + okf_catalogue.MARK_START + "\n* [X](x.md)\n" + okf_catalogue.MARK_END + "\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n---\n# X\n\n[Y](/b/index.md)\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertEqual(errors, [])
@@ -772,113 +779,6 @@ class SplitManagedBlockUnit(unittest.TestCase):
         self.assertEqual(after, "")
 
 
-class OkfConfig(unittest.TestCase):
-    """.okf.toml is the machine-truth config; absent or empty -> {}.
-    ~ in path values is expanded."""
-
-    def setUp(self):
-        import tempfile
-        self.tmp = tempfile.mkdtemp()
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _w(self, rel, text):
-        with open(os.path.join(self.tmp, rel), "w", encoding="utf-8") as f:
-            f.write(text)
-
-    def test_absent_config_is_empty_dict(self):
-        self.assertEqual(okf.load_okf_config(self.tmp), {})
-
-    def test_parses_keys(self):
-        self._w(".okf.toml", 'kc_root = "~/Obsidian/Knowledge-Catalogue"\n'
-                             'types_source = "~/Obsidian/Knowledge-Catalogue/TYPES.md"\n'
-                             'bundle = "demo-okf"\n')
-        cfg = okf.load_okf_config(self.tmp)
-        self.assertEqual(cfg["bundle"], "demo-okf")
-        self.assertFalse(cfg["types_source"].startswith("~"))  # expanduser ran
-        self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
-
-    def test_parses_keys_without_tomllib(self):
-        """okf-cli.py is `#!/usr/bin/env python3` with no declared minimum
-        version; on Python <3.11 (no stdlib `tomllib`) load_okf_config must
-        still parse the same file via its dependency-free fallback, not
-        crash with ModuleNotFoundError."""
-        import sys
-        from unittest import mock
-        self._w(".okf.toml", 'kc_root = "~/Obsidian/Knowledge-Catalogue"\n'
-                             'types_source = "~/Obsidian/Knowledge-Catalogue/TYPES.md"\n'
-                             'bundle = "demo-okf"  # trailing comment\n'
-                             'wikilink_checked_bundles = ["demo-okf"]\n')
-        with mock.patch.dict(sys.modules, {"tomllib": None}):
-            cfg = okf.load_okf_config(self.tmp)
-        self.assertEqual(cfg["bundle"], "demo-okf")
-        self.assertEqual(cfg["wikilink_checked_bundles"], ["demo-okf"])
-        self.assertFalse(cfg["types_source"].startswith("~"))  # expanduser ran
-        self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
-
-    def test_malformed_config_without_tomllib_fails_with_a_message(self):
-        import sys
-        from unittest import mock
-        self._w(".okf.toml", "this is not = = toml\n")
-        with mock.patch.dict(sys.modules, {"tomllib": None}):
-            with self.assertRaises(SystemExit) as cm:
-                okf.load_okf_config(self.tmp)
-        self.assertIn(".okf.toml is not valid TOML", str(cm.exception))
-
-
-class ListIndexableBundles(unittest.TestCase):
-    """OKFT-n8xz — the narrower corpus for index/search call sites only: the
-    declared `.okf.toml` `bundle` key when present, list_bundles()'s name
-    filter (catalogue behaviour, unchanged) otherwise."""
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _mkdirs(self, *names):
-        for n in names:
-            os.makedirs(os.path.join(self.tmp, n), exist_ok=True)
-
-    def _w_toml(self, text):
-        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
-            f.write(text)
-
-    def test_declared_bundle_key_narrows_to_exactly_that_name(self):
-        """AC1 — a `bundle` key wins even with other namefilter-eligible
-        directories sitting right next to it (the TPIC-scaffolding shape a
-        repo docs root actually has)."""
-        self._mkdirs("lean-stack-okf", "some-tpic-scaffolding", "another-plan-dir")
-        self._w_toml('bundle = "lean-stack-okf"\n')
-        self.assertEqual(okf.list_indexable_bundles(self.tmp), ["lean-stack-okf"])
-
-    def test_absent_bundle_key_matches_list_bundles(self):
-        """AC2 — no `bundle` key -> catalogue behaviour (list_bundles)."""
-        self._mkdirs("a", "b", "_staging")
-        self._w_toml('types_source = "x"\n')
-        self.assertEqual(okf.list_indexable_bundles(self.tmp),
-                          okf.list_bundles(self.tmp))
-
-    def test_no_config_file_at_all_matches_list_bundles(self):
-        """AC3 — no `.okf.toml` at all -> same fallback as AC2."""
-        self._mkdirs("a", "b")
-        self.assertEqual(okf.list_indexable_bundles(self.tmp),
-                          okf.list_bundles(self.tmp))
-
-    def test_declared_bundle_missing_on_disk_yields_empty_not_fallback(self):
-        """AC4 — a `bundle` key naming a directory that does not exist is a
-        positive declaration gone stale, not an invitation back to the wide
-        name filter: the empty set, chosen and justified in the bean over
-        falling back silently, which would resurrect every scaffolding
-        directory the moment the declared path went missing."""
-        self._mkdirs("some-other-dir")
-        self._w_toml('bundle = "does-not-exist"\n')
-        self.assertEqual(okf.list_indexable_bundles(self.tmp), [])
-
-
 class BundleKeyDoesNotNarrowResolution(unittest.TestCase):
     """Acceptance guard (OKFT-n8xz, test 5) — the resolution call sites keep
     seeing the WIDE bundle set even when `.okf.toml` declares a narrower
@@ -977,7 +877,7 @@ class IndexableArchiveScopedToDeclaredBundle(unittest.TestCase):
         """Review 2026-08-13 D02: `indexable_only` is find's explicit opt-in,
         not resolve_scopes()'s default — the call below mirrors what
         `_substring_ranking` actually passes, not a bare unscoped call."""
-        scopes = okf.resolve_scopes(self.tmp, None, include_archive=True,
+        scopes = okf_catalogue.resolve_scopes(self.tmp, None, include_archive=True,
                                     indexable_only=True)
         names = [b for b, _ in scopes]
         self.assertIn("_archive/declared-bundle", names)
@@ -990,7 +890,7 @@ class IndexableArchiveScopedToDeclaredBundle(unittest.TestCase):
         caller except find (merge-tags, remove-tags, normalize-tags, list,
         _recent_scopes, fix-xml-like-tags, fix-crosslinks, wikilinks, check)
         relies on this default."""
-        scopes = okf.resolve_scopes(self.tmp, None, include_archive=True)
+        scopes = okf_catalogue.resolve_scopes(self.tmp, None, include_archive=True)
         names = [b for b, _ in scopes]
         self.assertIn("_archive/other-scaffolding", names)
 
@@ -1112,77 +1012,6 @@ class ConfigAwareTypes(unittest.TestCase):
         errors, warnings = okf.run_checks(
             self.repo, "b", types_source=os.path.join(self.central, "TYPES.md"))
         self.assertNotIn("type-registered", [w[0] for w in warnings])
-
-
-class RefMatrix(unittest.TestCase):
-    """build_ref_matrix: every markdown link under scan_root resolving to the
-    target file. Same link-regex as bundle_graph; code fences stripped; http/
-    anchors ignored; relative + catalogue-root-absolute (/) both resolved."""
-
-    def setUp(self):
-        import tempfile
-        self.tmp = tempfile.mkdtemp()
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _w(self, rel, text):
-        ap = os.path.join(self.tmp, rel)
-        os.makedirs(os.path.dirname(ap), exist_ok=True)
-        with open(ap, "w", encoding="utf-8") as f:
-            f.write(text)
-
-    def _sources(self, hits):
-        return sorted(s for s, _ in hits)
-
-    def test_same_dir_and_subdir_inbound(self):
-        self._w("docs/arch.md", "# Arch\n")
-        self._w("docs/overview.md", "see [arch](arch.md)\n")
-        self._w("README.md", "see [arch](docs/arch.md)\n")
-        hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "docs/arch.md"))
-        self.assertEqual(self._sources(hits), ["README.md", "docs/overview.md"])
-
-    def test_catalogue_root_leading_slash_resolves(self):
-        self._w("docs/arch.md", "# Arch\n")
-        # /docs/arch.md — leading / is the CATALOGUE root, so the bundle
-        # segment is part of the link.
-        self._w("docs/x.md", "see [a](/docs/arch.md)\n")
-        hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "docs/arch.md"))
-        self.assertEqual(self._sources(hits), ["docs/x.md"])
-
-    def test_leading_slash_is_scan_root_not_bundle_root(self):
-        """Inverted from the old bundle-root rule (and renamed, so the name
-        stops asserting the opposite of the code): `/b1/x.md` names the same
-        file no matter which bundle the link sits in, so BOTH sources are
-        inbound references. Under the old reading the link in b2 would have
-        meant b2/x.md and been unrelated."""
-        self._w("b1/x.md", "# X\n")
-        self._w("b1/foo.md", "[x](/b1/x.md)\n")
-        self._w("b2/bar.md", "[x](/b1/x.md)\n")
-        hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "b1/x.md"))
-        self.assertEqual(self._sources(hits), ["b1/foo.md", "b2/bar.md"])
-
-    def test_http_and_anchor_and_fenced_ignored(self):
-        self._w("docs/arch.md", "# Arch\n")
-        self._w("docs/x.md",
-                "[ext](https://arch.md)\n[frag](arch.md#top)\n```\n[fenced](arch.md)\n```\n")
-        hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "docs/arch.md"))
-        # only the anchor link resolves to arch.md; http + fenced excluded
-        self.assertEqual(self._sources(hits), ["docs/x.md"])
-        self.assertEqual(len(hits), 1)
-
-    def test_git_and_node_modules_pruned(self):
-        self._w("docs/arch.md", "# Arch\n")
-        self._w(".git/x.md", "[a](../docs/arch.md)\n")
-        self._w("node_modules/y.md", "[a](../docs/arch.md)\n")
-        hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "docs/arch.md"))
-        self.assertEqual(hits, [])
-
-    def test_no_inbound_is_empty(self):
-        self._w("docs/arch.md", "# Arch\n")
-        hits = okf.build_ref_matrix(self.tmp, os.path.join(self.tmp, "docs/arch.md"))
-        self.assertEqual(hits, [])
 
 
 class RewritePath(unittest.TestCase):
@@ -1328,10 +1157,10 @@ class CmdRefs(unittest.TestCase):
         self._w("e/t.md", "t\n")
         ap = os.path.join(self.tmp, "d/a.md")
         tgt = os.path.join(self.tmp, "e/t.md")
-        self.assertEqual(okf.outbound_links(self.tmp, ap), [(" ../e/t.md?q ", tgt, True)])
-        self.assertEqual(list(okf.iter_md_links(self.tmp)), [("d/a.md", " ../e/t.md?q ", tgt)])
-        self.assertEqual(okf.build_ref_matrix(self.tmp, tgt), [("d/a.md", " ../e/t.md?q ")])
-        self.assertEqual(okf.resolve_md_link(self.tmp, ap, "mailto:a@b"), None)
+        self.assertEqual(okf_linkscan.outbound_links(self.tmp, ap), [(" ../e/t.md?q ", tgt, True)])
+        self.assertEqual(list(okf_linkscan.iter_md_links(self.tmp)), [("d/a.md", " ../e/t.md?q ", tgt)])
+        self.assertEqual(okf_linkscan.build_ref_matrix(self.tmp, tgt), [("d/a.md", " ../e/t.md?q ")])
+        self.assertEqual(okf_linkscan.resolve_md_link(self.tmp, ap, "mailto:a@b"), None)
 
     def test_missing_target_exits_nonzero(self):
         import types
@@ -1339,49 +1168,6 @@ class CmdRefs(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             okf.cmd_refs(os.path.join(self.tmp, "docs"), args)
         self.assertNotEqual(cm.exception.code, 0)
-
-
-class ResolveScopesTargets(unittest.TestCase):
-    """resolve_scopes feeds check, fix-crosslinks, fix-xml-tags, reindex and
-    every --scope. Normalising the target for the wikilink opt-in gate reaches
-    all of them, so the other target forms are pinned here."""
-
-    def setUp(self):
-        import tempfile
-        self.tmp = tempfile.mkdtemp()
-        for b in ("alpha", "beta"):
-            os.makedirs(os.path.join(self.tmp, b, "sub"), exist_ok=True)
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def test_relative_forms(self):
-        for target, bundle, tail in (
-            ("alpha", "alpha", "alpha"),
-            ("alpha/", "alpha", "alpha"),
-            ("alpha//", "alpha", "alpha"),
-            ("./alpha", "alpha", "alpha"),
-            ("alpha/sub", "alpha", "alpha/sub"),
-            ("alpha/../beta", "beta", "beta"),
-        ):
-            got = okf.resolve_scopes(self.tmp, target)
-            self.assertEqual(got[0][0], bundle, target)
-            self.assertEqual(got[0][1], os.path.join(self.tmp, tail), target)
-
-    def test_absolute_target_still_addresses_that_directory(self):
-        """os.path.join(root, "/x") discards root, so an absolute target used to
-        work by accident. Normalising it into a relative segment rescoped the
-        scan onto a path that does not exist and reported a clean run."""
-        ap = os.path.join(self.tmp, "beta")
-        self.assertEqual(okf.resolve_scopes(self.tmp, ap), [("beta", ap)])
-
-    def test_dot_target_means_the_whole_catalogue(self):
-        """`.` yielded a bundle literally named "." — every bundle-name-keyed
-        rule then failed to match while the scan still walked the root."""
-        for target in (".", "./"):
-            self.assertEqual(okf.resolve_scopes(self.tmp, target),
-                             okf.resolve_scopes(self.tmp, None), target)
 
 
 class RenameConcept(unittest.TestCase):
@@ -1493,10 +1279,10 @@ class TagRegistryGate(unittest.TestCase):
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - anything\n---\n# X\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertNotIn("tag-registered", self._names(warnings))
-        self.assertIsNone(okf.load_tags(self.tmp))
+        self.assertIsNone(okf_catalogue.load_tags(self.tmp))
 
     def test_unknown_tag_warns(self):
-        self._w("TAGS.md", okf.TAGS_HEADER + "| `known` |  |\n")
+        self._w("TAGS.md", okf_catalogue.TAGS_HEADER + "| `known` |  |\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - known\n  - novel\n---\n# X\n")
         errors, warnings = okf.run_checks(self.tmp, "b")
         self.assertIn("tag-registered", self._names(warnings))
@@ -1505,18 +1291,18 @@ class TagRegistryGate(unittest.TestCase):
         self.assertFalse(any("known" in m for m in msgs))
 
     def test_all_known_tags_clean(self):
-        self._w("TAGS.md", okf.TAGS_HEADER + "| `a` |  |\n| `b` |  |\n")
+        self._w("TAGS.md", okf_catalogue.TAGS_HEADER + "| `a` |  |\n| `b` |  |\n")
         self._w("c/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n  - b\n---\n# X\n")
         errors, warnings = okf.run_checks(self.tmp, "c")
         self.assertNotIn("tag-registered", self._names(warnings))
 
     def test_register_creates_and_appends(self):
-        added, already = okf.register_tags(self.tmp, [("zebra", "z"), ("alpha", "a")])
+        added, already = okf_catalogue.register_tags(self.tmp, [("zebra", "z"), ("alpha", "a")])
         self.assertEqual(set(added), {"zebra", "alpha"})
         self.assertEqual(already, [])
-        self.assertEqual(okf.load_tags(self.tmp), {"zebra", "alpha"})
+        self.assertEqual(okf_catalogue.load_tags(self.tmp), {"zebra", "alpha"})
         # idempotent + casefold-sorted output (alpha before zebra)
-        added2, already2 = okf.register_tags(self.tmp, [("alpha", "other"), ("mid", "m")])
+        added2, already2 = okf_catalogue.register_tags(self.tmp, [("alpha", "other"), ("mid", "m")])
         self.assertEqual(added2, ["mid"])
         self.assertEqual(already2, ["alpha"])
         body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
@@ -1525,18 +1311,18 @@ class TagRegistryGate(unittest.TestCase):
         self.assertIn("| `alpha` | a |", body)  # existing description is kept, not overwritten
 
     def test_register_preserves_descriptions(self):
-        self._w("TAGS.md", okf.TAGS_HEADER + "| `a` | keep me |\n")
-        okf.register_tags(self.tmp, [("b", "bee")])
+        self._w("TAGS.md", okf_catalogue.TAGS_HEADER + "| `a` | keep me |\n")
+        okf_catalogue.register_tags(self.tmp, [("b", "bee")])
         body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
         self.assertIn("| `a` | keep me |", body)
         self.assertIn("| `b` | bee |", body)
 
     def test_description_limit_is_150_and_nothing_is_written_on_refusal(self):
-        okf.register_tags(self.tmp, [("ok", "x" * 150)])
+        okf_catalogue.register_tags(self.tmp, [("ok", "x" * 150)])
         for bad in ("x" * 151, "", "   ", "a|b", "a\nb"):
             with self.assertRaises(ValueError):
-                okf.register_tags(self.tmp, [("fine", "good"), ("bad", bad)])
-        self.assertEqual(okf.load_tags(self.tmp), {"ok"})
+                okf_catalogue.register_tags(self.tmp, [("fine", "good"), ("bad", bad)])
+        self.assertEqual(okf_catalogue.load_tags(self.tmp), {"ok"})
 
     def test_register_option_needs_tag_and_description(self):
         ap = okf.build_parser()
@@ -1557,7 +1343,7 @@ class AutoEmbedOnRegister(unittest.TestCase):
     def setUp(self):
         import tempfile
         self.tmp = tempfile.mkdtemp()
-        self.bt = okf._load_build_tagvec()
+        self.bt = okf_catalogue._load_build_tagvec()
         self._orig_embed = self.bt.embed_bge_m3
 
     def tearDown(self):
@@ -1581,7 +1367,7 @@ class AutoEmbedOnRegister(unittest.TestCase):
         self.bt.embed_bge_m3 = _boom
         args = types.SimpleNamespace(register=[["still-registered", "stays registered"]])
         okf.cmd_tags(self.tmp, args)  # must not raise
-        self.assertEqual(okf.load_tags(self.tmp), {"still-registered"})
+        self.assertEqual(okf_catalogue.load_tags(self.tmp), {"still-registered"})
 
 
 class RemoveTags(unittest.TestCase):
@@ -1868,51 +1654,6 @@ class CmdPrimeBundleListing(unittest.TestCase):
         self.assertIn("tags: t", out)
 
 
-class ResolveConceptDirectoryFallback(unittest.TestCase):
-    """okf-cli-3hjr — prime lists bundles by the path an agent should type next,
-    and that path is the bundle. `toc <bundle>` / `read <bundle>` therefore have
-    to resolve to the bundle's own index.md instead of failing on a directory."""
-
-    def setUp(self):
-        import tempfile
-        self.tmp = tempfile.mkdtemp()
-        os.makedirs(os.path.join(self.tmp, "b", "sub"))
-        self._w("b/index.md", "# B\n\n## Contents\n")
-        self._w("b/one.md", "---\ntype: Concept\ntitle: One\n---\n# One\n")
-        self._w("b/sub/index.md", "# Sub\n")
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _w(self, rel, text):
-        with open(os.path.join(self.tmp, rel), "w", encoding="utf-8") as f:
-            f.write(text)
-
-    def test_bundle_resolves_to_its_index(self):
-        self.assertEqual(okf.resolve_concept(self.tmp, "b"),
-                         os.path.join(self.tmp, "b", "index.md"))
-
-    def test_subdirectory_resolves_to_its_index(self):
-        self.assertEqual(okf.resolve_concept(self.tmp, "b/sub"),
-                         os.path.join(self.tmp, "b", "sub", "index.md"))
-
-    def test_concept_path_is_unaffected(self):
-        """The fallback must not shadow a concept: b/one.md wins over any
-        directory reading of the same reference."""
-        self.assertEqual(okf.resolve_concept(self.tmp, "b/one"),
-                         os.path.join(self.tmp, "b", "one.md"))
-
-    def test_directory_without_index_still_fails(self):
-        os.makedirs(os.path.join(self.tmp, "empty"))
-        with self.assertRaises(SystemExit):
-            okf.resolve_concept(self.tmp, "empty")
-
-    def test_missing_reference_still_fails(self):
-        with self.assertRaises(SystemExit):
-            okf.resolve_concept(self.tmp, "nope")
-
-
 class CmdPrimeOnboardingGuide(unittest.TestCase):
     """okf-cli-3hjr — prime carries its own onboarding guide. Until now it
     printed <root>/CLAUDE.md; that file was removed from the catalogue on
@@ -1959,7 +1700,7 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         and rot on the next `_sub()` registration; this fails the moment a
         command exists that prime does not name."""
         out = self._prime()
-        registered = set(okf.subcommand_parsers(okf.build_parser()))
+        registered = set(okf_parser_support.subcommand_parsers(okf.build_parser()))
         missing = sorted(n for n in registered if n not in out)
         self.assertEqual(missing, [])
 
@@ -1968,7 +1709,7 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         the registry, by pinning a summary that only the registry holds."""
         out = self._prime()
         summary = okf.build_parser()
-        parsers = okf.subcommand_parsers(summary)
+        parsers = okf_parser_support.subcommand_parsers(summary)
         self.assertIn(parsers["find"].description.split(":")[0], out)
 
     def test_retrieval_path_is_ordered_and_named(self):
@@ -2002,14 +1743,14 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         split_frontmatter/read_file/concept_text(), the same functions
         plan_concept_delta() uses per concept) so 'covered' here means
         exactly what it means to the real detector, not a stand-in key."""
-        bt = okf._load_build_tagvec()
+        bt = okf_catalogue._load_build_tagvec()
         db = okf._tagvec_db_path(self.tmp)
         rows = []
         for p in paths:
             b, cid = p.split("/", 1)
             ap = os.path.join(self.tmp, b, cid + ".md")
-            fm, body = okf.split_frontmatter(okf.read_file(ap))
-            title = okf._dequote(fm.get("title", "")) or cid
+            fm, body = okf_catalogue.split_frontmatter(okf_catalogue.read_file(ap))
+            title = okf_catalogue._dequote(fm.get("title", "")) or cid
             text = bt.concept_text(title, body)
             key = bt.concept_cache_key(okf.SEMANTIC_MODEL, p, text)
             rows.append((key, p, okf.SEMANTIC_MODEL, 2, bt.pack_vec([1.0, 0.0])))
@@ -2060,8 +1801,8 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
 
     def test_check_semantic_flag_is_documented(self):
         ap = okf.build_parser()
-        parsers = okf.subcommand_parsers(ap)
-        actions = okf.parser_actions(parsers["prime"])
+        parsers = okf_parser_support.subcommand_parsers(ap)
+        actions = okf_parser_support.parser_actions(parsers["prime"])
         flag = next((a for a in actions if a.dest == "check_semantic"), None)
         self.assertIsNotNone(flag, "prime has no --check-semantic option")
         self.assertTrue((flag.help or "").strip())
@@ -2088,7 +1829,7 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         and score scales are not guessable. prime carries its --help verbatim so
         the first search does not cost a second round trip."""
         out = self._prime()
-        find_help = okf.subcommand_parsers(okf.build_parser())["find"].format_help()
+        find_help = okf_parser_support.subcommand_parsers(okf.build_parser())["find"].format_help()
         self.assertIn(find_help.strip(), out)
 
     def test_find_help_is_rendered_not_paraphrased(self):
@@ -2108,9 +1849,9 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
             f.write("# B\n")
         out = self._prime()
         self.assertIn("toc <bundle>", out)
-        for b in okf.list_bundles(self.tmp):
+        for b in okf_catalogue.list_bundles(self.tmp):
             self.assertIn("bundle: {}".format(b), out)
-            self.assertTrue(os.path.isfile(okf.resolve_concept(self.tmp, b)))
+            self.assertTrue(os.path.isfile(okf_catalogue.resolve_concept(self.tmp, b)))
 
 
 class CmdPrimeCompactGuide(unittest.TestCase):
@@ -2150,7 +1891,7 @@ class CmdPrimeCompactGuide(unittest.TestCase):
         self.assertLess(len(self._prime(compact=True)), len(self._prime()))
 
     def test_compact_drops_the_verbatim_find_help(self):
-        find_help = okf.subcommand_parsers(okf.build_parser())["find"].format_help()
+        find_help = okf_parser_support.subcommand_parsers(okf.build_parser())["find"].format_help()
         self.assertNotIn(find_help.strip(), self._prime(compact=True))
 
     def test_compact_still_names_every_find_flag(self):
@@ -2159,7 +1900,7 @@ class CmdPrimeCompactGuide(unittest.TestCase):
         tomorrow cannot go missing here. Derived from the production parser
         rather than a literal list, or this test would rot with the text."""
         out = self._prime(compact=True)
-        parser = okf.subcommand_parsers(okf.build_parser())["find"]
+        parser = okf_parser_support.subcommand_parsers(okf.build_parser())["find"]
         flags = [o for a in parser._actions for o in a.option_strings
                  if o.startswith("--") and o != "--help"]
         self.assertTrue(flags)
@@ -2178,7 +1919,7 @@ class CmdPrimeCompactGuide(unittest.TestCase):
 
     def test_compact_names_every_registered_command(self):
         out = self._prime(compact=True)
-        registered = set(okf.subcommand_parsers(okf.build_parser()))
+        registered = set(okf_parser_support.subcommand_parsers(okf.build_parser()))
         self.assertEqual(sorted(n for n in registered if n not in out), [])
 
     def test_compact_command_directory_is_one_line_per_command(self):
@@ -2187,7 +1928,7 @@ class CmdPrimeCompactGuide(unittest.TestCase):
         dropped, the wrapping is — asserted by matching each command's whole
         registered description against its single line."""
         lines = self._prime(compact=True).splitlines()
-        parsers = okf.subcommand_parsers(okf.build_parser())
+        parsers = okf_parser_support.subcommand_parsers(okf.build_parser())
         for name, parser in parsers.items():
             head = "    {:<16} ".format(name)
             own = [l for l in lines if l.startswith(head)]
@@ -2203,7 +1944,7 @@ class CmdPrimeCompactGuide(unittest.TestCase):
         out = self._prime(compact=True)
         self.assertRegex(out, r"(?i)fts index:")
         self.assertRegex(out, r"(?i)tag vocabulary:")
-        for b in okf.list_bundles(self.tmp):
+        for b in okf_catalogue.list_bundles(self.tmp):
             self.assertIn("{} (1 concepts)".format(b), out)
 
     def test_compact_keeps_the_retrieval_ladder(self):
@@ -2217,67 +1958,6 @@ class CmdPrimeCompactGuide(unittest.TestCase):
         passes --root (a recipe or the MCP server always does), the default
         rendering may not — it is what a human reads first."""
         self.assertIn("--root", self._prime())
-
-
-class IterConceptsStagingPrune(unittest.TestCase):
-    """iter_concepts (okf-cli.py:117) did not prune "_"-prefixed staging
-    dirs, unlike its sibling iter_all_md (:2925, clause :2930-2932) —
-    in-bundle staging content was reachable via index/list/find yet skipped
-    by `check`, the worst combination: reachable but unverified (OKFT-oe8t).
-    """
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _w(self, rel, text="---\ntype: Concept\ntitle: T\n---\nbody\n"):
-        ap = os.path.join(self.tmp, rel)
-        os.makedirs(os.path.dirname(ap), exist_ok=True)
-        with open(ap, "w", encoding="utf-8") as f:
-            f.write(text)
-
-    def test_underscore_staging_dir_pruned(self):
-        self._w("b/_intake/konzept.md")
-        cids = [cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b"))]
-        self.assertEqual(cids, [])
-
-    def test_ordinary_subdir_still_walked(self):
-        """The prune targets "_"-prefixed names only — a normal nested
-        directory stays fully reachable."""
-        self._w("b/sub/inner.md")
-        cids = [cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b"))]
-        self.assertEqual(cids, ["sub/inner"])
-
-    def test_dot_dir_and_assets_still_pruned(self):
-        """Unchanged behaviour — this fix adds a clause, it does not touch
-        the two that were already there."""
-        self._w("b/.git/hidden.md")
-        self._w("b/assets/pic.md")
-        self._w("b/kept.md")
-        cids = sorted(cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b")))
-        self.assertEqual(cids, ["kept"])
-
-    def test_underscore_prefix_prunes_dirs_not_files(self):
-        """I04 (Review 2026-08-13): the "_" rule inspects DIRECTORY names in
-        `dirnames`, never file names — a file `_private.md` sitting directly
-        in the bundle root is untouched by the prune and stays reachable.
-        Correct today, but unpinned before this test."""
-        self._w("b/_private.md")
-        cids = [cid for cid, _ap in okf.iter_concepts(os.path.join(self.tmp, "b"))]
-        self.assertEqual(cids, ["_private"])
-
-    def test_prune_staging_false_widens_the_walk(self):
-        """OKFT-oe8t Review D02: prune_staging=False is the opt-out the
-        three tag-mutation commands (cmd_merge_tags, cmd_remove_tags,
-        cmd_normalize_tags) pass explicitly — it restores the pre-fix wide
-        walk for whichever caller opts into it, without a second, duplicated
-        traversal function."""
-        self._w("b/_intake/konzept.md")
-        cids = [cid for cid, _ap in
-                okf.iter_concepts(os.path.join(self.tmp, "b"), prune_staging=False)]
-        self.assertEqual(cids, ["_intake/konzept"])
 
 
 class CmdListJson(unittest.TestCase):
@@ -2434,12 +2114,12 @@ class RootSafety(unittest.TestCase):
 
     def test_explicit_root_returns_abspath_unchanged(self):
         # SC-002: --root behavior unchanged regardless of cwd/markers
-        got = okf.catalogue_root(self.tmp)
+        got = okf_catalogue.catalogue_root(self.tmp)
         self.assertEqual(got, os.path.abspath(self.tmp))
 
     def test_no_root_no_catalogue_returns_none(self):
         os.chdir(self.tmp)
-        self.assertIsNone(okf.catalogue_root(None))
+        self.assertIsNone(okf_catalogue.catalogue_root(None))
 
     def test_no_root_no_catalogue_hard_fails_via_main(self):
         # SC-001
@@ -2459,19 +2139,19 @@ class RootSafety(unittest.TestCase):
         with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
             f.write("")
         os.chdir(self.tmp)
-        self.assertEqual(okf.catalogue_root(None), os.getcwd())
+        self.assertEqual(okf_catalogue.catalogue_root(None), os.getcwd())
 
     def test_auto_detect_spec_types_marker(self):
         # SC-003
         open(os.path.join(self.tmp, "SPEC.md"), "w", encoding="utf-8").close()
         open(os.path.join(self.tmp, "TYPES.md"), "w", encoding="utf-8").close()
         os.chdir(self.tmp)
-        self.assertEqual(okf.catalogue_root(None), os.getcwd())
+        self.assertEqual(okf_catalogue.catalogue_root(None), os.getcwd())
 
     def test_partial_marker_not_enough(self):
         open(os.path.join(self.tmp, "SPEC.md"), "w", encoding="utf-8").close()
         os.chdir(self.tmp)
-        self.assertIsNone(okf.catalogue_root(None))
+        self.assertIsNone(okf_catalogue.catalogue_root(None))
 
     def test_auto_detect_walks_up_from_subdir(self):
         # SC-003: ancestor lookup
@@ -2480,7 +2160,7 @@ class RootSafety(unittest.TestCase):
         os.makedirs(sub)
         os.chdir(sub)
         expected = os.path.dirname(os.path.dirname(os.getcwd()))
-        self.assertEqual(okf.catalogue_root(None), expected)
+        self.assertEqual(okf_catalogue.catalogue_root(None), expected)
 
     def test_auto_detect_docs_nested_okf_toml_from_sibling_subdir(self):
         # okf-cli worktree bug: a hull-layout project keeps `docs/.okf.toml`
@@ -2499,7 +2179,7 @@ class RootSafety(unittest.TestCase):
         # tempfile.mkdtemp() returns unresolved, so derive the expectation
         # from the resolved cwd rather than from self.tmp directly.
         expected = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "docs")
-        self.assertEqual(okf.catalogue_root(None), expected)
+        self.assertEqual(okf_catalogue.catalogue_root(None), expected)
 
 
 class FindFilterContract(unittest.TestCase):
@@ -2934,74 +2614,6 @@ class FindScopeLikeEscaping(unittest.TestCase):
         self.assertNotIn("Xarchive/my_bundle/hidden2", paths)
 
 
-class ResolveScopesArchive(unittest.TestCase):
-    """R-12 (okf-cli-iwx4) — resolve_scopes() is the ONE function `cmd_list`
-    and `_substring_ranking` both traverse through; this class pins its
-    include_archive behaviour directly, at the primitive level, the same way
-    ResolveScopesTargets above pins the non-archive target forms."""
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-        os.makedirs(os.path.join(self.tmp, "alpha", "sub"), exist_ok=True)
-        os.makedirs(os.path.join(self.tmp, "beta"), exist_ok=True)
-        os.makedirs(os.path.join(self.tmp, "_archive", "alpha"), exist_ok=True)
-        # archive-only bundle: no active "gamma" directory exists at all —
-        # R-05/R-06's basename index already discovers bundles this way
-        # (build_concept_basename_index), so the shared scope resolution
-        # must too.
-        os.makedirs(os.path.join(self.tmp, "_archive", "gamma"), exist_ok=True)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def test_default_is_unchanged_by_the_new_parameter(self):
-        self.assertEqual(
-            okf.resolve_scopes(self.tmp, None),
-            [("alpha", os.path.join(self.tmp, "alpha")),
-             ("beta", os.path.join(self.tmp, "beta"))],
-        )
-
-    def test_unscoped_include_archive_appends_every_archive_bundle(self):
-        got = okf.resolve_scopes(self.tmp, None, include_archive=True)
-        self.assertEqual(got, [
-            ("alpha", os.path.join(self.tmp, "alpha")),
-            ("beta", os.path.join(self.tmp, "beta")),
-            ("_archive/alpha", os.path.join(self.tmp, "_archive", "alpha")),
-            ("_archive/gamma", os.path.join(self.tmp, "_archive", "gamma")),
-        ])
-
-    def test_scoped_include_archive_appends_only_that_bundles_archive_dir(self):
-        got = okf.resolve_scopes(self.tmp, "alpha", include_archive=True)
-        self.assertEqual(got, [
-            ("alpha", os.path.join(self.tmp, "alpha")),
-            ("_archive/alpha", os.path.join(self.tmp, "_archive", "alpha")),
-        ])
-        got_other = okf.resolve_scopes(self.tmp, "beta", include_archive=True)
-        self.assertNotIn(("_archive/alpha",
-                          os.path.join(self.tmp, "_archive", "alpha")),
-                          got_other)
-
-    def test_scoped_subdir_include_archive_appends_nested_archive_dir(self):
-        """AC3's easiest way to break: losing or re-deriving the prefix
-        during traversal. `alpha/sub` must map to the NESTED
-        `_archive/alpha/sub`, not `_archive/alpha` or `_archive/sub`."""
-        got = okf.resolve_scopes(self.tmp, "alpha/sub", include_archive=True)
-        self.assertEqual(got, [
-            ("alpha", os.path.join(self.tmp, "alpha", "sub")),
-            ("_archive/alpha",
-             os.path.join(self.tmp, "_archive", "alpha", "sub")),
-        ])
-
-    def test_no_archive_directory_at_all_does_not_crash(self):
-        tmp2 = tempfile.mkdtemp()
-        try:
-            os.makedirs(os.path.join(tmp2, "solo"))
-            got = okf.resolve_scopes(tmp2, None, include_archive=True)
-            self.assertEqual(got, [("solo", os.path.join(tmp2, "solo"))])
-        finally:
-            shutil.rmtree(tmp2, ignore_errors=True)
-
-
 class ListIncludeArchive(unittest.TestCase):
     """R-12/AC1-AC3 (okf-cli-iwx4) — `list` reaches the archive through the
     SAME resolve_scopes() `_substring_ranking` uses (SubstringRankingArchive
@@ -3046,8 +2658,8 @@ class ListIncludeArchive(unittest.TestCase):
         self.assertNotIn("path: _archive/bundle-b/other", out)  # type Concept
 
     def test_list_parser_has_include_archive_flag(self):
-        parsers = okf.subcommand_parsers(okf.build_parser())
-        dests = {a.dest for a in okf.parser_actions(parsers["list"])}
+        parsers = okf_parser_support.subcommand_parsers(okf.build_parser())
+        dests = {a.dest for a in okf_parser_support.parser_actions(parsers["list"])}
         self.assertIn("include_archive", dests)
 
 
@@ -4212,8 +3824,8 @@ class CmdBuildIndexIfStale(unittest.TestCase):
 
     def test_help_documents_the_flag(self):
         ap = okf.build_parser()
-        parsers = okf.subcommand_parsers(ap)
-        actions = okf.parser_actions(parsers["build-index"])
+        parsers = okf_parser_support.subcommand_parsers(ap)
+        actions = okf_parser_support.parser_actions(parsers["build-index"])
         flag = next((a for a in actions if a.dest == "if_stale"), None)
         self.assertIsNotNone(flag, "build-index has no --if-stale option")
         self.assertTrue((flag.help or "").strip())
@@ -4238,7 +3850,7 @@ class SemanticCoverageSharesTheProducersDetector(unittest.TestCase):
         self.ap = os.path.join(self.root, "b", "one.md")
         os.makedirs(os.path.dirname(self.ap))
         self._write("original body")
-        self.bt = okf._load_build_tagvec()
+        self.bt = okf_catalogue._load_build_tagvec()
         self.db = okf._tagvec_db_path(self.root)
 
     def tearDown(self):
@@ -4249,8 +3861,8 @@ class SemanticCoverageSharesTheProducersDetector(unittest.TestCase):
             f.write("---\ntype: Runbook\ntitle: One\n---\n{}\n".format(body))
 
     def _embed_current_content(self):
-        fm, body = okf.split_frontmatter(okf.read_file(self.ap))
-        title = okf._dequote(fm.get("title", "")) or "one"
+        fm, body = okf_catalogue.split_frontmatter(okf_catalogue.read_file(self.ap))
+        title = okf_catalogue._dequote(fm.get("title", "")) or "one"
         text = self.bt.concept_text(title, body)
         key = self.bt.concept_cache_key(okf.SEMANTIC_MODEL, "b/one", text)
         self.bt.write_concept_rows(
@@ -4287,7 +3899,7 @@ class CmdBuildSemanticIndex(unittest.TestCase):
         self.root = tempfile.mkdtemp()
         self._w("b/one.md", "One", "one body")
         self._w("b/two.md", "Two", "two body")
-        self.bt = okf._load_build_tagvec()
+        self.bt = okf_catalogue._load_build_tagvec()
         self._orig_voyage = self.bt.embed_voyage
         self._orig_resilient = self.bt.embed_resilient
         self._orig_key = os.environ.pop("VOYAGE_API_KEY", None)
@@ -4344,10 +3956,10 @@ class CmdBuildSemanticIndex(unittest.TestCase):
                 (okf.SEMANTIC_MODEL,))}
         finally:
             conn.close()
-        disk_paths = {p for b in okf.list_bundles(self.root)
+        disk_paths = {p for b in okf_catalogue.list_bundles(self.root)
                       for p, _ap in
                       (("{}/{}".format(b, cid), ap)
-                       for cid, ap in okf.iter_concepts(os.path.join(self.root, b)))}
+                       for cid, ap in okf_catalogue.iter_concepts(os.path.join(self.root, b)))}
         self.assertEqual(embedded, disk_paths)
 
     def test_if_stale_skips_when_coverage_is_complete(self):
@@ -4408,8 +4020,8 @@ class CmdBuildSemanticIndex(unittest.TestCase):
 
     def test_help_documents_the_flag(self):
         ap = okf.build_parser()
-        parsers = okf.subcommand_parsers(ap)
-        actions = okf.parser_actions(parsers["build-semantic-index"])
+        parsers = okf_parser_support.subcommand_parsers(ap)
+        actions = okf_parser_support.parser_actions(parsers["build-semantic-index"])
         flag = next((a for a in actions if a.dest == "if_stale"), None)
         self.assertIsNotNone(flag, "build-semantic-index has no --if-stale option")
         self.assertTrue((flag.help or "").strip())
@@ -5058,12 +4670,12 @@ class ParserExtraction(unittest.TestCase):
     """build_parser() renders the surface without executing a command."""
 
     def test_every_registered_command_is_dispatchable(self):
-        parsers = okf.subcommand_parsers(okf.build_parser())
+        parsers = okf_parser_support.subcommand_parsers(okf.build_parser())
         self.assertEqual(set(parsers), set(okf.COMMAND_DISPATCH))
 
     def test_parser_actions_skips_the_auto_help_action(self):
-        parsers = okf.subcommand_parsers(okf.build_parser())
-        dests = [a.dest for a in okf.parser_actions(parsers["read"])]
+        parsers = okf_parser_support.subcommand_parsers(okf.build_parser())
+        dests = [a.dest for a in okf_parser_support.parser_actions(parsers["read"])]
         self.assertNotIn("help", dests)
         self.assertIn("path", dests)
 
@@ -5072,24 +4684,24 @@ class CommandDirectory(unittest.TestCase):
     """Every command carries a summary, at exactly one authored place."""
 
     def test_find_index_read_are_no_longer_invisible(self):
-        parsers = okf.subcommand_parsers(okf.build_parser())
+        parsers = okf_parser_support.subcommand_parsers(okf.build_parser())
         for name in ("find", "index", "read"):
             self.assertTrue((parsers[name].description or "").strip(),
                             "{} has no summary".format(name))
 
     def test_the_summary_reaches_both_help_levels(self):
         ap = okf.build_parser()
-        parsers = okf.subcommand_parsers(ap)
+        parsers = okf_parser_support.subcommand_parsers(ap)
         summary = parsers["read"].description
         self.assertIn(summary, parsers["read"].format_help())
         self.assertIn("find", ap.format_help())
 
     def test_every_command_declares_a_group(self):
-        parsers = okf.subcommand_parsers(okf.build_parser())
-        self.assertEqual(set(okf.COMMAND_GROUPS), set(parsers))
+        parsers = okf_parser_support.subcommand_parsers(okf.build_parser())
+        self.assertEqual(set(okf_parser_support.COMMAND_GROUPS), set(parsers))
 
     def test_find_help_explains_both_score_scales(self):
-        parsers = okf.subcommand_parsers(okf.build_parser())
+        parsers = okf_parser_support.subcommand_parsers(okf.build_parser())
         text = parsers["find"].format_help()
         self.assertIn("100", text)
         self.assertIn("6 * number of terms", text)
@@ -5100,8 +4712,8 @@ class FindOptionHelp(unittest.TestCase):
     """find's options describe themselves, and truthfully."""
 
     def _find_action(self, dest):
-        parsers = okf.subcommand_parsers(okf.build_parser())
-        for act in okf.parser_actions(parsers["find"]):
+        parsers = okf_parser_support.subcommand_parsers(okf.build_parser())
+        for act in okf_parser_support.parser_actions(parsers["find"]):
             if act.dest == dest:
                 return act
         self.fail("find has no action with dest {!r}".format(dest))
@@ -5118,7 +4730,7 @@ class FindOptionHelp(unittest.TestCase):
 class CommandDirectoryOrder(unittest.TestCase):
 
     def test_commands_are_listed_alphabetically(self):
-        names = list(okf.subcommand_parsers(okf.build_parser()))
+        names = list(okf_parser_support.subcommand_parsers(okf.build_parser()))
         self.assertEqual(names, sorted(names))
 
     def test_top_level_help_points_at_per_command_help(self):
@@ -5130,13 +4742,13 @@ class GroupedOverview(unittest.TestCase):
     def test_overview_names_every_group_that_has_commands(self):
         text = okf.build_parser().format_help()
         self.assertIn("commands by purpose:", text)
-        for group in okf._GROUP_ORDER:
+        for group in okf_parser_support._GROUP_ORDER:
             self.assertIn("  {}:".format(group), text)
 
     def test_overview_covers_every_command(self):
         text = okf.build_parser().format_help()
         overview = text.split("commands by purpose:", 1)[1]
-        for name in okf.COMMAND_GROUPS:
+        for name in okf_parser_support.COMMAND_GROUPS:
             self.assertRegex(overview, r"\n\s+{}\s".format(re.escape(name)))
 
     def test_module_docstring_no_longer_lists_commands_by_hand(self):
@@ -5150,7 +4762,7 @@ class CommandHelpConformance(unittest.TestCase):
 
     def setUp(self):
         self.ap = okf.build_parser()
-        self.parsers = okf.subcommand_parsers(self.ap)
+        self.parsers = okf_parser_support.subcommand_parsers(self.ap)
 
     def test_every_subcommand_has_a_summary(self):
         missing = sorted(n for n, p in self.parsers.items()
@@ -5160,13 +4772,13 @@ class CommandHelpConformance(unittest.TestCase):
     def test_every_option_and_positional_has_help(self):
         missing = []
         for name, parser in sorted(self.parsers.items()):
-            for act in okf.parser_actions(parser):
+            for act in okf_parser_support.parser_actions(parser):
                 if not (act.help or "").strip():
                     missing.append("{} {}".format(name, act.dest))
         self.assertEqual(missing, [])
 
     def test_every_command_is_grouped_and_dispatchable(self):
-        self.assertEqual(set(okf.COMMAND_GROUPS), set(self.parsers))
+        self.assertEqual(set(okf_parser_support.COMMAND_GROUPS), set(self.parsers))
         self.assertEqual(set(okf.COMMAND_DISPATCH), set(self.parsers))
 
     def test_top_level_option_has_help(self):
@@ -5181,7 +4793,7 @@ class CommandHelpConformance(unittest.TestCase):
         test_every_option_and_positional_has_help, gives a failure message
         scoped to the top-level surface and keeps that existing method's
         assertion untouched (AC-4)."""
-        missing = [act.dest for act in okf.parser_actions(self.ap)
+        missing = [act.dest for act in okf_parser_support.parser_actions(self.ap)
                    if not isinstance(act, argparse._SubParsersAction)
                    and not (act.help or "").strip()]
         self.assertEqual(missing, [])
@@ -5427,7 +5039,7 @@ class WikilinkExtraction(unittest.TestCase):
         """The span each record carries is what a rewrite splices on. If the
         mask changed length the offsets would point at the wrong bytes."""
         text = "---\ntype: Concept\n---\n`code` and [[a]] and <!-- c -->\n"
-        self.assertEqual(len(okf.wikilink_scan_text(text)), len(text))
+        self.assertEqual(len(okf_linkscan.wikilink_scan_text(text)), len(text))
         a, b = okf.parse_wikilinks(text)[0]["span"]
         self.assertEqual(text[a:b], "[[a]]")
 
@@ -5484,8 +5096,8 @@ class WikilinkExtraction(unittest.TestCase):
         what follows is `body` either way, so only the BOUNDARY shows the
         difference — and the boundary is what decides which mask the bytes
         before it get. Asserting the label alone left this unpinned."""
-        self.assertTrue(okf.is_yaml_frontmatter_block(""))
-        self.assertEqual(okf.wikilink_regions("---\n---\n\n[[A]]\n")[0],
+        self.assertTrue(okf_linkscan.is_yaml_frontmatter_block(""))
+        self.assertEqual(okf_linkscan.wikilink_regions("---\n---\n\n[[A]]\n")[0],
                          ("frontmatter", 0, 7))
 
     def test_indented_fence_in_a_block_scalar_keeps_the_block_yaml(self):
@@ -5645,8 +5257,8 @@ class WikilinkExtraction(unittest.TestCase):
             "﻿---\ntype: Concept\n---\nbom first\n",
             "---\r\ntype: Concept\r\n---\r\ncrlf body\r\n",
         ):
-            self.assertEqual(text[okf._frontmatter_end(text):],
-                             okf.split_frontmatter(text)[1], repr(text))
+            self.assertEqual(text[okf_linkscan._frontmatter_end(text):],
+                             okf_catalogue.split_frontmatter(text)[1], repr(text))
 
 
 class WikilinkResolve(WikilinkFixtureMixin, unittest.TestCase):
@@ -6108,11 +5720,11 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
 
     def test_frontmatter_property_is_rewritten_and_stays_parseable(self):
         self._w("a/src.md", '---\ntype: Concept\nrelated:\n  - "[[old]]"\n---\n# Src\n')
-        before = set(okf.split_frontmatter(self._r("a/src.md"))[0])
+        before = set(okf_catalogue.split_frontmatter(self._r("a/src.md"))[0])
         self._rename("a/old.md", "a/new.md", apply=True)
         after_text = self._r("a/src.md")
         self.assertIn('- "[[new]]"', after_text)
-        self.assertEqual(set(okf.split_frontmatter(after_text)[0]), before)
+        self.assertEqual(set(okf_catalogue.split_frontmatter(after_text)[0]), before)
 
     def test_directory_only_move_rewrites_nothing(self):
         """A wikilink carries no path, so only a basename change can break one."""
@@ -6954,8 +6566,8 @@ class ArchiveComputesPlanOnce(WikilinkFixtureMixin, unittest.TestCase):
         """Exercised through cmd_archive, not a direct perform_rename call —
         a direct call would not pin the wiring between the two plans."""
         from unittest import mock
-        with mock.patch.object(okf, "build_ref_matrix",
-                                wraps=okf.build_ref_matrix) as spy:
+        with mock.patch.object(okf_linkscan, "build_ref_matrix",
+                                wraps=okf_linkscan.build_ref_matrix) as spy:
             self._archive("a/old.md", apply=True)
         self.assertEqual(spy.call_count, 1)
 
@@ -7281,7 +6893,7 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         self._w(".okf.toml", 'wikilink_checked_bundles = "a"\n')
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            got = okf.wikilink_checked_bundles(okf.load_okf_config(self.tmp), self.tmp)
+            got = okf.wikilink_checked_bundles(okf_catalogue.load_okf_config(self.tmp), self.tmp)
         self.assertEqual(got, set())
         self.assertIn("must be an array", err.getvalue())
 
@@ -7291,7 +6903,7 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         self._optin("nosuchbundle")
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            okf.wikilink_checked_bundles(okf.load_okf_config(self.tmp), self.tmp)
+            okf.wikilink_checked_bundles(okf_catalogue.load_okf_config(self.tmp), self.tmp)
         self.assertIn("nosuchbundle", err.getvalue())
 
     @needs_case_insensitive_fs
@@ -7334,7 +6946,7 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         self._optin("A")
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            got = okf.wikilink_checked_bundles(okf.load_okf_config(self.tmp), self.tmp)
+            got = okf.wikilink_checked_bundles(okf_catalogue.load_okf_config(self.tmp), self.tmp)
         self.assertEqual(got, {"a"})
         self.assertNotIn("non-bundle", err.getvalue())
 
@@ -7532,13 +7144,13 @@ class RecentFixtureMixin:
         self.tmp = tempfile.mkdtemp()
         self.events = {}          # repo -> stdout string
         self.toplevels = {}       # realpath -> (top, reason)
-        self._real_toplevel = okf._git_toplevel
+        self._real_toplevel = okf_catalogue._git_toplevel
         self._real_events = okf._git_add_events
-        okf._git_toplevel = self._fake_toplevel
+        okf_catalogue._git_toplevel = self._fake_toplevel
         okf._git_add_events = self._fake_events
 
     def tearDown(self):
-        okf._git_toplevel = self._real_toplevel
+        okf_catalogue._git_toplevel = self._real_toplevel
         okf._git_add_events = self._real_events
         shutil.rmtree(self.tmp, ignore_errors=True)
 
@@ -7868,7 +7480,7 @@ class RecentAgainstRealGit(unittest.TestCase):
         self._git(catalogue, "add", "-A", when=1785000000)
         self._git(catalogue, "commit", "-qm", "link", when=1785000000)
 
-        top, why = okf._git_toplevel(os.path.join(catalogue, "x-okf"))
+        top, why = okf_catalogue._git_toplevel(os.path.join(catalogue, "x-okf"))
         self.assertIsNone(why, why)
         self.assertEqual(os.path.realpath(top), os.path.realpath(foreign))
 
@@ -7898,7 +7510,7 @@ class RecentAgainstRealGit(unittest.TestCase):
     def test_non_repo_directory_reports_no_repo(self):
         plain = os.path.join(self.tmp, "plain")
         os.makedirs(plain)
-        top, why = okf._git_toplevel(plain)
+        top, why = okf_catalogue._git_toplevel(plain)
         self.assertIsNone(top)
         self.assertEqual(why, "no-repo")
 
@@ -8506,13 +8118,13 @@ class CorpusScopingTask1(unittest.TestCase):
 
     def test_default_filter_excludes_topic_from_broad_fts(self):
         okf.build_fts_index(self.root, include_topics=True)
-        filters = okf.FindFilters(corpus_bundles=okf.list_search_bundles(self.root))
+        filters = okf.FindFilters(corpus_bundles=okf_catalogue.list_search_bundles(self.root))
         ranked = okf._fts_ranking(self.root, "UniqueTopicNeedle", 10, filters)
         self.assertEqual(ranked, [])
 
     def test_explicit_inclusion_returns_topic_from_broad_fts(self):
         okf.build_fts_index(self.root, include_topics=True)
-        filters = okf.FindFilters(include_topics=True, corpus_bundles=okf.list_search_bundles(self.root, True))
+        filters = okf.FindFilters(include_topics=True, corpus_bundles=okf_catalogue.list_search_bundles(self.root, True))
         ranked = okf._fts_ranking(self.root, "UniqueTopicNeedle", 10, filters)
         self.assertEqual(ranked[0][0], "topic/topic-only")
 
@@ -8567,13 +8179,13 @@ class CmdReindexBlastRadius(unittest.TestCase):
             idx1 = os.path.join(bundle_path, "subdir1", "index.md")
             idx2 = os.path.join(bundle_path, "subdir2", "index.md")
             
-            okf.write_file(idx1, "# Subdir1\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
-            okf.write_file(idx2, "# Subdir2\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
+            okf_catalogue.write_file(idx1, "# Subdir1\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
+            okf_catalogue.write_file(idx2, "# Subdir2\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
             
             # Create a concept file in each subdir
-            okf.write_file(os.path.join(bundle_path, "subdir1", "concept1.md"),
+            okf_catalogue.write_file(os.path.join(bundle_path, "subdir1", "concept1.md"),
                           "---\ntitle: Concept1\n---\n")
-            okf.write_file(os.path.join(bundle_path, "subdir2", "concept2.md"),
+            okf_catalogue.write_file(os.path.join(bundle_path, "subdir2", "concept2.md"),
                           "---\ntitle: Concept2\n---\n")
             
             # Reindex only subdir1 by creating args directly (no sys.argv)
@@ -8581,13 +8193,13 @@ class CmdReindexBlastRadius(unittest.TestCase):
             okf.cmd_reindex(root, args)
             
             # Verify subdir1/index.md was updated with concept1
-            content1 = okf.read_file(idx1)
+            content1 = okf_catalogue.read_file(idx1)
             self.assertIn("concept1", content1)
             self.assertNotIn("concept2", content1)
             
             # Verify subdir2/index.md was NOT modified (regression: it should not be touched)
             content2_expected = "# Subdir2\n\n<!-- okf:index -->\n<!-- /okf:index -->\n"
-            content2_actual = okf.read_file(idx2)
+            content2_actual = okf_catalogue.read_file(idx2)
             self.assertEqual(content2_actual, content2_expected,
                            "reindex <bundle>/<subdir> modified a sibling directory!")
 
@@ -8609,17 +8221,17 @@ class CmdReindexSlugCollision(unittest.TestCase):
             other = os.path.join(bundle_path, "other")
             os.makedirs(e2e)
             os.makedirs(other)
-            okf.write_file(os.path.join(e2e, "README.md"),
+            okf_catalogue.write_file(os.path.join(e2e, "README.md"),
                           "---\ntitle: E2E Readme\ntype: guide\n---\n# E2E\n")
-            okf.write_file(os.path.join(other, "README.md"),
+            okf_catalogue.write_file(os.path.join(other, "README.md"),
                           "---\ntitle: Other Readme\ntype: guide\n---\n# Other\n")
-            okf.write_file(os.path.join(e2e, "index.md"),
+            okf_catalogue.write_file(os.path.join(e2e, "index.md"),
                           "# e2e-tests\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
 
             args = okf.build_parser().parse_args(["reindex", "bundle"])
             okf.cmd_reindex(root, args)
 
-            content = okf.read_file(os.path.join(e2e, "index.md"))
+            content = okf_catalogue.read_file(os.path.join(e2e, "index.md"))
             self.assertNotIn("README", content,
                            "README.md must never surface as a link target")
             self.assertNotIn(os.path.basename(root), content,
@@ -8632,11 +8244,11 @@ class CmdReindexSlugCollision(unittest.TestCase):
             bundle_path = os.path.join(root, bundle)
             subdir = os.path.join(bundle_path, "sub1")
             os.makedirs(subdir)
-            okf.write_file(os.path.join(subdir, "concept.md"),
+            okf_catalogue.write_file(os.path.join(subdir, "concept.md"),
                           "---\ntitle: Test Concept\n---\n")
-            subdirs = okf.list_subdirs_with_index(subdir)
-            concepts = okf.list_dir_concepts(subdir)
-            block = okf.render_block(subdirs, concepts, "test-bundle/sub1")
+            subdirs = okf_catalogue.list_subdirs_with_index(subdir)
+            concepts = okf_catalogue.list_dir_concepts(subdir)
+            block = okf_catalogue.render_block(subdirs, concepts, "test-bundle/sub1")
             self.assertIn("/test-bundle/sub1", block,
                          "render_block must use bundle-relative paths")
             for line in block.split('\n'):
@@ -8670,7 +8282,7 @@ class MainExplicitRootMarkerWarning(unittest.TestCase):
 
     def test_no_warning_when_marker_present(self):
         with tempfile.TemporaryDirectory() as root:
-            okf.write_file(os.path.join(root, ".okf.toml"), "")
+            okf_catalogue.write_file(os.path.join(root, ".okf.toml"), "")
             import sys as _sys, io as _io
             old_argv, old_stderr = _sys.argv, _sys.stderr
             _sys.argv = ["okf-cli.py", "--root", root, "index"]
@@ -8687,7 +8299,7 @@ class MainExplicitRootMarkerWarning(unittest.TestCase):
             import sys as _sys, io as _io
             old_cwd, old_argv, old_stderr = os.getcwd(), _sys.argv, _sys.stderr
             os.chdir(root)
-            okf.write_file(os.path.join(root, ".okf.toml"), "")
+            okf_catalogue.write_file(os.path.join(root, ".okf.toml"), "")
             _sys.argv = ["okf-cli.py", "index"]
             _sys.stderr = captured = _io.StringIO()
             try:
@@ -8758,7 +8370,7 @@ class SyncFixtureMixin:
         return self._run(okf.cmd_sync_update, **kw)
 
     def _payload_of(self, rel):
-        _, body = okf.split_frontmatter(self._r(rel))
+        _, body = okf_catalogue.split_frontmatter(self._r(rel))
         return okf.parse_sync_blocks(body)[0]["payload"]
 
 
@@ -8790,20 +8402,20 @@ class SyncBlockParse(unittest.TestCase):
 
     def test_reordered_attributes_are_malformed(self):
         body = ("<!-- okf:sync source=/a/owner.md id=b1 hash=0123456789ab -->\n"
-                "> [!quote] x\n" + okf.SYNC_BODY + "\ntext\n" + okf.SYNC_END)
+                "> [!quote] x\n" + okf_catalogue.SYNC_BODY + "\ntext\n" + okf_catalogue.SYNC_END)
         recs = okf.parse_sync_blocks(body)
         self.assertEqual(len(recs), 1)
         self.assertTrue(recs[0]["malformed"])
 
     def test_missing_body_marker_is_malformed(self):
-        body = self._block().replace(okf.SYNC_BODY + "\n", "")
+        body = self._block().replace(okf_catalogue.SYNC_BODY + "\n", "")
         recs = okf.parse_sync_blocks(body)
         self.assertEqual(len(recs), 1)
         self.assertTrue(recs[0]["malformed"])
         self.assertEqual(recs[0]["id"], "b1")
 
     def test_missing_end_marker_does_not_eat_the_next_block(self):
-        body = (self._block("b1").replace(okf.SYNC_END, "") + "\n"
+        body = (self._block("b1").replace(okf_catalogue.SYNC_END, "") + "\n"
                 + self._block("b2"))
         recs = okf.parse_sync_blocks(body)
         self.assertEqual([r["id"] for r in recs], ["b1", "b2"])
@@ -8875,7 +8487,7 @@ class SyncInsertCommand(SyncFixtureMixin, unittest.TestCase):
     def test_apply_records_the_owner_payload_hash(self):
         _, code = self._insert()
         self.assertEqual(code, 0)
-        _, body = okf.split_frontmatter(self._r("kc-proj/setup.md"))
+        _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup.md"))
         rec = okf.parse_sync_blocks(body)[0]
         self.assertEqual(rec["source"], "/kc-gov/ownership.md")
         self.assertEqual(rec["hash"], okf.sync_hash(self.OWNER_PAYLOAD))
@@ -9021,7 +8633,7 @@ class SyncCheckValidators(SyncFixtureMixin, unittest.TestCase):
         self._w("kc-gov/ownership.md",
                 self._r("kc-gov/ownership.md")
                 + "\n<!-- okf:canon id=ownership-rule -->\nzweimal\n"
-                + okf.CANON_END + "\n")
+                + okf_catalogue.CANON_END + "\n")
         errors, _ = okf.run_checks(self.tmp, None)
         self.assertIn(("canon-block", "kc-gov/ownership.md",
                        "canon block id `ownership-rule` declared twice"), errors)
@@ -9075,12 +8687,12 @@ class SyncProtectedFromRewriters(SyncFixtureMixin, unittest.TestCase):
         self.assertEqual(okf.check_xml_like_tags(ctx), [])
 
     def test_wikilink_in_a_synced_payload_is_not_scanned(self):
-        _, body = okf.split_frontmatter(self._r("kc-proj/setup.md"))
+        _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup.md"))
         self.assertEqual(okf.parse_wikilinks(body), [])
 
     def test_rename_leaves_the_payload_intact_and_rewrites_the_source(self):
         expected = okf.parse_sync_blocks(
-            okf.split_frontmatter(self.consumer_before)[1])[0]["payload"]
+            okf_catalogue.split_frontmatter(self.consumer_before)[1])[0]["payload"]
         okf.perform_rename(self.tmp,
                            os.path.join(self.tmp, "kc-proj/setup.md"),
                            os.path.join(self.tmp, "kc-proj/setup2.md"),
@@ -9092,7 +8704,7 @@ class SyncProtectedFromRewriters(SyncFixtureMixin, unittest.TestCase):
                            os.path.join(self.tmp, "kc-gov/ownership.md"),
                            os.path.join(self.tmp, "kc-gov/canon/ownership.md"),
                            apply=True, force=True)
-        _, body = okf.split_frontmatter(self._r("kc-proj/setup2.md"))
+        _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup2.md"))
         self.assertEqual(okf.parse_sync_blocks(body)[0]["source"],
                          "/kc-gov/canon/ownership.md")
 
@@ -9109,19 +8721,19 @@ class IndexMapRecursiveBlock(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         b = os.path.join(self.tmp, "b")
         os.makedirs(os.path.join(b, "sub"))
-        okf.write_file(os.path.join(b, "top.md"), "---\ntitle: Top\n---\n# Top\n")
-        okf.write_file(os.path.join(b, "sub", "deep.md"), "---\ntitle: Deep\n---\n# Deep\n")
-        okf.write_file(os.path.join(b, "sub", "index.md"),
+        okf_catalogue.write_file(os.path.join(b, "top.md"), "---\ntitle: Top\n---\n# Top\n")
+        okf_catalogue.write_file(os.path.join(b, "sub", "deep.md"), "---\ntitle: Deep\n---\n# Deep\n")
+        okf_catalogue.write_file(os.path.join(b, "sub", "index.md"),
                        "# Sub\n\n" + M0 + "\n" + M1 + "\n")
-        okf.write_file(os.path.join(b, "index.md"), "# B\n\n" + M0 + "\n" + M1 + "\n")
-        okf.write_file(os.path.join(b, "INDEX-MAP.md"),
+        okf_catalogue.write_file(os.path.join(b, "index.md"), "# B\n\n" + M0 + "\n" + M1 + "\n")
+        okf_catalogue.write_file(os.path.join(b, "INDEX-MAP.md"),
                        "# B — Index Map\n\nEntry point.\n\n" + M0 + "\n" + M1 + "\n")
 
     def _reindex(self):
         okf.cmd_reindex(self.tmp, okf.build_parser().parse_args(["reindex", "b"]))
 
     def _map(self):
-        return okf.read_file(os.path.join(self.tmp, "b", "INDEX-MAP.md"))
+        return okf_catalogue.read_file(os.path.join(self.tmp, "b", "INDEX-MAP.md"))
 
     def test_index_map_lists_the_whole_subtree_indented(self):
         self._reindex()
@@ -9131,7 +8743,7 @@ class IndexMapRecursiveBlock(unittest.TestCase):
         self.assertIn("  * [Deep](/b/sub/deep.md)", text)
         self.assertIn("Entry point.", text)     # prose outside the block survives
         # index.md stays one level deep: no nested entry leaks into it.
-        self.assertNotIn("deep.md", okf.read_file(os.path.join(self.tmp, "b", "index.md")))
+        self.assertNotIn("deep.md", okf_catalogue.read_file(os.path.join(self.tmp, "b", "index.md")))
 
     def test_a_removed_concept_disappears_from_the_index_map(self):
         self._reindex()
