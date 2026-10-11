@@ -495,14 +495,13 @@ class McpWhereParameter(unittest.TestCase):
                     argv = mcp.build_argv("/root", command, {"query": "q", key: "x" if key != "include_archive" else True})
                     self.assertEqual(argv, mcp.build_argv("/root", command, {"query": "q"}))
 
-    def test_find_and_list_accept_where_and_none_of_the_removed_parameters(self):
+    def test_find_and_list_accept_where(self):
         for name in ("okf_find", "okf_list"):
             params = inspect.signature(self.tools()[name]).parameters
             with self.subTest(tool=name):
                 self.assertIn("where", params)
                 self.assertIs(params["where"].annotation, str)
                 self.assertEqual(params["where"].default, "")
-                self.assertEqual(set(self.REMOVED) & set(params), set())
 
     def test_no_tool_takes_a_removed_parameter(self):
         for name, fn in self.tools().items():
