@@ -221,3 +221,98 @@ class MigrateStatus(GitCatalogue):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@needs_git
+class MigrateSources(GitCatalogue):
+    FM = "type: Note\nstatus: stable"
+
+    def _r(self, rel="b/c.md"):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def _run(self, body, fm=None, apply=True):
+        self._doc("b/c.md", body, self.FM if fm is None else fm)
+        self._commit("c", T1)
+        args = ("migrate", "--apply") if apply else ("migrate",)
+        env, _e, code = run_json(self.tmp, *args)
+        self.assertEqual(code, 0)
+        return env["data"]
+
+    def _sources(self):
+        return read_frontmatter(self._r()).data.get("sources")
+
+    def test_list_section_becomes_one_entry_per_resource_with_block_text_as_title(self):
+        data = self._run("Intro.\n\n## Quellen\n\n- [Doc](https://a.org/x) says it\n- `src/m.py` and https://b.org/y.\n\n## Next\n\nrest\n")
+        self.assertEqual(data["unresolved"], [])
+        self.assertEqual(self._sources(), [
+            {"resource": "https://a.org/x", "title": "[Doc](https://a.org/x) says it"},
+            {"resource": "src/m.py", "title": "`src/m.py` and https://b.org/y."},
+            {"resource": "https://b.org/y"}])
+        self.assertEqual(read_frontmatter(self._r()).body, "\nIntro.\n\n## Next\n\nrest\n")
+
+    def test_paragraph_with_several_resources_titles_only_the_first_entry(self):
+        self._run("## Citations\n\nSee [a](p/a.md), then [b](p/b.md).\n")
+        self.assertEqual(self._sources(), [
+            {"resource": "p/a.md", "title": "See [a](p/a.md), then [b](p/b.md)."},
+            {"resource": "p/b.md"}])
+        self.assertNotIn("Citations", self._r())
+
+    def test_heading_text_is_case_insensitive_at_any_level(self):
+        self._run("### sOurCes\n\n- https://a.org\n")
+        self.assertEqual(self._sources()[0]["resource"], "https://a.org")
+
+    def test_other_keys_and_their_order_stay_and_sources_is_a_block_list(self):
+        self._run("## Quellen\n\n- https://a.org\n", fm=self.FM + "\ntags: [a]")
+        text = self._r()
+        self.assertIn("type: Note\nstatus: stable\ntags: [a]\nsources:\n", text)
+        self.assertIn("  - resource: https://a.org\n", text)
+
+    def test_inline_code_without_slash_or_extension_is_no_resource(self):
+        data = self._run("## Quellen\n\n- see `D01` only\n")
+        self.assertEqual(data["unresolved"][0]["field"], "sources")
+        self.assertIn("see `D01` only", self._r())
+        self.assertIsNone(self._sources())
+
+    def test_block_without_resource_leaves_everything_unchanged(self):
+        body = "## Quellen\n\n- https://a.org\n- no resource here\n"
+        before = "---\n{}\n---\n{}".format(self.FM, body)
+        data = self._run(body)
+        self.assertEqual([(u["path"], u["field"]) for u in data["unresolved"]], [("b/c.md", "sources")])
+        self.assertIn("no resource here", data["unresolved"][0]["reason"])
+        self.assertEqual(self._r(), before)
+        self.assertEqual(data["files"], [])
+
+    def test_table_quote_fence_and_subheading_go_to_manual_rework(self):
+        for part in ("| a | b |\n|--|--|\n| x | `p/q` |\n", "> https://a.org\n", "```\nhttps://a.org\n```\n",
+                     "https://a.org\n\n### Sub\n\nhttps://b.org\n"):
+            self._reset()
+            body = "## Quellen\n\n" + part
+            data = self._run(body)
+            self.assertEqual([u["field"] for u in data["unresolved"]], ["sources"], part)
+            self.assertIn("## Quellen", self._r(), part)
+            self.assertIsNone(self._sources(), part)
+
+    def test_existing_sources_stay_and_the_section_goes_to_manual_rework(self):
+        fm = self.FM + "\nsources:\n  - resource: https://old.org"
+        data = self._run("## Quellen\n\n- https://a.org\n", fm=fm)
+        self.assertEqual([u["field"] for u in data["unresolved"]], ["sources"])
+        self.assertEqual(self._sources(), [{"resource": "https://old.org"}])
+        self.assertIn("## Quellen", self._r())
+
+    def test_heading_inside_fenced_code_is_no_citation_section(self):
+        body = "```\n## Quellen\n\n- https://a.org\n```\n"
+        data = self._run(body)
+        self.assertEqual(data["unresolved"], [])
+        self.assertEqual(data["files"], [])
+        self.assertIn(body, self._r())
+
+    def test_section_ends_at_a_heading_of_the_same_or_higher_level(self):
+        self._run("# Top\n\n## Quellen\n\nhttps://a.org\n\n# Other\n\nkeep\n")
+        self.assertEqual(read_frontmatter(self._r()).body, "\n# Top\n\n# Other\n\nkeep\n")
+
+    def test_preview_writes_nothing_and_diff_shows_sources(self):
+        data = self._run("## Quellen\n\nhttps://a.org\n", apply=False)
+        self.assertIn("+sources:", data["files"][0]["diff"])
+        self.assertIn("-## Quellen", data["files"][0]["diff"])
+        self.assertEqual(self._git("status", "--short"), "")
