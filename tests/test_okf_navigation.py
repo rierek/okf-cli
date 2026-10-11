@@ -545,40 +545,36 @@ class ReadTargeted(unittest.TestCase):
         with open(os.path.join(self.root, rel), "w", encoding="utf-8") as f:
             f.write(text)
 
-    def _lines(self, first, last):
-        """File lines first..last (1-based, inclusive) of CONCEPT, newline-terminated."""
-        return "".join(l + "\n" for l in self.CONCEPT.splitlines()[first - 1:last])
-
     def _read(self, path, *flags):
         return _cli(self.root, "read", path, *flags)
 
     def test_unique_section_runs_to_next_heading_of_equal_or_higher_level(self):
         r = self._read("b/c", "--section", "Alpha")
-        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self._lines(8, 11), ""))
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, '## Alpha\nalpha text\n### Deep\ndeep text\n', ""))
 
     def test_section_of_the_last_top_heading_runs_to_end_of_body(self):
         r = self._read("b/c", "--section", "Top")
-        self.assertEqual((r.returncode, r.stdout), (0, self._lines(6, 28)))
+        self.assertEqual((r.returncode, r.stdout), (0, '# Top\nintro\n## Alpha\nalpha text\n### Deep\ndeep text\n## Beta\nbeta text\n### Dup\nfirst dup text\n## Gamma\n### Dup\nsecond dup text\n## Fenced\n```\n## Hidden\n```\nafter fence\n## Delta\n~~~\n## Tilde\n~~~\nend\n'))
 
     def test_section_includes_subsections_and_stops_at_a_higher_level_heading(self):
         r = self._read("b/c", "--section", "Beta")
-        self.assertEqual((r.returncode, r.stdout), (0, self._lines(12, 15)))
+        self.assertEqual((r.returncode, r.stdout), (0, '## Beta\nbeta text\n### Dup\nfirst dup text\n'))
 
     def test_match_is_case_insensitive_exact(self):
         r = self._read("b/c", "--section", "dEEp")
-        self.assertEqual((r.returncode, r.stdout), (0, self._lines(10, 11)))
+        self.assertEqual((r.returncode, r.stdout), (0, '### Deep\ndeep text\n'))
         r = self._read("b/c", "--section", "Dee")
         self.assertEqual((r.returncode, r.stdout), (3, ""))
 
     def test_path_resolves_a_duplicate_heading(self):
         r = self._read("b/c", "--section", "Beta > Dup")
-        self.assertEqual((r.returncode, r.stdout), (0, self._lines(14, 15)))
+        self.assertEqual((r.returncode, r.stdout), (0, '### Dup\nfirst dup text\n'))
         r = self._read("b/c", "--section", "Gamma>Dup")
-        self.assertEqual((r.returncode, r.stdout), (0, self._lines(17, 18)))
+        self.assertEqual((r.returncode, r.stdout), (0, '### Dup\nsecond dup text\n'))
 
     def test_path_with_three_segments_follows_the_nesting(self):
         r = self._read("b/c", "--section", "top > alpha > deep")
-        self.assertEqual((r.returncode, r.stdout), (0, self._lines(10, 11)))
+        self.assertEqual((r.returncode, r.stdout), (0, '### Deep\ndeep text\n'))
 
     def test_later_segment_matches_only_inside_the_previous_section(self):
         r = self._read("b/c", "--section", "Alpha > Dup")
@@ -602,7 +598,7 @@ class ReadTargeted(unittest.TestCase):
 
     def test_fenced_heading_does_not_end_the_enclosing_section(self):
         r = self._read("b/c", "--section", "Fenced")
-        self.assertEqual((r.returncode, r.stdout), (0, self._lines(19, 23)))
+        self.assertEqual((r.returncode, r.stdout), (0, '## Fenced\n```\n## Hidden\n```\nafter fence\n'))
 
     def test_frontmatter_comment_is_not_selectable(self):
         r = self._read("b/c", "--section", "yaml heading")
@@ -629,7 +625,7 @@ class ReadTargeted(unittest.TestCase):
 
     def test_frontmatter_only_prints_the_block_with_delimiters(self):
         r = self._read("b/c", "--frontmatter-only")
-        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self._lines(1, 5), ""))
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, '---\ntype: Concept\ntitle: C\n# yaml heading\n---\n', ""))
 
     def test_frontmatter_only_prints_nothing_without_frontmatter(self):
         r = self._read("b/bare", "--frontmatter-only")
@@ -637,7 +633,7 @@ class ReadTargeted(unittest.TestCase):
 
     def test_body_only_prints_everything_after_the_frontmatter(self):
         r = self._read("b/c", "--body-only")
-        self.assertEqual((r.returncode, r.stdout), (0, self._lines(6, 28) + "\n"))
+        self.assertEqual((r.returncode, r.stdout), (0, '# Top\nintro\n## Alpha\nalpha text\n### Deep\ndeep text\n## Beta\nbeta text\n### Dup\nfirst dup text\n## Gamma\n### Dup\nsecond dup text\n## Fenced\n```\n## Hidden\n```\nafter fence\n## Delta\n~~~\n## Tilde\n~~~\nend\n\n'))
 
     def test_body_only_prints_the_whole_file_without_frontmatter(self):
         r = self._read("b/bare", "--body-only")
@@ -660,20 +656,14 @@ class ReadTargeted(unittest.TestCase):
             r = self._read(path)
             self.assertEqual((r.returncode, r.stdout), (0, text + "\n"), path)
 
-    def test_section_and_frontmatter_only_are_a_usage_error(self):
-        r = self._read("b/c", "--section", "Alpha", "--frontmatter-only")
-        self.assertEqual((r.returncode, r.stdout), (2, ""))
-        self.assertIn("not allowed with", r.stderr)
-
-    def test_section_and_body_only_are_a_usage_error(self):
-        r = self._read("b/c", "--section", "Alpha", "--body-only")
-        self.assertEqual((r.returncode, r.stdout), (2, ""))
-        self.assertIn("not allowed with", r.stderr)
-
-    def test_frontmatter_only_and_body_only_are_a_usage_error(self):
-        r = self._read("b/c", "--frontmatter-only", "--body-only")
-        self.assertEqual((r.returncode, r.stdout), (2, ""))
-        self.assertIn("not allowed with", r.stderr)
+    def test_any_two_selection_options_are_a_usage_error(self):
+        for flags in (("--section", "Alpha", "--frontmatter-only"),
+                      ("--section", "Alpha", "--body-only"),
+                      ("--frontmatter-only", "--body-only")):
+            with self.subTest(flags=flags):
+                r = self._read("b/c", *flags)
+                self.assertEqual((r.returncode, r.stdout), (2, ""))
+                self.assertIn("not allowed with", r.stderr)
 
 
 if __name__ == "__main__":
