@@ -599,9 +599,45 @@ class McpCtxBoundary(McpBoundaryTestBase):
         out = self._tool("okf_ctx_list")(root=self.root, for_path="b/one.md")
         self.assertEqual([c["slug"] for c in out], ["alpha"])
 
-    def test_nonzero_empty_stdout_still_returns_empty_for_other_commands(self):
-        self.assertEqual(
-            mcp.run_okf(self.root, "check", {"target": "nonexist"}), {})
+    def test_check_on_a_missing_target_raises_with_cli_stderr(self):
+        with self.assertRaises(RuntimeError) as cm:
+            mcp.run_okf(self.root, "check", {"target": "nonexist"})
+        self.assertIn("not a directory: nonexist", str(cm.exception))
+
+    def test_check_with_violations_returns_the_report(self):
+        _w(self.root, "b/bad.md", "no frontmatter\n")
+        out = mcp.run_okf(self.root, "check", {})
+        self.assertTrue(out["errors"])
+
+
+class McpExitClassHandling(unittest.TestCase):
+    """Exit 4 (findings) and 5 (drift) of the report verbs are data; exit 1, 2
+    and 3 raise with the CLI's stderr, for the report verbs as for any other."""
+
+    def _run(self, command, returncode, stdout="", stderr=""):
+        stub = subprocess.CompletedProcess(
+            args=["python3", "okf-cli.py"], returncode=returncode,
+            stdout=stdout, stderr=stderr)
+        fake_subprocess = mock.Mock()
+        fake_subprocess.run.return_value = stub
+        with mock.patch.object(mcp, "subprocess", fake_subprocess):
+            return mcp.run_okf("/root", command, {})
+
+    def test_findings_and_drift_return_stdout_as_data(self):
+        self.assertEqual(self._run("check", 4, stdout='{"errors": [1]}'), {"errors": [1]})
+        self.assertEqual(self._run("sync-status", 5, stdout='{"blocks": []}'), {"blocks": []})
+        self.assertEqual(self._run("sync-update", 5, stdout="report\n"), "report\n")
+
+    def test_internal_invalid_and_not_found_raise_with_stderr(self):
+        for command in ("check", "sync-status", "sync-update", "ctx", "find"):
+            for code in (1, 2, 3):
+                with self.assertRaises(RuntimeError, msg=(command, code)) as cm:
+                    self._run(command, code, stdout="partial", stderr="boom")
+                self.assertIn("boom", str(cm.exception))
+
+    def test_drift_exit_is_an_error_for_a_non_report_verb(self):
+        with self.assertRaises(RuntimeError):
+            self._run("find", 5, stdout="x", stderr="boom")
 
 
 class McpBuildSemanticIndexSurface(unittest.TestCase):

@@ -365,3 +365,9 @@ class RunnerAgainstTmpCatalogueTest(unittest.TestCase):
         with open(out, encoding="utf-8") as f:
             blob = json.load(f)
         self.assertEqual(set(blob), {"metrics", "catalogue_rev", "per_row"})
+
+    def test_not_found_exit_surfaces_as_an_error_naming_the_code(self):
+        with self.assertRaises(RuntimeError) as cm:
+            runner._run_cli(self.root, ["index", "no-such-bundle"])
+        self.assertIn("(exit 3)", str(cm.exception))
+        self.assertIn("not a directory: no-such-bundle", str(cm.exception))

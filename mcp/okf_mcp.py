@@ -101,29 +101,30 @@ OKF_CLI = os.environ.get("OKF_CLI",
 # a catalogue-wide dump does not.
 MAX_OUTPUT_CHARS = int(os.environ.get("OKF_MCP_MAX_CHARS", "120000"))
 
-# Commands whose nonzero exit code is a FINDING, not a failure: they are
-# report/gate verbs, and the report is on stdout. `sync-status` exits 1 on any
-# drift, `sync-update` on a refused or unresolvable block — raising there would
-# hide the very list the caller asked for.
+# Report/gate verbs: exit 4 (non_conformant, findings) and exit 5 (drift) are
+# DATA -- the report is on stdout and raising would hide the very list the
+# caller asked for. Exit 1 (internal), 2 (invalid input) and 3 (not found)
+# raise for these verbs as for every other command.
 EXIT_CODE_IS_DATA = {"check", "sync-status", "sync-update", "ctx"}
+DATA_EXIT_CODES = {4, 5}
 
 
 def run_okf(root, command, params):
     """Invoke okf-cli.py, return parsed JSON for --json commands else raw text.
-    Note: check, sync-status and sync-update exit 1 on findings — that is data,
-    not a crash (EXIT_CODE_IS_DATA), so exit code is only treated as an error
-    for the other commands.
+    check and ctx exit 4 on findings, sync-status and sync-update (and
+    reindex --check) exit 5 on drift -- data, not a crash, for the verbs in
+    EXIT_CODE_IS_DATA. Every other non-zero exit raises with the CLI's stderr.
 
     D01 (okf-cli-2o39): the CLI announces degradation (stale/absent lexical
     index, unavailable embedding backend, ...) on stderr, never on stdout.
     For non-JSON commands that stderr text is prepended to the returned
     stdout text, so an MCP consumer actually sees it. JSON-supporting
-    commands are left untouched — their stdout feeds json.loads() directly,
+    commands are left untouched -- their stdout feeds json.loads() directly,
     and mixing stderr in would break every consumer of those tools."""
     argv = build_argv(root, command, params)
     proc = subprocess.run(["python3", OKF_CLI] + argv, capture_output=True, text=True)
-    if proc.returncode != 0 and (command not in EXIT_CODE_IS_DATA
-                                 or (command == "ctx" and not proc.stdout.strip())):
+    if proc.returncode != 0 and not (command in EXIT_CODE_IS_DATA
+                                     and proc.returncode in DATA_EXIT_CODES):
         raise RuntimeError("okf-cli {} failed: {}".format(command, proc.stderr.strip()))
     out = proc.stdout
     if len(out) > MAX_OUTPUT_CHARS:
