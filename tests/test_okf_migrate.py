@@ -219,10 +219,6 @@ class MigrateStatus(GitCatalogue):
         self.assertIn("wibble -> (no decision) (1 concept(s))", out)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 @needs_git
 class MigrateSources(GitCatalogue):
     FM = "type: Note\nstatus: stable"
@@ -293,6 +289,19 @@ class MigrateSources(GitCatalogue):
             self.assertIn("## Quellen", self._r(), part)
             self.assertIsNone(self._sources(), part)
 
+    def test_indented_code_and_html_block_go_to_manual_rework(self):
+        for part in ("https://a.org\n\n    code https://b.org\n", "<!-- https://a.org -->\n",
+                     "<div>https://a.org</div>\n"):
+            self._reset()
+            data = self._run("## Quellen\n\n" + part)
+            self.assertEqual([u["field"] for u in data["unresolved"]], ["sources"], part)
+            self.assertIn("## Quellen", self._r(), part)
+            self.assertIsNone(self._sources(), part)
+
+    def test_autolink_paragraph_is_a_citation_block(self):
+        self._run("## Quellen\n\n<https://a.org>\n")
+        self.assertEqual(self._sources()[0]["resource"], "https://a.org")
+
     def test_existing_sources_stay_and_the_section_goes_to_manual_rework(self):
         fm = self.FM + "\nsources:\n  - resource: https://old.org"
         data = self._run("## Quellen\n\n- https://a.org\n", fm=fm)
@@ -316,3 +325,7 @@ class MigrateSources(GitCatalogue):
         self.assertIn("+sources:", data["files"][0]["diff"])
         self.assertIn("-## Quellen", data["files"][0]["diff"])
         self.assertEqual(self._git("status", "--short"), "")
+
+
+if __name__ == "__main__":
+    unittest.main()

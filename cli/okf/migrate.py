@@ -31,6 +31,7 @@ CITATION_HEADINGS = {"citations", "quellen", "sources"}
 # target from counting twice.
 RESOURCE_RE = re.compile(r"(?P<link>{})|(?P<code>(?P<ticks>`+)(?:(?!(?P=ticks)).)+?(?P=ticks))"
                          r"|(?P<url>https?://[^\s<>`)]+)".format(CROSSLINK_RE.pattern))
+HTML_BLOCK_RE = re.compile(r"<(?:[!?/]|[A-Za-z](?![A-Za-z0-9+.-]*:[^\s<>]*>))")
 FILE_EXT_RE = re.compile(r"\.[A-Za-z0-9]{1,8}$")
 
 
@@ -63,6 +64,10 @@ def _citation_blocks(lines):
             return None, "section holds a table"
         elif s.startswith(">"):
             return None, "section holds a quote"
+        elif HTML_BLOCK_RE.match(s):
+            return None, "section holds an HTML block"
+        elif cur is None and not LIST_ITEM_RE.match(line) and re.match(r" {4}|\t", line):
+            return None, "section holds an indented code block"
         elif LIST_ITEM_RE.match(line):
             cur = [LIST_ITEM_RE.sub("", line, count=1).strip()]
             blocks.append(cur)
