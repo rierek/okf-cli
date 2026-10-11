@@ -5,7 +5,9 @@ points, outbound links and the reference matrix."""
 import os
 import re
 
-from okf.catalogue import FM_DELIM, SYNC_SPAN_RE, _prune_walk_dirs, list_bundles, read_file
+from okf.catalogue import (
+    FM_DELIM, SYNC_SPAN_RE, _prune_walk_dirs, fence_line_spans, list_bundles, read_file,
+)
 
 
 def resolve_md_link(scan_root, src_abs, raw):
@@ -98,7 +100,7 @@ def _frontmatter_end(text):
 # regex: a regex pairs backtick runs left to right with no notion of line start
 # or fence length, so one prose ``` mention or a 4-backtick fence shifts every
 # later pairing by one and leaves a real code block exposed to the rewriter.
-FENCE_LINE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*(.*)$")
+# (FENCE_LINE_RE, the line rule itself, lives in catalogue with iter_headings.)
 COMMENT_RE = re.compile(r"%%[\s\S]*?%%|<!--[\s\S]*?-->")
 INLINE_CODE_RE = re.compile(r"(`+)(?:(?!\1).)+?\1")
 LIST_ITEM_RE = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]")
@@ -121,31 +123,8 @@ def _split_lines_with_offsets(text):
 
 
 def _fenced_code_spans(lines, offs):
-    """CommonMark fenced blocks. An opener is up to three spaces of indent then
-    three or more backticks or tildes; it closes on a line of at least as many
-    of the same character carrying nothing else. An unclosed fence runs to end
-    of file, which is how Obsidian renders it too."""
-    spans, i, n = [], 0, len(lines)
-    while i < n:
-        m = FENCE_LINE_RE.match(lines[i].rstrip("\n"))
-        if not m:
-            i += 1
-            continue
-        marker, rest = m.group(1), m.group(2)
-        if marker[0] == "`" and "`" in rest:
-            i += 1                       # info string may not contain a backtick
-            continue
-        start, char, width = i, marker[0], len(marker)
-        i += 1
-        while i < n:
-            cm = FENCE_LINE_RE.match(lines[i].rstrip("\n"))
-            if (cm and cm.group(1)[0] == char and len(cm.group(1)) >= width
-                    and not cm.group(2).strip()):
-                i += 1
-                break
-            i += 1
-        spans.append((offs[start], offs[i]))
-    return spans
+    """fence_line_spans as character-offset spans over the same lines."""
+    return [(offs[first], offs[end]) for first, end in fence_line_spans(lines)]
 
 
 def _indented_code_spans(lines, offs):

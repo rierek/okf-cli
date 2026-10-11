@@ -77,7 +77,7 @@ def cmd_toc(root, args):
     title = fm.get("title") or os.path.basename(ap)[:-3]
     print("# {}  [{}]".format(title, fm.get("type", "")))
     found = False
-    for lvl, text in iter_headings(body):
+    for lvl, text, _line in iter_headings(body):
         if args.level == 0:                       # --level 0 → full tree, indented
             print("  " * (lvl - 1) + "- " + text)
             found = True

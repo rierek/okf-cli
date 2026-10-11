@@ -537,18 +537,48 @@ def resolve_concept(root, path):
     raise OkfError("not_found", "not found: {}".format(path))
 
 
+FENCE_LINE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*(.*)$")
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*#*$")
+
+
+def fence_line_spans(lines):
+    """CommonMark fenced blocks as (first, end) line indexes, end exclusive. An
+    opener is up to three spaces of indent then three or more backticks or
+    tildes; it closes on a line of at least as many of the same character
+    carrying nothing else. An unclosed fence runs to the last line, which is
+    how Obsidian renders it too."""
+    spans, i, n = [], 0, len(lines)
+    while i < n:
+        m = FENCE_LINE_RE.match(lines[i].rstrip("\n"))
+        if not m:
+            i += 1
+            continue
+        marker, rest = m.group(1), m.group(2)
+        if marker[0] == "`" and "`" in rest:
+            i += 1                       # info string may not contain a backtick
+            continue
+        start, char, width = i, marker[0], len(marker)
+        i += 1
+        while i < n:
+            cm = FENCE_LINE_RE.match(lines[i].rstrip("\n"))
+            if (cm and cm.group(1)[0] == char and len(cm.group(1)) >= width
+                    and not cm.group(2).strip()):
+                i += 1
+                break
+            i += 1
+        spans.append((start, i))
+    return spans
+
+
 def iter_headings(body):
-    """Yield (level, text) for markdown headings, skipping fenced code blocks."""
-    in_fence = False
-    for line in body.splitlines():
-        if line.lstrip().startswith("```"):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        m = re.match(r"^(#{1,6})\s+(.+?)\s*#*$", line)
+    """Yield (level, text, line) per ATX heading outside fenced code; line is the
+    0-based index of the heading in body.splitlines()."""
+    lines = body.splitlines()
+    fenced = {i for first, end in fence_line_spans(lines) for i in range(first, end)}
+    for i, line in enumerate(lines):
+        m = i not in fenced and HEADING_RE.match(line)
         if m:
-            yield len(m.group(1)), m.group(2).strip()
+            yield len(m.group(1)), m.group(2).strip(), i
 
 
 def _prune_walk_dirs(dirnames):

@@ -23,7 +23,7 @@ from okf import navigation as okf_navigation
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
 from okf.errors import OkfError
-from tests.okf_testkit import run_find
+from tests.okf_testkit import _cli, run_find
 
 
 class VisualizeDefaultOutputPath(unittest.TestCase):
@@ -461,6 +461,38 @@ class BundleArgumentIsValidated(unittest.TestCase):
         error, out = self._call(okf_index.cmd_index, self._index_args("_archive"))
         self.assertIsNone(error)
         self.assertIn("Old", out)
+
+
+class TocUsesTheSharedHeadingFunction(unittest.TestCase):
+    """OKFT-ir4m — `toc` lists the headings the one heading function yields:
+    plain three-backtick fences behave as before, tilde fences and longer
+    fences now hide their headings too."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root, True)
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, ".okf.toml"), "w"):
+            pass
+
+    def _toc(self, body, *flags):
+        with open(os.path.join(self.root, "b", "c.md"), "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: C\n---\n" + body)
+        r = _cli(self.root, "toc", "b/c", *flags)
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        return r.stdout
+
+    def test_plain_backtick_fence_output_unchanged(self):
+        self.assertEqual(self._toc("# One\n```\n## no\n```\n## Two\n", "--level", "0"),
+                         "# C  [Concept]\n- One\n  - Two\n")
+
+    def test_tilde_fence_headings_not_listed(self):
+        self.assertEqual(self._toc("# One\n~~~\n## no\n~~~\n## Two\n"),
+                         "# C  [Concept]\n- Two\n")
+
+    def test_four_backtick_fence_with_inner_three_backticks_not_listed(self):
+        self.assertEqual(self._toc("````\n```\n## no\n```\n````\n## Two\n"),
+                         "# C  [Concept]\n- Two\n")
 
 
 if __name__ == "__main__":
