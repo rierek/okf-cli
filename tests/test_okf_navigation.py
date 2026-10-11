@@ -280,7 +280,8 @@ class ArchiveHitPathResolvesViaRead(unittest.TestCase):
 
     def _read_path(self, path):
         import io, contextlib, types
-        args = types.SimpleNamespace(path=path)
+        args = types.SimpleNamespace(path=path, section=None, frontmatter_only=False,
+                                     body_only=False)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             okf_navigation.cmd_read(self.tmp, args)
@@ -493,6 +494,186 @@ class TocUsesTheSharedHeadingFunction(unittest.TestCase):
     def test_four_backtick_fence_with_inner_three_backticks_not_listed(self):
         self.assertEqual(self._toc("````\n```\n## no\n```\n````\n## Two\n"),
                          "# C  [Concept]\n- Two\n")
+
+
+class ReadTargeted(unittest.TestCase):
+    """OKFT-5pyb — `read --section / --frontmatter-only / --body-only`, over the
+    real CLI process on a throwaway catalogue."""
+
+    CONCEPT = "\n".join([
+        "---",                    # 1
+        "type: Concept",          # 2
+        "title: C",               # 3
+        "# yaml heading",         # 4
+        "---",                    # 5
+        "# Top",                  # 6
+        "intro",                  # 7
+        "## Alpha",               # 8
+        "alpha text",             # 9
+        "### Deep",               # 10
+        "deep text",              # 11
+        "## Beta",                # 12
+        "beta text",              # 13
+        "### Dup",                # 14
+        "first dup text",         # 15
+        "## Gamma",               # 16
+        "### Dup",                # 17
+        "second dup text",        # 18
+        "## Fenced",              # 19
+        "```",                    # 20
+        "## Hidden",              # 21
+        "```",                    # 22
+        "after fence",            # 23
+        "## Delta",               # 24
+        "~~~",                    # 25
+        "## Tilde",               # 26
+        "~~~",                    # 27
+        "end",                    # 28
+    ]) + "\n"
+    BARE = "# Bare\ntext\n## Sub\nmore\n"
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root, True)
+        os.makedirs(os.path.join(self.root, "b"))
+        self._w(".okf.toml", "")
+        self._w("b/c.md", self.CONCEPT)
+        self._w("b/bare.md", self.BARE)
+        self._w("b/index.md", "---\ntype: Index\n---\n# B\n## Contents\nlist\n## Other\nx\n")
+
+    def _w(self, rel, text):
+        with open(os.path.join(self.root, rel), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _lines(self, first, last):
+        """File lines first..last (1-based, inclusive) of CONCEPT, newline-terminated."""
+        return "".join(l + "\n" for l in self.CONCEPT.splitlines()[first - 1:last])
+
+    def _read(self, path, *flags):
+        return _cli(self.root, "read", path, *flags)
+
+    def test_unique_section_runs_to_next_heading_of_equal_or_higher_level(self):
+        r = self._read("b/c", "--section", "Alpha")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self._lines(8, 11), ""))
+
+    def test_section_of_the_last_top_heading_runs_to_end_of_body(self):
+        r = self._read("b/c", "--section", "Top")
+        self.assertEqual((r.returncode, r.stdout), (0, self._lines(6, 28)))
+
+    def test_section_includes_subsections_and_stops_at_a_higher_level_heading(self):
+        r = self._read("b/c", "--section", "Beta")
+        self.assertEqual((r.returncode, r.stdout), (0, self._lines(12, 15)))
+
+    def test_match_is_case_insensitive_exact(self):
+        r = self._read("b/c", "--section", "dEEp")
+        self.assertEqual((r.returncode, r.stdout), (0, self._lines(10, 11)))
+        r = self._read("b/c", "--section", "Dee")
+        self.assertEqual((r.returncode, r.stdout), (3, ""))
+
+    def test_path_resolves_a_duplicate_heading(self):
+        r = self._read("b/c", "--section", "Beta > Dup")
+        self.assertEqual((r.returncode, r.stdout), (0, self._lines(14, 15)))
+        r = self._read("b/c", "--section", "Gamma>Dup")
+        self.assertEqual((r.returncode, r.stdout), (0, self._lines(17, 18)))
+
+    def test_path_with_three_segments_follows_the_nesting(self):
+        r = self._read("b/c", "--section", "top > alpha > deep")
+        self.assertEqual((r.returncode, r.stdout), (0, self._lines(10, 11)))
+
+    def test_later_segment_matches_only_inside_the_previous_section(self):
+        r = self._read("b/c", "--section", "Alpha > Dup")
+        self.assertEqual((r.returncode, r.stdout), (3, ""))
+
+    def test_ambiguous_section_exits_2_and_lists_candidates_with_file_lines(self):
+        r = self._read("b/c", "--section", "Dup")
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertIn("line 14: Top > Beta > Dup", r.stderr)
+        self.assertIn("line 17: Top > Gamma > Dup", r.stderr)
+
+    def test_unknown_section_exits_3_with_empty_stdout(self):
+        r = self._read("b/c", "--section", "Nope")
+        self.assertEqual((r.returncode, r.stdout), (3, ""))
+        self.assertNotEqual(r.stderr, "")
+
+    def test_fenced_heading_is_not_selectable(self):
+        for text in ("Hidden", "Tilde"):
+            r = self._read("b/c", "--section", text)
+            self.assertEqual((r.returncode, r.stdout), (3, ""), text)
+
+    def test_fenced_heading_does_not_end_the_enclosing_section(self):
+        r = self._read("b/c", "--section", "Fenced")
+        self.assertEqual((r.returncode, r.stdout), (0, self._lines(19, 23)))
+
+    def test_frontmatter_comment_is_not_selectable(self):
+        r = self._read("b/c", "--section", "yaml heading")
+        self.assertEqual((r.returncode, r.stdout), (3, ""))
+
+    def test_every_unique_toc_heading_is_selectable(self):
+        toc = _cli(self.root, "toc", "b/c", "--level", "0").stdout.splitlines()[1:]
+        texts = [l.lstrip(" ")[2:] for l in toc]
+        unique = [t for t in texts if texts.count(t) == 1]
+        self.assertEqual(len(unique), len(texts) - 2)    # "Dup" twice is the only repeat
+        for text in unique:
+            r = self._read("b/c", "--section", text)
+            self.assertEqual(r.returncode, 0, (text, r.stderr))
+            first = r.stdout.splitlines()[0]
+            self.assertTrue(first.startswith("#") and first.endswith(" " + text), (text, first))
+
+    def test_directory_reference_resolves_to_index_in_every_mode(self):
+        r = self._read("b", "--section", "Contents")
+        self.assertEqual((r.returncode, r.stdout), (0, "## Contents\nlist\n"))
+        r = self._read("b", "--frontmatter-only")
+        self.assertEqual((r.returncode, r.stdout), (0, "---\ntype: Index\n---\n"))
+        r = self._read("b", "--body-only")
+        self.assertEqual((r.returncode, r.stdout), (0, "# B\n## Contents\nlist\n## Other\nx\n\n"))
+
+    def test_frontmatter_only_prints_the_block_with_delimiters(self):
+        r = self._read("b/c", "--frontmatter-only")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self._lines(1, 5), ""))
+
+    def test_frontmatter_only_prints_nothing_without_frontmatter(self):
+        r = self._read("b/bare", "--frontmatter-only")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+
+    def test_body_only_prints_everything_after_the_frontmatter(self):
+        r = self._read("b/c", "--body-only")
+        self.assertEqual((r.returncode, r.stdout), (0, self._lines(6, 28) + "\n"))
+
+    def test_body_only_prints_the_whole_file_without_frontmatter(self):
+        r = self._read("b/bare", "--body-only")
+        self.assertEqual((r.returncode, r.stdout), (0, self.BARE + "\n"))
+
+    def test_unterminated_frontmatter_counts_as_none(self):
+        self._w("b/open.md", "---\ntype: X\n# not closed\n")
+        self.assertEqual(self._read("b/open", "--frontmatter-only").stdout, "")
+        self.assertEqual(self._read("b/open", "--body-only").stdout,
+                         "---\ntype: X\n# not closed\n\n")
+
+    def test_frontmatter_only_then_body_only_reproduces_plain_read(self):
+        for path in ("b/c", "b/bare"):
+            plain = self._read(path).stdout
+            joined = self._read(path, "--frontmatter-only").stdout + self._read(path, "--body-only").stdout
+            self.assertEqual(joined, plain, path)
+
+    def test_plain_read_is_the_file_plus_one_newline(self):
+        for path, text in (("b/c", self.CONCEPT), ("b/bare", self.BARE)):
+            r = self._read(path)
+            self.assertEqual((r.returncode, r.stdout), (0, text + "\n"), path)
+
+    def test_section_and_frontmatter_only_are_a_usage_error(self):
+        r = self._read("b/c", "--section", "Alpha", "--frontmatter-only")
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertIn("not allowed with", r.stderr)
+
+    def test_section_and_body_only_are_a_usage_error(self):
+        r = self._read("b/c", "--section", "Alpha", "--body-only")
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertIn("not allowed with", r.stderr)
+
+    def test_frontmatter_only_and_body_only_are_a_usage_error(self):
+        r = self._read("b/c", "--frontmatter-only", "--body-only")
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertIn("not allowed with", r.stderr)
 
 
 if __name__ == "__main__":

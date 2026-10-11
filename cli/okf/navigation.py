@@ -54,8 +54,72 @@ def cmd_list(root, args):
     print("list: {} concept(s)".format(len(hits)))
 
 
+def _inside(heads, k):
+    """Indexes of the headings inside the section of heads[k] (sub-sections included)."""
+    out = []
+    for j in range(k + 1, len(heads)):
+        if heads[j][0] <= heads[k][0]:
+            break
+        out.append(j)
+    return out
+
+
+def _heading_path(heads, k):
+    """Heading texts from the top-level ancestor down to heads[k], joined by " > "."""
+    path, level = [heads[k][1]], heads[k][0]
+    for level_j, text_j, _line in reversed(heads[:k]):
+        if level_j < level:
+            path.append(text_j)
+            level = level_j
+    return " > ".join(reversed(path))
+
+
+def _read_section(body, section, first_file_line):
+    """Lines of the one section `section` ("A" or "A > B > ...") names in `body`.
+    A segment matches heading text case-insensitively and exactly; each later
+    segment only inside the section of the previous match. Several matches are
+    invalid_input listing every candidate's heading path and file line, none is
+    not_found. `first_file_line` is the 1-based file line of the body's line 0."""
+    lines, heads = body.splitlines(), list(iter_headings(body))
+    segments = [s.strip().casefold() for s in section.split(">")]
+    hits = [k for k, h in enumerate(heads) if h[1].casefold() == segments[0]]
+    for seg in segments[1:]:
+        hits = sorted({j for k in hits for j in _inside(heads, k)
+                       if heads[j][1].casefold() == seg})
+    if not hits:
+        raise OkfError("not_found", "section not found: {}".format(section))
+    if len(hits) > 1:
+        raise OkfError("invalid_input", "ambiguous section: {} matches {} headings\n{}".format(
+            section, len(hits), "\n".join(
+                "  line {}: {}".format(first_file_line + heads[k][2], _heading_path(heads, k))
+                for k in hits)))
+    k = hits[0]
+    after = max(_inside(heads, k), default=k) + 1       # first heading of equal or higher level
+    return lines[heads[k][2]:heads[after][2] if after < len(heads) else None]
+
+
+def _split_head_body(text):
+    """(frontmatter block, rest) at the point split_frontmatter splits. The block
+    keeps both delimiter lines and the last newline (split_frontmatter leaves
+    that newline on the body side); without frontmatter it is "" and rest is text."""
+    body = split_frontmatter(text)[1]
+    head = text[:len(text) - len(body)]
+    if head and body.startswith("\n"):
+        return head + "\n", body[1:]
+    return head, body
+
+
 def cmd_read(root, args):
-    print(read_file(resolve_concept(root, args.path)))
+    text = read_file(resolve_concept(root, args.path))
+    head, body = _split_head_body(text)
+    if args.section is not None:
+        print("\n".join(_read_section(body, args.section, head.count("\n") + 1)))
+    elif args.frontmatter_only:
+        print(head, end="")
+    elif args.body_only:
+        print(body)
+    else:
+        print(text)
 
 
 def cmd_info(root, _args):
@@ -234,6 +298,15 @@ def add_list_parser(sub):
 def add_read_parser(sub):
     pr = _sub(sub, "read", "navigation", "print one concept page")
     pr.add_argument("path", help="<bundle>/<concept-id> of the page to print").completer = _complete_concepts
+    only = pr.add_mutually_exclusive_group()
+    only.add_argument("--section", metavar="HEADING",
+                      help="print only this section: heading text (case-insensitive, exact) up to "
+                           "the next heading of equal or higher level, sub-sections included; "
+                           "'A > B' resolves B inside A")
+    only.add_argument("--frontmatter-only", action="store_true",
+                      help="print only the frontmatter block, delimiters included")
+    only.add_argument("--body-only", action="store_true",
+                      help="print everything after the frontmatter block")
 
 
 def add_refs_parser(sub):
