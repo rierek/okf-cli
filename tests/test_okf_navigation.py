@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 if _HERE not in sys.path:  # cli/ holds the okf package
@@ -25,7 +26,7 @@ from okf import navigation as okf_navigation
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
 from okf.errors import OkfError
-from tests.okf_testkit import _cli, run_cli, run_find
+from tests.okf_testkit import _cli, call_command, needs_case_insensitive_fs, run_cli, run_find
 
 
 class VisualizeDefaultOutputPath(unittest.TestCase):
@@ -283,7 +284,7 @@ class ArchiveHitPathResolvesViaRead(unittest.TestCase):
     def _read_path(self, path):
         import io, contextlib, types
         args = types.SimpleNamespace(path=path, section=None, frontmatter_only=False,
-                                     body_only=False)
+                                     body_only=False, follow=None, inbound=False, max_tokens=None)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             okf_navigation.cmd_read(self.tmp, args)
@@ -729,6 +730,141 @@ class ReadCommandsOnYamlFrontmatter(unittest.TestCase):
                                 if f["path"].startswith("b/")),
                          [("kc/frontmatter/tags-block-form", "warning", "b/typed.md"),
                           ("okf/frontmatter/parseable", "error", "b/bad.md")])
+
+
+class ReadFollow(unittest.TestCase):
+    """R-07 — `read <id> --follow N [--inbound] [--max-tokens K]`: BFS over markdown links as one block.
+    Fixture: a -> b, d, e (b inside section S); b -> c, a; c -> a; f -> a; g -> e."""
+
+    FILES = {
+        "a": "---\ntype: X\ntitle: A\ndescription: dA\n---\n# A\n## S\nsec [b](b.md)\n## T\n"
+             "[d](d.md) [e](e.md) [dead](nope.md) [u](https://x.org) [self](#x) [dir](.)\n",
+        "b": "---\ntitle: B\n---\nb body [c](c.md) [back](a.md) [again](a.md)\n",
+        "c": "c body [a](a.md)\n",
+        "d": "---\ndescription: dd\n---\nd body\n",
+        "e": "e body\n",
+        "f": "f [a](a.md)\n",
+        "g": "g [e](e.md)\n",
+    }
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root, True)
+        os.makedirs(os.path.join(self.root, "b"))
+        open(os.path.join(self.root, ".okf.toml"), "w").close()
+        for name, text in self.FILES.items():
+            with open(os.path.join(self.root, "b", name + ".md"), "w", encoding="utf-8") as f:
+                f.write(text)
+
+    def nodes(self, *flags):
+        return call_command(self.root, "read", "b/a", *flags)["nodes"]
+
+    def at(self, *flags):
+        return [(n["path"], n["depth"]) for n in self.nodes(*flags)]
+
+    def scans(self, *argv):
+        """How often the catalogue walk ran during one in-process call, failing calls included."""
+        with mock.patch.object(okf_linkscan, "iter_rename_scan_md",
+                               wraps=okf_linkscan.iter_rename_scan_md) as walk:
+            try:
+                call_command(self.root, *argv)
+            except OkfError:
+                pass
+        return walk.call_count
+
+    def test_node_set_per_depth_with_each_node_once_on_a_cycle(self):
+        self.assertEqual(self.at("--follow", "1"), [("b/a", 0), ("b/b", 1), ("b/d", 1), ("b/e", 1)])
+        self.assertEqual(self.at("--follow", "2"),
+                         [("b/a", 0), ("b/b", 1), ("b/d", 1), ("b/e", 1), ("b/c", 2)])
+
+    def test_inbound_adds_the_linking_files_sorted_after_the_outbound_ones_on_every_level(self):
+        self.assertEqual(self.at("--follow", "1", "--inbound"),
+                         [("b/a", 0), ("b/b", 1), ("b/d", 1), ("b/e", 1), ("b/c", 1), ("b/f", 1)])
+        self.assertIn(("b/g", 2), self.at("--follow", "2", "--inbound"))
+        self.assertNotIn("b/g", [p for p, _d in self.at("--follow", "2")])
+
+    def test_the_catalogue_is_walked_once_per_follow_call_and_never_without_one(self):
+        self.assertEqual(self.scans("read", "b/a", "--follow", "3", "--inbound"), 1)
+        self.assertEqual(self.scans("read", "b/a", "--follow", "2", "--inbound", "--max-tokens", "9",
+                                    "--section", "S"), 1)
+        for argv in (("read", "b/a", "--follow", "0"), ("read", "b/a"), ("read", "b/missing", "--follow", "2"),
+                     ("read", "b/a", "--follow", "1", "--section", "Nope"),
+                     ("read", "b/a", "--follow", "1", "--body-only")):
+            self.assertEqual(self.scans(*argv), 0, argv)
+
+    def test_follow_zero_is_plain_read_byte_for_byte(self):
+        for extra in ((), ("--json",)):
+            plain = _cli(self.root, "read", "b/a", *extra)
+            self.assertEqual(_cli(self.root, "read", "b/a", "--follow", "0", "--max-tokens", "3", *extra).stdout,
+                             plain.stdout)
+
+    def test_the_block_is_stable_and_headed_by_depth_and_path(self):
+        first = _cli(self.root, "read", "b/a", "--follow", "2").stdout
+        self.assertEqual(_cli(self.root, "read", "b/a", "--follow", "2").stdout, first)
+        self.assertEqual([ln for ln in first.splitlines() if ln.startswith("=====")],
+                         ["===== depth 0 b/a =====", "===== depth 1 b/b =====", "===== depth 1 b/d =====",
+                          "===== depth 1 b/e =====", "===== depth 2 b/c ====="])
+        self.assertTrue(first.startswith("===== depth 0 b/a =====\n" + self.FILES["a"]))
+
+    def test_budget_reduces_from_the_first_node_that_does_not_fit_in_bfs_order(self):
+        full = {n["path"]: n["tokens"] for n in self.nodes("--follow", "1")}
+        for budget, reduced in ((full["b/a"] + full["b/b"], ["b/d", "b/e"]),    # the edge still fits
+                                (full["b/a"] + full["b/b"] + full["b/e"] - 1, ["b/d", "b/e"]),
+                                (1, ["b/b", "b/d", "b/e"])):                    # root alone over budget
+            got = self.nodes("--follow", "1", "--max-tokens", str(budget))
+            self.assertEqual([n["path"] for n in got if n["reduced"]], reduced, budget)
+            self.assertFalse(got[0]["reduced"])
+            self.assertIn("text", got[0])
+
+    def test_a_later_small_node_never_jumps_ahead_of_a_reduced_one(self):
+        with open(os.path.join(self.root, "b", "d.md"), "w", encoding="utf-8") as f:
+            f.write("---\ntitle: D\n---\n" + "long body line\n" * 40)
+        full = {n["path"]: n["tokens"] for n in self.nodes("--follow", "1")}
+        budget = full["b/a"] + full["b/b"] + full["b/e"]          # fits a, b, e but not the large d
+        got = self.nodes("--follow", "1", "--max-tokens", str(budget))
+        self.assertEqual([(n["path"], n["reduced"]) for n in got],
+                         [("b/a", False), ("b/b", False), ("b/d", True), ("b/e", True)])
+
+    def test_a_reduced_node_carries_title_and_description_and_no_content(self):
+        d = self.nodes("--follow", "1", "--max-tokens", "1")[2]
+        self.assertEqual((d["path"], d["reduced"], d["title"], d["description"], "text" in d),
+                         ("b/d", True, "d", "dd", False))     # no title: the stem
+        text = _cli(self.root, "read", "b/a", "--follow", "1", "--max-tokens", "1").stdout
+        self.assertIn("===== depth 1 b/b [reduced] =====\nB\n", text)
+        self.assertIn("===== depth 1 b/d [reduced] =====\nd\ndd\n", text)
+        self.assertNotIn("d body", text)
+
+    def test_section_narrows_the_root_but_not_its_links_or_neighbours(self):
+        got = self.nodes("--follow", "1", "--section", "S")
+        self.assertEqual(got[0]["text"], "## S\nsec [b](b.md)\n")
+        self.assertEqual([n["path"] for n in got], ["b/a", "b/b", "b/d", "b/e"])   # d, e link from section T
+        self.assertIn("b body", got[1]["text"])
+        budgeted = self.nodes("--follow", "1", "--section", "S", "--max-tokens", str(got[0]["tokens"]))
+        self.assertEqual([n["reduced"] for n in budgeted], [False, True, True, True])
+
+    def test_unknown_section_fails_like_plain_read_section(self):
+        plain = _cli(self.root, "read", "b/a", "--section", "Nope")
+        followed = _cli(self.root, "read", "b/a", "--section", "Nope", "--follow", "1")
+        self.assertEqual((followed.returncode, followed.stdout), (plain.returncode, plain.stdout))
+        self.assertNotEqual(plain.returncode, 0)
+
+    def test_follow_with_frontmatter_only_or_body_only_is_a_usage_error_for_any_value(self):
+        for follow in ("0", "1"):
+            for flag in ("--frontmatter-only", "--body-only"):
+                r = _cli(self.root, "read", "b/a", "--follow", follow, flag)
+                self.assertEqual((r.returncode, r.stdout), (2, ""), (follow, flag))
+
+    def test_bad_numbers_are_usage_errors(self):
+        for flags in (("--follow", "-1"), ("--follow", "x"), ("--max-tokens", "0"), ("--max-tokens", "1.5")):
+            r = _cli(self.root, "read", "b/a", "--follow", "1", *flags)
+            self.assertEqual((r.returncode, r.stdout), (2, ""), flags)
+
+    @needs_case_insensitive_fs
+    def test_a_link_spelled_in_another_case_is_the_same_node(self):
+        with open(os.path.join(self.root, "b", "c.md"), "w", encoding="utf-8") as f:
+            f.write("c [a](A.md) [b](B.md)\n")
+        self.assertEqual(self.at("--follow", "3"),
+                         [("b/a", 0), ("b/b", 1), ("b/d", 1), ("b/e", 1), ("b/c", 2)])
 
 
 if __name__ == "__main__":
