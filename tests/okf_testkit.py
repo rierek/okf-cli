@@ -240,3 +240,35 @@ class CtxFixtureMixin:
 
 def E(pos, mode, path, comment=""):
     return {"pos": pos, "mode": mode, "path": path, "comment": comment}
+
+
+DECLARE = 'okf_version: "0.2"'
+
+
+class SpecCase(unittest.TestCase):
+    """A throwaway catalogue with one bundle `b`. `_bundle` writes its root index.md. A base with
+    no tests of its own: the OKF v0.2 test modules inherit it."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _bundle(self, front: "str | None" = DECLARE, bundle="b"):
+        """The bundle-root index.md; `front` is its frontmatter text, None for no block."""
+        head = "" if front is None else "---\n{}\n---\n".format(front)
+        self._w(bundle + "/index.md", head + "# B\n\nA bundle for the v0.2 rule tests.\n")
+
+    def _concept(self, extra="", rel="b/x.md", type_="Note"):
+        self._w(rel, "---\ntype: {}\n{}\n---\n# X\n\nbody\n".format(type_, extra))
+
+    def _findings(self, target: "str | None" = "b"):
+        return okf_check.run_checks(self.tmp, target)
+
+    def _group(self, prefix, target: "str | None" = "b"):
+        return [f for f in self._findings(target) if f.rule.startswith(prefix)]

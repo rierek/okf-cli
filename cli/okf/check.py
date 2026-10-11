@@ -3,6 +3,7 @@ engine that runs them (`run_checks`), the crosslink and XML-like-tag repairs, an
 the check, fix-crosslinks and fix-xml-tags commands."""
 
 from collections import namedtuple
+import datetime
 import os
 import re
 
@@ -548,6 +549,13 @@ RULES = [
     Rule("okf/provenance/sources-shape", "error", "file", spec_check.check_sources_shape, "0.2"),
     Rule("okf/provenance/source-resource", "error", "file", spec_check.check_source_resource, "0.2"),
     Rule("okf/provenance/usage-window", "error", "file", spec_check.check_usage_window, "0.2"),
+    Rule("okf/trust/generated", "error", "file", spec_check.check_generated, "0.2"),
+    Rule("okf/trust/verified", "error", "file", spec_check.check_verified, "0.2"),
+    Rule("okf/lifecycle/status", "error", "file", spec_check.check_status, "0.2"),
+    Rule("okf/lifecycle/stale-after", "warning", "file", spec_check.check_stale_after, "0.2"),
+    Rule("okf/format/actor", "error", "file", spec_check.check_actor, "0.2"),
+    Rule("okf/format/timestamp", "error", "file", spec_check.check_timestamp, "0.2"),
+    Rule("okf/computation/runtime", "error", "file", spec_check.check_runtime, "0.2"),
 ]
 
 
@@ -555,6 +563,11 @@ def finding_of(rule_id, path, message):
     """The Finding for `rule_id`, severity taken from the registry; KeyError for
     an ID no rule registers."""
     return Finding(rule_id, {r.id: r.severity for r in RULES}[rule_id], path, message)
+
+
+def _utcnow():
+    """The instant of a run, in UTC: the one source of `now` for every stale_after comparison."""
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _gated(rules, version):
@@ -597,7 +610,7 @@ def run_checks(root, target, types_source=None):
         return canon["idx"]
 
     run = {"types_set": types_set, "tags_set": tags_set, "wl_checked": wl_checked,
-           "wl_index": wl_index, "canon_index": canon_index}
+           "wl_index": wl_index, "canon_index": canon_index, "now": _utcnow()}
     file_rules = [r for r in RULES if r.scope == "file"]
     bundle_rules = [r for r in RULES if r.scope == "bundle"]
 
