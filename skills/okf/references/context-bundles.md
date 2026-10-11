@@ -43,7 +43,7 @@ description: "Read these first when joining the widget project"
 
 - Modes are literal CLI values: `pflicht` = required entry, read in order, positions `1..n`. `nachschlag` = reference entry, consulted when needed, position `-`.
 - A path is a catalogue concept, written as a `/`-link, or any other file, written as a code span.
-- `type: Context` must be registered in `TYPES.md` when that file exists, else `check` warns `type-registered`. Add the row ``| `Context` | Curated reading list (ctx) |``.
+- `type: Context` must be registered in `TYPES.md` when that file exists, else `check` warns `kc/type/registered`. Add the row ``| `Context` | Curated reading list (ctx) |``.
 - Slug: lowercase letters, digits and hyphens. Reserved: the ctx verb names and `index`, `log`, `readme`, `index-map`.
 
 ## Read a ctx
@@ -76,7 +76,7 @@ okf-cli --root <catalogue> ctx create <slug> --import <file> --description "<one
 1. Pick the pages with `find`, `toc` and `read`. Fewer is better: every required entry costs reading time.
 2. Create the ctx. Paths are `<bundle>/<concept-id>` (with or without `.md`) or file paths. `--import <file>` reads a local text file with one path per line; blank lines and lines starting with `#` are skipped; text after a TAB becomes the entry comment.
 3. `ctx create` makes every path a required entry, ordered alphabetically by path, not in the order given. Fix the order with `ctx move` (next section).
-4. Always pass `--description`; an empty description is a `ctx` warning.
+4. Always pass `--description`; an empty description is a `kc/ctx/empty-description` warning.
 
 ## Edit a ctx
 
@@ -106,11 +106,11 @@ okf-cli --root <catalogue> check _ctx
 okf-cli --root <catalogue> ctx <slug>
 ```
 
-Done when `ctx check` and `check _ctx` end `OK — 0 violations` and `ctx <slug>` lists the entries in the intended order. `--stale` warns for every entry modified after the ctx file: review whether the ctx still fits. A check fails: fix the entry, then rerun the checks until clean.
+Done when `ctx check` and `check _ctx` end `OK — 0 violations` and `ctx <slug>` lists the entries in the intended order. `--stale` reports `kc/ctx/stale-entry` as a warning for every entry modified after the ctx file: review whether the ctx still fits. A check fails: fix the entry, then rerun the checks until clean.
 
 ## Maintenance
 
-- `rename` and `archive` of a concept rewrite ctx entries automatically. An entry that now points into `_archive/` is a `ctx` warning: drop it or replace it.
+- `rename` and `archive` of a concept rewrite ctx entries automatically. An entry that now points into `_archive/` is a `kc/ctx/archived-entry` warning: drop it or replace it.
 - `ctx list --for <path>` before deleting or archiving a concept shows which ctx files depend on it.
 - MCP offers only `okf_ctx_list` and `okf_ctx_show`; every other ctx verb is CLI-only.
 
@@ -121,7 +121,7 @@ Done when `ctx check` and `check _ctx` end `OK — 0 violations` and `ctx <slug>
 | `ctx: unknown slug: <slug>` | Typo, or the ctx was renamed | `ctx list` |
 | `ctx create` rejects the slug | Uppercase, underscore, or a reserved name | Use lowercase letters, digits, hyphens |
 | `ctx <slug>` exits 1, entry shown `[DEAD]` | Entry file deleted or moved outside `rename` | `ctx drop <slug> <path>`, then `ctx add` the new path |
-| `WARNING type-registered _ctx/<slug>.md` | `Context` missing from `TYPES.md` | Add the `Context` row |
-| `WARNING ctx ... entry under _archive/` | Member was archived | Drop or replace the entry |
+| `WARNING kc/type/registered _ctx/<slug>.md` | `Context` missing from `TYPES.md` | Add the `Context` row |
+| `WARNING kc/ctx/archived-entry ... entry under _archive/` | Member was archived | Drop or replace the entry |
 | Reading order wrong after `create` | `create` sorts alphabetically | `ctx move <slug> <path> --pos <n>` |
-| `ERROR ctx ... required positions are not 1..n` | Table edited by hand | Fix the `pos` column, or rebuild with `ctx move` |
+| `ERROR kc/ctx/required-positions ... required positions are not 1..n` | Table edited by hand | Fix the `pos` column, or rebuild with `ctx move` |

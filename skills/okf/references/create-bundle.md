@@ -107,7 +107,7 @@ Write `<catalogue>/<bundle>/index.md`:
 
 ## 4. Vocabulary
 
-Types: pick values from `info`. For a genuinely new type, add a row to `<catalogue>/TYPES.md`: ``| `NewType` | what it is for |``. An unregistered type is warning `type-registered`.
+Types: pick values from `info`. For a genuinely new type, add a row to `<catalogue>/TYPES.md`: ``| `NewType` | what it is for |``. An unregistered type is warning `kc/type/registered`.
 
 Tags, when `TAGS.md` exists:
 
@@ -142,7 +142,7 @@ generated: { by: <actor>, at: <UTC now> }
 
 - `<actor>`: your own `<agent>/<model>` identifier when you wrote the text; `human:<id>` only for a named person who wrote it.
 - `<UTC now>`: the output of `date -u +%Y-%m-%dT%H:%M:%SZ`.
-- Link only to files that exist; a link to a missing file is warning `crosslink-format`.
+- Link only to files that exist; a link to a missing file is warning `kc/link/crosslink-format`.
 
 ## 6. Generate the listings
 
@@ -167,7 +167,7 @@ okf-cli --root <catalogue> find "<words from the concept title>"
 
 Done when all hold:
 
-- `check` ends `OK — 0 violations` and shows no `entry-file-description` warning.
+- `check` ends `OK — 0 violations` and shows no `kc/asset/entry-file-description` warning.
 - `reindex --check` reports `0 stale, 0 uncovered`.
 - `index` lists `<bundle>: <your description sentence>`.
 - `find` returns the concept as `rank: 1` or close to it.
@@ -190,12 +190,12 @@ Add `TYPES.md`, `TAGS.md`, `.okf.toml` and `.gitignore` when you created or chan
 | Symptom | Cause | Fix |
 |---|---|---|
 | stderr `note: --root ... carries no catalogue marker` | `--root` is not the catalogue root, often the bundle directory itself; `check` then misses files | Point `--root` at the directory that contains the bundle. New catalogue: add `.okf.toml` |
-| `WARNING entry-file-description <bundle>` | Bundle `index.md` lacks the H1 or the intro paragraph | Add `# Title` and one plain sentence under it |
+| `WARNING kc/asset/entry-file-description <bundle>` | Bundle `index.md` lacks the H1 or the intro paragraph | Add `# Title` and one plain sentence under it |
 | Concept missing from every listing, `check` clean | Its directory has no `index.md` with markers | Create it (step 3), then `reindex <bundle>` |
 | New subdirectory missing from the bundle listing | Only the subdirectory was reindexed | `reindex <bundle>` (the parent lists subdirectories that carry an `index.md`) |
 | `skipped (no markers)` | `index.md` without the marker pair | Add the pair, or `reindex <bundle> --init` |
-| `ERROR asset-placement` | Non-markdown file outside `assets/` | Move it to `<bundle>/assets/` and link it there |
-| `ERROR reserved-no-type` | An `index.md` carries `type:` | Remove the `type` key |
-| `WARNING crosslink-format ... not resolving from root` | Link target does not exist | Point the link at an existing file |
+| `ERROR kc/asset/placement` | Non-markdown file outside `assets/` | Move it to `<bundle>/assets/` and link it there |
+| `ERROR okf/type/reserved-no-type` | An `index.md` carries `type:` | Remove the `type` key |
+| `WARNING kc/link/crosslink-format ... not resolving from root` | Link target does not exist | Point the link at an existing file |
 | `find` misses the new concept; stderr `lexical index is stale` | Search index built before the write | `build-index`, then `find` again |
 | `find` covers only one bundle | `.okf.toml` holds a `bundle = "..."` key | Remove the key from a shared catalogue |

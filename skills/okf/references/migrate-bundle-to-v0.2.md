@@ -22,8 +22,8 @@ Copy into your task list (todo tool or scratch list), tick one by one. Each phas
 
 - [ ] Phase 0: baseline -> done when the outputs of `check`, `reindex --check` and both `grep` calls are saved as the work list, and the user agreed to the planned mapping
 - [ ] Phase 1: structure -> done when `reindex <bundle> --check` reports `0 stale, 0 uncovered` and `check <bundle>` ends `OK — 0 violations` -> on failure: create missing index files or convert listings by hand, rerun phase 1
-- [ ] Phase 2: normalisation -> done when `fix-crosslinks --check` reports `0 unresolved link(s)` and `check` shows no `tags-block-form` or `xml-like-tags` warning -> on failure: fix links by hand, rerun phase 2
-- [ ] Phase 3: vocabulary -> done when `check` shows no `type-registered`, `tag-registered` or `english-keys` warning -> on failure: register or rename, rerun `check`
+- [ ] Phase 2: normalisation -> done when `fix-crosslinks --check` reports `0 unresolved link(s)` and `check` shows no `kc/frontmatter/tags-block-form` or `kc/markup/xml-like-tags` warning -> on failure: fix links by hand, rerun phase 2
+- [ ] Phase 3: vocabulary -> done when `check` shows no `kc/type/registered`, `kc/tag/registered` or `kc/frontmatter/english-keys` warning -> on failure: register or rename, rerun `check`
 - [ ] Phase 4: frontmatter fields -> done when the phase 0 `grep` calls print nothing, except keys kept on purpose -> on failure: edit the listed files, rerun the `grep` calls
 - [ ] Phase 5: trust and lifecycle -> done when every `status`, `verified` and `stale_after` value traces to a user statement or a record -> on failure: remove the value or ask the user
 - [ ] Phase 6: verify -> done when every criterion in phase 6 holds -> on failure: back to the phase that owns the finding, rerun phase 6 until clean
@@ -63,7 +63,7 @@ Unchanged from v0.1: required `type`, recommended `title`, `description`, `resou
 | `deprecated: true`, `obsolete: true` | `status: deprecated` | Or `archive` the concept. |
 | `review_by`, `expires`, `valid_until` | `stale_after` | Absolute time with offset. |
 | `reviewed_by` plus `reviewed_at`, `approved_by` | `verified: { by: human:<id>, at: <t> }` | Only for a review that happened. |
-| Keys flagged by warning `english-keys` | English equivalents | `title`, `description`, `type`, `tags`, `generated.at`. |
+| Keys flagged by warning `kc/frontmatter/english-keys` | English equivalents | `title`, `description`, `type`, `tags`, `generated.at`. |
 | `superseded_by`, `resource`, other keys | keep | `superseded_by` only on `type: Decision`. |
 
 ## Deciding values
@@ -121,9 +121,9 @@ Fix every `unresolved` link that `fix-crosslinks` reports by hand.
 
 ### Phase 3: vocabulary
 
-- `type-registered` warnings: add the type to `TYPES.md`, or change the concept to an existing type.
-- `tag-registered` warnings (closed vocabulary): `tags <candidate>` to find the existing tag, then `merge-tags <old> --into <existing> --scope <bundle> --apply`, or `tags --register <tag> "<description>"` (writes at once).
-- `english-keys` warnings: rename the keys.
+- `kc/type/registered` warnings: add the type to `TYPES.md`, or change the concept to an existing type.
+- `kc/tag/registered` warnings (closed vocabulary): `tags <candidate>` to find the existing tag, then `merge-tags <old> --into <existing> --scope <bundle> --apply`, or `tags --register <tag> "<description>"` (writes at once).
+- `kc/frontmatter/english-keys` warnings: rename the keys.
 
 Run `check <bundle>`.
 
@@ -208,7 +208,7 @@ Done when:
 |---|---|---|
 | Hand-written index text lost | `reindex --init` replaced the old list | Restore from git; move the text into concepts or into prose above `## Contents`; run `--init` again |
 | Concepts of a subdirectory missing from listings | Subdirectory without `index.md` | Phase 1, step 1 |
-| `ERROR reserved-no-type` on `index.md` | `type` added next to `okf_version` | Remove `type` |
+| `ERROR okf/type/reserved-no-type` on `index.md` | `type` added next to `okf_version` | Remove `type` |
 | `generated` without `by` | Author unknown | Ask the user; never fill in your own actor for text you did not write |
 | `verified` added during migration | Migration mistaken for review | Remove it unless a real check happened |
 | `check` clean but another OKF reader fails | Invalid YAML (for example an unquoted `: `) | Quote the value; `check` does not parse YAML |
