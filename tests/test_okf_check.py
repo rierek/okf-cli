@@ -1253,5 +1253,148 @@ class FindingShape(unittest.TestCase):
                          ["b/b.md", "b/y.md", "b/a.md", "b/z.md"])
 
 
+class SuppressRules(unittest.TestCase):
+    """R-10 — `check --ignore <pattern>` (repeatable) and `.okf.toml`
+    `ignore_rules` silence rules by exact ID or by prefix with a trailing `*`;
+    a suppressed finding neither prints nor counts, with or without --strict."""
+
+    KC_ERROR = "kc/name/filename-chars"
+    OKF_ERROR = "okf/frontmatter/parseable"
+    KC_WARNING = "kc/frontmatter/english-keys"
+    OK = "OK — 0 violations\n"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n")
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _config(self, body=""):
+        self._w(".okf.toml", body)
+
+    def _kc_error(self):
+        self._w("b/weird%name.md", "---\ntype: Concept\n---\n# W\n")
+
+    def _okf_error(self):
+        self._w("b/nofm.md", "# no frontmatter\n")
+
+    def _kc_warning(self):
+        self._w("b/g.md", "---\ntype: Concept\ntitel: X\n---\n# G\n")
+
+    def _rules(self, r):
+        return [f["rule"] for f in json.loads(r.stdout)["findings"]]
+
+    def test_ignore_prefix_turns_exit_4_into_0(self):
+        self._config()
+        self._kc_error()
+        control = _cli(self.tmp, "check")
+        self.assertEqual((control.returncode, control.stderr),
+                         (EXIT_CODES["non_conformant"], ""))
+        self.assertIn(self.KC_ERROR, control.stdout)
+        r = _cli(self.tmp, "check", "--ignore", "kc/*")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self.OK, ""))
+
+    def test_ignore_rules_config_entry_turns_exit_4_into_0(self):
+        self._kc_error()
+        self._config("")
+        self.assertEqual(_cli(self.tmp, "check").returncode, EXIT_CODES["non_conformant"])
+        self._config('ignore_rules = ["{}"]\n'.format(self.KC_ERROR))
+        r = _cli(self.tmp, "check")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self.OK, ""))
+
+    def test_pattern_without_star_matches_only_the_identical_id(self):
+        self._config()
+        self._kc_error()
+        for pattern in ("kc/name", "kc/name/filename", "kc/name/filename-chars-x", "kc/*/filename-chars",
+                        "kc/name/filename.chars", "KC/NAME/FILENAME-CHARS"):
+            with self.subTest(pattern=pattern):
+                r = _cli(self.tmp, "check", "--ignore", pattern)
+                self.assertEqual(r.returncode, EXIT_CODES["non_conformant"], r.stdout)
+        r = _cli(self.tmp, "check", "--ignore", self.KC_ERROR)
+        self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+
+    def test_trailing_star_matches_every_id_with_that_prefix(self):
+        self._config()
+        self._kc_error()
+        for pattern in ("kc/name/*", "kc/n*", "kc/name/filename-chars*", "kc/*", "*"):
+            with self.subTest(pattern=pattern):
+                r = _cli(self.tmp, "check", "--ignore", pattern)
+                self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+        for pattern in ("okf/*", "kc/type/*", "kc/name/x*"):
+            with self.subTest(pattern=pattern):
+                r = _cli(self.tmp, "check", "--ignore", pattern)
+                self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
+
+    def test_a_suppressed_finding_is_absent_from_text_and_json_the_rest_stays(self):
+        self._config()
+        self._kc_error()
+        self._okf_error()
+        text = _cli(self.tmp, "check", "--ignore", "kc/*")
+        self.assertEqual(text.returncode, EXIT_CODES["non_conformant"])
+        self.assertNotIn(self.KC_ERROR, text.stdout)
+        self.assertIn(self.OKF_ERROR, text.stdout)
+        self.assertEqual(text.stdout.splitlines()[-1], "1 VIOLATIONS")
+        js = _cli(self.tmp, "check", "--ignore", "kc/*", "--json")
+        self.assertEqual(js.returncode, EXIT_CODES["non_conformant"])
+        self.assertEqual(self._rules(js), [self.OKF_ERROR])
+
+    def test_strict_does_not_count_a_suppressed_warning(self):
+        self._config()
+        self._kc_warning()
+        strict = _cli(self.tmp, "check", "--strict")
+        self.assertEqual(strict.returncode, EXIT_CODES["non_conformant"])
+        r = _cli(self.tmp, "check", "--strict", "--ignore", "kc/frontmatter/*")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self.OK, ""))
+        js = _cli(self.tmp, "check", "--strict", "--json", "--ignore", self.KC_WARNING)
+        self.assertEqual((js.returncode, json.loads(js.stdout)), (0, {"findings": []}))
+
+    def test_flag_and_config_patterns_are_united_and_the_flag_repeats(self):
+        self._kc_error()
+        self._okf_error()
+        self._config('ignore_rules = ["kc/*"]\n')
+        for argv in (("--ignore", "okf/*"), ("--ignore", self.OKF_ERROR)):
+            with self.subTest(argv=argv):
+                r = _cli(self.tmp, "check", *argv)
+                self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+        only_config = _cli(self.tmp, "check")
+        self.assertEqual(only_config.returncode, EXIT_CODES["non_conformant"])
+        self._config("")
+        r = _cli(self.tmp, "check", "--ignore", "kc/*", "--ignore", "okf/*")
+        self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+
+    def test_malformed_ignore_rules_suppresses_nothing_and_says_so_on_stderr(self):
+        self._kc_error()
+        for toml, shown in (('"kc/*"', "'kc/*'"), ("7", "7"), ("true", "True"),
+                            ('["kc/*", 1]', "['kc/*', 1]"), ("[[1]]", "[[1]]")):
+            with self.subTest(value=toml):
+                self._config("ignore_rules = {}\n".format(toml))
+                r = _cli(self.tmp, "check")
+                self.assertEqual(r.returncode, EXIT_CODES["non_conformant"], r.stdout)
+                self.assertIn(self.KC_ERROR, r.stdout)
+                self.assertTrue(r.stderr.startswith("note: ignore_rules "), r.stderr)
+                self.assertIn("got {} ".format(shown), r.stderr)
+
+    def test_a_flag_still_applies_when_the_config_value_is_malformed(self):
+        self._kc_error()
+        self._config('ignore_rules = "kc/*"\n')
+        r = _cli(self.tmp, "check", "--ignore", self.KC_ERROR)
+        self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+        self.assertTrue(r.stderr.startswith("note: ignore_rules "), r.stderr)
+
+    def test_absent_or_empty_ignore_rules_suppresses_nothing_silently(self):
+        self._kc_error()
+        for body in ("", "ignore_rules = []\n"):
+            with self.subTest(body=body):
+                self._config(body)
+                r = _cli(self.tmp, "check")
+                self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
+                self.assertIn(self.KC_ERROR, r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

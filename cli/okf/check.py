@@ -612,8 +612,34 @@ def cmd_check(root, args):
         # Without this a typo'd or renamed bundle scanned nothing and exited 0 —
         # a clean bill of health for a directory that does not exist.
         raise OkfError("not_found", "not a directory: {}".format(target))
-    findings = run_checks(root, target, types_source=getattr(args, "types", None))
+    patterns = ignore_patterns(load_okf_config(root), args.ignore)
+    findings = [f for f in run_checks(root, target, types_source=getattr(args, "types", None))
+                if not is_suppressed(f.rule, patterns)]
     report_findings(findings, args.strict, args.json)
+
+
+def ignore_patterns(config, flag_patterns):
+    """The suppression set: every `--ignore` pattern plus the `.okf.toml`
+    `ignore_rules` array. A value that is not an array of strings is announced
+    on stderr and contributes nothing — the safe direction is more findings,
+    never fewer (a bare string iterated per character would yield `*`)."""
+    patterns = list(flag_patterns)
+    if "ignore_rules" in config:
+        v = config["ignore_rules"]
+        if isinstance(v, list) and all(isinstance(x, str) for x in v):
+            patterns += v
+        else:
+            sys.stderr.write("note: ignore_rules must be an array of rule-ID patterns; "
+                             "got {!r} — it suppresses no rule\n".format(v))
+    return patterns
+
+
+def is_suppressed(rule_id, patterns):
+    """`*` is the only metacharacter and only as the last character: that
+    pattern matches every ID starting with the text before it; any other
+    pattern matches only the identical ID."""
+    return any(rule_id.startswith(p[:-1]) if p.endswith("*") else rule_id == p
+               for p in patterns)
 
 
 def report_findings(findings, strict, as_json):
@@ -640,6 +666,10 @@ def add_check_parser(sub):
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pc.add_argument("--strict", action="store_true",
                     help="count warnings toward the exit code; each finding keeps its severity")
+    pc.add_argument("--ignore", action="append", default=[], metavar="PATTERN",
+                    help="suppress rules: an exact rule ID, or a prefix ending in `*` "
+                         "(kc/*, okf/link/*); repeatable, added to .okf.toml ignore_rules; "
+                         "suppressed findings neither print nor count")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
     pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
 
