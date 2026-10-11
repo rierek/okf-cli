@@ -4,12 +4,9 @@ generic completers."""
 
 import argparse
 import os
-import re
 import textwrap
 
-from okf.catalogue import (
-    all_tags, catalogue_root, iter_concepts, list_bundles, load_okf_config, read_file,
-)
+from okf.catalogue import all_tags, catalogue_root, iter_concepts, list_bundles
 
 
 def subcommand_parsers(ap):
@@ -48,6 +45,20 @@ def _sub(sub, name, group, summary, **kwargs):
         raise ValueError("unknown command group: {}".format(group))
     COMMAND_GROUPS[name] = group
     return sub.add_parser(name, help=summary, description=summary, **kwargs)
+
+
+def _add_filters(parser):
+    """Register `--where`, the one way a command selects concepts. Every filter command (find,
+    list, recent and the tag verbs) calls this and nothing else, so the filter language, its help
+    and its errors exist once."""
+    parser.add_argument(
+        "--where", metavar="EXPR",
+        help="select concepts by an expression: `field op value` with op one of = != < <= > >= "
+             "~ (contains), or `field in (a, b)`; combine with and, or, not and parentheses. "
+             "Fields: type, tag, path (<bundle>/<concept-id>), archived (true or false) and any "
+             "frontmatter key (nested: a.b). Archived concepts are hidden unless the expression "
+             "names `archived`. Quote a value holding spaces or other characters: 'a b'. "
+             "Example: (type = Runbook and tag != draft) and path ~ home-lab/")
 
 
 def merge_commands(*mappings):
@@ -109,24 +120,6 @@ def _completion_root(parsed_args):
     explicit = getattr(parsed_args, "root", None)
     root = catalogue_root(os.path.expanduser(explicit) if explicit else None)
     return root if root and os.path.isdir(root) else None
-
-
-def _complete_types(parsed_args, **_):
-    root = _completion_root(parsed_args)
-    if root is None:
-        return []
-    # Same source resolution as run_checks: .okf.toml types_source, else <root>/TYPES.md.
-    src = load_okf_config(root).get("types_source") or os.path.join(root, "TYPES.md")
-    if not os.path.isfile(src):
-        return []
-    out = {}
-    for line in read_file(src).splitlines():
-        m = re.match(r"\|\s*`([^`]+)`\s*\|(.*)\|\s*$", line)
-        if m:
-            # Description = last table cell, first sentence (rank/mapping cells sit before it).
-            cells = [c.strip() for c in m.group(2).split("|") if c.strip()]
-            out[m.group(1)] = re.split(r"(?<=[.!?])\s", cells[-1], maxsplit=1)[0][:100] if cells else ""
-    return dict(sorted(out.items()))
 
 
 def _complete_tags(parsed_args, **_):

@@ -473,12 +473,13 @@ class ExitCodePerClass(unittest.TestCase):
     def test_empty_result_is_0(self):
         r = self._cli("find", "zzzznothingmatches")
         self.assertEqual(r.returncode, 0, r.stderr)
-        r = self._cli("list", "--type", "NoSuchType")
+        r = self._cli("list", "--where", "type = NoSuchType")
         self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_rejected_call_is_2(self):
         r = self._cli("list")
-        self.assertEqual((r.returncode, r.stderr), (2, "(error: pass --type and/or --tag)\n"))
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("--where", r.stderr)
 
     def test_check_violation_is_4_with_full_report_in_both_modes(self):
         self._w("b/bad.md", "no frontmatter\n")

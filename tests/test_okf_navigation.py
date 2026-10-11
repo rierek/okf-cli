@@ -177,7 +177,7 @@ class CmdListJson(unittest.TestCase):
     def _run(self, **kw):
         """The text printed; with json=True the handler's result, the envelope's `data`."""
         import io, contextlib, types
-        args = types.SimpleNamespace(type=None, tag=None, scope=None, json=False)
+        args = types.SimpleNamespace(where=None, json=False)
         for k, v in kw.items():
             setattr(args, k, v)
         buf = io.StringIO()
@@ -189,19 +189,19 @@ class CmdListJson(unittest.TestCase):
         return buf.getvalue()
 
     def test_json_output_is_parseable_array(self):
-        data = self._run(type="Runbook", json=True)
+        data = self._run(where="type = Runbook", json=True)
         self.assertIsInstance(data, list)
         self.assertEqual(len(data), 2)
         self.assertTrue(all("path" in r and "type" in r and "title" in r
                             and "description" in r for r in data))
 
     def test_json_empty_result_is_parseable_empty_array(self):
-        data = self._run(type="Nope", json=True)
+        data = self._run(where="type = Nope", json=True)
         self.assertEqual(data, [])
 
     def test_non_json_output_unchanged(self):
-        out_json_false = self._run(type="Runbook", json=False)
-        out_no_flag = self._run(type="Runbook")
+        out_json_false = self._run(where="type = Runbook", json=False)
+        out_no_flag = self._run(where="type = Runbook")
         self.assertEqual(out_json_false, out_no_flag)
         self.assertIn("list: 2 concept(s)", out_json_false)
         self.assertNotIn("{", out_json_false)
@@ -230,8 +230,7 @@ class ListIncludeArchive(unittest.TestCase):
 
     def _run(self, **kw):
         import io, contextlib, types
-        args = types.SimpleNamespace(type=None, tag=None, scope=None,
-                                     json=False, include_archive=False)
+        args = types.SimpleNamespace(where=None, json=False)
         for k, v in kw.items():
             setattr(args, k, v)
         buf = io.StringIO()
@@ -240,20 +239,20 @@ class ListIncludeArchive(unittest.TestCase):
         return buf.getvalue()
 
     def test_sc01_default_excludes_archived_concept(self):
-        out = self._run(type="Runbook")
+        out = self._run(where="type = Runbook")
         self.assertIn("path: bundle-a/active", out)
         self.assertNotIn("path: _archive/bundle-a/hidden", out)
 
-    def test_sc01_flag_includes_archived_concept_of_matching_type(self):
-        out = self._run(type="Runbook", include_archive=True)
+    def test_sc01_archived_expression_includes_archived_concept_of_matching_type(self):
+        out = self._run(where="type = Runbook and archived in (true, false)")
         self.assertIn("path: bundle-a/active", out)
         self.assertIn("path: _archive/bundle-a/hidden", out)
         self.assertNotIn("path: _archive/bundle-b/other", out)  # type Concept
 
-    def test_list_parser_has_include_archive_flag(self):
+    def test_list_parser_takes_a_where_expression(self):
         parsers = okf_parser_support.subcommand_parsers(okf_parser.build_parser())
         dests = {a.dest for a in okf_parser_support.parser_actions(parsers["list"])}
-        self.assertIn("include_archive", dests)
+        self.assertIn("where", dests)
 
 
 class ArchiveHitPathResolvesViaRead(unittest.TestCase):
@@ -290,8 +289,8 @@ class ArchiveHitPathResolvesViaRead(unittest.TestCase):
 
     def test_list_archive_hit_path_resolves_via_read(self):
         import io, contextlib, types
-        args = types.SimpleNamespace(type="Concept", tag=None, scope=None,
-                                     json=False, include_archive=True)
+        args = types.SimpleNamespace(where="type = Concept and archived in (true, false)",
+                                     json=False)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             okf_navigation.cmd_list(self.tmp, args)
@@ -304,7 +303,7 @@ class ArchiveHitPathResolvesViaRead(unittest.TestCase):
         marker = "zqxfindread"
         self._w("_archive/bundle-a/needle.md", "Concept", "Needle",
                 "{} {}".format(marker, self.body_marker))
-        out = run_find(self.tmp, marker, include_archive=True)
+        out = run_find(self.tmp, marker, where="archived in (true, false)")
         lines = out.splitlines()
         path_line = next(l for l in lines if l.startswith("path: "))
         path = path_line[len("path: "):]
@@ -353,7 +352,7 @@ class StagingExcludedFromIndexListFind(unittest.TestCase):
         import io
         import contextlib
         import types
-        args = types.SimpleNamespace(type="Concept", tag=None, scope=None, json=False)
+        args = types.SimpleNamespace(where="type = Concept", json=False)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             okf_navigation.cmd_list(self.tmp, args)

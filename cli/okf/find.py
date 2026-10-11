@@ -13,9 +13,9 @@ from okf.catalogue import (
     _dequote, all_tags, iter_concepts, list_search_bundles, load_okf_config, read_file,
     resolve_scopes, split_frontmatter,
 )
-from okf.find_filters import FindFilters
+from okf.find_filters import compile_where
 from okf.fts import _fts_index_includes_topics, _fts_ranking, tokenize
-from okf.parser_support import _complete_scopes, _complete_tags, _complete_types, _sub
+from okf.parser_support import _add_filters, _sub
 from okf.semantic import semantic_ranking
 
 
@@ -77,24 +77,22 @@ def _substring_ranking(root, query, terms, limit, filters):
     scoring, its `contrib` breakdown and its 6*len(terms) scale must remain
     byte-identical, because the frozen eval baseline was recorded against it.
 
-    Scope is enforced twice on purpose, and the two are not redundant:
-    resolve_scopes() confines the TRAVERSAL (so a filtered-out concept is
-    never even read from disk), while matches_loaded() re-checks the assembled
-    path. Only the second one is a predicate; dropping it would reopen the
-    I01 gap the moment the traversal changes shape.
+    The expression is enforced twice on purpose, and the two are not redundant:
+    resolve_scopes() confines the TRAVERSAL to the active catalogue, or to it
+    plus the archive when the expression names `archived` (so a concept the
+    archive rule hides is never even read from disk), while matches_loaded()
+    re-checks the assembled path against the whole expression. Only the second
+    one is a predicate; dropping it would reopen the I01 gap the moment the
+    traversal changes shape.
 
     `indexable_only` tracks `--include-topics`: the default uses the declared
     index corpus while an explicit topic search scans all bundles."""
     hits = []
     for _b, bp in resolve_scopes(
-            root, filters.scope, filters.include_archive,
+            root, None, filters.include_archive,
             indexable_only=not filters.include_topics):
-        # B04: the path prefix is the SCOPE's position under root, not the
-        # bundle name. iter_concepts() yields cids relative to `bp`, so with
-        # --scope b/sub the old "{bundle}/{cid}" form printed `b/y` for a
-        # concept that actually lives at `b/sub/y` — a path no okf-cli read
-        # can resolve. Unscoped, relpath(bp, root) IS the bundle name, so the
-        # frozen eval baseline sees byte-identical output.
+        # The path prefix is the bundle's position under root (`_archive/<b>` for an
+        # archived one), so a hit's path is one `okf-cli read` resolves.
         prefix = os.path.relpath(bp, root).replace(os.sep, "/")
         for cid, ap in iter_concepts(bp):
             text = read_file(ap)
@@ -261,7 +259,19 @@ def _zero_hit_suggestions(root, query, limit=5):
 
 
 def cmd_find(root, args):
-    if getattr(args, "include_topics", False) and _fts_index_includes_topics(root) is False:
+    # I01: built ONCE, here, and handed to every arm as a single value. The
+    # filters used to travel as loose positional arguments, which is how the
+    # semantic arm ended up never receiving them at all (B01). Compiled before
+    # anything else, so a malformed --where fails whatever the query is.
+    include_topics = getattr(args, "include_topics", False)
+    # Only a positive `bundle` declaration narrows the result predicate.
+    # A catalogue without that declaration keeps its historic behavior:
+    # archived-only bundles remain reachable through `archived` in --where.
+    config = load_okf_config(root)
+    corpus_bundles = (list_search_bundles(root) if config.get("bundle")
+                      and not include_topics else None)
+    filters = compile_where(getattr(args, "where", None), include_topics, corpus_bundles)
+    if include_topics and _fts_index_includes_topics(root) is False:
         _note("lexical index excludes topic folders — run `okf-cli build-index --include-topics`")
     terms = tokenize(args.query)
     if not terms:
@@ -270,28 +280,6 @@ def cmd_find(root, args):
         print("(empty query)")
         return
     breakdown = getattr(args, "breakdown", False)
-    # I01: built ONCE, here, and handed to every arm as a single value. The
-    # three filters used to travel as loose positional arguments, which is how
-    # the semantic arm ended up never receiving them at all (B01).
-    # 8a (FIL03/FIL04): --scope narrows via resolve_scopes(); without it,
-    # behavior is unchanged (resolve_scopes(root, None) == list_bundles(root)
-    # iteration, as before). --bundle was a duplicate alias, removed D02
-    # (PO-grilling 2026-07-26).
-    include_topics = getattr(args, "include_topics", False)
-    # Only a positive `bundle` declaration narrows the result predicate.
-    # A catalogue without that declaration keeps its historic behavior:
-    # archived-only bundles remain reachable via --include-archive.
-    config = load_okf_config(root)
-    corpus_bundles = (list_search_bundles(root) if config.get("bundle")
-                      and not include_topics else None)
-    filters = FindFilters(
-        scope=getattr(args, "scope", None),
-        type=getattr(args, "type", None),
-        tag=getattr(args, "tag", None),
-        include_archive=getattr(args, "include_archive", False),
-        include_topics=include_topics,
-        corpus_bundles=corpus_bundles,
-    )
     hits, max_score = _rank_lexically(root, args.query, terms, args.limit,
                                       filters)
 
@@ -322,19 +310,19 @@ def cmd_find(root, args):
 
     semantic_hits = []
     if not lexical_owned_provisionally or len(hits) < args.limit:
-        # B01: the SAME filters object the lexical arm got — --scope/--type/
-        # --tag constrain the answer, not one arm of it.
+        # B01: the SAME filters object the lexical arm got — --where
+        # constrains the answer, not one arm of it.
         semantic_hits = _semantic_hit_dicts(root, args.query, args.limit,
                                             filters)
 
     # R-13: the embedding build stays on the active catalogue by design
     # (cli/embeddings/build_tagvec.py:174) — an unannounced limit is a trap,
-    # so tell the searcher when --include-archive did not reach the arm
-    # that just shaped the answer. Gated on the conjunction (flag set AND
-    # the semantic arm actually contributed hits), not the flag alone, and
-    # printed at most once per invocation (PF-4).
+    # so tell the searcher when `archived` did not reach the arm
+    # that just shaped the answer. Gated on the conjunction (expression names
+    # `archived` AND the semantic arm actually contributed hits), not the
+    # expression alone, and printed at most once per invocation (PF-4).
     if filters.include_archive and semantic_hits:
-        _note("--include-archive covers the lexical arm only; "
+        _note("`archived` in --where covers the lexical arm only; "
               "embeddings stay on the active catalogue")
 
     all_hits, lexical_owned = fuse_conditional(hits, semantic_hits, args.limit)
@@ -428,6 +416,12 @@ rank / score lines:
   `provenance:` names the arm that produced the line. Degradations (index
   absent or stale, embedding backend unavailable) are announced on stderr,
   one note per degraded arm.
+
+filters:
+  --where EXPR selects the concepts the answer may hold, whichever arm owns
+  the ranking: the lexical, substring and semantic arms all apply it before
+  the result is cut to --limit. Without `archived` in the expression,
+  archived concepts are hidden; the semantic arm never covers them.
 """
 
 
@@ -440,14 +434,7 @@ def add_find_parser(sub):
     pf.add_argument("--include-topics", action="store_true", help="widen beyond .okf.toml declared bundle to topic folders")
     pf.add_argument("--limit", type=int, default=10,
                     help="max results to print (default 10)")
-    pf.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
-    pf.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
-    pf.add_argument("--scope", metavar="TARGET",
-                    help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
-    pf.add_argument("--include-archive", action="store_true",
-                    help="also search _archive/<bundle>/<cid>; excluded by "
-                         "default (combine with --scope to reach the "
-                         "archived concepts of one bundle)")
+    _add_filters(pf)
     pf.add_argument("--breakdown", action="store_true",
                     help="print per-hit contributing field(s)/term(s); "
                          "output is byte-identical to today without this flag")

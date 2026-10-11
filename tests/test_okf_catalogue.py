@@ -596,7 +596,7 @@ class CtxLoadSave(CtxFixtureMixin, unittest.TestCase):
 
     def test_sc02_list_type_context_shows_saved_ctx(self):
         okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "d", "entries": []})
-        r = self._cli("list", "--type", "Context")
+        r = self._cli("list", "--where", "type = Context")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("_ctx/s", r.stdout)
 

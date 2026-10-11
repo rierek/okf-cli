@@ -10,9 +10,10 @@ from okf.output import _add_output, _note
 
 from okf import catalogue
 from okf.catalogue import (
-    _dequote, extract_tags, iter_concepts, meta_of, read_file, resolve_scopes, split_frontmatter,
+    _dequote, iter_concepts, meta_of, read_file, resolve_scopes, split_frontmatter,
 )
-from okf.parser_support import _complete_scopes, _complete_tags, _complete_types, _sub
+from okf.find_filters import compile_where
+from okf.parser_support import _add_filters, _sub
 
 
 # --- recent: concepts by the commit that added them ------------------------
@@ -156,7 +157,7 @@ def _git_add_events(repo, prefixes):
     return res.stdout, None
 
 
-def _recent_scopes(root, target):
+def _recent_scopes(root, include_archive):
     """[(bundle, bundle_path, repo_top_or_None, prefix_or_None), …].
 
     Classification is by realpath, not os.path.islink: islink only sees a link
@@ -178,12 +179,8 @@ def _recent_scopes(root, target):
     if root_prefix == ".":
         root_prefix = ""
     scopes = []
-    for bundle, bp in resolve_scopes(root, target):
+    for bundle, bp in resolve_scopes(root, None, include_archive):
         real = os.path.realpath(bp)
-        if not os.path.isdir(real):
-            _note("scope `{}` is a broken symlink — nothing to "
-                  "list; repoint or remove the link".format(bundle))
-            continue
         if real == realroot or real.startswith(realroot + os.sep):
             sub = os.path.relpath(real, realroot).replace(os.sep, "/")
             sub = "" if sub == "." else sub
@@ -203,7 +200,8 @@ def _recent_scopes(root, target):
 
 
 def cmd_recent(root, args):
-    scopes = _recent_scopes(root, args.scope)
+    filters = compile_where(args.where)
+    scopes = _recent_scopes(root, filters.include_archive)
     by_repo = {}
     for repo, members in group_scopes_by_repo(
             [(b, repo, prefix) for b, _bp, repo, prefix in scopes]):
@@ -214,24 +212,19 @@ def cmd_recent(root, args):
             continue
         by_repo[repo] = parse_add_events(stdout)
 
-    want_meta = bool(args.type or args.tag)
     entries, meta, dated_repo = [], {}, {}
     for bundle, bp, repo, prefix in scopes:
         events = by_repo.get(repo) if repo is not None else None
         for cid, ap in iter_concepts(bp):
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
             path = rel[:-3] if rel.endswith(".md") else rel
-            if want_meta:
-                # One read feeding both frontmatter and tags; cmd_list still
-                # reads twice, and that is not this change's business.
+            if filters:
+                # One read feeding the whole predicate and the frontmatter meta.
                 text = read_file(ap)
                 fm, _body = split_frontmatter(text)
-                ctype = _dequote(fm.get("type", ""))
-                if args.type and ctype != args.type:
+                if not filters.matches_loaded(path, fm, text):
                     continue
-                if args.tag and args.tag not in extract_tags(text):
-                    continue
-                meta[path] = (ctype, _dequote(fm.get("title", "")) or cid,
+                meta[path] = (_dequote(fm.get("type", "")), _dequote(fm.get("title", "")) or cid,
                               _dequote(fm.get("description", "")))
             ts = events.get(concept_git_key(prefix, cid)) if events else None
             dated_repo[path] = events is not None
@@ -275,10 +268,7 @@ def add_recent_parser(sub):
                "list the most recently created concepts, newest first")
     prc.add_argument("--limit", type=int, default=10,
                      help="max results to print (default 10)")
-    prc.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
-    prc.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
-    prc.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
+    _add_filters(prc)
     _add_output(prc)
 
 

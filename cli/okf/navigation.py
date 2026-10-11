@@ -9,30 +9,30 @@ from okf.output import _add_output
 
 from okf import linkscan
 from okf.catalogue import (
-    extract_tags, iter_concepts, iter_headings, meta_of, read_file, require_bundle_dir,
-    resolve_concept, resolve_scopes, split_frontmatter,
+    iter_concepts, iter_headings, meta_of, read_file, require_bundle_dir, resolve_concept,
+    resolve_scopes, split_frontmatter,
 )
+from okf.find_filters import compile_where
 from okf.linkscan import _refs_display
 from okf.parser_support import (
-    _complete_bundles, _complete_concept_files, _complete_concepts, _complete_dirs, _complete_files,
-    _complete_scopes, _complete_tags, _complete_types, _sub,
+    _add_filters, _complete_bundles, _complete_concept_files, _complete_concepts, _complete_dirs,
+    _complete_files, _sub,
 )
 
 
 def cmd_list(root, args):
-    if not args.type and not args.tag:
-        raise OkfError("invalid_input", "(error: pass --type and/or --tag)")
+    if args.where is None:
+        raise OkfError("invalid_input", "(error: pass --where, e.g. --where 'type = Runbook')")
+    filters = compile_where(args.where)
     hits = []
-    for _bundle, bp in resolve_scopes(
-            root, args.scope, getattr(args, "include_archive", False)):
+    for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
         for _cid, ap in iter_concepts(bp):
-            t, title, desc = meta_of(ap)
-            if args.type and t != args.type:
-                continue
-            if args.tag and args.tag not in extract_tags(read_file(ap)):
-                continue
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
             path = rel[:-3] if rel.endswith(".md") else rel
+            text = read_file(ap)
+            if not filters.matches_loaded(path, split_frontmatter(text)[0], text):
+                continue
+            t, title, desc = meta_of(ap)
             hits.append((title, t, path, desc))
     hits.sort(key=lambda x: x[0].casefold())
     if getattr(args, "json", False):
@@ -295,15 +295,8 @@ def add_info_parser(sub):
 
 def add_list_parser(sub):
     pls = _sub(sub, "list", "navigation",
-               "list concepts filtered by frontmatter type and/or tag")
-    pls.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
-    pls.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
-    pls.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
-    pls.add_argument("--include-archive", action="store_true",
-                    help="also list _archive/<bundle>/<cid>; excluded by "
-                         "default (combine with --scope to reach the "
-                         "archived concepts of one bundle)")
+               "list the complete, unranked set of concepts a required --where expression selects")
+    _add_filters(pls)
     _add_output(pls)
 
 

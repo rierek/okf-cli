@@ -26,7 +26,7 @@ def run_find(root, query, **kw):
     args, cmd_find, redirected streams), but parameterised by root so the new
     suites can each use their own temp catalogue. Returns stdout."""
     args = types.SimpleNamespace(
-        query=query, limit=10, type=None, tag=None, scope=None,
+        query=query, limit=10, where=None,
         breakdown=False,
     )
     for k, v in kw.items():
