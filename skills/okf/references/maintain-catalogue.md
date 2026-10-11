@@ -33,7 +33,7 @@ okf-cli --root <catalogue> recent --limit 20
 - `index`: one line per bundle. `index <bundle>` prints its `index.md`; `--full` prints description, concept count, directories, types and tags.
 - `info`: `TYPES.md` and `PROPERTIES.md`.
 - `recent`: newest concepts first, dated by the git commit that added them. Needs git (exit 1 when the git binary is missing, exit 2 when the catalogue root is no git repository); uncommitted concepts appear undated at the end.
-- `--json` exists on `index`, `list`, `recent`, `refs`, `wikilinks`, `check` and `sync-status`.
+- `--json` exists on every command and prints one line, the envelope `{command, ok, data, warnings, error}`, and nothing else on stdout. `data` is the result, `warnings` the notes that text mode prints as `note:` lines on stderr, `error` is `null` or `{kind, code, message}` with `code` equal to the exit code. A failure that has a result keeps it in `data` (`check` findings, `sync-status` rows, the candidates of an ambiguous `read --section`). Read success from `ok`.
 
 ## 2. Retrieve
 
@@ -63,7 +63,7 @@ okf-cli --root <catalogue> check <target> --ignore 'kc/*' --ignore okf/frontmatt
 okf-cli --root <catalogue> check <target> --types <path to TYPES.md>
 ```
 
-Output: one `ERROR` or `WARNING` line per finding, then `OK — 0 violations` or `<n> VIOLATIONS`; every line carries the rule ID of the table below. Only findings that count are numbered: an error always, a warning only under `--strict`. Exit 4 (non_conformant) when any finding counts. `--strict` counts warnings toward the exit code; every finding keeps its severity. `--json` prints one object `{"findings": [{rule, severity, path, message}, ...]}`. `--ignore <pattern>` (repeatable) and the `.okf.toml` key `ignore_rules` (array of patterns) suppress rules: a pattern ending in `*` matches every rule ID with that prefix (`kc/*`, `okf/link/*`), any other pattern only the identical ID; a suppressed finding neither prints nor counts, with or without `--strict`. An `ignore_rules` that is not an array of strings suppresses nothing and prints a `note:` line on stderr. `--types` overrides the type vocabulary source. A target that is not a directory fails with `not a directory`. Fix the findings, then rerun `check` until it is clean.
+Output: one `ERROR` or `WARNING` line per finding, then `OK — 0 violations` or `<n> VIOLATIONS`; every line carries the rule ID of the table below. Only findings that count are numbered: an error always, a warning only under `--strict`. Exit 4 (non_conformant) when any finding counts. `--strict` counts warnings toward the exit code; every finding keeps its severity. `--json` prints the envelope, with the findings as `data.findings`, a list of `{rule, severity, path, message}`; a run with counting findings has `ok` false and `error.kind` `non_conformant`, and `data.findings` still lists them. `--ignore <pattern>` (repeatable) and the `.okf.toml` key `ignore_rules` (array of patterns) suppress rules: a pattern ending in `*` matches every rule ID with that prefix (`kc/*`, `okf/link/*`), any other pattern only the identical ID; a suppressed finding neither prints nor counts, with or without `--strict`. An `ignore_rules` that is not an array of strings suppresses nothing and prints a `note:` line on stderr (with `--json`: an entry of `warnings`). `--types` overrides the type vocabulary source. A target that is not a directory fails with `not a directory`. Fix the findings, then rerun `check` until it is clean.
 
 | Rule | Severity | Trigger | Fix |
 |---|---|---|---|
