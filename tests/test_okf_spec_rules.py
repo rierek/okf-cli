@@ -118,6 +118,12 @@ class LifecycleRules(RuleCase):
             with self.subTest(value):
                 self._none("stale_after: " + value)
 
+    def test_the_rule_compares_stale_after_with_the_clock_of_the_run(self):
+        now = datetime.datetime(2026, 9, 23, 12, 0, 0, tzinfo=UTC)
+        with mock.patch.object(okf_spec, "utcnow", return_value=now):
+            self._one("stale_after: 2026-09-23T11:59:59Z", "warning")
+            self._none("stale_after: 2026-09-23T12:00:01Z")
+
     def test_one_instant_serves_every_comparison_of_a_run(self):
         self._bundle()
         self._bundle(bundle="c")

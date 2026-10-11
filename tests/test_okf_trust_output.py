@@ -165,5 +165,15 @@ class NoSecondRead(TrustOutputCase):
         self.assertEqual((len(seen), max(seen.values())), (4, 1))
 
 
+class SynthesizedIndexMeta(TrustOutputCase):
+    """`index <bundle>` without an index.md lists each concept's type, title (stem when absent)
+    and description from one frontmatter read."""
+
+    def test_untitled_concept_falls_back_to_its_stem_and_the_description_is_listed(self):
+        self._w("s/untitled-one.md", "---\ntype: Note\ndescription: about one\n---\n# T\n")
+        out, _, code = run_cli(self.tmp, "index", "s")
+        self.assertEqual((code, out), (0, "# s\n\n* [untitled-one](untitled-one.md) [Note] - about one\n"))
+
+
 if __name__ == "__main__":
     unittest.main()
