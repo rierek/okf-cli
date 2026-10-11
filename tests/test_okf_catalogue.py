@@ -287,6 +287,25 @@ class IterHeadings(unittest.TestCase):
         self.assertEqual(self._h("    ```\n# yes\n"), [(1, "yes", 1)])
 
 
+class IndexH1AndDescIgnoresFences(unittest.TestCase):
+    """OKFT-ir4m AC5 — the H1 of an index.md comes from the one heading function."""
+
+    def _h1_desc(self, body):
+        with tempfile.TemporaryDirectory() as d:
+            ap = os.path.join(d, "index.md")
+            with open(ap, "w", encoding="utf-8") as f:
+                f.write(body)
+            return okf_catalogue.index_h1_and_desc(ap)
+
+    def test_fenced_h1_is_not_the_title(self):
+        self.assertEqual(self._h1_desc("```\n# Fake\nnot intro\n```\n# Real\nIntro.\n"),
+                         ("Real", "Intro."))
+
+    def test_plain_h1_and_intro_unchanged(self):
+        self.assertEqual(self._h1_desc("# B\n\nIntro.\n## Contents\n"), ("B", "Intro."))
+        self.assertEqual(self._h1_desc("# B\n## Contents\n"), ("B", ""))
+
+
 class IterConceptsStagingPrune(unittest.TestCase):
     """iter_concepts (okf-cli.py:117) did not prune "_"-prefixed staging
     dirs, unlike its sibling iter_all_md (:2925, clause :2930-2932) —

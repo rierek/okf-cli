@@ -631,19 +631,17 @@ def index_h1_and_desc(ap):
     """
     _, body = split_frontmatter(read_file(ap))
     lines = body.splitlines()
-    h1, desc, i = None, "", 0
-    while i < len(lines):
-        m = re.match(r"^#\s+(.+?)\s*#*$", lines[i])
-        i += 1
-        if m:
-            h1 = m.group(1).strip()
-            break
+    heads = list(iter_headings(body))
+    h1 = next((text for level, text, _line in heads if level == 1), None)
+    heading_lines = {line for _level, _text, line in heads}
+    i = next((line for level, _text, line in heads if level == 1), len(lines) - 1) + 1
+    desc = ""
     while i < len(lines):
         s = lines[i].strip()
         if not s:
             i += 1
             continue
-        if not re.match(r"^(#|<!--|[*\-+>]|\d+\.)", s):
+        if i not in heading_lines and not re.match(r"^(<!--|[*\-+>]|\d+\.)", s):
             desc = s
         break
     return h1, desc
