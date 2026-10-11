@@ -225,6 +225,87 @@ class ResolveConceptDirectoryFallback(unittest.TestCase):
         self.assertEqual((cm.exception.kind, cm.exception.message), ("not_found", "not found: nope"))
 
 
+class IterHeadings(unittest.TestCase):
+    """OKFT-ir4m — the one heading function: (level, text, line) per ATX heading
+    outside fenced code, `line` the 0-based index in body.splitlines()."""
+
+    def _h(self, body):
+        return list(okf_catalogue.iter_headings(body))
+
+    def test_duplicate_nested_and_fenced_fixture_exact_tuples(self):
+        body = "\n".join([
+            "# Top",                      # 0
+            "intro",                      # 1
+            "## Dup",                     # 2
+            "### Deep",                   # 3
+            "#### Deeper ####",           # 4
+            "## Dup",                     # 5
+            "```py",                      # 6
+            "# fake backtick",            # 7
+            "```",                        # 8
+            "~~~",                        # 9
+            "# fake tilde",               # 10
+            "~~~",                        # 11
+            "````",                       # 12
+            "```",                        # 13
+            "# fake four",                # 14
+            "```",                        # 15
+            "````",                       # 16
+            "## After",                   # 17
+        ]) + "\n"
+        self.assertEqual(self._h(body), [
+            (1, "Top", 0), (2, "Dup", 2), (3, "Deep", 3), (4, "Deeper", 4),
+            (2, "Dup", 5), (2, "After", 17)])
+
+    def test_duplicate_heading_keeps_distinct_lines(self):
+        self.assertEqual(self._h("## A\nx\n## A\n"), [(2, "A", 0), (2, "A", 2)])
+
+    def test_levels_one_to_four_nest_in_document_order(self):
+        self.assertEqual(self._h("# a\n## b\n### c\n#### d\n### e\n# f\n"),
+                         [(1, "a", 0), (2, "b", 1), (3, "c", 2), (4, "d", 3),
+                          (3, "e", 4), (1, "f", 5)])
+
+    def test_tilde_fence_hides_headings(self):
+        self.assertEqual(self._h("~~~\n# no\n~~~\n# yes\n"), [(1, "yes", 3)])
+
+    def test_long_fence_is_not_closed_by_shorter_one(self):
+        self.assertEqual(self._h("````\n```\n# no\n```\n````\n# yes\n"), [(1, "yes", 5)])
+
+    def test_closer_must_use_the_openers_character(self):
+        self.assertEqual(self._h("```\n~~~\n# no\n```\n# yes\n"), [(1, "yes", 4)])
+
+    def test_fence_line_with_info_string_does_not_close(self):
+        self.assertEqual(self._h("```\n```py\n# no\n```\n# yes\n"), [(1, "yes", 4)])
+
+    def test_unclosed_fence_runs_to_end_of_body(self):
+        self.assertEqual(self._h("# a\n```\n# no\n## no\n"), [(1, "a", 0)])
+
+    def test_indent_up_to_three_spaces_opens_a_fence(self):
+        self.assertEqual(self._h("   ```\n# no\n   ```\n# yes\n"), [(1, "yes", 3)])
+
+    def test_four_space_indent_does_not_open_a_fence(self):
+        self.assertEqual(self._h("    ```\n# yes\n"), [(1, "yes", 1)])
+
+
+class IndexH1AndDescIgnoresFences(unittest.TestCase):
+    """OKFT-ir4m AC5 — the H1 of an index.md comes from the one heading function."""
+
+    def _h1_desc(self, body):
+        with tempfile.TemporaryDirectory() as d:
+            ap = os.path.join(d, "index.md")
+            with open(ap, "w", encoding="utf-8") as f:
+                f.write(body)
+            return okf_catalogue.index_h1_and_desc(ap)
+
+    def test_fenced_h1_is_not_the_title(self):
+        self.assertEqual(self._h1_desc("```\n# Fake\nnot intro\n```\n# Real\nIntro.\n"),
+                         ("Real", "Intro."))
+
+    def test_plain_h1_and_intro_unchanged(self):
+        self.assertEqual(self._h1_desc("# B\n\nIntro.\n## Contents\n"), ("B", "Intro."))
+        self.assertEqual(self._h1_desc("# B\n## Contents\n"), ("B", ""))
+
+
 class IterConceptsStagingPrune(unittest.TestCase):
     """iter_concepts (okf-cli.py:117) did not prune "_"-prefixed staging
     dirs, unlike its sibling iter_all_md (:2925, clause :2930-2932) —
