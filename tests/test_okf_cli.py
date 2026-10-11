@@ -428,19 +428,22 @@ class ExitErrorMapping(unittest.TestCase):
     def test_unhandled_exception_exits_one(self):
         program = """
 import importlib.util
-import os
 import sys
 sys.path.insert(0, {cli!r})
 spec = importlib.util.spec_from_file_location("entry", {entry!r})
 entry = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(entry)
 entry.COMMAND_DISPATCH = {{"prime": lambda _, __: (_ for _ in ()).throw(RuntimeError("broken"))}}
-sys.argv = ["okf-cli.py", "prime"]
+sys.argv = ["okf-cli.py", "--root", {root!r}, "prime"]
 entry.main()
-""".format(cli=_HERE, entry=os.path.join(_HERE, "okf-cli.py"))
-        result = subprocess.run([sys.executable, "-c", program],
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, okf_errors.EXIT_CODES["internal"])
+"""
+        with tempfile.TemporaryDirectory() as root:
+            result = subprocess.run(
+                [sys.executable, "-c", program.format(
+                    cli=_HERE, entry=os.path.join(_HERE, "okf-cli.py"), root=root)],
+                cwd=root, capture_output=True, text=True)
+        self.assertEqual(result.returncode, okf_errors.EXIT_CODES["internal"], result.stderr)
+        self.assertIn("RuntimeError: broken", result.stderr)
 
 
 class ExitCodePerClass(unittest.TestCase):
