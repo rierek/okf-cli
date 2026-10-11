@@ -22,6 +22,7 @@ if _ROOT not in sys.path:
 
 from okf import catalogue as okf_catalogue
 from okf import check as okf_check
+from okf.errors import EXIT_CODES
 from okf import rename as okf_rename
 from okf import sync as okf_sync
 from okf import tags as okf_tags
@@ -731,12 +732,12 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
             import shutil
             shutil.rmtree(ext, ignore_errors=True)
 
-    def test_strict_run_exits_one(self):
+    def test_strict_run_exits_non_conformant(self):
         self._optin("a")
         self._w("a/index.md", "# A\n\nIntro.\n")
         self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
         out = _cli(self.tmp, "check", "--strict")
-        self.assertEqual(out.returncode, 1)
+        self.assertEqual(out.returncode, EXIT_CODES["non_conformant"])
         self.assertIn("wikilink-resolvable", out.stdout)
 
     def test_absent_config_is_silent(self):
@@ -866,7 +867,7 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         self._w("a/index.md", "# A\n\nIntro.\n")
         for bad in ("a/nope", "nosuchbundle"):
             out = _cli(self.tmp, "check", bad)
-            self.assertEqual(out.returncode, 1, bad)
+            self.assertEqual(out.returncode, EXIT_CODES["not_found"], bad)
             self.assertIn(bad, out.stderr, bad)
 
     def test_malformed_config_fails_with_a_message_not_a_traceback(self):
@@ -874,7 +875,7 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         name the file — including when --types made it irrelevant before."""
         self._w(".okf.toml", "this is not = = toml\n")
         out = _cli(self.tmp, "check", "--types", os.path.join(self.tmp, "TYPES.md"))
-        self.assertEqual(out.returncode, 1)
+        self.assertEqual(out.returncode, EXIT_CODES["invalid_input"])
         self.assertIn(".okf.toml is not valid TOML", out.stderr)
         self.assertNotIn("Traceback", out.stderr)
 

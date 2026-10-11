@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+from okf.errors import OkfError
 
 from okf import catalogue
 from okf.catalogue import (
@@ -167,13 +168,11 @@ def _recent_scopes(root, target, notes):
     realroot = os.path.realpath(root)
     root_top, reason = catalogue._git_toplevel(realroot)
     if reason == "no-git":
-        print("recent: git binary not found — this command reads creation "
-              "dates from git history", file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("internal", "recent: git binary not found — this command reads creation "
+                       "dates from git history")
     if reason == "no-repo":
-        print("recent: catalogue root is not a git repository — no history "
-              "to read", file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("invalid_input",
+                       "recent: catalogue root is not a git repository — no history to read")
     # The catalogue root need not be a repo root: okf-tools/docs has exactly
     # that shape, so its own prefix is not necessarily empty.
     root_prefix = os.path.relpath(realroot, root_top).replace(os.sep, "/")

@@ -21,6 +21,7 @@ from okf import catalogue as okf_catalogue
 from okf import linkscan as okf_linkscan
 from okf import wikilinks as okf_wikilinks
 from tests.okf_testkit import _cli
+from okf.errors import EXIT_CODES
 
 
 class WikilinkFixtureMixin:
@@ -757,7 +758,7 @@ class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
 
     def test_missing_target_exits_one(self):
         out = _cli(self.tmp, "wikilinks", "nosuchbundle")
-        self.assertEqual(out.returncode, 1)
+        self.assertEqual(out.returncode, EXIT_CODES["not_found"])
         self.assertIn("nosuchbundle", out.stderr)
 
     def test_by_bundle_never_contradicts_the_link_list(self):
@@ -785,10 +786,12 @@ class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
         self._w("a/assets/note.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
         # iter_all_md prunes these names from `dirnames`, never from the
         # directory it is handed, so a target naming one scans it regardless.
-        for bad in ("..", ".", "./", "_plan", "a/_plan", "a/assets",
-                    "a/nosuchsubdir", "nosuchbundle"):
+        for bad, kind in (("..", "invalid_input"), (".", "invalid_input"),
+                          ("./", "invalid_input"), ("_plan", "invalid_input"),
+                          ("a/_plan", "invalid_input"), ("a/assets", "invalid_input"),
+                          ("a/nosuchsubdir", "not_found"), ("nosuchbundle", "not_found")):
             out = _cli(self.tmp, "wikilinks", bad)
-            self.assertEqual(out.returncode, 1, bad)
+            self.assertEqual(out.returncode, EXIT_CODES[kind], bad)
             self.assertRegex(out.stderr, r"not a (directory|scannable bundle path)", bad)
             self.assertIn(bad, out.stderr, bad)
 

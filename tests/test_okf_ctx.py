@@ -22,6 +22,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from okf import catalogue as okf_catalogue
+from okf.errors import EXIT_CODES
 from okf import ctx as okf_ctx
 from okf import linkscan as okf_linkscan
 from tests.okf_testkit import CtxFixtureMixin, E
@@ -208,22 +209,25 @@ class CtxListCreate(CtxFixtureMixin, unittest.TestCase):
     def test_create_errors_write_nothing(self):
         self._create("old", "b/one")
         cases = [
-            (("Bad", "b/one"), 'ctx: invalid slug "Bad": use lowercase letters, digits and hyphens'),
-            (("show", "b/one"), 'ctx: invalid slug "show": "show" is a reserved name'),
-            (("old", "b/two"), "ctx: old already exists"),
-            (("new",), "ctx: create needs at least one path"),
-            (("new", "b/one", "--import", "nofile.txt"), "ctx: import file not found: nofile.txt"),
+            (("Bad", "b/one"), "invalid_input",
+             'ctx: invalid slug "Bad": use lowercase letters, digits and hyphens'),
+            (("show", "b/one"), "invalid_input",
+             'ctx: invalid slug "show": "show" is a reserved name'),
+            (("old", "b/two"), "invalid_input", "ctx: old already exists"),
+            (("new",), "invalid_input", "ctx: create needs at least one path"),
+            (("new", "b/one", "--import", "nofile.txt"), "not_found",
+             "ctx: import file not found: nofile.txt"),
         ]
-        for argv, msg in cases:
+        for argv, kind, msg in cases:
             r = self._create(*argv)
-            self.assertEqual((r.returncode, r.stdout), (2, ""), argv)
+            self.assertEqual((r.returncode, r.stdout), (EXIT_CODES[kind], ""), argv)
             self.assertEqual(r.stderr.strip(), msg, argv)
         self.assertEqual(okf_catalogue.ctx_slugs(self.root), ["old"])
         self.assertEqual(len(okf_catalogue.load_ctx(self.root, "old")["entries"]), 1)
 
     def test_create_missing_paths_each_reported(self):
         r = self._create("new", "b/one", "b/x", "b/y")
-        self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.returncode, EXIT_CODES["not_found"])
         self.assertEqual(r.stderr.splitlines(), ["ctx: not found: b/x", "ctx: not found: b/y"])
         self.assertEqual(okf_catalogue.ctx_slugs(self.root), [])
 
@@ -269,13 +273,13 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
 
     def test_show_unknown_slug(self):
         r = self._cli("ctx", "show", "nope")
-        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertEqual((r.returncode, r.stdout), (EXIT_CODES["not_found"], ""))
         self.assertEqual(r.stderr.strip(), "ctx: unknown slug: nope")
 
     def test_show_dead_entry(self):
         self._kill_one()
         r = self._cli("ctx", "show", "demo")
-        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
         self.assertIn("  1. [DEAD] {}\n     why: start here\n".format(self.one), r.stdout)
         self.assertTrue(r.stdout.endswith(
             "WARNING: 1 dead entry — this list is incomplete; fix with `ctx edit demo`\n"))
@@ -317,7 +321,7 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
         import json
         self._kill_one()
         r = self._cli("ctx", "show", "demo", "--json")
-        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
         d = json.loads(r.stdout)
         self.assertEqual(d["dead"], 1)
         e = d["entries"][0]
@@ -348,7 +352,7 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
     def test_read_dead_exit_1(self):
         self._kill_one()
         r = self._cli("ctx", "read", "demo")
-        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
         self.assertTrue(r.stdout.startswith(
             "===== 1/2 [DEAD] {} =====\n===== 2/2 ".format(self.one)))
 
@@ -368,11 +372,12 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
         import json
         os.remove(self.out)
         r = self._cli("ctx", "show", "demo")
-        self.assertEqual(r.returncode, 1)
+        self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
         self.assertIn("  - [DEAD] {}\n     why: background\n".format(self.out), r.stdout)
         self.assertIn("WARNING: 1 dead entry", r.stdout)
         j = self._cli("ctx", "show", "demo", "--json")
-        self.assertEqual((j.returncode, json.loads(j.stdout)["dead"]), (1, 1))
+        self.assertEqual((j.returncode, json.loads(j.stdout)["dead"]),
+                         (EXIT_CODES["non_conformant"], 1))
 
     def test_show_orders_required_by_pos_not_file_order(self):
         self._w("_ctx/hand.md", okf_catalogue.render_ctx("hand", "", [
@@ -470,7 +475,8 @@ class CtxMaintain(CtxFixtureMixin, unittest.TestCase):
     def test_add_missing_file_refused(self):
         before = self._bytes()
         r = self._cli("ctx", "add", "demo", "b/nope.md")
-        self.assertEqual((r.returncode, r.stderr), (2, "ctx: not found: b/nope.md\n"))
+        self.assertEqual((r.returncode, r.stderr),
+                         (EXIT_CODES["not_found"], "ctx: not found: b/nope.md\n"))
         self.assertEqual(self._bytes(), before)
 
     # --- drop
@@ -490,7 +496,8 @@ class CtxMaintain(CtxFixtureMixin, unittest.TestCase):
     def test_drop_absent_refused(self):
         before = self._bytes()
         r = self._cli("ctx", "drop", "demo", "b/gone.md")
-        self.assertEqual((r.returncode, r.stderr), (2, "ctx: b/gone.md is not in demo\n"))
+        self.assertEqual((r.returncode, r.stderr),
+                         (EXIT_CODES["not_found"], "ctx: b/gone.md is not in demo\n"))
         self.assertEqual(self._bytes(), before)
 
     # --- move
@@ -526,14 +533,15 @@ class CtxMaintain(CtxFixtureMixin, unittest.TestCase):
 
     def test_move_refusals_leave_file_unchanged(self):
         before = self._bytes()
-        for argv, msg in (
-                (["b/one.md"], "ctx: move needs --pos or --mode\n"),
-                (["b/gone.md", "--pos", "1"], "ctx: b/gone.md is not in demo\n"),
+        for argv, msg, kind in (
+                (["b/one.md"], "ctx: move needs --pos or --mode\n", "invalid_input"),
+                (["b/gone.md", "--pos", "1"], "ctx: b/gone.md is not in demo\n", "not_found"),
                 (["b/one.md", "--pos", "1", "--mode", "nachschlag"],
-                 "ctx: --pos applies only to mode pflicht\n"),
-                (["ext/three.md", "--pos", "1"], "ctx: --pos applies only to mode pflicht\n")):
+                 "ctx: --pos applies only to mode pflicht\n", "invalid_input"),
+                (["ext/three.md", "--pos", "1"], "ctx: --pos applies only to mode pflicht\n",
+                 "invalid_input")):
             r = self._cli("ctx", "move", "demo", *argv)
-            self.assertEqual((r.returncode, r.stderr), (2, msg), argv)
+            self.assertEqual((r.returncode, r.stderr), (EXIT_CODES[kind], msg), argv)
             self.assertEqual(self._bytes(), before, argv)
 
     def test_sequences_keep_positions_gapless(self):
@@ -579,13 +587,15 @@ class CtxMaintain(CtxFixtureMixin, unittest.TestCase):
     def test_rename_refusals_move_nothing(self):
         okf_catalogue.save_ctx(self.root, {"slug": "other", "description": "", "entries": []})
         before = self._bytes()
-        for argv, msg in (
-                (["demo", "Bad_Slug"], 'ctx: invalid slug "Bad_Slug": use lowercase letters, digits and hyphens\n'),
-                (["demo", "list"], 'ctx: invalid slug "list": "list" is a reserved name\n'),
-                (["demo", "other"], "ctx: other already exists\n"),
-                (["nope", "fresh"], "ctx: unknown slug: nope\n")):
+        for argv, msg, kind in (
+                (["demo", "Bad_Slug"], 'ctx: invalid slug "Bad_Slug": use lowercase letters, digits and hyphens\n',
+                 "invalid_input"),
+                (["demo", "list"], 'ctx: invalid slug "list": "list" is a reserved name\n',
+                 "invalid_input"),
+                (["demo", "other"], "ctx: other already exists\n", "invalid_input"),
+                (["nope", "fresh"], "ctx: unknown slug: nope\n", "not_found")):
             r = self._cli("ctx", "rename", *argv)
-            self.assertEqual((r.returncode, r.stderr), (2, msg), argv)
+            self.assertEqual((r.returncode, r.stderr), (EXIT_CODES[kind], msg), argv)
             self.assertEqual(self._bytes(), before, argv)
         self.assertEqual(okf_catalogue.ctx_slugs(self.root), ["demo", "other"])
 
@@ -615,7 +625,8 @@ class CtxMaintain(CtxFixtureMixin, unittest.TestCase):
 
     def test_remove_unknown_slug_refused(self):
         r = self._cli("ctx", "remove", "nope")
-        self.assertEqual((r.returncode, r.stderr), (2, "ctx: unknown slug: nope\n"))
+        self.assertEqual((r.returncode, r.stderr),
+                         (EXIT_CODES["not_found"], "ctx: unknown slug: nope\n"))
 
 
 class CtxNavigate(CtxFixtureMixin, unittest.TestCase):
@@ -767,12 +778,12 @@ class CtxNavigate(CtxFixtureMixin, unittest.TestCase):
         self._set("b/one.md", "b/two.md")
         r = self._cli("ctx", "inbound", "demo", "--file", "zzz")
         self.assertEqual((r.returncode, r.stdout, r.stderr),
-                         (2, "", 'ctx: no entry in demo matches --file "zzz"\n'))
+                         (EXIT_CODES["not_found"], "", 'ctx: no entry in demo matches --file "zzz"\n'))
         self._w("c/two.md", "# T\n")
         self._set("b/two.md", "c/two.md")
         r = self._cli("ctx", "outbound", "demo", "--file", "two")
         self.assertEqual((r.returncode, r.stdout, r.stderr),
-                         (2, "", 'ctx: --file "two" matches several entries: b/two.md, c/two.md\n'))
+                         (EXIT_CODES["invalid_input"], "", 'ctx: --file "two" matches several entries: b/two.md, c/two.md\n'))
 
 
 class CtxEdit(CtxFixtureMixin, unittest.TestCase):
@@ -830,17 +841,18 @@ class CtxEdit(CtxFixtureMixin, unittest.TestCase):
 
     def test_errors_after_edit_exit_1(self):
         r = self._edit(EDITOR=self._editor("ed", self.bad))
-        self.assertEqual((r.returncode, r.stdout, r.stderr), (1, 
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (EXIT_CODES["non_conformant"],
             "ERROR    ctx                  _ctx/demo.md  (dead entry: b/gone.md)\n1 VIOLATIONS\n", ""))
 
     def test_editor_nonzero_exit(self):
         r = self._edit(EDITOR=self._editor("ed", self.good, rc=3))
-        self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", "ctx: editor exited 3\n"))
+        self.assertEqual((r.returncode, r.stdout, r.stderr),
+                         (EXIT_CODES["invalid_input"], "", "ctx: editor exited 3\n"))
 
     def test_unknown_slug_never_starts_editor(self):
         r = self._edit("nope", EDITOR=self._editor("ed", self.good))
         self.assertEqual((r.returncode, r.stdout, r.stderr),
-                         (2, "", "ctx: unknown slug: nope\n"))
+                         (EXIT_CODES["not_found"], "", "ctx: unknown slug: nope\n"))
         self.assertEqual(self._calls(), [])
 
     def test_index_refreshed_after_edit(self):

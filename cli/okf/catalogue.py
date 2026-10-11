@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
+from okf.errors import OkfError
 
 
 RESERVED = {"index.md", "log.md", "readme.md", "index-map.md"}
@@ -90,8 +91,7 @@ def require_bundle_dir(root, bundle):
     directory is not a bundle for listing purposes but is a real, printable
     directory, and refusing it here would break callers that name one."""
     if not os.path.isdir(os.path.join(root, os.path.normpath(bundle))):
-        print("not a directory: {}".format(bundle), file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("not_found", "not a directory: {}".format(bundle))
 
 
 # --- ctx: curated reading lists stored as _ctx/<slug>.md ---------------------
@@ -110,9 +110,8 @@ _CTX_INDEX_SKELETON = (
     "## Contents\n\n" + MARK_START + "\n" + MARK_END + "\n")
 
 
-def _ctx_die(msg):
-    print("ctx: {}".format(msg), file=sys.stderr)
-    sys.exit(2)
+def _ctx_die(msg, kind="invalid_input"):
+    raise OkfError(kind, "ctx: {}".format(msg))
 
 
 def ctx_dir(root):
@@ -252,7 +251,7 @@ def ctx_findings(root, ap, stale=False):
 def load_ctx(root, slug):
     f = ctx_file(root, slug)
     if not os.path.isfile(f):
-        _ctx_die("unknown slug: {}".format(slug))
+        _ctx_die("unknown slug: {}".format(slug), "not_found")
     desc, entries, problems = parse_ctx(read_file(f))
     return {"slug": slug, "description": desc, "entries": entries, "problems": problems}
 
@@ -533,11 +532,9 @@ def resolve_concept(root, path):
         idx = _find_reserved_name(os.listdir(as_dir), "index.md")
         if idx:
             return os.path.join(as_dir, idx)
-        print("not found: {} is a directory without an index.md".format(path),
-              file=sys.stderr)
-        sys.exit(1)
-    print("not found: {}".format(path), file=sys.stderr)
-    sys.exit(1)
+        raise OkfError("not_found",
+                       "not found: {} is a directory without an index.md".format(path))
+    raise OkfError("not_found", "not found: {}".format(path))
 
 
 def iter_headings(body):
@@ -917,7 +914,8 @@ def load_okf_config(root):
             try:
                 data = _parse_minimal_toml(f.read())
             except ValueError as e:
-                sys.exit("ERROR: {} is not valid TOML: {}".format(p, e))
+                raise OkfError("invalid_input",
+                               "ERROR: {} is not valid TOML: {}".format(p, e))
     else:
         with open(p, "rb") as f:
             try:
@@ -925,7 +923,8 @@ def load_okf_config(root):
             except tomllib.TOMLDecodeError as e:
                 # Every caller now reaches this on every run, so a parse failure has
                 # to name the file and the reason instead of printing a traceback.
-                sys.exit("ERROR: {} is not valid TOML: {}".format(p, e))
+                raise OkfError("invalid_input",
+                               "ERROR: {} is not valid TOML: {}".format(p, e))
     for k in ("kc_root", "types_source"):
         if isinstance(data.get(k), str):
             data[k] = os.path.expanduser(data[k])

@@ -5,6 +5,8 @@ BrokenPipe handling of its __main__ guard. The commands live in cli/okf/, one te
 Run: python3 -m unittest tests.test_okf_cli -v
 """
 import importlib.util
+import io
+import json
 import os
 import re
 import shutil
@@ -12,16 +14,21 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
+_ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from okf import catalogue as okf_catalogue
+from okf import errors as okf_errors
 from okf import fts as okf_fts
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
-
+from tests.okf_testkit import SyncFixtureMixin
 
 _spec = importlib.util.spec_from_file_location("okf_cli", os.path.join(_HERE, "okf-cli.py"))
 okf = importlib.util.module_from_spec(_spec)
@@ -55,14 +62,16 @@ class RootSafety(unittest.TestCase):
         # SC-001
         os.chdir(self.tmp)
         import sys as _sys
-        old_argv = _sys.argv
+        old_argv, old_stderr = _sys.argv, _sys.stderr
         _sys.argv = ["okf-cli.py", "find", "test"]
+        _sys.stderr = captured = io.StringIO()
         try:
             with self.assertRaises(SystemExit) as ctx:
                 okf.main()
         finally:
-            _sys.argv = old_argv
-        self.assertIn("--root", str(ctx.exception))
+            _sys.argv, _sys.stderr = old_argv, old_stderr
+        self.assertEqual(ctx.exception.code, okf_errors.EXIT_CODES["not_found"])
+        self.assertIn("--root", captured.getvalue())
 
     def test_auto_detect_okf_toml_marker(self):
         # SC-003
@@ -372,6 +381,146 @@ class MainExplicitRootMarkerWarning(unittest.TestCase):
                 os.chdir(old_cwd)
                 _sys.argv, _sys.stderr = old_argv, old_stderr
             self.assertNotIn("no catalogue marker", captured.getvalue())
+
+
+class ExitErrorMapping(unittest.TestCase):
+    def test_error_kinds_carry_their_table_code(self):
+        self.assertEqual(set(okf_errors.EXIT_CODES),
+                         {"internal", "invalid_input", "not_found", "non_conformant", "drift"})
+        self.assertEqual(len(set(okf_errors.EXIT_CODES.values())), 5)
+        for kind in okf_errors.EXIT_CODES:
+            error = okf_errors.OkfError(kind, "problem")
+            self.assertEqual((error.kind, error.message, error.code),
+                             (kind, "problem", okf_errors.EXIT_CODES[kind]))
+        with self.assertRaises(ValueError):
+            okf_errors.OkfError("unknown", "problem")
+
+    def test_main_maps_okf_error_without_losing_stdout(self):
+        def fail(_, __):
+            print("report")
+            raise okf_errors.OkfError("drift", "stale")
+
+        old_argv, old_stdout, old_stderr = sys.argv, sys.stdout, sys.stderr
+        sys.argv = ["okf-cli.py", "prime"]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        sys.stdout, sys.stderr = stdout, stderr
+        try:
+            with tempfile.TemporaryDirectory() as root:
+                with (mock.patch.object(okf, "COMMAND_DISPATCH", {"prime": fail}),
+                      mock.patch.object(okf, "catalogue_root", return_value=root)):
+                    with self.assertRaises(SystemExit) as raised:
+                        okf.main()
+        finally:
+            sys.argv, sys.stdout, sys.stderr = old_argv, old_stdout, old_stderr
+        self.assertEqual(raised.exception.code, okf_errors.EXIT_CODES["drift"])
+        self.assertEqual(stdout.getvalue(), "report\n")
+        self.assertEqual(stderr.getvalue(), "stale\n")
+
+    def test_unknown_flag_exits_two_with_or_without_json(self):
+        with tempfile.TemporaryDirectory() as root:
+            for argv in (["--root", root, "index", "--unknown"],
+                         ["--root", root, "index", "--json", "--unknown"]):
+                result = subprocess.run(
+                    [sys.executable, os.path.join(_HERE, "okf-cli.py"), *argv],
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2, result.stderr)
+
+    def test_unhandled_exception_exits_one(self):
+        program = """
+import importlib.util
+import sys
+sys.path.insert(0, {cli!r})
+spec = importlib.util.spec_from_file_location("entry", {entry!r})
+entry = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(entry)
+entry.COMMAND_DISPATCH = {{"prime": lambda _, __: (_ for _ in ()).throw(RuntimeError("broken"))}}
+sys.argv = ["okf-cli.py", "--root", {root!r}, "prime"]
+entry.main()
+"""
+        with tempfile.TemporaryDirectory() as root:
+            result = subprocess.run(
+                [sys.executable, "-c", program.format(
+                    cli=_HERE, entry=os.path.join(_HERE, "okf-cli.py"), root=root)],
+                cwd=root, capture_output=True, text=True)
+        self.assertEqual(result.returncode, okf_errors.EXIT_CODES["internal"], result.stderr)
+        self.assertIn("RuntimeError: broken", result.stderr)
+
+
+class ExitCodePerClass(unittest.TestCase):
+    """R-03 end to end: the real entry file against a throwaway catalogue. The
+    literal numbers are the specified contract, not a copy of the table."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root, True)
+        open(os.path.join(self.root, ".okf.toml"), "w").close()
+        os.makedirs(os.path.join(self.root, "b"))
+        self._w("b/one.md", "---\ntype: Concept\ndescription: d\n---\n# One\n")
+
+    def _w(self, rel, text):
+        with open(os.path.join(self.root, rel), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _cli(self, *argv):
+        return subprocess.run(
+            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", self.root, *argv],
+            capture_output=True, text=True)
+
+    def test_read_missing_concept_is_3(self):
+        r = self._cli("read", "b/missing")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (3, "", "not found: b/missing\n"))
+
+    def test_empty_result_is_0(self):
+        r = self._cli("find", "zzzznothingmatches")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        r = self._cli("list", "--type", "NoSuchType")
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_rejected_call_is_2(self):
+        r = self._cli("list")
+        self.assertEqual((r.returncode, r.stderr), (2, "(error: pass --type and/or --tag)\n"))
+
+    def test_check_violation_is_4_with_full_report_in_both_modes(self):
+        self._w("b/bad.md", "no frontmatter\n")
+        text = self._cli("check")
+        self.assertEqual(text.returncode, 4, text.stderr)
+        self.assertIn("VIOLATIONS", text.stdout)
+        js = self._cli("check", "--json")
+        self.assertEqual(js.returncode, 4, js.stderr)
+        self.assertTrue(json.loads(js.stdout)["errors"])
+
+    def test_reindex_check_stale_is_5(self):
+        self._w("b/index.md", "# B\n\n<!-- okf:index -->\nstale\n<!-- /okf:index -->\n")
+        r = self._cli("reindex", "b", "--check")
+        self.assertEqual(r.returncode, 5, r.stderr)
+        self.assertIn("STALE", r.stdout)
+        self.assertIn("reindex --check: 1 stale", r.stdout)
+
+    def test_tags_validate_unknown_is_4_with_report_known_is_0(self):
+        self._w("TAGS.md", "| Tag | Description |\n|---|---|\n| `known` | d |\n")
+        r = self._cli("tags", "--validate", "known", "ghost")
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertIn("UNKNOWN  ghost", r.stdout)
+        self.assertIn("1 UNKNOWN — register with", r.stdout)
+        r = self._cli("tags", "--validate", "known")
+        self.assertEqual((r.returncode, r.stdout), (0, "OK — all 1 known\n"))
+
+    def test_unknown_flag_is_2_in_both_modes(self):
+        for argv in (["check", "--nope"], ["check", "--json", "--nope"]):
+            self.assertEqual(self._cli(*argv).returncode, 2, argv)
+
+
+class SyncStatusDriftExit(SyncFixtureMixin, unittest.TestCase):
+    def test_outdated_block_is_5_with_report_in_both_modes(self):
+        self._insert()
+        self._w("kc-gov/ownership.md",
+                self._r("kc-gov/ownership.md").replace(self.OWNER_PAYLOAD, "Neuer Kanon.\n"))
+        for extra in ((), ("--json",)):
+            r = subprocess.run(
+                [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", self.tmp,
+                 "sync-status", *extra], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 5, r.stderr)
+            self.assertIn("source-changed", r.stdout)
 
 
 if __name__ == "__main__":

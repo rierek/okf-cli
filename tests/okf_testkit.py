@@ -14,6 +14,7 @@ from unittest import mock
 
 from okf import catalogue as okf_catalogue
 from okf import find as okf_find
+from okf.errors import OkfError
 from okf import sync as okf_sync
 
 
@@ -73,8 +74,8 @@ class SyncFixtureMixin:
         try:
             with contextlib.redirect_stdout(buf):
                 fn(self.tmp, argparse.Namespace(**kw))
-        except SystemExit as e:
-            code = e.code or 0
+        except OkfError as e:
+            code = e.code
         return buf.getvalue(), code
 
     def _insert(self, **over):

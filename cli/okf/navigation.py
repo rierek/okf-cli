@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+from okf.errors import OkfError
 
 from okf import linkscan
 from okf.catalogue import (
@@ -20,8 +21,7 @@ from okf.parser_support import (
 
 def cmd_list(root, args):
     if not args.type and not args.tag:
-        print("(error: pass --type and/or --tag)", file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("invalid_input", "(error: pass --type and/or --tag)")
     hits = []
     for _bundle, bp in resolve_scopes(
             root, args.scope, getattr(args, "include_archive", False)):
@@ -145,8 +145,7 @@ def cmd_refs(root, args):
         cand_scan = os.path.join(scan_root, args.path)
         target = cand_scan if os.path.exists(cand_scan) else os.path.join(root, args.path)
     if not os.path.exists(target):
-        sys.stderr.write("refs: target not found: {}\n".format(args.path))
-        sys.exit(2)
+        raise OkfError("not_found", "refs: target not found: {}".format(args.path))
     only_in = getattr(args, "only_in", False)
     only_out = getattr(args, "only_out", False)
     want_in, want_out = not only_out, not only_in

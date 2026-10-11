@@ -21,6 +21,7 @@ if _ROOT not in sys.path:
 
 from okf import catalogue as okf_catalogue
 from okf import check as okf_check
+from okf.errors import EXIT_CODES, OkfError
 from tests.okf_testkit import CtxFixtureMixin, E
 
 M0, M1 = okf_catalogue.MARK_START, okf_catalogue.MARK_END
@@ -77,9 +78,10 @@ class OkfConfig(unittest.TestCase):
         from unittest import mock
         self._w(".okf.toml", "this is not = = toml\n")
         with mock.patch.dict(sys.modules, {"tomllib": None}):
-            with self.assertRaises(SystemExit) as cm:
+            with self.assertRaises(OkfError) as cm:
                 okf_catalogue.load_okf_config(self.tmp)
-        self.assertIn(".okf.toml is not valid TOML", str(cm.exception))
+        self.assertEqual(cm.exception.kind, "invalid_input")
+        self.assertIn(".okf.toml is not valid TOML", cm.exception.message)
 
 
 class ListIndexableBundles(unittest.TestCase):
@@ -213,12 +215,14 @@ class ResolveConceptDirectoryFallback(unittest.TestCase):
 
     def test_directory_without_index_still_fails(self):
         os.makedirs(os.path.join(self.tmp, "empty"))
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(OkfError) as cm:
             okf_catalogue.resolve_concept(self.tmp, "empty")
+        self.assertEqual(cm.exception.kind, "not_found")
 
     def test_missing_reference_still_fails(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(OkfError) as cm:
             okf_catalogue.resolve_concept(self.tmp, "nope")
+        self.assertEqual((cm.exception.kind, cm.exception.message), ("not_found", "not found: nope"))
 
 
 class IterConceptsStagingPrune(unittest.TestCase):
@@ -497,12 +501,11 @@ class CtxLoadSave(CtxFixtureMixin, unittest.TestCase):
         self.assertTrue(idx.startswith("# Mine\n\nHand written.\n"))
         self.assertIn("(/_ctx/s.md)", idx)
 
-    def test_load_missing_slug_exits_2_with_message(self):
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+    def test_load_missing_slug_is_not_found_with_message(self):
+        with self.assertRaises(OkfError) as cm:
             okf_catalogue.load_ctx(self.root, "nope")
-        self.assertEqual(cm.exception.code, 2)
-        self.assertEqual(err.getvalue(), "ctx: unknown slug: nope\n")
+        self.assertEqual((cm.exception.kind, cm.exception.message),
+                         ("not_found", "ctx: unknown slug: nope"))
 
     def test_load_reports_parse_problems(self):
         self._w("_ctx/s.md", "---\ntype: Context\ndescription: d\n---\n\n# s\n")
@@ -642,7 +645,7 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
         self.assertEqual(self._f(ap), (self.SC01, []))
         self.assertEqual(self._run_checks_ctx(), (self.SC01, []))
         r = self._cli("ctx", "check")
-        self.assertEqual((r.returncode, r.stderr), (1, ""))
+        self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
         self.assertEqual(r.stdout.splitlines(), [
             "ERROR    ctx                  _ctx/demo.md  ({})".format(m) for m in self.SC01]
             + ["3 VIOLATIONS"])
@@ -737,9 +740,10 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
                          (0, "WARNING  ctx                  _ctx/good.md  (empty description)\n"
                              "OK — 0 violations\n"))
         r = self._cli("ctx", "check", "nope")
-        self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", "ctx: unknown slug: nope\n"))
+        self.assertEqual((r.returncode, r.stdout, r.stderr),
+                         (EXIT_CODES["not_found"], "", "ctx: unknown slug: nope\n"))
         r = self._cli("ctx", "check", "--json")
-        self.assertEqual((r.returncode, json.loads(r.stdout)), (1, {
+        self.assertEqual((r.returncode, json.loads(r.stdout)), (EXIT_CODES["non_conformant"], {
             "errors": [{"check": "ctx", "path": "_ctx/bad.md", "message": "dead entry: b/gone.md"}],
             "warnings": [{"check": "ctx", "path": "_ctx/good.md", "message": "empty description"}]}))
         ap = os.path.join(self.root, "_ctx", "good.md")

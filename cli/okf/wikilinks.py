@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import unicodedata
+from okf.errors import OkfError
 
 from okf.catalogue import RESERVED, iter_all_md, list_bundles, read_file, resolve_scopes
 from okf.linkscan import wikilink_regions, wikilink_scan_text
@@ -263,8 +264,7 @@ def cmd_wikilinks(root, args):
         segments = [s for s in norm.split("/") if s not in (".", "")]
         tp = os.path.join(root, norm)
         if not os.path.isdir(tp):
-            print("not a directory: {}".format(args.target), file=sys.stderr)
-            sys.exit(1)
+            raise OkfError("not_found", "not a directory: {}".format(args.target))
         # The target must name a bundle, or a subdirectory of one that
         # iter_all_md would actually traverse. Without this, `wikilinks ..`
         # walks out of the catalogue, and `wikilinks <bundle>/_plan` scans
@@ -273,8 +273,8 @@ def cmd_wikilinks(root, args):
         # directory it is handed as a starting point.
         excluded = [s for s in segments if s.startswith((".", "_")) or s == "assets"]
         if not segments or segments[0] not in list_bundles(root) or excluded:
-            print("not a scannable bundle path: {}".format(args.target), file=sys.stderr)
-            sys.exit(1)
+            raise OkfError("invalid_input",
+                           "not a scannable bundle path: {}".format(args.target))
     links = scan_wikilinks(root, args.target)
     totals = {"resolved": 0, "ambiguous": 0, "unresolved": 0}
     for r in links:
