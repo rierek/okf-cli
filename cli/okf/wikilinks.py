@@ -13,11 +13,12 @@ from okf.parser_support import _complete_scopes, _sub
 
 
 # --- wikilinks -------------------------------------------------------------
-# Obsidian's native link form. Every markdown-link scanner in this module
-# anchors on "](" (CROSSLINK_RE plus its three inline copies), so none of them
-# can see a [[…]] — a rename rewrites the markdown links, reports success and
-# silently orphans every inbound wikilink. Everything below is the wikilink
-# counterpart of that machinery: parse, resolve, report, rewrite.
+# Obsidian's native link form. The markdown-link scanners (okf.linkscan, with
+# CROSSLINK_RE in okf.catalogue) anchor on "](", so none of them can see a
+# [[…]] — a rename that rewrote only the markdown links would report success and
+# silently orphan every inbound wikilink. Everything below is the wikilink
+# counterpart of that machinery for reading: parse, resolve, report. The rewrite
+# half lives in okf.rename (plan_wikilink_rewrites, _apply_wikilink_rewrites).
 
 WIKILINK_RE = re.compile(r"(!?)\[\[([^\[\]\n]+)\]\]")
 

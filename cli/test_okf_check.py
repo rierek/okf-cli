@@ -19,6 +19,7 @@ if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks i
 
 from okf import catalogue as okf_catalogue
 from okf import check as okf_check
+from okf import rename as okf_rename
 from okf import sync as okf_sync
 from okf import tags as okf_tags
 from okf import wikilinks as okf_wikilinks
@@ -982,6 +983,106 @@ class SyncCheckValidators(SyncFixtureMixin, unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual([e for e in errors if e[0].startswith("sync")], [])
         self.assertEqual([w for w in warnings if w[0].startswith("sync")], [])
+
+
+class StagingContentRepair(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._w("b/published.md",
+                "---\ntype: Concept\ntitle: Published\n---\n"
+                "See [Old](old.md).\n<PLACEHOLDER>\nold/path\n")
+        self._w("b/_intake/staged.md",
+                "See [Old](../old.md).\n<PLACEHOLDER>\nold/path\n")
+        self._w("b/old.md", "---\ntype: Concept\ntitle: Old\n---\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_fix_crosslinks_reaches_staging(self):
+        touched, _ = okf_check.fix_crosslinks(self.tmp, "b")
+        self.assertEqual({p for p, _ in touched},
+                         {"b/published.md", "b/_intake/staged.md"})
+        self.assertIn("(/b/old.md)", self._r("b/_intake/staged.md"))
+
+    def test_fix_xml_tags_reaches_staging(self):
+        touched = okf_check.fix_xml_like_tags(self.tmp, "b")
+        self.assertEqual({p for p, _ in touched},
+                         {"b/published.md", "b/_intake/staged.md"})
+        self.assertIn("`<PLACEHOLDER>`", self._r("b/_intake/staged.md"))
+
+    def test_rewrite_path_reaches_staging(self):
+        touched = okf_rename.rewrite_path(self.tmp, "old/path", "new/path")
+        self.assertEqual({p for p, _ in touched},
+                         {"b/published.md", "b/_intake/staged.md"})
+        self.assertIn("new/path", self._r("b/_intake/staged.md"))
+
+    def test_reindex_and_check_prune_staging(self):
+        reindexed = _cli(self.tmp, "reindex", "b")
+        checked = _cli(self.tmp, "check", "b")
+        self.assertEqual(reindexed.returncode, 0, reindexed.stderr)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.assertNotIn("_intake/staged.md", reindexed.stdout)
+        self.assertNotIn("_intake/staged.md", checked.stdout)
+
+
+class SyncProtectedFromRewriters(SyncFixtureMixin, unittest.TestCase):
+    """A materialised payload is owned by its canon concept: no scanner
+    reports inside it and no rewriter touches it."""
+
+    OWNER_PAYLOAD = ("Siehe [details](../kc-proj/setup.md), [[setup]] und "
+                     "<info>.<other>.\n")
+
+    def setUp(self):
+        super().setUp()
+        self._w(".okf.toml", '[wikilinks]\nchecked_bundles = ["kc-proj"]\n')
+        self._insert()
+        self.consumer_before = self._r("kc-proj/setup.md")
+
+    def test_fix_crosslinks_leaves_the_block_byte_identical(self):
+        okf_check.fix_crosslinks(self.tmp, None)
+        self.assertEqual(self._r("kc-proj/setup.md"), self.consumer_before)
+
+    def test_fix_xml_tags_leaves_the_block_byte_identical(self):
+        okf_check.fix_xml_like_tags(self.tmp, None)
+        self.assertEqual(self._r("kc-proj/setup.md"), self.consumer_before)
+
+    def test_crosslink_and_xml_checks_report_nothing_for_the_consumer(self):
+        ctx = okf_check.gather_file_context(
+            self.tmp, "kc-proj", os.path.join(self.tmp, "kc-proj/setup.md"))
+        self.assertEqual(okf_check.check_crosslink_format(ctx), [])
+        self.assertEqual(okf_check.check_xml_like_tags(ctx), [])
+
+    def test_wikilink_in_a_synced_payload_is_not_scanned(self):
+        _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup.md"))
+        self.assertEqual(okf_wikilinks.parse_wikilinks(body), [])
+
+    def test_rename_leaves_the_payload_intact_and_rewrites_the_source(self):
+        expected = okf_sync.parse_sync_blocks(
+            okf_catalogue.split_frontmatter(self.consumer_before)[1])[0]["payload"]
+        okf_rename.perform_rename(self.tmp,
+                                  os.path.join(self.tmp, "kc-proj/setup.md"),
+                                  os.path.join(self.tmp, "kc-proj/setup2.md"),
+                                  apply=True, force=True)
+        # The payload wikilinks to the renamed concept and must NOT be
+        # rewritten: the owner's copy is the one that carries that link.
+        self.assertEqual(self._payload_of("kc-proj/setup2.md"), expected)
+        okf_rename.perform_rename(self.tmp,
+                                  os.path.join(self.tmp, "kc-gov/ownership.md"),
+                                  os.path.join(self.tmp, "kc-gov/canon/ownership.md"),
+                                  apply=True, force=True)
+        _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup2.md"))
+        self.assertEqual(okf_sync.parse_sync_blocks(body)[0]["source"],
+                         "/kc-gov/canon/ownership.md")
 
 
 if __name__ == "__main__":
