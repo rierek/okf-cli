@@ -168,12 +168,19 @@ Catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`. Relate
 
 ```bash
 just test     # unittest discovery over cli/test_*.py
+just build    # wheel and sdist into dist/ (uv build)
 just check    # conformance scan against a real catalogue
 just prime
 just setup    # the okf-cli install plan; add --apply to perform it
 ```
 
 `just test` must be green before anything in `cli/` or `mcp/` is committed. Tests never write into a real catalogue.
+
+`cli/okf-cli.py` is only the entry point: it builds the parser, resolves the catalogue root and dispatches. The commands live in the `cli/okf/` package; tests sit beside it as `cli/test_okf_<module>.py`, and `cli/test_okf_cli.py` covers the entry itself:
+
+- Shared foundation: `catalogue` (root, bundles, concepts, tags, configuration), `linkscan` (link and reference scan), `parser_support` (command registration helpers).
+- Commands, each module defining its `COMMANDS`: `navigation` (list, read, info, toc, visualize, refs), `prime`, `index` (index, reindex), `ctx`, `recent`, `find` (with `find_filters`), `fts` (build-index), `semantic` (build-semantic-index), `tags`, `check` (check, fix-crosslinks, fix-xml-tags), `wikilinks`, `sync`, `rename` (rename, archive, rewrite-path) and `install`.
+- `parser` merges the `COMMANDS` of every command module into the argparse parser; `entry_support` holds the BrokenPipe helper of the entry.
 
 ## Contributing
 

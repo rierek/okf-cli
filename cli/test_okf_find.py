@@ -3,8 +3,12 @@
 
 Run: python3 -m unittest test_okf_find -v
 """
+import argparse
+import contextlib
+import io
 import os
 import shutil
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -13,9 +17,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
     sys.path.insert(0, _HERE)
 
+from okf import catalogue as okf_catalogue
 from okf import find as okf_find
 from okf import find_filters as okf_find_filters
 from okf import fts as okf_fts
+from okf import parser as okf_parser
 from okf import semantic as okf_semantic
 from okf_testkit import run_find
 
@@ -1341,3 +1347,67 @@ class FindSupersededByField(unittest.TestCase):
         out = run_find(self.root, "tunnel")
         self.assertIn("type: Decision\nsuperseded_by: /b/new.md\npath: b/old",
                        out)
+
+
+class CorpusScopingTask1(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "canonical"))
+        os.makedirs(os.path.join(self.root, "topic"))
+        with open(os.path.join(self.root, ".okf.toml"), "w") as f:
+            f.write("bundle = \"canonical\"\n")
+        for bundle, cid, title in [("canonical", "main", "Canonical"), ("topic", "topic-only", "UniqueTopicNeedle")]:
+            with open(os.path.join(self.root, bundle, cid + ".md"), "w") as f:
+                f.write("---\ntype: Concept\ntitle: " + title + "\ndescription: d\ntags: []\n---\n" + title + "\n")
+            with open(os.path.join(self.root, bundle, "index.md"), "w") as f:
+                f.write("# " + bundle + "\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_default_filter_excludes_topic_from_broad_fts(self):
+        okf_fts.build_fts_index(self.root, include_topics=True)
+        filters = okf_find_filters.FindFilters(corpus_bundles=okf_catalogue.list_search_bundles(self.root))
+        ranked = okf_fts._fts_ranking(self.root, "UniqueTopicNeedle", 10, filters)
+        self.assertEqual(ranked, [])
+
+    def test_explicit_inclusion_returns_topic_from_broad_fts(self):
+        okf_fts.build_fts_index(self.root, include_topics=True)
+        filters = okf_find_filters.FindFilters(include_topics=True, corpus_bundles=okf_catalogue.list_search_bundles(self.root, True))
+        ranked = okf_fts._fts_ranking(self.root, "UniqueTopicNeedle", 10, filters)
+        self.assertEqual(ranked[0][0], "topic/topic-only")
+
+    def test_narrow_metadata_is_stale_for_topic_request(self):
+        okf_fts.build_fts_index(self.root, include_topics=False)
+        conn = sqlite3.connect(okf_fts._fts_db_path(self.root))
+        try:
+            self.assertTrue(okf_fts._fts_index_stale(self.root, conn, include_topics=True))
+        finally:
+            conn.close()
+
+    def test_topic_request_against_narrow_index_emits_only_rebuild_note(self):
+        okf_fts.build_fts_index(self.root, include_topics=False)
+        args = argparse.Namespace(
+            query="UniqueTopicNeedle", limit=10, scope=None, type=None,
+            tag=None, include_archive=False, include_topics=True,
+            breakdown=False)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            okf_find.cmd_find(self.root, args)
+        lexical_notes = [line for line in stderr.getvalue().splitlines()
+                         if line.startswith("note: lexical index")]
+        self.assertEqual(
+            lexical_notes,
+            ["note: lexical index excludes topic folders — run "
+             "`okf-cli build-index --include-topics`"])
+
+    def test_topic_request_without_fts_uses_wide_substring_scan(self):
+        filters = okf_find_filters.FindFilters(include_topics=True)
+        ranked = okf_find._substring_ranking(
+            self.root, "UniqueTopicNeedle", ["uniquetopicneedle"], 10, filters)
+        self.assertEqual(ranked[0]["path"], "topic/topic-only")
+
+    def test_parser_exposes_include_topics(self):
+        parser = okf_parser.build_parser()
+        self.assertTrue(parser.parse_args(["build-index", "--include-topics"]).include_topics)
+        self.assertTrue(parser.parse_args(["find", "needle", "--include-topics"]).include_topics)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Integration tests at the MCP -> subprocess boundary (T09 / okf-cli-asky).
 
-test_okf_cli.py loads okf-cli.py via importlib and calls functions directly
-(test_okf_cli.py:6-13) — it can never catch a B01-class break, which lives in
-argv marshalling across the process boundary (build_argv -> subprocess.run ->
+The per-module test files import the cli/okf/ modules and call their functions
+directly — they can never catch a B01-class break, which lives in argv
+marshalling across the process boundary (build_argv -> subprocess.run ->
 json.loads). These tests instead drive okf_mcp.run_okf, which shells out to
 the REAL cli/okf-cli.py, exactly as the MCP server does.
 
@@ -22,6 +22,8 @@ from unittest import mock
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
     sys.path.insert(0, _HERE)
+
+from okf import parser as okf_parser
 
 _spec = importlib.util.spec_from_file_location(
     "okf_mcp", os.path.join(_HERE, "..", "mcp", "okf_mcp.py"))
@@ -278,11 +280,7 @@ class McpSurfaceParity(unittest.TestCase):
     a command renamed on one side only — the drift class of okf-cli-4ws6."""
 
     def test_whitelist_only_names_real_cli_commands(self):
-        spec = importlib.util.spec_from_file_location(
-            "okf_cli", os.path.join(_HERE, "okf-cli.py"))
-        okf = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(okf)
-        unknown = sorted(set(mcp._COMMANDS) - set(okf.COMMAND_DISPATCH))
+        unknown = sorted(set(mcp._COMMANDS) - set(okf_parser.COMMAND_DISPATCH))
         self.assertEqual(unknown, [])
 
 

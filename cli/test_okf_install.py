@@ -26,6 +26,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
     sys.path.insert(0, _HERE)
 
+from okf import install as okf_install_cmd
+from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
 
 
@@ -37,7 +39,6 @@ def _load(name, filename):
 
 
 inst = _load("okf_install", "okf_install.py")
-okf = _load("okf_cli", "okf-cli.py")
 HAS_ARGCOMPLETE = importlib.util.find_spec("argcomplete") is not None
 
 _STUB_HEAD = ('#!%s\nimport json, os, re, sys, time\n'
@@ -936,9 +937,9 @@ class CommandLine(unittest.TestCase):
                               capture_output=True, text=True, env=self.env, timeout=60)
 
     def test_install_is_registered_exempt_from_the_catalogue_and_dispatchable(self):
-        self.assertIn("install", okf.CATALOGUE_FREE)
-        self.assertLessEqual(okf.CATALOGUE_FREE, set(okf.COMMAND_DISPATCH))
-        okf.build_parser()  # registration fills COMMAND_GROUPS
+        self.assertIn("install", okf_install_cmd.CATALOGUE_FREE)
+        self.assertLessEqual(okf_install_cmd.CATALOGUE_FREE, set(okf_parser.COMMAND_DISPATCH))
+        okf_parser.build_parser()  # registration fills COMMAND_GROUPS
         self.assertEqual(okf_parser_support.COMMAND_GROUPS["install"], "maintenance")
 
     def test_plan_runs_with_no_catalogue_and_no_root(self):
