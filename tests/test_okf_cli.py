@@ -403,9 +403,11 @@ class ExitErrorMapping(unittest.TestCase):
         stdout, stderr = io.StringIO(), io.StringIO()
         sys.stdout, sys.stderr = stdout, stderr
         try:
-            with mock.patch.object(okf, "COMMAND_DISPATCH", {"prime": fail}):
-                with self.assertRaises(SystemExit) as raised:
-                    okf.main()
+            with tempfile.TemporaryDirectory() as root:
+                with (mock.patch.object(okf, "COMMAND_DISPATCH", {"prime": fail}),
+                      mock.patch.object(okf, "catalogue_root", return_value=root)):
+                    with self.assertRaises(SystemExit) as raised:
+                        okf.main()
         finally:
             sys.argv, sys.stdout, sys.stderr = old_argv, old_stdout, old_stderr
         self.assertEqual(raised.exception.code, okf_errors.EXIT_CODES["drift"])
