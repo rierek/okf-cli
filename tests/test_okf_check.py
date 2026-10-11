@@ -25,13 +25,23 @@ if _ROOT not in sys.path:
 
 from okf import catalogue as okf_catalogue
 from okf import check as okf_check
+from okf.diffs import write_plan
 from okf.errors import EXIT_CODES
 from okf import rename as okf_rename
 from okf import sync as okf_sync
 from okf import tags as okf_tags
 from okf import wikilinks as okf_wikilinks
+from tests.git_preview import HAS_GIT, GitPreviewMixin
 from tests.okf_testkit import SyncFixtureMixin, _cli, _scan, needs_case_insensitive_fs
 from tests.test_okf_wikilinks import WikilinkFixtureMixin
+
+
+def _applied(planner, root, *args, **kwargs):
+    """Run a fix planner, write its plan and return its result unchanged. The plan is the third
+    entry of fix_crosslinks' result and the second of the others."""
+    result = planner(root, *args, **kwargs)
+    write_plan(root, result[2] if len(result) == 4 else result[1])
+    return result
 
 
 class CheckCommand(unittest.TestCase):
@@ -422,7 +432,7 @@ class FixCrosslinksCommand(unittest.TestCase):
     def test_writes_rewritten_files_by_default(self):
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Y](y.md)\n")
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b")
+        touched, unresolved, _plan, _skipped = _applied(okf_check.fix_crosslinks, self.tmp, "b")
         self.assertEqual(len(touched), 1)
         self.assertEqual(unresolved, [])
         content = self._r("b/x.md")
@@ -433,20 +443,20 @@ class FixCrosslinksCommand(unittest.TestCase):
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Y](y.md)\n")
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
         before = self._r("b/x.md")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b", dry_run=True)
+        touched, unresolved, _plan, _skipped = okf_check.fix_crosslinks(self.tmp, "b")
         self.assertEqual(len(touched), 1)
         self.assertEqual(self._r("b/x.md"), before)
 
     def test_reserved_file_is_not_rewritten(self):
         self._w("b/index.md", "# B\n\n[X](x.md)\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b")
+        touched, unresolved, _plan, _skipped = _applied(okf_check.fix_crosslinks, self.tmp, "b")
         self.assertNotIn("b/index.md", [t[0] for t in touched])
         self.assertIn("(x.md)", self._r("b/index.md"))
 
     def test_unresolved_links_are_reported(self):
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Ghost](ghost.md)\n")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b")
+        touched, unresolved, _plan, _skipped = _applied(okf_check.fix_crosslinks, self.tmp, "b")
         self.assertEqual(touched, [])
         self.assertIn(("b/x.md", "ghost.md"), unresolved)
 
@@ -455,7 +465,7 @@ class FixCrosslinksCommand(unittest.TestCase):
         self._w("b/index.md",
                 "# B\n\n[Rel](y.md)\n\n[Legacy](/y.md)\n\n" + block + "\n")
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        touched, unresolved, _plan, _skipped = _applied(okf_check.fix_crosslinks, self.tmp, "b", include_reserved=True)
         self.assertIn("b/index.md", [t[0] for t in touched])
         content = self._r("b/index.md")
         self.assertIn(block, content)
@@ -465,21 +475,21 @@ class FixCrosslinksCommand(unittest.TestCase):
     def test_include_reserved_rewrites_reserved_file_without_marker(self):
         self._w("b/index.md", "# B\n\n[Y](y.md)\n")
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        touched, unresolved, _plan, _skipped = _applied(okf_check.fix_crosslinks, self.tmp, "b", include_reserved=True)
         self.assertIn("b/index.md", [t[0] for t in touched])
         self.assertIn("[Y](/b/y.md)", self._r("b/index.md"))
 
     def test_include_reserved_does_not_change_non_reserved_behavior(self):
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n[Y](y.md)\n")
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        touched, unresolved, _plan, _skipped = _applied(okf_check.fix_crosslinks, self.tmp, "b", include_reserved=True)
         self.assertEqual(len(touched), 1)
         self.assertIn("[Y](/b/y.md)", self._r("b/x.md"))
 
     def test_include_reserved_protects_unterminated_marker(self):
         self._w("b/index.md", "[Y](y.md)\n\n<!-- okf:index -->\n[Z](y.md)\n")
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        touched, unresolved, _plan, _skipped = _applied(okf_check.fix_crosslinks, self.tmp, "b", include_reserved=True)
         content = self._r("b/index.md")
         self.assertIn("[Y](/b/y.md)", content)
         self.assertIn("<!-- okf:index -->\n[Z](y.md)\n", content)
@@ -488,15 +498,15 @@ class FixCrosslinksCommand(unittest.TestCase):
         self._w("b/index.md", "[Y](y.md)\n")
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
         before = self._r("b/index.md")
-        touched, unresolved = okf_check.fix_crosslinks(
-            self.tmp, "b", dry_run=True, include_reserved=True)
+        touched, unresolved, _plan, _skipped = okf_check.fix_crosslinks(
+            self.tmp, "b", include_reserved=True)
         self.assertIn("b/index.md", [t[0] for t in touched])
         self.assertEqual(self._r("b/index.md"), before)
 
     def test_include_reserved_ignores_index_exempt_marker(self):
         self._w("b/index.md", "<!-- okf:index-exempt -->\n[Y](y.md)\n")
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
-        touched, unresolved = okf_check.fix_crosslinks(self.tmp, "b", include_reserved=True)
+        touched, unresolved, _plan, _skipped = _applied(okf_check.fix_crosslinks, self.tmp, "b", include_reserved=True)
         self.assertIn("b/index.md", [t[0] for t in touched])
         self.assertIn("[Y](/b/y.md)", self._r("b/index.md"))
 
@@ -1039,19 +1049,19 @@ class StagingContentRepair(unittest.TestCase):
             return f.read()
 
     def test_fix_crosslinks_reaches_staging(self):
-        touched, _ = okf_check.fix_crosslinks(self.tmp, "b")
+        touched, _, _, _ = _applied(okf_check.fix_crosslinks, self.tmp, "b")
         self.assertEqual({p for p, _ in touched},
                          {"b/published.md", "b/_intake/staged.md"})
         self.assertIn("(/b/old.md)", self._r("b/_intake/staged.md"))
 
     def test_fix_xml_tags_reaches_staging(self):
-        touched = okf_check.fix_xml_like_tags(self.tmp, "b")
+        touched, _, _ = _applied(okf_check.fix_xml_like_tags, self.tmp, "b")
         self.assertEqual({p for p, _ in touched},
                          {"b/published.md", "b/_intake/staged.md"})
         self.assertIn("`<PLACEHOLDER>`", self._r("b/_intake/staged.md"))
 
     def test_rewrite_path_reaches_staging(self):
-        touched = okf_rename.rewrite_path(self.tmp, "old/path", "new/path")
+        touched, _, _ = _applied(okf_rename.rewrite_path, self.tmp, "old/path", "new/path")
         self.assertEqual({p for p, _ in touched},
                          {"b/published.md", "b/_intake/staged.md"})
         self.assertIn("new/path", self._r("b/_intake/staged.md"))
@@ -1079,11 +1089,11 @@ class SyncProtectedFromRewriters(SyncFixtureMixin, unittest.TestCase):
         self.consumer_before = self._r("kc-proj/setup.md")
 
     def test_fix_crosslinks_leaves_the_block_byte_identical(self):
-        okf_check.fix_crosslinks(self.tmp, None)
+        _applied(okf_check.fix_crosslinks, self.tmp, None)
         self.assertEqual(self._r("kc-proj/setup.md"), self.consumer_before)
 
     def test_fix_xml_tags_leaves_the_block_byte_identical(self):
-        okf_check.fix_xml_like_tags(self.tmp, None)
+        _applied(okf_check.fix_xml_like_tags, self.tmp, None)
         self.assertEqual(self._r("kc-proj/setup.md"), self.consumer_before)
 
     def test_crosslink_and_xml_checks_report_nothing_for_the_consumer(self):
@@ -1392,6 +1402,44 @@ class SuppressRules(unittest.TestCase):
                 r = _cli(self.tmp, "check")
                 self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
                 self.assertIn(self.KC_ERROR, r.stdout)
+
+
+@unittest.skipUnless(HAS_GIT, "git not installed")
+class FixVerbPreviewEqualsGitDiff(GitPreviewMixin, unittest.TestCase):
+    """OKFT-d6an SC-01 — per file, the `--check` preview of fix-crosslinks (with and without
+    --include-reserved) and fix-xml-tags equals the `git diff` after the write run; a file that is not
+    valid UTF-8 is reported and never rewritten."""
+
+    FILES = {
+        "b/x.md": b"---\ntype: Concept\ntitle: X\n---\n[Y](y.md)\n" + b"line\n" * 20 + b"<PLACEHOLDER> [Y](y.md)\n",
+        "b/y.md": b"---\ntype: Concept\ntitle: Y\n---\n# Y\n",
+        "b/sub/crlf.md": b"---\r\ntype: Concept\r\ntitle: C\r\n---\r\n[Y](../y.md)\r\n<A.B>\r\n",
+        "b/nonl.md": b"---\ntype: Concept\ntitle: N\n---\n[Y](y.md) <TAG>",
+        "b/index.md": b"# B\n\n[Rel](y.md)\n\n<!-- okf:index -->\n* [Y](y.md)\n<!-- /okf:index -->\n",
+        "b/latin.md": b"---\ntype: Concept\ntitle: L\n---\n[Y](y.md) <TAG> caf\xe9\n",
+    }
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_preview_equals_git_diff_after_write_run(self):
+        for verb, extra in (("fix-crosslinks", []), ("fix-crosslinks", ["--include-reserved"]),
+                            ("fix-xml-tags", [])):
+            with self.subTest(verb=verb, extra=extra):
+                shutil.rmtree(self.tmp, ignore_errors=True)
+                os.makedirs(self.tmp)
+                self.commit_files(self.tmp, self.FILES)
+                preview = self.assert_preview_equals_git_diff(
+                    self.tmp,
+                    lambda: self.json_files(self.tmp, verb, "b", "--check", *extra),
+                    lambda: self.json_files(self.tmp, verb, "b", *extra))
+                paths = [f["path"] for f in preview]
+                self.assertEqual(paths, sorted(paths))
+                self.assertNotIn("b/latin.md", paths)
+                with open(os.path.join(self.tmp, "b/latin.md"), "rb") as f:
+                    self.assertEqual(f.read(), self.FILES["b/latin.md"])
+                self.assertEqual("b/index.md" in paths, bool(extra))
 
 
 if __name__ == "__main__":

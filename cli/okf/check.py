@@ -6,6 +6,7 @@ from collections import namedtuple
 import os
 import re
 
+from okf.diffs import unified_diffs, write_plan
 from okf.errors import OkfError
 from okf import spec, spec_check, sync, wikilinks
 from okf.history import History
@@ -13,8 +14,8 @@ from okf.output import _add_output, _note
 from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE,
     _mask_managed_block, _split_managed_block, ctx_findings, fm_text, index_h1_and_desc,
-    iter_all_md, load_okf_config, load_tags, load_types, read_file, read_frontmatter, resolve_scopes,
-    flow_tags, tags_of, write_file,
+    iter_all_md, load_okf_config, load_tags, load_types, read_file, read_file_verbatim,
+    read_frontmatter, resolve_scopes, flow_tags, tags_of,
 )
 from okf.parser_support import _complete_files, _complete_scopes, _sub
 from okf.sync import classify_sync_block, parse_canon_blocks, parse_sync_blocks
@@ -279,16 +280,22 @@ def check_xml_like_tags(ctx):
     return ["angle-bracket placeholder(s) not in code-fence: {}".format(", ".join(sorted(set(hits))))] if hits else []
 
 
-def fix_xml_like_tags(root, target, dry_run=False):
+def fix_xml_like_tags(root, target):
     """Wrap angle-bracket placeholder chains in inline code across every
     non-reserved .md under `target` (bundle or bundle/subdir, or the whole
-    catalogue when None). Returns [(rel, count), ...]."""
-    touched = []
+    catalogue when None). Writes nothing. Returns (touched, plan, skipped):
+    touched = [(rel, count), ...], plan = [(rel, stored_text, new_text), ...],
+    skipped = [rel, ...] of files that are not valid UTF-8."""
+    touched, plan, skipped = [], [], []
     for bundle, bp in resolve_scopes(root, target):
         for ap in iter_all_md(bp, prune_staging=False):
             if os.path.basename(ap).lower() in RESERVED:
                 continue
-            text = read_file(ap)
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            text = read_file_verbatim(ap)
+            if text is None:
+                skipped.append(rel)
+                continue
             split = read_frontmatter(text)
             head, body = split.head, split.body
             masked, tokens = _mask_code_spans(body)
@@ -305,11 +312,16 @@ def fix_xml_like_tags(root, target, dry_run=False):
             new_masked = XML_TAG_CHAIN_RE.sub(repl, masked)
             new_body = _unmask(new_masked, tokens)
             if count:
-                rel = os.path.relpath(ap, root).replace(os.sep, "/")
                 touched.append((rel, count))
-                if not dry_run:
-                    write_file(ap, head + new_body)
-    return touched
+                plan.append((rel, text, head + new_body))
+    return touched, plan, skipped
+
+
+def _print_fix_report(files, skipped):
+    for entry in files:
+        print(entry["diff"], end="")
+    for rel in skipped:
+        print("skipped        {}  (not valid UTF-8)".format(rel))
 
 
 def cmd_fix_xml_tags(root, args):
@@ -318,13 +330,14 @@ def cmd_fix_xml_tags(root, args):
         tp = os.path.join(root, target.rstrip("/"))
         if not os.path.isdir(tp):
             raise OkfError("not_found", "not a directory: {}".format(target))
-    touched = fix_xml_like_tags(root, target, dry_run=args.check)
+    touched, plan, skipped = fix_xml_like_tags(root, target)
+    files = unified_diffs(plan)
+    if not args.check:
+        write_plan(root, plan)
     verb = "would wrap" if args.check else "wrapped"
     if getattr(args, "json", False):
-        return {"applied": not args.check,
-                "files": [{"path": rel, "chains": n} for rel, n in touched]}
-    for rel, n in touched:
-        print("{:<12} {}  ({} chain(s))".format(verb, rel, n))
+        return {"applied": not args.check, "files": files, "skipped": skipped}
+    _print_fix_report(files, skipped)
     print("fix-xml-tags: {} file(s) {}, {} chain(s) total".format(
         len(touched), verb, sum(n for _, n in touched)))
 
@@ -427,7 +440,7 @@ def rewrite_crosslinks_in_body(root, bundle, cdir, body):
     return new_body, changed, unresolved
 
 
-def fix_crosslinks(root, target, dry_run=False, include_reserved=False):
+def fix_crosslinks(root, target, include_reserved=False):
     """Rewrite crosslinks in every non-reserved .md under `target` (bundle or
     bundle/subdir, or the whole catalogue when None) to catalogue-root-absolute
     form. `include_reserved=True` (D-fxcr-01) additionally rewrites RESERVED
@@ -436,19 +449,23 @@ def fix_crosslinks(root, target, dry_run=False, include_reserved=False):
     the block itself is never handed to the rewriter, so it stays
     byte-identical. Default (`include_reserved=False`) leaves RESERVED files
     untouched, unchanged from before this parameter existed. Returns
-    (touched, unresolved): touched = [(rel, changed_count), ...],
-    unresolved = [(rel, target), ...]."""
-    touched, unresolved = [], []
+    (touched, unresolved, plan, skipped): writes nothing. touched = [(rel, changed_count), ...],
+    unresolved = [(rel, target), ...], plan = [(rel, stored_text, new_text), ...],
+    skipped = [rel, ...] of files that are not valid UTF-8."""
+    touched, unresolved, plan, skipped = [], [], [], []
     for bundle, bp in resolve_scopes(root, target):
         for ap in iter_all_md(bp, prune_staging=False):
             is_reserved = os.path.basename(ap).lower() in RESERVED
             if is_reserved and not include_reserved:
                 continue
-            text = read_file(ap)
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            text = read_file_verbatim(ap)
+            if text is None:
+                skipped.append(rel)
+                continue
             split = read_frontmatter(text)
             head, body = split.head, split.body
             cdir = os.path.dirname(os.path.relpath(ap, bp))
-            rel = os.path.relpath(ap, root).replace(os.sep, "/")
             if is_reserved:
                 before, block, after = _split_managed_block(body)
                 new_before, changed_before, unres_before = rewrite_crosslinks_in_body(
@@ -464,9 +481,8 @@ def fix_crosslinks(root, target, dry_run=False, include_reserved=False):
                 unresolved.append((rel, u))
             if changed:
                 touched.append((rel, changed))
-                if not dry_run:
-                    write_file(ap, head + new_body)
-    return touched, unresolved
+                plan.append((rel, text, head + new_body))
+    return touched, unresolved, plan, skipped
 
 
 def cmd_fix_crosslinks(root, args):
@@ -475,15 +491,16 @@ def cmd_fix_crosslinks(root, args):
         tp = os.path.join(root, target.rstrip("/"))
         if not os.path.isdir(tp):
             raise OkfError("not_found", "not a directory: {}".format(target))
-    touched, unresolved = fix_crosslinks(root, target, dry_run=args.check,
-                                          include_reserved=args.include_reserved)
+    touched, unresolved, plan, skipped = fix_crosslinks(
+        root, target, include_reserved=args.include_reserved)
+    files = unified_diffs(plan)
+    if not args.check:
+        write_plan(root, plan)
     verb = "would rewrite" if args.check else "rewrote"
     if getattr(args, "json", False):
-        return {"applied": not args.check,
-                "files": [{"path": rel, "links": n} for rel, n in touched],
+        return {"applied": not args.check, "files": files, "skipped": skipped,
                 "unresolved": [{"path": rel, "target": tgt} for rel, tgt in unresolved]}
-    for rel, n in touched:
-        print("{:<14} {}  ({} link(s))".format(verb, rel, n))
+    _print_fix_report(files, skipped)
     for rel, tgt in unresolved:
         print("unresolved     {}  -> {}".format(rel, tgt))
     print("fix-crosslinks: {} file(s) {}, {} unresolved link(s)".format(

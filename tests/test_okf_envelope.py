@@ -692,11 +692,13 @@ class IndexBuilds(WriteFixture):
 class LinkFixes(WriteFixture):
     def test_fix_crosslinks_preview_then_apply(self):
         preview = self.ok("fix-crosslinks", "--check")["data"]
-        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/inline.md", "links": 1}],
-                                   "unresolved": []})
+        self.assertEqual([(f["path"], f["old_path"]) for f in preview["files"]], [("kc-a/inline.md", None)])
+        self.assertTrue(preview["files"][0]["diff"].startswith("--- a/kc-a/inline.md\n+++ b/kc-a/inline.md\n"))
+        self.assertEqual((preview["applied"], preview["unresolved"], preview["skipped"]), (False, [], []))
         self.assertIn("](beta.md)", self.read("kc-a/inline.md"))
         text = self.text("fix-crosslinks", "--check")
-        self.assertIn("would rewrite  kc-a/inline.md  (1 link(s))", text)
+        self.assertIn("--- a/kc-a/inline.md\n+++ b/kc-a/inline.md\n", text)
+        self.assertIn("fix-crosslinks: 1 file(s) would rewrite, 0 unresolved link(s)", text)
         applied = self.ok("fix-crosslinks")["data"]
         self.assertEqual((applied["applied"], applied["files"]), (True, preview["files"]))
         self.assertIn("](/kc-a/beta.md)", self.read("kc-a/inline.md"))
@@ -708,7 +710,9 @@ class LinkFixes(WriteFixture):
 
     def test_fix_xml_tags_preview_then_apply(self):
         preview = self.ok("fix-xml-tags", "--check")["data"]
-        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/inline.md", "chains": 1}]})
+        self.assertEqual([(f["path"], f["old_path"]) for f in preview["files"]], [("kc-a/inline.md", None)])
+        self.assertIn("+", preview["files"][0]["diff"])
+        self.assertEqual((preview["applied"], preview["skipped"]), (False, []))
         self.assertIn(" <tag> ", self.read("kc-a/inline.md"))
         self.assertEqual(self.ok("fix-xml-tags")["data"]["applied"], True)
         self.assertIn("`<tag>`", self.read("kc-a/inline.md"))
@@ -721,7 +725,8 @@ class LinkFixes(WriteFixture):
     def test_rewrite_path_preview_then_apply(self):
         self._w("kc-a/refs.md", "---\ntype: Note\ntitle: R\ndescription: d\n---\n\n# R\n\nsee old/place.md twice: old/place.md\n")
         preview = self.ok("rewrite-path", "old/place.md", "new/place.md", "--check")["data"]
-        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/refs.md", "count": 2}]})
+        self.assertEqual([(f["path"], f["old_path"]) for f in preview["files"]], [("kc-a/refs.md", None)])
+        self.assertEqual((preview["applied"], preview["skipped"]), (False, []))
         self.assertIn("old/place.md", self.read("kc-a/refs.md"))
         self.assertEqual(self.ok("rewrite-path", "old/place.md", "new/place.md")["data"]["applied"], True)
         self.assertNotIn("old/place.md", self.read("kc-a/refs.md"))

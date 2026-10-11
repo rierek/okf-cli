@@ -24,7 +24,9 @@ from okf import catalogue as okf_catalogue
 from okf import linkscan as okf_linkscan
 from okf import rename as okf_rename
 from okf import wikilinks as okf_wikilinks
+from okf.diffs import write_plan
 from okf.errors import OkfError
+from tests.git_preview import HAS_GIT, GitPreviewMixin
 from tests.okf_testkit import needs_case_insensitive_fs
 from tests.test_okf_wikilinks import WikilinkFixtureMixin
 
@@ -56,7 +58,8 @@ class RewritePath(unittest.TestCase):
     def test_rewrites_across_md_and_code(self):
         self._w("README.md", "docs live at docs/notes.md today\n")
         self._w("app.py", "# see docs/notes.md for details\n")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/demo-okf/notes.md")
+        touched, plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/demo-okf/notes.md")
+        write_plan(self.tmp, plan)
         self.assertEqual(sorted(t[0] for t in touched), ["README.md", "app.py"])
         self.assertIn("docs/demo-okf/notes.md", self._r("README.md"))
         self.assertIn("docs/demo-okf/notes.md", self._r("app.py"))
@@ -64,24 +67,25 @@ class RewritePath(unittest.TestCase):
     def test_dry_run_writes_nothing_but_reports(self):
         self._w("README.md", "docs/notes.md\n")
         before = self._r("README.md")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md", dry_run=True)
+        touched, _plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
         self.assertEqual(touched, [("README.md", 1)])
         self.assertEqual(self._r("README.md"), before)
 
     def test_prunes_git_and_node_modules(self):
         self._w(".git/config", "docs/notes.md\n")
         self._w("node_modules/x.js", "docs/notes.md\n")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        touched, _plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
         self.assertEqual(touched, [])
 
     def test_counts_multiple_occurrences(self):
         self._w("a.txt", "docs/notes.md and docs/notes.md again\n")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        touched, _plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
         self.assertEqual(touched, [("a.txt", 2)])
 
     def test_does_not_touch_substring_collision(self):
         self._w("a.txt", "my-docs/notes.md and docs/notes.md-old and docs/notes.md\n")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        touched, plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        write_plan(self.tmp, plan)
         self.assertEqual(touched, [("a.txt", 1)])            # only the standalone path
         self.assertIn("my-docs/notes.md", self._r("a.txt"))  # prefix-collision untouched
         self.assertIn("docs/notes.md-old", self._r("a.txt")) # suffix-collision untouched
@@ -1428,6 +1432,38 @@ class GitMvBeyondSymlink(unittest.TestCase):
         # there is no second repository to name — the report must not claim
         # one (point 3: the two causes share a surface but not a report).
         self.assertNotIn("repository differs from --root", out)
+
+
+@unittest.skipUnless(HAS_GIT, "git not installed")
+class RewritePathPreviewEqualsGitDiff(GitPreviewMixin, unittest.TestCase):
+    """OKFT-d6an SC-01 — the `--check` preview of rewrite-path, paths relative to its --scan-root
+    (a git repository outside the catalogue root), equals the `git diff` after the write run."""
+
+    FILES = {
+        "README.md": b"docs live at docs/notes.md today\n" + b"x\n" * 20 + b"and docs/notes.md again\n",
+        "src/app.py": b"# see docs/notes.md for details",
+        "crlf.txt": b"docs/notes.md\r\nmore\r\n",
+        "latin.txt": b"docs/notes.md caf\xe9\n",
+    }
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.catalogue = os.path.join(self.tmp, "cat")
+        self.repo = os.path.join(self.tmp, "repo")
+        os.makedirs(self.catalogue)
+        os.makedirs(self.repo)
+
+    def test_preview_equals_git_diff_after_write_run(self):
+        self.commit_files(self.repo, self.FILES)
+        args = ("rewrite-path", "docs/notes.md", "docs/x.md", "--scan-root", self.repo)
+        preview = self.assert_preview_equals_git_diff(
+            self.repo,
+            lambda: self.json_files(self.catalogue, *args, "--check"),
+            lambda: self.json_files(self.catalogue, *args))
+        self.assertEqual([f["path"] for f in preview], ["README.md", "crlf.txt", "src/app.py"])
+        with open(os.path.join(self.repo, "latin.txt"), "rb") as f:
+            self.assertEqual(f.read(), self.FILES["latin.txt"])
 
 
 if __name__ == "__main__":

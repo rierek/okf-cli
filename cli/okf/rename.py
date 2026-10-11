@@ -8,6 +8,7 @@ import subprocess
 from okf.errors import OkfError
 from okf.output import _add_output, _note
 
+from okf.diffs import unified_diffs, write_plan
 from okf import catalogue, check, linkscan, wikilinks
 from okf.catalogue import (
     CROSSLINK_RE, RESERVED, SYNC_OPEN_LIT, SYNC_OPEN_RE, _prune_walk_dirs, ctx_memberships,
@@ -23,38 +24,45 @@ REWRITE_EXTS = (".md", ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".rb",
                 ".yml", ".yaml", ".toml", ".json", ".txt", ".rst", ".cfg", ".ini", ".sh")
 
 
-def rewrite_path(scan_root, old, new, dry_run=False):
+def rewrite_path(scan_root, old, new):
     """Literal old->new path-string replace across text files under scan_root
     (covers non-markdown references markdown tooling can't see). Prunes .git,
-    node_modules, dotdirs. Returns [(rel_path, count), ...]."""
-    touched = []
+    node_modules, dotdirs. Writes nothing. Returns (touched, plan, skipped):
+    touched = [(rel_path, count), ...], plan = [(rel_path, stored_text, new_text), ...],
+    skipped = [rel_path, ...] of files that are not valid UTF-8."""
+    touched, plan, skipped = [], [], []
+    pat = re.compile(r"(?<![\w./-])" + re.escape(old) + r"(?![\w./-])")
     for dirpath, dirnames, filenames in os.walk(scan_root):
         _prune_walk_dirs(dirnames)
         for fn in filenames:
             if not fn.endswith(REWRITE_EXTS):
                 continue
             ap = os.path.join(dirpath, fn)
-            text = read_file(ap)
-            pat = re.compile(r"(?<![\w./-])" + re.escape(old) + r"(?![\w./-])")
-            n = len(pat.findall(text))
-            if not n:
+            rel = os.path.relpath(ap, scan_root).replace(os.sep, "/")
+            text = read_file_verbatim(ap)
+            if text is None:
+                skipped.append(rel)
                 continue
-            if not dry_run:
-                with open(ap, "w", encoding="utf-8") as f:
-                    f.write(pat.sub(lambda _m: new, text))
-            touched.append((os.path.relpath(ap, scan_root).replace(os.sep, "/"), n))
-    return touched
+            new_text, n = pat.subn(lambda _m: new, text)
+            if n:
+                touched.append((rel, n))
+                plan.append((rel, text, new_text))
+    return touched, plan, skipped
 
 
 def cmd_rewrite_path(root, args):
     scan_root = os.path.abspath(args.scan_root) if getattr(args, "scan_root", None) else root
     dry = getattr(args, "check", False)
-    touched = rewrite_path(scan_root, args.old, args.new, dry_run=dry)
+    touched, plan, skipped = rewrite_path(scan_root, args.old, args.new)
+    files = unified_diffs(plan)
+    if not dry:
+        write_plan(scan_root, plan)
     if getattr(args, "json", False):
-        return {"applied": not dry, "files": [{"path": rel, "count": n} for rel, n in touched]}
-    verb = "would rewrite" if dry else "rewrote"
-    for rel, n in touched:
-        print("{} {} ({}x)".format(verb, rel, n))
+        return {"applied": not dry, "files": files, "skipped": skipped}
+    for entry in files:
+        print(entry["diff"], end="")
+    for rel in skipped:
+        print("skipped        {}  (not valid UTF-8)".format(rel))
     print("{} file(s) {}".format(len(touched), "affected (dry-run)" if dry else "written"))
 
 
