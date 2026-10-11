@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/recent.py — the add-event parser, repository grouping,
-ranking, rendering and the recent command. Stdlib unittest, no deps.
+ranking, rendering and the recent command. unittest.
 
 Run: just test tests.test_okf_recent -v
 """

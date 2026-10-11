@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/sync.py — canon and sync block parsing, classification and
-the sync-insert, sync-status and sync-update commands. Stdlib unittest, no deps.
+the sync-insert, sync-status and sync-update commands. unittest.
 Run: just test tests.test_okf_sync -v
 """
 import os

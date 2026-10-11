@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/navigation.py — the list, read, info, toc, visualize and refs
-commands. Stdlib unittest, no deps.
+commands. unittest.
 
 Run: just test tests.test_okf_navigation -v
 """

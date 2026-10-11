@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/index.py — the index and reindex commands, the bundle
-summary renderers and the flat-index migration. Stdlib unittest, no deps.
+summary renderers and the flat-index migration. unittest.
 
 Run: just test tests.test_okf_index -v
 """

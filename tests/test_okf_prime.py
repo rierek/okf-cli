@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/prime.py — the prime command: onboarding guide, live catalogue
-state and bundle listing. Stdlib unittest, no deps.
+state and bundle listing. unittest.
 
 Run: just test tests.test_okf_prime -v
 """

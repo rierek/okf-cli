@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for cli/okf/find_filters.py — the filters every search arm shares. Stdlib unittest, no deps.
+"""Tests for cli/okf/find_filters.py — the filters every search arm shares. unittest.
 
 Run: just test tests.test_okf_find_filters -v
 """

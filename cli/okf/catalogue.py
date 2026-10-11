@@ -191,10 +191,11 @@ def parse_ctx(text):
     return desc, entries, problems
 
 
-def render_ctx(slug, description, entries):
-    out = ['---', 'type: ' + CTX_TYPE,
-           'description: "{}"'.format(description.replace('"', '\\"')), '---', '',
-           '# ' + slug, '', '| pos | mode | path | comment |', '|---|---|---|---|']
+def render_ctx(slug, description, entries, existing=None):
+    """The full text of a ctx file. `existing` is the text of the file it replaces: its frontmatter keeps
+    every other key, comment and quoting style, and its description stays as written when the text is
+    unchanged. Without it (or when its frontmatter does not parse) the writer starts a new block."""
+    out = ['', '# ' + slug, '', '| pos | mode | path | comment |', '|---|---|---|---|']
     for e in entries:
         p = e["path"]
         if p.startswith(("~", "/")):
@@ -204,7 +205,14 @@ def render_ctx(slug, description, entries):
         comment = re.sub(r"\r?\n", " ", e["comment"]).replace("|", "\\|")
         out.append("| {} | {} | {} | {} |".format("-" if e["pos"] is None else e["pos"],
                                                    e["mode"], cell, comment))
-    return "\n".join(out) + "\n"
+    fm = read_frontmatter(existing or "")
+    if fm.data is None:
+        fm = Frontmatter("", CommentedMap(), None, "")
+    if fm_text(fm.data, "type") != CTX_TYPE:
+        fm.data["type"] = CTX_TYPE
+    if "description" not in fm.data or fm_text(fm.data, "description") != description:
+        fm.data["description"] = description
+    return render_frontmatter(fm._replace(body="\n".join(out) + "\n"))
 
 
 def ctx_findings(root, ap, stale=False):
@@ -275,7 +283,9 @@ def save_ctx(root, ctx):
     for e in rest:
         e["pos"] = None
     os.makedirs(ctx_dir(root), exist_ok=True)
-    write_file(ctx_file(root, ctx["slug"]), render_ctx(ctx["slug"], ctx["description"], pf + rest))
+    path = ctx_file(root, ctx["slug"])
+    existing = read_file(path) if os.path.isfile(path) else None
+    write_file(path, render_ctx(ctx["slug"], ctx["description"], pf + rest, existing))
     idx = os.path.join(ctx_dir(root), "index.md")
     if not os.path.exists(idx):
         write_file(idx, _CTX_INDEX_SKELETON)
@@ -466,14 +476,29 @@ def read_frontmatter(text):
     cut = end + len(FM_DELIM) + 1
     head, body = text[:cut], text[cut:]
     try:
-        data = YAML_RT.load(text[len(FM_DELIM):end])
+        data = YAML_RT.load(text[len(FM_DELIM):end + 1])
     except (YAMLError, ValueError) as error:
         return Frontmatter(head, None, _yaml_reason(error), body)
     if data is None:
         data = CommentedMap()
+        data.fa.set_block_style()  # an empty block, not the `{}` of a block that wrote one
     if not isinstance(data, CommentedMap):
         return Frontmatter(head, None, "block is not a mapping", body)
     return Frontmatter(head, data, None, body)
+
+
+def render_frontmatter(fm):
+    """The complete file text of `fm`: the opening delimiter, the YAML dump of `fm.data` through the
+    reader's instance, the closing delimiter and `fm.body` unchanged. A block that read as empty, or
+    lost its last key, renders as an empty block; one that wrote `{}` keeps it. An empty `fm.head` gives a
+    new block of its own, both delimiter lines ending in a newline, in front of the body. Raises
+    ValueError when there is no mapping to render."""
+    if fm.data is None:
+        raise ValueError("no frontmatter mapping to render" + (": " + fm.error if fm.error else ""))
+    dump = io.StringIO()
+    if fm.data or fm.data.fa.flow_style() is not False:
+        YAML_RT.dump(fm.data, dump)
+    return "---\n" + dump.getvalue() + ("---" if fm.head else "---\n") + fm.body
 
 
 def read_file(ap):

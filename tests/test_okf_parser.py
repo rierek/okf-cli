@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/parser.py — the parser builder, the command directory, help
-conformance and shell completion. Stdlib unittest, no deps.
+conformance and shell completion. unittest.
 
 Run: just test tests.test_okf_parser -v
 """

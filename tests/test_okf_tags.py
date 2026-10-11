@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/tags.py — the tag verbs and the auto-embedding of newly
-registered tags. Stdlib unittest, no deps.
+registered tags. unittest.
 Run: just test tests.test_okf_tags -v
 """
 import os
@@ -81,22 +81,13 @@ class RemoveTags(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             okf_tags.cmd_remove_tags(self.tmp, args)
 
-    def test_field_removal_block_form(self):
-        text = "---\ntype: Concept\ntitle: X\ntags:\n  - a\n  - b\n---\n# X\n"
-        out = okf_tags.remove_tags_field(text)
-        self.assertNotIn("tags:", out)
-        self.assertIn("title: X", out)
-        self.assertIn("# X", out)
-
-    def test_field_removal_inline_form(self):
-        text = "---\ntype: Concept\ntags: [a, b]\ntitle: X\n---\n# X\n"
-        out = okf_tags.remove_tags_field(text)
-        self.assertNotIn("tags:", out)
-        self.assertNotIn("[a, b]", out)
-        self.assertIn("title: X", out)
-
-    def test_field_removal_no_tags_returns_none(self):
-        self.assertIsNone(okf_tags.remove_tags_field("---\ntype: Concept\ntitle: X\n---\n# X\n"))
+    def test_removing_the_last_tag_removes_the_key_and_nothing_else(self):
+        for tags in ("tags:\n  - only\n", "tags: [only]\n"):
+            with self.subTest(tags=tags):
+                ap = self._w("b/x.md", "---\ntype: Concept\n" + tags + "title: X   # keep\n---\n# X\n")
+                self._run(["only"])
+                self.assertEqual(open(ap, encoding="utf-8").read(),
+                                 "---\ntype: Concept\ntitle: X   # keep\n---\n# X\n")
 
     def test_removes_one_keeps_others(self):
         ap = self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - keep\n  - drop\n---\n# X\n")
@@ -104,13 +95,6 @@ class RemoveTags(unittest.TestCase):
         new = open(ap, encoding="utf-8").read()
         self.assertIn("  - keep", new)
         self.assertNotIn("drop", new)
-
-    def test_emptying_strips_tags_field(self):
-        ap = self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - only\n---\n# X\n")
-        self._run(["only"])
-        new = open(ap, encoding="utf-8").read()
-        self.assertNotIn("tags:", new)
-        self.assertIn("title: X", new)
 
     def test_dry_run_writes_nothing(self):
         original = "---\ntype: Concept\ntitle: X\ntags:\n  - drop\n---\n# X\n"
@@ -239,6 +223,104 @@ class TagVerbsHonourWhere(unittest.TestCase):
         for name, run in self.verbs():
             with self.subTest(verb=name):
                 self.assertEqual(run("type = Pattern"), ["b/other.md"])
+
+
+class TagVerbsWriteThroughTheWriter(unittest.TestCase):
+    """R-11 — merge-tags, remove-tags and normalize-tags edit the round-trip mapping and render it
+    through render_frontmatter: a write changes only the targeted key and keeps every comment,
+    quoting style and the body."""
+
+    LONG = "word " * 40 + "end"
+    FRONT = ("---\n# header comment\ntype: Note   # kind\ntitle: \"Quoted\"\ndescription: " + LONG +
+             "\ntags:\n  - alpha\n  - beta   # keep me\n  - \"gamma delta\"\n"
+             "generated: {by: x, at: 2026-10-09T00:00:00Z}\n---\n\nbody `alpha` text\n")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+        return ap
+
+    def _text(self, ap):
+        with open(ap, encoding="utf-8") as f:
+            return f.read()
+
+    def _verb(self, cmd, apply=True, **extra):
+        import contextlib
+        import io
+        import types
+        args = types.SimpleNamespace(where=None, apply=apply, json=False, **extra)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            cmd(self.tmp, args)
+        return out.getvalue()
+
+    def test_merge_changes_only_the_tag_line(self):
+        ap = self._w("b/x.md", self.FRONT)
+        self._verb(okf_tags.cmd_merge_tags, tags=["alpha"], into="omega")
+        self.assertEqual(self._text(ap), self.FRONT.replace("  - alpha\n", "  - omega\n"))
+
+    def test_merge_keeps_the_position_and_drops_a_repeated_tag(self):
+        ap = self._w("b/x.md", "---\ntype: Note\ntags:\n  - a\n  - b\n  - c\n---\n")
+        self._verb(okf_tags.cmd_merge_tags, tags=["a", "c"], into="z")
+        self.assertEqual(self._text(ap), "---\ntype: Note\ntags:\n  - z\n  - b\n---\n")
+
+    def test_merge_keeps_a_flow_list_a_flow_list(self):
+        ap = self._w("b/x.md", "---\ntype: Note\ntags: [alpha, \"b c\"]\n---\n")
+        self._verb(okf_tags.cmd_merge_tags, tags=["alpha"], into="omega")
+        self.assertEqual(self._text(ap), "---\ntype: Note\ntags: [omega, \"b c\"]\n---\n")
+
+    def test_without_apply_nothing_is_written_and_the_lines_say_would_rewrite(self):
+        ap = self._w("b/x.md", self.FRONT)
+        out = self._verb(okf_tags.cmd_merge_tags, apply=False, tags=["alpha"], into="omega")
+        self.assertEqual(self._text(ap), self.FRONT)
+        self.assertIn("would rewrite  b/x.md", out)
+        self.assertIn("merge-tags: 1 file(s) would rewrite, 0 unparseable — alpha -> omega", out)
+
+    def test_remove_drops_the_tag_and_keeps_everything_else(self):
+        ap = self._w("b/x.md", self.FRONT)
+        self._verb(okf_tags.cmd_remove_tags, tags=["alpha"])
+        self.assertEqual(self._text(ap), self.FRONT.replace("  - alpha\n", ""))
+
+    def test_normalize_turns_a_flow_list_into_a_block_list_and_keeps_quotes(self):
+        ap = self._w("b/x.md", "---\ntype: Note   # kind\ntags: [alpha, \"b c\"]\ntitle: T\n---\nbody\n")
+        self._verb(okf_tags.cmd_normalize_tags)
+        self.assertEqual(self._text(ap),
+                         "---\ntype: Note   # kind\ntags:\n  - alpha\n  - \"b c\"\ntitle: T\n---\nbody\n")
+
+    def test_normalize_leaves_a_block_list_and_an_empty_list_alone(self):
+        a = self._w("b/a.md", "---\ntype: Note\ntags:\n- x\n---\n")
+        b = self._w("b/b.md", "---\ntype: Note\ntags: []\n---\n")
+        out = self._verb(okf_tags.cmd_normalize_tags)
+        self.assertEqual((self._text(a), self._text(b)), ("---\ntype: Note\ntags:\n- x\n---\n",
+                                                           "---\ntype: Note\ntags: []\n---\n"))
+        self.assertIn("normalize-tags: 0 file(s) rewrote", out)
+
+    def test_a_file_whose_frontmatter_fails_to_parse_is_listed_and_left_unwritten(self):
+        bad = "---\ntype: Note\ndescription: a: b\ntags:\n  - alpha\n---\nbody\n"
+        for name, cmd, extra in (("merge-tags", okf_tags.cmd_merge_tags, dict(tags=["alpha"], into="omega")),
+                                 ("remove-tags", okf_tags.cmd_remove_tags, dict(tags=["alpha"]))):
+            with self.subTest(verb=name):
+                ap = self._w("b/bad.md", bad)
+                out = self._verb(cmd, **extra)
+                self.assertEqual(self._text(ap), bad)
+                self.assertIn("unparseable    b/bad.md  (frontmatter does not parse: mapping values are not "
+                              "allowed here (line 3, column 15) — skipped)", out)
+        ap = self._w("b/bad.md", "---\ntype: Note\ntags: [a\n---\n")
+        self._verb(okf_tags.cmd_normalize_tags)
+        self.assertEqual(self._text(ap), "---\ntype: Note\ntags: [a\n---\n")
+
+    def test_a_tags_value_that_is_not_a_list_is_listed_and_left_unwritten(self):
+        text = "---\ntype: Note\ntags: alpha, beta\n---\nbody\n"
+        ap = self._w("b/odd.md", text)
+        out = self._verb(okf_tags.cmd_merge_tags, tags=["alpha"], into="omega")
+        self.assertEqual(self._text(ap), text)
+        self.assertIn("unparseable    b/odd.md  (tags field not in inline/block form — skipped)", out)
 
 
 if __name__ == "__main__":

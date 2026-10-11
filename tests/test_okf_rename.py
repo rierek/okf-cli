@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/rename.py — the rename, archive and rewrite-path commands:
 the reference rewrite plan and its writers, the git move, the archive guards and
-the literal path-string rewrite. Stdlib unittest, no deps.
+the literal path-string rewrite. unittest.
 
 Run: just test tests.test_okf_rename -v
 """

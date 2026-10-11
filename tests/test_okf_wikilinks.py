@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/wikilinks.py — the `[[…]]` parser, the basename index and
-resolver, and the wikilinks command. Stdlib unittest, no deps.
+resolver, and the wikilinks command. unittest.
 Run: just test tests.test_okf_wikilinks -v
 """
 import json

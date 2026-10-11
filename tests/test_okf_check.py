@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/check.py — the conformance scan: its rules, the check
-engine, and the fix-crosslinks and fix-xml-tags repairs. Stdlib unittest, no deps.
+engine, and the fix-crosslinks and fix-xml-tags repairs. unittest.
 
 Run: just test tests.test_okf_check -v
 """

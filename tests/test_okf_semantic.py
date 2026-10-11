@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for cli/okf/semantic.py — the semantic arm: query embedding, cosine ranking, tag expansion and coverage. Stdlib unittest, no deps.
+"""Tests for cli/okf/semantic.py — the semantic arm: query embedding, cosine ranking, tag expansion and coverage. unittest.
 
 Run: just test tests.test_okf_semantic -v
 """

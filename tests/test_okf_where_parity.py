@@ -2,7 +2,7 @@
 """Parity of `--where` with the removed `--type` / `--tag` / `--scope` / `--include-archive`
 flags (OKFT-zpom). PINNED holds the concept set each old-flag invocation returned on this
 fixture, captured on the pre-removal tree (milestone/0.2 at b87f1e7); the test asserts the
-`--where` equivalent returns the same set. Stdlib unittest, no deps.
+`--where` equivalent returns the same set. unittest.
 
 Run: just test tests.test_okf_where_parity -v
 """

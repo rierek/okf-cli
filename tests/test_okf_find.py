@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for cli/okf/find.py — the find command: filters across arms, lexical and semantic hand-over, fusion, degradation notes. Stdlib unittest, no deps.
+"""Tests for cli/okf/find.py — the find command: filters across arms, lexical and semantic hand-over, fusion, degradation notes. unittest.
 
 Run: just test tests.test_okf_find -v
 """

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `okf-cli install` (okf_install.py) — stdlib unittest, no deps.
+"""Tests for `okf-cli install` (okf_install.py) — unittest.
 
 Every test runs in a tmp HOME with a PATH that holds only stub binaries: nothing
 touches the real home, the real PATH or a real harness. Stub CLIs (claude,

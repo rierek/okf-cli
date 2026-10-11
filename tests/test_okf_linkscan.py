@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for cli/okf/linkscan.py — link scanning. Stdlib unittest, no deps.
+"""Tests for cli/okf/linkscan.py — link scanning. unittest.
 
 Run: just test tests.test_okf_linkscan -v
 """
