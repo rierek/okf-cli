@@ -434,16 +434,11 @@ class FindFilters:
             return False
         if self.tree is None:
             return True
-        loaded = []
 
+        @functools.cache
         def load():
-            if not loaded:
-                ap = os.path.join(root, path + ".md")
-                if not os.path.isfile(ap):
-                    raise FileNotFoundError(ap)
-                text = read_file(ap)
-                loaded.append((split_frontmatter(text)[0], text))
-            return loaded[0]
+            text = read_file(os.path.join(root, path + ".md"))  # raises when the file is gone
+            return split_frontmatter(text)[0], text
 
         try:
             return _evaluate(self.tree, path, load)

@@ -11,7 +11,7 @@ import urllib.request
 
 from okf import catalogue
 from okf.catalogue import iter_concepts, list_indexable_bundles
-from okf.find_filters import EMB_FILTER_COLUMNS, FindFilters
+from okf.find_filters import EMB_FILTER_COLUMNS
 from okf.output import _add_output, _note
 from okf.parser_support import _sub
 
@@ -40,7 +40,7 @@ def _tagvec_db_path(root):
     return os.path.join(root, ".tagvec", "tag_vectors.sqlite")
 
 
-def _load_concept_vectors(db_path, model, filters=None):
+def _load_concept_vectors(db_path, model, filters):
     """([(path, [float, ...]), ...], residual) for every concept_emb row of
     `model`, or (None, _) if the cache file/table is absent or has no rows for
     this model (the graceful-skip signal semantic_ranking() acts on).
@@ -52,7 +52,6 @@ def _load_concept_vectors(db_path, model, filters=None):
     meaningful: a concept the expression excludes never occupies a slot it
     would then be dropped from (B01). The returned `residual` carries the other
     conjuncts for the caller to apply."""
-    filters = FindFilters() if filters is None else filters  # not `or`: an empty value still carries the corpus
     where, where_params, residual = filters.sql_where(EMB_FILTER_COLUMNS)
     if not os.path.isfile(db_path):
         return None, residual

@@ -1007,21 +1007,17 @@ def resolve_scopes(root, target, include_archive=False, indexable_only=False):
     epic is about narrowing. `cmd_list` stays wide too (Q03, undecided by
     design — raised to the PO, not this function).
 
-    When include_archive is set, each resolved scope's archived counterpart
-    is appended too, labelled `_archive/<bundle>[...]` and pointing at the
-    real `_archive/...` directory below root — a caller that walks the
+    When include_archive is set on an unscoped call, every bundle registered
+    under `_archive/` is appended, labelled `_archive/<bundle>` and pointing at
+    the real `_archive/...` directory below root — a caller that walks the
     returned pairs reaches the archive without a second traversal shape, and
     a hit's path stays its true position below root (AC3: `okf-cli read` on
-    it resolves, SC-02). Unscoped, every bundle registered under `_archive/`
-    is reached this way too, including one with no active counterpart — the
+    it resolves, SC-02). That includes a bundle with no active counterpart — the
     same discovery R-05/R-06's wikilink basename index already does for the
     archive (build_concept_basename_index, above; that function's traversal
     is independent of this one and always stays wide — resolution never
-    narrows regardless of `indexable_only` here). Scoped, the archived
-    counterpart is derived WITHOUT an existence check, same as the active
-    side already does for a scoped target: a directory that turns out not to
-    exist yields no concepts from iter_concepts()'s os.walk, silently, the
-    same contract as always — no special-casing needed here for that."""
+    narrows regardless of `indexable_only` here). A scoped call never
+    appends the archive: `--where` replaced the scoped-archive flags."""
     def _bundles(r, config_r=None):
         return (list_indexable_bundles(r, config_r) if indexable_only
                 else list_bundles(r))
@@ -1037,7 +1033,6 @@ def resolve_scopes(root, target, include_archive=False, indexable_only=False):
             if rel.startswith(".."):
                 return [("", tp)]
             scopes = [(rel.split("/")[0], tp)]
-            norm = rel
         else:
             # normpath otherwise: an unnormalised `./a` yielded bundle "." and
             # silently defeated every bundle-name-keyed rule (the wikilink
@@ -1046,22 +1041,17 @@ def resolve_scopes(root, target, include_archive=False, indexable_only=False):
             norm = os.path.normpath(target).replace(os.sep, "/").strip("/")
             if norm in (".", ""):
                 scopes = [(b, os.path.join(root, b)) for b in _bundles(root)]
-                norm = None
             else:
                 scopes = [(norm.split("/")[0], os.path.join(root, norm))]
     else:
         scopes = [(b, os.path.join(root, b)) for b in _bundles(root)]
-        norm = None
-    if not include_archive:
-        return scopes
+    if not include_archive or target:
+        return scopes  # the archive is reached unscoped only; no caller scopes it
     archive_root = os.path.join(root, "_archive")
-    if norm is None:
-        if not os.path.isdir(archive_root):
-            return scopes
-        return scopes + [("_archive/" + b, os.path.join(archive_root, b))
-                         for b in _bundles(archive_root, root)]
-    return scopes + [("_archive/" + norm.split("/")[0],
-                      os.path.join(archive_root, norm))]
+    if not os.path.isdir(archive_root):
+        return scopes
+    return scopes + [("_archive/" + b, os.path.join(archive_root, b))
+                     for b in _bundles(archive_root, root)]
 
 
 def read_file_verbatim(abspath):

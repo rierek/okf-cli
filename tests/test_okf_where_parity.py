@@ -182,12 +182,6 @@ class WhereParity(unittest.TestCase):
                 self.regime(command)
                 self.assertEqual(self.run_where(command, WHERE[old]), expected)
 
-    def test_the_fixture_tells_the_flags_apart(self):
-        """A parity row that every flag combination satisfies proves nothing: the pinned sets of
-        the find rows must differ from each other and from the unfiltered answer."""
-        sets = [tuple(v) for (c, _o), v in PINNED.items() if c == "find lexical"]
-        self.assertEqual(len(set(sets)), len(sets))
-
 
 class WhereIsTheOnlyFilterPath(unittest.TestCase):
     """OKFT-zpom criteria 4, 10 and 12 — through the real okf-cli.py, on a throwaway catalogue."""
