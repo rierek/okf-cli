@@ -24,6 +24,15 @@ from okf import check as okf_check
 from okf.errors import EXIT_CODES, OkfError
 from tests.okf_testkit import CtxFixtureMixin, E
 
+
+def _scan(root, target, **kw):
+    """okf_check.run_checks, split by each finding's own severity into
+    (errors, warnings), each a list of (rule, path, message)."""
+    findings = okf_check.run_checks(root, target, **kw)
+    return ([(f.rule, f.path, f.message) for f in findings if f.severity == "error"],
+            [(f.rule, f.path, f.message) for f in findings if f.severity == "warning"])
+
+
 M0, M1 = okf_catalogue.MARK_START, okf_catalogue.MARK_END
 
 
@@ -602,7 +611,7 @@ class CtxSaveEffects(CtxFixtureMixin, unittest.TestCase):
 
     def test_check_reports_nothing_for_ctx(self):
         self._save_full()
-        errors, warnings = okf_check.run_checks(self.root, None)
+        errors, warnings = _scan(self.root, None)
         names = ("kc/asset/entry-file-description", "kc/asset/placement", "kc/type/registered")
         bad = [x for x in errors + warnings if x[0] in names and "_ctx" in repr(x)]
         self.assertEqual(bad, [])
@@ -629,7 +638,7 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
         return okf_catalogue.ctx_findings(self.root, ap, **kw)
 
     def _run_checks_ctx(self):
-        errs, warns = okf_check.run_checks(self.root, None)
+        errs, warns = _scan(self.root, None)
         return ([(n, m) for n, _, m in errs if n.startswith("kc/ctx/")],
                 [(n, m) for n, _, m in warns if n.startswith("kc/ctx/")])
 
@@ -761,10 +770,11 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
                          (EXIT_CODES["not_found"], "", "ctx: unknown slug: nope\n"))
         r = self._cli("ctx", "check", "--json")
         self.assertEqual((r.returncode, json.loads(r.stdout)), (EXIT_CODES["non_conformant"], {
-            "errors": [{"check": "kc/ctx/dead-entry", "path": "_ctx/bad.md",
-                        "message": "dead entry: b/gone.md"}],
-            "warnings": [{"check": "kc/ctx/empty-description", "path": "_ctx/good.md",
-                          "message": "empty description"}]}))
+            "findings": [
+                {"rule": "kc/ctx/dead-entry", "severity": "error", "path": "_ctx/bad.md",
+                 "message": "dead entry: b/gone.md"},
+                {"rule": "kc/ctx/empty-description", "severity": "warning",
+                 "path": "_ctx/good.md", "message": "empty description"}]}))
         ap = os.path.join(self.root, "_ctx", "good.md")
         os.utime(ap, (1000, 1000))
         os.utime(os.path.join(self.root, "b", "two.md"), (500, 500))
@@ -794,7 +804,7 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
         registered = {r.id for r in okf_check.RULES if r.id.startswith("kc/ctx/")}
         self.assertEqual(len(registered), 11)
         self.assertEqual(reported, registered)
-        errs, warns = okf_check.run_checks(self.root, "_ctx")
+        errs, warns = _scan(self.root, "_ctx")
         self.assertEqual({n for n, _, _ in errs + warns if n.startswith("kc/ctx/")},
                          registered - {"kc/ctx/stale-entry"})
 

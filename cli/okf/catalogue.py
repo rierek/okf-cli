@@ -785,7 +785,7 @@ def load_tags(root, tags_source=None):
 TAGS_HEADER = (
     "# TAGS.md — Registered Tag Vocabulary\n\n"
     "Closed vocabulary for concept `tags:`. The `kc/tag/registered` conformance check\n"
-    "(warning; `check --strict` escalates to error) flags any tag not listed here.\n"
+    "(warning; `check --strict` counts it toward the exit code) flags any tag not listed here.\n"
     "Add a new tag only via `okf-cli.py tags --register <tag> <description>` — reuse an existing\n"
     "tag over minting a near-duplicate. A tag earns its place by aggregating content.\n\n"
     "| Tag | Description |\n|-----|-------------|\n"

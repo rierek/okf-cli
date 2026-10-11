@@ -121,8 +121,7 @@ class McpCheckRefsBoundary(McpBoundaryTestBase):
     def test_check_json_over_subprocess(self):
         out = mcp.run_okf(self.root, "check", {"target": ""})
         self.assertIsInstance(out, dict)
-        self.assertIn("errors", out)
-        self.assertIn("warnings", out)
+        self.assertEqual(list(out), ["findings"])
 
     def test_refs_json_over_subprocess(self):
         out = mcp.run_okf(
@@ -607,7 +606,8 @@ class McpCtxBoundary(McpBoundaryTestBase):
     def test_check_with_violations_returns_the_report(self):
         _w(self.root, "b/bad.md", "no frontmatter\n")
         out = mcp.run_okf(self.root, "check", {})
-        self.assertTrue(out["errors"])
+        self.assertIn(("okf/frontmatter/parseable", "b/bad.md"),
+                      [(f["rule"], f["path"]) for f in out["findings"]])
 
 
 class McpExitClassHandling(unittest.TestCase):
@@ -624,7 +624,7 @@ class McpExitClassHandling(unittest.TestCase):
             return mcp.run_okf("/root", command, {})
 
     def test_findings_and_drift_return_stdout_as_data(self):
-        self.assertEqual(self._run("check", 4, stdout='{"errors": [1]}'), {"errors": [1]})
+        self.assertEqual(self._run("check", 4, stdout='{"findings": [1]}'), {"findings": [1]})
         self.assertEqual(self._run("sync-status", 5, stdout='{"blocks": []}'), {"blocks": []})
         self.assertEqual(self._run("sync-update", 5, stdout="report\n"), "report\n")
 

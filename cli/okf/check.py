@@ -74,7 +74,8 @@ def check_type_registered(ctx, types_set):
 def check_tag_registered(ctx, tags_set):
     """Closed-vocabulary gate: every frontmatter tag must be in TAGS.md.
     No-op when TAGS.md is absent (tags_set is None). Severity is warning, so it
-    surfaces new tags without blocking; `check --strict` escalates to error.
+    surfaces new tags without blocking; `check --strict` counts it toward the exit
+    code and keeps severity warning.
     Keeps agents from exploding the tag vocabulary with creative one-offs — a tag
     only aggregates content if it is reused, not minted fresh each write."""
     if ctx["is_reserved"] or not ctx["has_fm"] or tags_set is None:
@@ -489,6 +490,7 @@ def cmd_fix_crosslinks(root, args):
 # scope "file":   check(ctx) -> [message]            one concept file per call
 # scope "bundle": check({"bundle", "bp"}) -> [(path, message)]   one bundle per call
 Rule = namedtuple("Rule", "id severity scope check")
+Finding = namedtuple("Finding", "rule severity path message")
 
 
 def _ctx_rule(rule_id, severity):
@@ -542,9 +544,10 @@ RULES = [
 ]
 
 
-def rule_severity(rule_id):
-    """The registry severity of `rule_id`; KeyError for an ID no rule registers."""
-    return {r.id: r.severity for r in RULES}[rule_id]
+def finding_of(rule_id, path, message):
+    """The Finding for `rule_id`, severity taken from the registry; KeyError for
+    an ID no rule registers."""
+    return Finding(rule_id, {r.id: r.severity for r in RULES}[rule_id], path, message)
 
 
 def run_checks(root, target, types_source=None):
@@ -554,8 +557,8 @@ def run_checks(root, target, types_source=None):
     types_source overrides <root>/TYPES.md; absent, falls back to the
     .okf.toml `types_source` config key, then to <root>/TYPES.md.
 
-    Returns (errors, warnings), each a list of (rule_id, rel_path, message),
-    partitioned by the rule's registry severity.
+    Returns a list of Finding(rule, severity, path, message); each severity is
+    the registry severity of its rule.
     """
     scopes = resolve_scopes(root, target)
     config = load_okf_config(root)
@@ -585,10 +588,10 @@ def run_checks(root, target, types_source=None):
     file_rules = [r for r in RULES if r.scope == "file"]
     bundle_rules = [r for r in RULES if r.scope == "bundle"]
 
-    errors, warnings = [], []
+    findings = []
 
     def add(rule, path, msg):
-        (errors if rule.severity == "error" else warnings).append((rule.id, path, msg))
+        findings.append(Finding(rule.id, rule.severity, path, msg))
 
     for bundle, bp in scopes:
         for ap in iter_all_md(bp):
@@ -600,7 +603,7 @@ def run_checks(root, target, types_source=None):
         for rule in bundle_rules:
             for path, msg in rule.check({"bundle": bundle, "bp": bp}):
                 add(rule, path, msg)
-    return errors, warnings
+    return findings
 
 
 def cmd_check(root, args):
@@ -609,34 +612,34 @@ def cmd_check(root, args):
         # Without this a typo'd or renamed bundle scanned nothing and exited 0 —
         # a clean bill of health for a directory that does not exist.
         raise OkfError("not_found", "not a directory: {}".format(target))
-    errors, warnings = run_checks(root, getattr(args, "target", None),
-                                  types_source=getattr(args, "types", None))
-    if args.strict:
-        errors, warnings = errors + warnings, []
-    _print_findings(errors, warnings, args.json)
-    if errors:
-        raise OkfError("non_conformant", "")
+    findings = run_checks(root, target, types_source=getattr(args, "types", None))
+    report_findings(findings, args.strict, args.json)
 
 
-def _print_findings(errors, warnings, as_json):
+def report_findings(findings, strict, as_json):
+    """Print `findings` and exit non_conformant when any counts. The ONE place
+    that decides what counts: an error always, a warning only under `strict`.
+    `strict` never changes a finding's severity. Errors print before warnings,
+    each group by path, so the order does not depend on filesystem walk order;
+    the report is printed first, so it is never lost to the exit."""
+    counting = [f for f in findings if strict or f.severity == "error"]
+    ordered = sorted(findings, key=lambda f: (f.severity != "error", f.path))
     if as_json:
-        print(json.dumps({
-            "errors": [{"check": n, "path": p, "message": m} for n, p, m in errors],
-            "warnings": [{"check": n, "path": p, "message": m} for n, p, m in warnings],
-        }))
+        print(json.dumps({"findings": [f._asdict() for f in ordered]}))
     else:
-        for name, path, msg in errors:
-            print("ERROR    {:<20} {}  ({})".format(name, path, msg))
-        for name, path, msg in warnings:
-            print("WARNING  {:<20} {}  ({})".format(name, path, msg))
-        print("OK — 0 violations" if not errors else "{} VIOLATIONS".format(len(errors)))
+        for f in ordered:
+            print("{:<9}{:<20} {}  ({})".format(f.severity.upper(), f.rule, f.path, f.message))
+        print("{} VIOLATIONS".format(len(counting)) if counting else "OK — 0 violations")
+    if counting:
+        raise OkfError("non_conformant", "")
 
 
 def add_check_parser(sub):
     pc = _sub(sub, "check", "maintenance",
               "conformance scan: §9 hard rules + local invariants")
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
-    pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
+    pc.add_argument("--strict", action="store_true",
+                    help="count warnings toward the exit code; each finding keeps its severity")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
     pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
 
