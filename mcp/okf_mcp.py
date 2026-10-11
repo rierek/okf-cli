@@ -43,25 +43,23 @@ _COMMANDS = {
     "ctx":   ["verb", "slug"],
 }
 # optional value-flag params: tool-key -> okf-cli flag
-_FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
-          "scope": "--scope", "source": "--source", "block": "--block",
+_FLAGS = {"scan_root": "--scan-root", "where": "--where", "limit": "--limit",
+          "source": "--source", "block": "--block",
           "for_path": "--for", "section": "--section"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
-               "compact": "--compact", "include_archive": "--include-archive",
-               "full": "--full", "frontmatter_only": "--frontmatter-only",
+               "compact": "--compact", "full": "--full", "frontmatter_only": "--frontmatter-only",
                "body_only": "--body-only"}
 # _BOOL_FLAGS is shared across every command's params dict, but okf-cli's own
-# argparse only defines --include-archive on the find/list subparsers (R-14,
-# okf-cli-9e2b) — any OTHER command handed that flag would fail at the
-# subprocess boundary with an argparse error. Command-scope it explicitly
-# rather than relying on no other tool function ever populating the key:
-# a key absent from this map stays as unrestricted as before (apply/force/
-# unresolved/compact are untouched, out of this task's scope). `full` gets
-# the same treatment (okf-cli-t2w8, SC-002): argparse only defines --full on
+# argparse defines some of them on one command only — any OTHER command handed
+# that flag would fail at the subprocess boundary with an argparse error.
+# Command-scope it explicitly rather than relying on no other tool function
+# ever populating the key: a key absent from this map stays as unrestricted as
+# before (apply/force/unresolved/compact are untouched, out of this task's
+# scope). `full` (okf-cli-t2w8, SC-002): argparse only defines --full on
 # index/prime, and okf_prime never populates the key, so scoping to index
 # alone is enough. frontmatter_only and body_only exist on read alone (OKFT-0kcz).
-_BOOL_FLAG_COMMANDS = {"include_archive": {"find", "list"}, "full": {"index"},
+_BOOL_FLAG_COMMANDS = {"full": {"index"},
                        "frontmatter_only": {"read"}, "body_only": {"read"}}
 
 
@@ -123,8 +121,9 @@ def run_okf(root, command, params):
     if len(out) > MAX_OUTPUT_CHARS:
         raise RuntimeError(
             "okf-cli {} produced {} characters, over the {} character budget. "
-            "Narrow the call -- pass a bundle/scope/type filter, or use find "
-            "for a ranked subset.".format(command, len(out), MAX_OUTPUT_CHARS))
+            "Narrow the call -- pass a bundle, filter with where (for example "
+            "where=\"type = Runbook\"), or use find for a ranked subset."
+            .format(command, len(out), MAX_OUTPUT_CHARS))
     try:
         envelope = json.loads(out)
         ok, data, warnings, error = (envelope["ok"], envelope["data"],
@@ -141,11 +140,13 @@ def run_okf(root, command, params):
 
 def _register(server):
     @server.tool()
-    def okf_find(root: str = "", *, query: str, limit: int = 10, type: str = "",
-                 tag: str = "", scope: str = "",
-                 include_archive: bool = False) -> dict:
-        """Ranked search across a catalogue/repo root, composable with
-        exact-match type/tag filters and a bundle/subdir scope.
+    def okf_find(root: str = "", *, query: str, limit: int = 10, where: str = "") -> dict:
+        """Ranked search across a catalogue/repo root, narrowed by a `where`
+        expression: `field op value` with op one of = != < <= > >= ~ (contains)
+        or `field in (a, b)`, joined by and, or, not and parentheses. Fields:
+        type, tag, path (<bundle>/<concept-id>), archived (true or false) and
+        any frontmatter key (nested: a.b). Quote a value with spaces: 'a b'.
+        Example: where="type = Runbook and path ~ home-lab/".
 
         Two arms produce results: a lexical FTS5/BM25 arm and a semantic
         embedding arm. Exactly one of them owns the ranking per query — the
@@ -160,15 +161,13 @@ def _register(server):
         back to a substring scan (fix it with okf_build_index), and an
         unavailable embedding backend leaves lexical results only.
 
-        Pass include_archive=True to also search archived material
-        (`archive`-verb output). The lexical arm honours it fully; the
-        semantic arm's embeddings are built only for the active catalogue
-        (a deliberate cost limit), so a call that hands over to the
-        semantic arm carries an extra warning saying so (R-13)."""
-        return run_okf(root, "find", {
-            "query": query, "limit": limit, "type": type, "tag": tag,
-            "scope": scope, "include_archive": include_archive,
-        })
+        Archived concepts are hidden unless `where` names `archived`, for
+        example where="archived in (true, false)". The lexical arm honours it
+        fully; the semantic arm's embeddings are built only for the active
+        catalogue (a deliberate cost limit), so a call that hands over to the
+        semantic arm carries an extra warning saying so (R-13). A malformed
+        expression fails the call with an `invalid_input` error."""
+        return run_okf(root, "find", {"query": query, "limit": limit, "where": where})
 
     @server.tool()
     def okf_read(root: str = "", *, path: str, section: str = "",
@@ -200,13 +199,15 @@ def _register(server):
         return run_okf(root, "index", {"bundle": bundle, "full": full})
 
     @server.tool()
-    def okf_list(root: str = "", type: str = "", tag: str = "",
-                 include_archive: bool = False) -> dict:
-        """Concepts filtered by frontmatter type and/or tag. Pass
-        include_archive=True to also list archived concepts."""
-        return run_okf(root, "list", {
-            "type": type, "tag": tag, "include_archive": include_archive,
-        })
+    def okf_list(root: str = "", where: str = "") -> dict:
+        """The complete, unranked set of concepts a `where` expression selects;
+        the expression is required (an empty one fails with `invalid_input`).
+        Grammar as in okf_find: `field op value` or `field in (a, b)`, joined by
+        and, or, not and parentheses, over type, tag, path, archived and any
+        frontmatter key. Example: where="type = Runbook and tag = alpha".
+        Archived concepts are listed only when `where` names `archived`, for
+        example where="archived in (true, false)"."""
+        return run_okf(root, "list", {"where": where})
 
     @server.tool()
     def okf_check(root: str = "", target: str = "") -> dict:

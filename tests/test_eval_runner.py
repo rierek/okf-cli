@@ -18,11 +18,16 @@ Run: python3 -m unittest tests.test_eval_runner -v
 import importlib.util
 import json
 import os
+import sys
 import shutil
 import tempfile
 import unittest
 
 _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
+    sys.path.insert(0, _HERE)
+
+from okf.find_filters import And, Not, Or, parse_where
 
 _fx_spec = importlib.util.spec_from_file_location(
     "eval_fixtures", os.path.join(_HERE, "eval", "fixtures.py")
@@ -226,6 +231,15 @@ class PickBundlesTest(unittest.TestCase):
             fixtures._pick_bundles(root)
 
 
+def _path_values(node):
+    """The values of every `path` condition in a parsed --where tree."""
+    if isinstance(node, (And, Or)):
+        return _path_values(node.left) + _path_values(node.right)
+    if isinstance(node, Not):
+        return _path_values(node.operand)
+    return [node.value] if node.field == "path" else []
+
+
 class GoldenBundleConsistencyTest(unittest.TestCase):
     """OKFT-sgkn AC-07 / D-sgkn-02 — golden.json's bundle-name literals
     (expected_path prefix, and the s4-index-walk row's query.bundle) are
@@ -256,10 +270,16 @@ class GoldenBundleConsistencyTest(unittest.TestCase):
             if isinstance(query, dict) and "bundle" in query:
                 if query["bundle"] != want:
                     mismatches.append((row["id"], "query.bundle", query["bundle"], want))
-            # scope always names CORRECT_BUNDLE, also on S2 rows (location probe)
-            if isinstance(query, dict) and "scope" in query:
-                if query["scope"] != fixtures.CORRECT_BUNDLE:
-                    mismatches.append((row["id"], "query.scope", query["scope"], fixtures.CORRECT_BUNDLE))
+            # a filtered list row names CORRECT_BUNDLE in the path condition of its `where`
+            # expression, also on S2 rows (location probe); the production parser reads it
+            for key in ("type", "tag", "scope"):
+                if isinstance(query, dict) and key in query:
+                    mismatches.append((row["id"], "query." + key, query[key], "removed key"))
+            if isinstance(query, dict) and "where" in query:
+                path_values = _path_values(parse_where(query["where"]))
+                if path_values != [fixtures.CORRECT_BUNDLE + "/"]:
+                    mismatches.append((row["id"], "query.where path", path_values,
+                                       [fixtures.CORRECT_BUNDLE + "/"]))
         self.assertEqual(
             mismatches, [],
             "golden.json bundle literal(s) diverge from fixtures.py pin "

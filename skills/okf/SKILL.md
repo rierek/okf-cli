@@ -62,7 +62,7 @@ Each workflow file opens with a checklist: copy it into your task list and tick 
 
 Widen only when the cheaper step leaves the question open.
 
-1. `okf-cli --root <catalogue> find "<query>"`: ranked search. Filters: `--scope <bundle>`, `--type <Type>`, `--tag <tag>`, `--limit <n>`.
+1. `okf-cli --root <catalogue> find "<query>"`: ranked search. Filter: `--where "<expr>"`, for example `--where "type = Runbook and path ~ <bundle>/"`. Also `--limit <n>`.
 2. `okf-cli --root <catalogue> index [<bundle>]`: bundles, or one bundle's listing.
 3. `okf-cli --root <catalogue> toc <bundle>/<concept-id>`: headings before the body.
 4. `okf-cli --root <catalogue> read <bundle>/<concept-id>`: the page.
@@ -89,6 +89,6 @@ Widen only when the cheaper step leaves the question open.
 
 The okf MCP server (`mcp/okf_mcp.py` in the okf-cli checkout) wraps the same CLI. Tool `okf_<verb>` runs CLI command `<verb>`, with `-` written as `_` (`okf_build_index`, `okf_sync_status`); ctx has only `okf_ctx_list` and `okf_ctx_show`. The server is usually registered as `okf`, and some harnesses prefix tool names with the server name. Your tool list is the authority on what exists. Pass `root` (the `--root` value) on every call.
 
-CLI only: `archive`, `recent`, `visualize`, `fix-crosslinks`, `fix-xml-tags`, `rewrite-path`, `merge-tags`, `remove-tags`, `normalize-tags`, `tags --register` and `--validate`, every ctx verb except list and show, and flags the MCP tools omit (`find --breakdown`, `list --scope`, `check --strict`, `toc --level`, `reindex --check` and `--init`, `--if-stale`).
+CLI only: `archive`, `recent`, `visualize`, `fix-crosslinks`, `fix-xml-tags`, `rewrite-path`, `merge-tags`, `remove-tags`, `normalize-tags`, `tags --register` and `--validate`, every ctx verb except list and show, and flags the MCP tools omit (`find --breakdown`, `check --strict`, `toc --level`, `reindex --check` and `--init`, `--if-stale`).
 
 MCP limits: a result above 120000 characters fails, so narrow the call (`okf_find` or a bundle argument). `okf_prime` renders the compact form. Every tool runs the CLI with `--json` and returns `{"data", "warnings"}`: the degradation notes arrive in `warnings`, so read them next to `data`. A failure that carries a result (`okf_check` findings, `okf_sync_status` rows, a dead ctx entry) returns `data` and `warnings` plus `error {kind, code, message}`; a failure without a result raises with `error.kind` and `error.message`.

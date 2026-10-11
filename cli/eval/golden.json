@@ -92,7 +92,7 @@
   {
     "id": "s1-list-metadata-hit",
     "verb": "list",
-    "query": {"type": "Concept", "tag": "eval-fixture", "scope": "knowledge-management"},
+    "query": {"where": "type = Concept and tag = eval-fixture and path ~ knowledge-management/"},
     "class": "metadata",
     "expected_path": "knowledge-management/_okfeval-s1",
     "min_rank": null,
@@ -102,7 +102,7 @@
   {
     "id": "s4-list-metadata-miss",
     "verb": "list",
-    "query": {"type": "Concept", "tag": "eval-fixture", "scope": "knowledge-management"},
+    "query": {"where": "type = Concept and tag = eval-fixture and path ~ knowledge-management/"},
     "class": "metadata",
     "expected_path": "knowledge-management/_okfeval-s4",
     "min_rank": null,
@@ -112,7 +112,7 @@
   {
     "id": "s2-list-location-miss",
     "verb": "list",
-    "query": {"type": "Concept", "tag": "eval-fixture", "scope": "knowledge-management"},
+    "query": {"where": "type = Concept and tag = eval-fixture and path ~ knowledge-management/"},
     "class": "location",
     "expected_path": "testing-quality/_okfeval-s2",
     "min_rank": null,

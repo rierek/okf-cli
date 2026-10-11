@@ -115,15 +115,7 @@ def _score_find_row(root, row):
 
 
 def _score_list_row(root, row):
-    q = row["query"]
-    argv = ["list", "--json"]
-    if q.get("type"):
-        argv += ["--type", q["type"]]
-    if q.get("tag"):
-        argv += ["--tag", q["tag"]]
-    if q.get("scope"):
-        argv += ["--scope", q["scope"]]
-    out = _run_cli(root, argv)
+    out = _run_cli(root, ["list", "--json", "--where", row["query"]["where"]])
     entries = json.loads(out)["data"]
     hit = any(e.get("path") == row["expected_path"] for e in entries)
     return {"rank": 1 if hit else float("inf"), "score_ratio": None}

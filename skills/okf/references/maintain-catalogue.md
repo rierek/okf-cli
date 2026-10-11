@@ -38,16 +38,17 @@ okf-cli --root <catalogue> recent --limit 20
 ## 2. Retrieve
 
 ```bash
-okf-cli --root <catalogue> find "<query>" --scope <target> --type <Type> --tag <tag> --limit 10
-okf-cli --root <catalogue> list --type <Type> --scope <target>
+okf-cli --root <catalogue> find "<query>" --where "path ~ <target>/ and type = <Type> and tag = <tag>" --limit 10
+okf-cli --root <catalogue> list --where "type = <Type> and path ~ <target>/"
 okf-cli --root <catalogue> toc <bundle>/<concept-id> --level 0
 okf-cli --root <catalogue> read <bundle>/<concept-id>
 okf-cli --root <catalogue> refs <bundle>/<concept-id>.md
 okf-cli --root <catalogue> wikilinks <target> --unresolved
 ```
 
-- `find`: ranked search over two arms, a lexical index (FTS5/BM25) and an optional semantic index. `rank: N` is the list position; `provenance:` names the arm. `--breakdown` adds raw `score:` and `contrib:` lines. `--include-archive` also searches `_archive/` (lexical arm only). Filters are exact matches. Quote multi-word queries. With a semantic index and `VOYAGE_API_KEY` set, the query goes to Voyage AI (section 5).
-- `list`: complete, unranked set. Requires `--type` and/or `--tag`; `--scope` and `--include-archive` optional.
+- `find`: ranked search over two arms, a lexical index (FTS5/BM25) and an optional semantic index. `rank: N` is the list position; `provenance:` names the arm. `--breakdown` adds raw `score:` and `contrib:` lines. `--where` filters; `archived in (true, false)` in it also searches `_archive/` (lexical arm only). Quote multi-word queries. With a semantic index and `VOYAGE_API_KEY` set, the query goes to Voyage AI (section 5).
+- `list`: complete, unranked set. Requires `--where`.
+- `--where "<expr>"` is the one filter on `find`, `list`, `recent`, `merge-tags`, `remove-tags` and `normalize-tags`: `field op value` with op one of `=` `!=` `<` `<=` `>` `>=` `~` (contains), or `field in (a, b)`, joined by `and`, `or`, `not` and parentheses. Fields: `type`, `tag`, `path` (`<bundle>/<concept-id>`), `archived` (`true` or `false`) and any frontmatter key (nested: `a.b`). Quote a value holding spaces: `'a b'`. A malformed expression exits with code 2.
 - `toc`: headings, default h2 only; `--level 0` prints the full tree. A bare `<bundle>` resolves to its `index.md`.
 - `refs`: inbound and outbound markdown links of one file. Give the path with `.md`, relative to `--root`. `--in` or `--out` limits the direction.
 - A result with a `superseded_by:` line is an outdated decision: read the target.
@@ -128,9 +129,9 @@ okf-cli --root <catalogue> tags --singletons
 okf-cli --root <catalogue> tags <candidate> <candidate>
 okf-cli --root <catalogue> tags --validate <tag> <tag>
 okf-cli --root <catalogue> tags --register <tag> "<description>"
-okf-cli --root <catalogue> merge-tags <old> <old2> --into <new> --scope <target>
-okf-cli --root <catalogue> remove-tags <tag> --scope <target>
-okf-cli --root <catalogue> normalize-tags --scope <target>
+okf-cli --root <catalogue> merge-tags <old> <old2> --into <new> --where "path ~ <target>/"
+okf-cli --root <catalogue> remove-tags <tag> --where "path ~ <target>/"
+okf-cli --root <catalogue> normalize-tags --where "path ~ <target>/"
 ```
 
 - `tags`: every tag in use with its count. `--singletons`: tags used once, the merge candidates.
@@ -188,7 +189,7 @@ okf-cli --root <catalogue> archive --restore _archive/<bundle>/<concept-id>.md -
 ```
 
 - `archive` moves the concept to `_archive/<bundle>/<concept-id>.md`, rewrites inbound links to the new path and reindexes. The report starts with the number of active concepts that still link to it.
-- Archived concepts are hidden from `find` and `list` unless `--include-archive`; the semantic arm never covers them. `check` and `index` skip `_archive/`.
+- Archived concepts are hidden from `find` and `list` unless the `--where` expression names `archived`, for example `archived in (true, false)`; the semantic arm never covers them. `check` and `index` skip `_archive/`.
 - A ctx entry that now points into `_archive/` gives a `kc/ctx/archived-entry` warning: drop or replace it.
 - `--restore` reverses the move and the link rewrites. One concept per call.
 
@@ -254,8 +255,8 @@ Run periodically and before a release of the catalogue. Copy into your task list
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `find` returns nothing for an existing concept | Stale or missing lexical index, or concept archived | `build-index`; add `--include-archive` |
-| `list` prints `(error: pass --type and/or --tag)` | `list` needs a filter | Add `--type` or `--tag`, or use `find` |
+| `find` returns nothing for an existing concept | Stale or missing lexical index, or concept archived | `build-index`; add `--where "archived in (true, false)"` |
+| `list` prints `(error: pass --where, e.g. --where 'type = Runbook')` | `list` needs a filter | Add `--where`, or use `find` |
 | `refs: target not found` | Path without `.md`, or not relative to `--root` | Pass `<bundle>/<concept-id>.md` |
 | `refs --scan-root <dir>` marks existing targets `[missing]` | With `--scan-root`, `/`-links resolve against that directory | Read only inbound links from outside the catalogue; run `refs` without `--scan-root` for the rest |
 | `recent: catalogue root is not a git repository` | `recent` dates concepts from git | Use `list` or `find` |
