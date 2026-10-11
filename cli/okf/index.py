@@ -4,7 +4,6 @@ and index-map.md generation, the --init migration and the --check report)."""
 
 import os
 import re
-import sys
 
 from okf import spec
 from okf.errors import OkfError

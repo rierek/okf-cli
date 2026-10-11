@@ -4,7 +4,6 @@ concept graph and HTML template behind visualize and their parser blocks."""
 import argparse
 import os
 import re
-import sys
 from okf.errors import OkfError
 from okf.output import _add_output
 

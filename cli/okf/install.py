@@ -3,7 +3,6 @@ registration code that lives next to cli/okf-cli.py, and registers the parser bl
 
 import importlib.util
 import os
-import sys
 from okf.errors import OkfError
 
 from okf.output import _add_output
