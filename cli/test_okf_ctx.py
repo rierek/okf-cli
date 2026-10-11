@@ -20,6 +20,7 @@ if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks i
     sys.path.insert(0, _HERE)
 
 from okf import catalogue as okf_catalogue
+from okf import check as okf_check
 from okf import linkscan as okf_linkscan
 
 _spec = importlib.util.spec_from_file_location("okf_cli", os.path.join(_HERE, "okf-cli.py"))
@@ -363,7 +364,7 @@ class CtxSaveEffects(CtxCatalogue):
 
     def test_check_reports_nothing_for_ctx(self):
         self._save_full()
-        errors, warnings = okf.run_checks(self.root, None)
+        errors, warnings = okf_check.run_checks(self.root, None)
         names = ("entry-file-description", "asset-placement", "type-registered")
         bad = [x for x in errors + warnings if x[0] in names and "_ctx" in repr(x)]
         self.assertEqual(bad, [])
@@ -1057,7 +1058,7 @@ class CtxFindings(CtxCatalogue):
         return okf_catalogue.ctx_findings(self.root, ap, **kw)
 
     def _run_checks_ctx(self):
-        errs, warns = okf.run_checks(self.root, None)
+        errs, warns = okf_check.run_checks(self.root, None)
         return ([m for n, _, m in errs if n == "ctx"], [m for n, _, m in warns if n == "ctx"])
 
     def _sc01(self):

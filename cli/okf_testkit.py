@@ -6,6 +6,7 @@ import io
 import os
 import shutil
 import tempfile
+import unittest
 
 from okf import catalogue as okf_catalogue
 from okf import find as okf_find
@@ -94,3 +95,30 @@ class SyncFixtureMixin:
     def _payload_of(self, rel):
         _, body = okf_catalogue.split_frontmatter(self._r(rel))
         return okf_sync.parse_sync_blocks(body)[0]["payload"]
+
+
+# --- helpers shared by the check, wikilinks and rename suites ---------------
+
+
+def _fs_is_case_insensitive():
+    with tempfile.TemporaryDirectory() as d:
+        open(os.path.join(d, "a"), "w").close()
+        return os.path.exists(os.path.join(d, "A"))
+
+
+needs_case_insensitive_fs = unittest.skipUnless(
+    _fs_is_case_insensitive(), "braucht case-insensitives Dateisystem (APFS)")
+
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _cli(root, *argv):
+    """Drive the REAL cli/okf-cli.py as a subprocess. The `command:` acceptance
+    criteria of docs/wikilink-awareness/SPEC.md are written against the shell
+    surface (exit code, stdout shape), which an in-process call cannot pin."""
+    import subprocess
+    import sys
+    return subprocess.run(
+        [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", root] + list(argv),
+        capture_output=True, text=True)
