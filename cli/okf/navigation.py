@@ -13,7 +13,7 @@ from okf.catalogue import (
     fm_meta, fm_text, iter_concepts, iter_headings, read_file, read_frontmatter, require_bundle_dir,
     resolve_concept, resolve_scopes,
 )
-from okf.ctx import _ctx_same_file
+from okf.ctx import _ctx_same_file, _tokens
 from okf.find_filters import compile_where
 from okf.linkscan import _refs_display
 from okf.parser_support import (
@@ -157,11 +157,6 @@ def follow_nodes(root, start_abs, depth, inbound):
     return order
 
 
-def _tokens(text):
-    # ponytail: chars/4 heuristic (D21), same as ctx show; use a tokenizer if budgets get tight
-    return (len(text) + 3) // 4
-
-
 def _follow_block(root, args, start_abs, root_text):
     """The `read --follow` block: [{path, depth, tokens, reduced, text | title, description}].
     The root is always full; with --max-tokens the walk stops printing nodes in full at the
@@ -170,15 +165,15 @@ def _follow_block(root, args, start_abs, root_text):
     nodes, used, reduced = [], 0, False
     for i, (ap, depth) in enumerate(follow_nodes(root, start_abs, args.follow, args.inbound)):
         text = root_text if i == 0 else read_file(ap)
-        if i and args.max_tokens is not None and used + _tokens(text) > args.max_tokens:
+        if i and args.max_tokens is not None and used + _tokens(len(text)) > args.max_tokens:
             reduced = True
         rec = {"path": _concept_path(root, ap), "depth": depth}
         if reduced:
             _t, title, desc = fm_meta(read_frontmatter(text).data, os.path.basename(ap)[:-3])
             rec.update(reduced=True, title=title, description=desc)
-            rec["tokens"] = _tokens(_reduced_text(rec))
+            rec["tokens"] = _tokens(len(_reduced_text(rec)))
         else:
-            rec.update(reduced=False, text=text, tokens=_tokens(text))
+            rec.update(reduced=False, text=text, tokens=_tokens(len(text)))
         used += rec["tokens"]
         nodes.append(rec)
     return nodes
@@ -399,8 +394,8 @@ def _count(minimum):
         try:
             n = int(raw)
         except ValueError:
-            n = None
-        if n is None or n < minimum:
+            n = minimum - 1
+        if n < minimum:
             raise argparse.ArgumentTypeError("{!r} is not an integer of at least {}".format(raw, minimum))
         return n
     return parse

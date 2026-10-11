@@ -87,6 +87,11 @@ def cmd_ctx_create(root, args):
     print("created {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(entries)))
 
 
+def _tokens(chars):
+    # ponytail: chars/4 heuristic (D21); use a tokenizer if budgets get tight
+    return (chars + 3) // 4
+
+
 def _ctx_members(root, slug):
     """Entries of a ctx with live metadata; required first in pos order."""
     c = load_ctx(root, slug)
@@ -102,9 +107,7 @@ def _ctx_members(root, slug):
         out.append({"pos": e["pos"], "mode": e["mode"],
                     "path": e["path"], "abspath": ap, "title": title, "type": typ,
                     "description": desc, "comment": e["comment"], "alive": alive,
-                    "chars": chars,
-                    # ponytail: chars/4 heuristic; use a tokenizer if budgets get tight
-                    "tokens": (chars + 3) // 4})
+                    "chars": chars, "tokens": _tokens(chars)})
     req = sorted((m for m in out if m["mode"] == "pflicht"), key=lambda m: m["pos"])
     return c, req + [m for m in out if m["mode"] != "pflicht"]
 
