@@ -594,11 +594,13 @@ class WriteFixture(Fixture):
 class TagWrites(WriteFixture):
     def test_merge_preview_then_apply(self):
         preview = self.ok("merge-tags", "alpha", "--into", "omega")["data"]
-        self.assertEqual(preview, {"applied": False, "files": ["kc-a/alpha.md", "kc-a/inline.md"],
-                                   "unparseable": [], "from": ["alpha"], "into": "omega"})
+        self.assertEqual({k: v for k, v in preview.items() if k != "files"},
+                         {"applied": False, "unparseable": [], "from": ["alpha"], "into": "omega"})
+        paths = [f["path"] for f in preview["files"]]
+        self.assertEqual(paths, ["kc-a/alpha.md", "kc-a/inline.md"])
         self.assertIn("alpha", self.read("kc-a/alpha.md"))
         text = self.text("merge-tags", "alpha", "--into", "omega")
-        self.assertEqual(re.findall(r"^would rewrite\s+(\S+)$", text, re.M), preview["files"])
+        self.assertEqual(re.findall(r"^\+\+\+ b/(\S+)$", text, re.M), paths)
         applied = self.ok("merge-tags", "alpha", "--into", "omega", "--apply")["data"]
         self.assertEqual((applied["applied"], applied["files"]), (True, preview["files"]))
         self.assertIn("omega", self.read("kc-a/alpha.md"))
@@ -608,27 +610,31 @@ class TagWrites(WriteFixture):
     def test_merge_reports_a_tags_field_it_cannot_rewrite(self):
         self._w("kc-a/odd.md", "---\ntype: Note\ntitle: Odd\ndescription: d\ntags: alpha, beta\n---\n\n# Odd\n")
         data = self.ok("merge-tags", "alpha", "--into", "omega")["data"]
-        self.assertEqual((data["files"], data["unparseable"]), (["kc-a/alpha.md", "kc-a/inline.md"], ["kc-a/odd.md"]))
+        self.assertEqual(([f["path"] for f in data["files"]], data["unparseable"]),
+                         (["kc-a/alpha.md", "kc-a/inline.md"], ["kc-a/odd.md"]))
         self.assertIn("unparseable    kc-a/odd.md", self.text("merge-tags", "alpha", "--into", "omega"))
 
     def test_remove_preview_then_apply_names_the_emptied_files(self):
         preview = self.ok("remove-tags", "beta", "gamma")["data"]
-        self.assertEqual(preview, {"applied": False, "files": ["kc-a/beta.md"], "emptied": ["kc-a/beta.md"],
-                                   "unparseable": [], "removed": ["beta", "gamma"]})
+        self.assertEqual([f["path"] for f in preview["files"]], ["kc-a/beta.md"])
+        self.assertEqual({k: v for k, v in preview.items() if k != "files"},
+                         {"applied": False, "emptied": ["kc-a/beta.md"], "unparseable": [], "removed": ["beta", "gamma"]})
         self.assertIn("tags:", self.read("kc-a/beta.md"))
         applied = self.ok("remove-tags", "beta", "gamma", "--apply")["data"]
         self.assertEqual((applied["applied"], applied["emptied"]), (True, ["kc-a/beta.md"]))
         self.assertNotIn("tags:", self.read("kc-a/beta.md"))
         partial = self.ok("remove-tags", "alpha")["data"]
-        self.assertEqual((partial["files"], partial["emptied"]),
+        self.assertEqual(([f["path"] for f in partial["files"]], partial["emptied"]),
                          (["kc-a/alpha.md", "kc-a/inline.md"], ["kc-a/alpha.md"]))
 
     def test_normalize_rewrites_an_inline_list(self):
         preview = self.ok("normalize-tags")["data"]
-        self.assertEqual(preview, {"applied": False, "files": ["kc-a/inline.md"], "unparseable": []})
+        self.assertEqual([f["path"] for f in preview["files"]], ["kc-a/inline.md"])
+        self.assertEqual((preview["applied"], preview["unparseable"]), (False, []))
         self.assertIn("tags: [alpha, zeta]", self.read("kc-a/inline.md"))
-        self.assertEqual(self.ok("normalize-tags", "--apply")["data"],
-                         {"applied": True, "files": ["kc-a/inline.md"], "unparseable": []})
+        applied = self.ok("normalize-tags", "--apply")["data"]
+        self.assertEqual((applied["applied"], [f["path"] for f in applied["files"]], applied["unparseable"]),
+                         (True, ["kc-a/inline.md"], []))
         self.assertIn("tags:\n  - alpha\n  - zeta", self.read("kc-a/inline.md"))
 
     def test_where_limits_the_rewrite(self):
