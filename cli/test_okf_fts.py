@@ -14,8 +14,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
     sys.path.insert(0, _HERE)
 
+from okf import catalogue as okf_catalogue
 from okf import find_filters as okf_find_filters
 from okf import fts as okf_fts
+from okf import parser as okf_parser
+from okf import parser_support as okf_parser_support
 
 
 class TokenizeUnicode(unittest.TestCase):
@@ -488,3 +491,141 @@ class FtsIndexStaleDegrades(unittest.TestCase):
             self.assertTrue(okf_fts._fts_index_stale(self.root, conn))
         finally:
             conn.close()
+
+
+class IndexableArchiveScopedToDeclaredBundle(unittest.TestCase):
+    """OKFT-n8xz test 6 / Gate B B01 — with a `bundle` key declared, an
+    archived directory that is NOT the declared bundle must not surface in
+    the FTS index (740/745) nor in find's --include-archive scope
+    (resolve_scopes, 3312/3317/3326)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.tmp, "declared-bundle"))
+        self._w("declared-bundle/one.md", "One", "active body.\n")
+        self._w("_archive/declared-bundle/two.md", "Two", "archived, same bundle.\n")
+        self._w("_archive/other-scaffolding/three.md", "Three", "archived, other dir.\n")
+        with open(os.path.join(self.tmp, ".okf.toml"), "w", encoding="utf-8") as f:
+            f.write('bundle = "declared-bundle"\n')
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, title, body):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: {}\n---\n{}".format(title, body))
+
+    def test_fts_index_excludes_the_undeclared_archived_bundle(self):
+        okf_fts.build_fts_index(self.tmp)
+        conn = sqlite3.connect(okf_fts._fts_db_path(self.tmp))
+        rows = [r[0] for r in conn.execute("SELECT path FROM docs")]
+        conn.close()
+        self.assertIn("declared-bundle/one", rows)
+        self.assertIn("_archive/declared-bundle/two", rows)
+        self.assertNotIn("_archive/other-scaffolding/three", rows)
+
+    def test_find_include_archive_scope_excludes_the_undeclared_bundle(self):
+        """Review 2026-08-13 D02: `indexable_only` is find's explicit opt-in,
+        not resolve_scopes()'s default — the call below mirrors what
+        `_substring_ranking` actually passes, not a bare unscoped call."""
+        scopes = okf_catalogue.resolve_scopes(self.tmp, None, include_archive=True,
+                                    indexable_only=True)
+        names = [b for b, _ in scopes]
+        self.assertIn("_archive/declared-bundle", names)
+        self.assertNotIn("_archive/other-scaffolding", names)
+
+    def test_resolve_scopes_default_stays_wide_even_with_a_bundle_key(self):
+        """Review 2026-08-13 B01 — the regression itself, pinned at the
+        primitive level: without indexable_only=True, resolve_scopes() must
+        NOT narrow just because `.okf.toml` declares a `bundle` key. Every
+        caller except find (merge-tags, remove-tags, normalize-tags, list,
+        _recent_scopes, fix-xml-like-tags, fix-crosslinks, wikilinks, check)
+        relies on this default."""
+        scopes = okf_catalogue.resolve_scopes(self.tmp, None, include_archive=True)
+        names = [b for b, _ in scopes]
+        self.assertIn("_archive/other-scaffolding", names)
+
+
+class CmdBuildIndexIfStale(unittest.TestCase):
+    """okf-cli-iaxj — `build-index --if-stale` skips the rebuild when the
+    existing index is current, so the Stop/SessionStart hook can call it on
+    every trigger without re-reading every concept body each time (D02)."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "b"))
+        with open(os.path.join(self.root, "b", "one.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: One\ndescription: d\n"
+                    "tags: []\n---\nbody one.\n")
+        with open(os.path.join(self.root, "b", "index.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("# B\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _run(self, if_stale):
+        import io
+        import contextlib
+        import types
+        args = types.SimpleNamespace(if_stale=if_stale)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            okf_fts.cmd_build_index(self.root, args)
+        return buf.getvalue()
+
+    def test_without_flag_always_rebuilds_even_when_current(self):
+        """Regression guard for the D02 promise: omitting --if-stale must
+        stay byte-identical to today — an unconditional full rebuild, never
+        a skip, no matter how fresh the index already is."""
+        okf_fts.build_fts_index(self.root)
+        db_path = okf_fts._fts_db_path(self.root)
+        before = os.path.getmtime(db_path)
+        out = self._run(if_stale=False)
+        after = os.path.getmtime(db_path)
+        self.assertIn("indexed 1 concept(s)", out)
+        self.assertGreaterEqual(after, before)
+
+    def test_if_stale_skips_rebuild_when_index_is_current(self):
+        okf_fts.build_fts_index(self.root)
+        db_path = okf_fts._fts_db_path(self.root)
+        # os.replace() on rebuild always produces a fresh inode/mtime, so an
+        # unchanged mtime is proof the rebuild branch never ran.
+        before = os.path.getmtime(db_path)
+        out = self._run(if_stale=True)
+        after = os.path.getmtime(db_path)
+        self.assertEqual(before, after)
+        self.assertIn("index is current", out)
+        self.assertIn(db_path, out)
+
+    def test_if_stale_rebuilds_when_a_concept_changed(self):
+        okf_fts.build_fts_index(self.root)
+        with open(os.path.join(self.root, "b", "two.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("---\ntype: Konzept\ntitle: Two\ndescription: d\n"
+                    "tags: []\n---\nbody two.\n")
+        out = self._run(if_stale=True)
+        self.assertIn("indexed 2 concept(s)", out)
+        conn = sqlite3.connect(okf_fts._fts_db_path(self.root))
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM docs").fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(total, 2)
+
+    def test_if_stale_rebuilds_when_index_is_absent(self):
+        # No build_fts_index() call at all — the .fts dir does not exist yet.
+        out = self._run(if_stale=True)
+        self.assertIn("indexed 1 concept(s)", out)
+        self.assertTrue(os.path.isfile(okf_fts._fts_db_path(self.root)))
+
+    def test_help_documents_the_flag(self):
+        ap = okf_parser.build_parser()
+        parsers = okf_parser_support.subcommand_parsers(ap)
+        actions = okf_parser_support.parser_actions(parsers["build-index"])
+        flag = next((a for a in actions if a.dest == "if_stale"), None)
+        self.assertIsNotNone(flag, "build-index has no --if-stale option")
+        self.assertTrue((flag.help or "").strip())

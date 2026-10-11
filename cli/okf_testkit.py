@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -21,9 +22,6 @@ def run_find(root, query, **kw):
     cli/test_okf_find.py — same in-process convention (SimpleNamespace
     args, cmd_find, redirected streams), but parameterised by root so the new
     suites can each use their own temp catalogue. Returns stdout."""
-    import io
-    import contextlib
-    import types
     args = types.SimpleNamespace(
         query=query, limit=10, type=None, tag=None, scope=None,
         breakdown=False,
@@ -120,8 +118,6 @@ def _cli(root, *argv):
     """Drive the REAL cli/okf-cli.py as a subprocess. The `command:` acceptance
     criteria of docs/wikilink-awareness/SPEC.md are written against the shell
     surface (exit code, stdout shape), which an in-process call cannot pin."""
-    import subprocess
-    import sys
     return subprocess.run(
         [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", root] + list(argv),
         capture_output=True, text=True)

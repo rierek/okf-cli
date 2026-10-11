@@ -13,6 +13,10 @@ default:
 test *ARGS:
     cd {{cli_dir}} && python3 -m unittest {{ if ARGS == "" { "discover -p 'test_*.py'" } else { ARGS } }}
 
+# Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
+build:
+    uv build
+
 # Gate A (EARS-Form der Acceptance Criteria) gegen rohe .beans/-Dateien, z.B. `just gate-a ../.beans/OKFT-xxxx--slug.md`. Exit 0 = sauber, 1 = Befund, 2 = Fehlaufruf.
 gate-a *ARGS:
     @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }

@@ -19,6 +19,8 @@ if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks i
 from okf import catalogue as okf_catalogue
 from okf import find as okf_find
 from okf import find_filters as okf_find_filters
+from okf import parser as okf_parser
+from okf import parser_support as okf_parser_support
 from okf import semantic as okf_semantic
 from okf_testkit import run_find
 
@@ -326,3 +328,153 @@ class ExpandQueryTags(unittest.TestCase):
                           err_buf.getvalue())
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+
+class CmdBuildSemanticIndex(unittest.TestCase):
+    """OKFT-wsne — `build-semantic-index [--if-stale]`: the trigger the
+    concept_emb producer lacked (SC-001/EARS "brought up to date without a
+    human remembering to do it"). Shape mirrors CmdBuildIndexIfStale (D02:
+    skip only when the artefact both exists and is current), but the probe
+    is semantic_coverage()'s PATH-SET comparison, not _fts_index_stale()'s
+    stat check -- concept_emb carries orphan rows for deleted concepts
+    (OKFT-3520) that a row-count check would let mask a real gap. No test
+    here makes a network call: embed_voyage is replaced on the cached
+    build_tagvec module (same pattern AutoEmbedOnRegister uses for
+    embed_bge_m3), and VOYAGE_API_KEY is popped from the environment in
+    setUp so a missing/real key on the host machine can never leak in."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self._w("b/one.md", "One", "one body")
+        self._w("b/two.md", "Two", "two body")
+        self.bt = okf_catalogue._load_build_tagvec()
+        self._orig_voyage = self.bt.embed_voyage
+        self._orig_resilient = self.bt.embed_resilient
+        self._orig_key = os.environ.pop("VOYAGE_API_KEY", None)
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+        self.bt.embed_voyage = self._orig_voyage
+        self.bt.embed_resilient = self._orig_resilient
+        os.environ.pop("VOYAGE_API_KEY", None)
+        if self._orig_key is not None:
+            os.environ["VOYAGE_API_KEY"] = self._orig_key
+
+    def _w(self, rel, title, body):
+        ap = os.path.join(self.root, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write("---\ntype: Runbook\ntitle: {}\ndescription: d\n"
+                     "tags: []\n---\n{}\n".format(title, body))
+
+    def _fake_embed(self, texts):
+        return [[1.0, 0.0] for _ in texts]
+
+    def _run(self, if_stale=False, with_key=True):
+        import io
+        import contextlib
+        import types
+        if with_key:
+            os.environ["VOYAGE_API_KEY"] = "test-key"
+        else:
+            os.environ.pop("VOYAGE_API_KEY", None)
+        args = types.SimpleNamespace(if_stale=if_stale)
+        out_buf, err_buf = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+            okf_semantic.cmd_build_semantic_index(self.root, args)
+        return out_buf.getvalue(), err_buf.getvalue()
+
+    def test_without_flag_embeds_the_full_delta(self):
+        self.bt.embed_voyage = self._fake_embed
+        out, err = self._run(if_stale=False)
+        self.assertIn("embedded 2 concept(s)", out)
+        self.assertIn(okf_semantic._tagvec_db_path(self.root), out)
+        self.assertEqual(err, "")
+
+    def test_sc002_disk_paths_match_concept_emb_rows_after_run(self):
+        """SC-002 verbatim: compare on-disk concept paths against
+        concept_emb rows after the trigger runs, with the embedding backend
+        replaced -- no network."""
+        self.bt.embed_voyage = self._fake_embed
+        self._run(if_stale=False)
+        conn = sqlite3.connect(okf_semantic._tagvec_db_path(self.root))
+        try:
+            embedded = {r[0] for r in conn.execute(
+                "SELECT path FROM concept_emb WHERE model = ?",
+                (okf_semantic.SEMANTIC_MODEL,))}
+        finally:
+            conn.close()
+        disk_paths = {p for b in okf_catalogue.list_bundles(self.root)
+                      for p, _ap in
+                      (("{}/{}".format(b, cid), ap)
+                       for cid, ap in okf_catalogue.iter_concepts(os.path.join(self.root, b)))}
+        self.assertEqual(embedded, disk_paths)
+
+    def test_if_stale_skips_when_coverage_is_complete(self):
+        self.bt.embed_voyage = self._fake_embed
+        self._run(if_stale=False)
+        calls = []
+        self.bt.embed_voyage = lambda texts: calls.append(texts) or self._fake_embed(texts)
+        out, err = self._run(if_stale=True)
+        self.assertIn("skipping", out)
+        self.assertEqual(calls, [])
+
+    def test_if_stale_embeds_when_partial(self):
+        self.bt.embed_voyage = self._fake_embed
+        self._run(if_stale=False)
+        self._w("b/three.md", "Three", "three body")
+        out, err = self._run(if_stale=True)
+        self.assertIn("embedded 1 concept(s)", out)
+
+    def test_if_stale_embeds_when_a_body_changed_without_reembedding(self):
+        """The regression this fix closes (OKFT-9wk6): semantic_coverage()
+        used to compare PATH sets only, so a changed concept body left the
+        OLD key's row sitting in concept_emb and --if-stale reported the
+        index complete -- skipping the rebuild that the changed content
+        actually needed. The probe now shares plan_concept_delta()'s
+        content-hash detection, so an edited body -- same path, same row
+        count, different key -- must trigger exactly one re-embed."""
+        self.bt.embed_voyage = self._fake_embed
+        self._run(if_stale=False)
+        self._w("b/one.md", "One", "one body CHANGED")
+        calls = []
+        self.bt.embed_voyage = lambda texts: calls.append(texts) or self._fake_embed(texts)
+        out, err = self._run(if_stale=True)
+        self.assertIn("embedded 1 concept(s)", out)
+        self.assertTrue(calls, "changed body must reach embed_voyage, not be skipped")
+
+    def test_if_stale_embeds_when_index_is_absent(self):
+        self.bt.embed_voyage = self._fake_embed
+        out, err = self._run(if_stale=True)
+        self.assertIn("embedded 2 concept(s)", out)
+
+    def test_missing_api_key_degrades_without_raising(self):
+        out, err = self._run(if_stale=False, with_key=False)
+        self.assertIn("note:", err)
+        self.assertIn("VOYAGE_API_KEY", err)
+        db = okf_semantic._tagvec_db_path(self.root)
+        self.assertFalse(os.path.isfile(db))
+
+    def test_network_failure_degrades_without_raising(self):
+        def _boom(texts):
+            raise RuntimeError("connection refused")
+        self.bt.embed_voyage = _boom
+        real_resilient = self.bt.embed_resilient
+        self.bt.embed_resilient = (
+            lambda fn, texts, label, sleep=None:
+            real_resilient(fn, texts, label, sleep=lambda _s: None))
+        out, err = self._run(if_stale=False)
+        self.assertIn("note:", err)
+
+    def test_help_documents_the_flag(self):
+        ap = okf_parser.build_parser()
+        parsers = okf_parser_support.subcommand_parsers(ap)
+        actions = okf_parser_support.parser_actions(parsers["build-semantic-index"])
+        flag = next((a for a in actions if a.dest == "if_stale"), None)
+        self.assertIsNotNone(flag, "build-semantic-index has no --if-stale option")
+        self.assertTrue((flag.help or "").strip())
+
+    def test_dispatch_table_carries_the_command(self):
+        self.assertIn("build-semantic-index", okf_parser.COMMAND_DISPATCH)
+        self.assertIs(okf_parser.COMMAND_DISPATCH["build-semantic-index"],
+                       okf_semantic.cmd_build_semantic_index)
