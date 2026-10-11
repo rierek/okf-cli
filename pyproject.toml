@@ -27,8 +27,6 @@ classifiers = [
 # the MCP server (`okf-cli install` registers it through `uv run --with "mcp<2"`,
 # so this extra is only for running mcp/okf_mcp.py with a plain python3)
 mcp = ["mcp<2"]
-# shell TAB completion
-completion = ["argcomplete>=3"]
 
 [project.urls]
 Homepage = "https://github.com/xRiErOS/okf-cli"

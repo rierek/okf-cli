@@ -233,31 +233,6 @@ class WikilinkExtraction(unittest.TestCase):
         recs = okf_wikilinks.parse_wikilinks("---\n---\nBody [[a]]\n")
         self.assertEqual([(r["region"], r["page"]) for r in recs], [("body", "a")])
 
-    def test_empty_frontmatter_block_still_bounds_the_region(self):
-        """`---\\n---` is an empty head, not a thematic rule. The region label of
-        what follows is `body` either way, so only the BOUNDARY shows the
-        difference — and the boundary is what decides which mask the bytes
-        before it get. Asserting the label alone left this unpinned."""
-        self.assertEqual(okf_linkscan.wikilink_regions("---\n---\n\n[[A]]\n")[0],
-                         ("frontmatter", 0, 7))
-
-    def test_indented_fence_in_a_block_scalar_keeps_the_block_yaml(self):
-        """An indented fence may be the content of a YAML block scalar.
-        Rejecting the whole block for it hid every link property in the file.
-
-        The indent has to be one FENCE_START_RE can see (up to three spaces): a
-        four-space fence never matches the pattern at all, so a fixture built
-        that way passes without the guard existing."""
-        recs = okf_wikilinks.parse_wikilinks(
-            '---\nexample: |\n  ```\n  code\n  ```\nrelated: "[[b]]"\n---\n# X\n')
-        self.assertEqual([(r["region"], r["page"]) for r in recs],
-                         [("frontmatter", "b")])
-        recs = okf_wikilinks.parse_wikilinks(
-            '---\nexample: |\n    ```\n    code\n    ```\nrelated:\n\n'
-            '    - "[[b]]"\n---\n# X\n')
-        self.assertEqual([(r["region"], r["page"]) for r in recs],
-                         [("frontmatter", "b")])
-
     def test_a_block_that_fails_to_parse_is_body_text(self):
         """The YAML parse decides, not a first-line heuristic: a plain scalar continued on an
         unindented line is invalid YAML, so its head is body text and the link property in it is

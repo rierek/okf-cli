@@ -38,7 +38,7 @@ jobs:
       - name: Interpreter dieser Matrix-Zeile
         run: uv run --no-project python -VV
       # Laufzeit-Abhaengigkeiten kommen aus dem PEP-723-Header von cli/okf-cli.py (just test);
-      # argcomplete und mcp sind Test-Extras, ohne sie werden Tests uebersprungen.
+      # mcp ist das einzige Test-Extra (`just test`), nicht im Header deklariert.
       # Leeres HOME: beweist, dass die Suite keinen Live-Vault
       # (~/Obsidian/Knowledge-Catalogue) braucht oder beschreibt (CLAUDE.md Regel 1).
       - name: just test (leeres HOME)
