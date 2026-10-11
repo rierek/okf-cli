@@ -52,7 +52,7 @@ Unchanged from v0.1: required `type`, recommended `title`, `description`, `resou
 |---|---|---|
 | `timestamp: <t>` | `generated: { by: <actor>, at: <t> }` | Keep the instant. Add an offset when missing (a bare date becomes `<date>T00:00:00Z`). |
 | `date`, `created`, `updated`, `modified` | `generated.at` | Use the last meaningful content change. |
-| `author: <name>` | `generated.by: human:<id>` | Only when that person wrote the current text. Otherwise keep `author` as an extra key. |
+| `author: <name>` | `generated.by: human:<id>` | Only when the user confirms that person wrote the current text: the key alone does not prove it. Otherwise (no confirmation, or you cannot ask) keep `author` as an extra key and name the concept in your report. |
 | `source`, `url`, `link`, `references` | `sources` entries | One entry per material: `resource` required, `id` when cited, `title` when known. |
 | Body section `# Citations` | `sources` entries plus `[^<id>]` footnotes | Move every item, footnote the claims it supports, then delete the section. |
 | `summary`, `excerpt`, `abstract` | `description` | One sentence. |
@@ -68,7 +68,7 @@ Unchanged from v0.1: required `type`, recommended `title`, `description`, `resou
 
 ## Deciding values
 
-- `generated.by`: the author of the current text. Unknown: ask the user. Never put your own actor there unless you rewrote the content.
+- `generated.by`: the author of the current text. Unknown: ask the user. No answer possible: leave `generated` out of that concept (`by` is required), keep its old `author` and date keys (`timestamp`, `created`, `date`, ...) unchanged (extra keys are allowed) and list the concept in your report; never write a placeholder such as `human:unknown`. Never put your own actor there unless you rewrote the content.
 - `generated.at`: from the old key; otherwise the date of the last commit that changed the file: `git -C <catalogue>/<bundle> log -1 --format=%cI -- <path below the bundle>.md`.
 - `verified`: only real confirmation events. A person who checked the content against its sources: `human:<id>`. An automated check (CI job, test, link checker): `process:<id>`. Migration is not verification; without evidence, omit the field. Unverified is an honest state.
 - `status`: omit for current content. `draft` for incomplete or unreviewed content. `deprecated` for content kept only for history and inbound links.

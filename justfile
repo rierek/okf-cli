@@ -13,6 +13,10 @@ default:
 test *ARGS:
     cd {{cli_dir}} && python3 -m unittest {{ if ARGS == "" { "discover -p 'test_*.py'" } else { ARGS } }}
 
+# Skill-Evals mit headless omp-Agenten (kostet Tokens): just skill-eval --only write- --models small=claude-haiku-4-5
+skill-eval *ARGS:
+    python3 scripts/skill-eval.py {{ARGS}}
+
 # Gate A (EARS-Form der Acceptance Criteria) gegen rohe .beans/-Dateien, z.B. `just gate-a ../.beans/OKFT-xxxx--slug.md`. Exit 0 = sauber, 1 = Befund, 2 = Fehlaufruf.
 gate-a *ARGS:
     @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }
