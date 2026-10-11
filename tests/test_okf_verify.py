@@ -224,7 +224,9 @@ class Output(VerifyCase):
     def test_the_verb_is_listed_in_the_maintenance_group_of_the_help(self):
         out, _, code = run_cli(self.tmp, "--help")
         self.assertEqual(code, 0)
-        self.assertRegex(out, r"(?m)^\s+verify\s+\S")
+        before, _, maintenance = out.partition("  maintenance:\n")
+        self.assertIn("    verify ", maintenance)
+        self.assertNotIn("    verify ", before)
 
 
 if __name__ == "__main__":
