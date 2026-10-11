@@ -252,7 +252,9 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         for kw in ({}, {"compact": True}, {"full": True}):
             with self.subTest(**kw):
                 out = self._prime(**kw)
-                self.assertIn("--where", out)
+                self.assertRegex(out, r'1\. find "<query>"[^\n]*\n\s+--where "')
+                if not kw.get("compact"):
+                    self.assertIn('`index <bundle>`, `--where "path ~ <bundle>/"` on find and list.', out)
                 self.assertNotRegex(out, r"--(type|tag|scope|include-archive)\b")
 
     def test_find_help_is_rendered_not_paraphrased(self):
