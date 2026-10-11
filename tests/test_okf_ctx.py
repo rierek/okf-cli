@@ -209,15 +209,17 @@ class CtxListCreate(CtxFixtureMixin, unittest.TestCase):
     def test_create_errors_write_nothing(self):
         self._create("old", "b/one")
         cases = [
-            (("Bad", "b/one"), 'ctx: invalid slug "Bad": use lowercase letters, digits and hyphens'),
-            (("show", "b/one"), 'ctx: invalid slug "show": "show" is a reserved name'),
-            (("old", "b/two"), "ctx: old already exists"),
-            (("new",), "ctx: create needs at least one path"),
-            (("new", "b/one", "--import", "nofile.txt"), "ctx: import file not found: nofile.txt"),
+            (("Bad", "b/one"), "invalid_input",
+             'ctx: invalid slug "Bad": use lowercase letters, digits and hyphens'),
+            (("show", "b/one"), "invalid_input",
+             'ctx: invalid slug "show": "show" is a reserved name'),
+            (("old", "b/two"), "invalid_input", "ctx: old already exists"),
+            (("new",), "invalid_input", "ctx: create needs at least one path"),
+            (("new", "b/one", "--import", "nofile.txt"), "not_found",
+             "ctx: import file not found: nofile.txt"),
         ]
-        for argv, msg in cases:
+        for argv, kind, msg in cases:
             r = self._create(*argv)
-            kind = "not_found" if "--import" in argv else "invalid_input"
             self.assertEqual((r.returncode, r.stdout), (EXIT_CODES[kind], ""), argv)
             self.assertEqual(r.stderr.strip(), msg, argv)
         self.assertEqual(okf_catalogue.ctx_slugs(self.root), ["old"])

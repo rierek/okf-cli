@@ -14,7 +14,7 @@ from unittest import mock
 
 from okf import catalogue as okf_catalogue
 from okf import find as okf_find
-from okf.errors import EXIT_CODES, OkfError
+from okf.errors import OkfError
 from okf import sync as okf_sync
 
 

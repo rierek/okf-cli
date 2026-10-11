@@ -786,10 +786,11 @@ class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
         self._w("a/assets/note.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
         # iter_all_md prunes these names from `dirnames`, never from the
         # directory it is handed, so a target naming one scans it regardless.
-        for bad in ("..", ".", "./", "_plan", "a/_plan", "a/assets",
-                    "a/nosuchsubdir", "nosuchbundle"):
+        for bad, kind in (("..", "invalid_input"), (".", "invalid_input"),
+                          ("./", "invalid_input"), ("_plan", "invalid_input"),
+                          ("a/_plan", "invalid_input"), ("a/assets", "invalid_input"),
+                          ("a/nosuchsubdir", "not_found"), ("nosuchbundle", "not_found")):
             out = _cli(self.tmp, "wikilinks", bad)
-            kind = "not_found" if bad in ("a/nosuchsubdir", "nosuchbundle") else "invalid_input"
             self.assertEqual(out.returncode, EXIT_CODES[kind], bad)
             self.assertRegex(out.stderr, r"not a (directory|scannable bundle path)", bad)
             self.assertIn(bad, out.stderr, bad)
