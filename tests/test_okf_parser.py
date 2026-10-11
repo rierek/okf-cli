@@ -18,6 +18,7 @@ if _HERE not in sys.path:  # cli/ holds the okf package
 
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
+from tests.okf_testkit import uv_dirs
 
 
 class ParserExtraction(unittest.TestCase):
@@ -177,10 +178,7 @@ class ShellCompletion(unittest.TestCase):
         """R-11 — the zsh glue calls the `okf-cli` wrapper, which starts `uv run --script`. The
         script environment holds argcomplete only when the PEP 723 header declares it; without it
         the call returns no candidates and no error."""
-        import subprocess
-        uv_dirs = {k: subprocess.run(["uv", d, "dir"], capture_output=True, text=True, check=True).stdout.strip()
-                   for k, d in (("UV_CACHE_DIR", "cache"), ("UV_PYTHON_INSTALL_DIR", "python"))}
-        with mock.patch.dict(os.environ, uv_dirs):  # kept when _complete swaps HOME for the fixture
+        with mock.patch.dict(os.environ, uv_dirs()):  # kept when _complete swaps HOME for the fixture
             self.assertEqual(self._complete("merge-tags q --into ", start=["uv", "run", "--script"]),
                              [("x", "concepts: 2"), ("y", "concepts: 1")])
 

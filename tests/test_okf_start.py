@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import unittest
 
-from tests.okf_testkit import uv_start_log
+from tests.okf_testkit import uv_dirs, uv_start_log
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 ENTRY = os.path.join(REPO, "cli", "okf-cli.py")
@@ -32,7 +32,7 @@ class JustRecipesStartThroughUv(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         # Asked before the shim is in place, so the shim logs only how the recipes start okf-cli.
-        self.uv_env = {"UV_CACHE_DIR": _uv_dir("cache"), "UV_PYTHON_INSTALL_DIR": _uv_dir("python")}
+        self.uv_env = uv_dirs()
         self.calls = uv_start_log(self)
 
     def _just(self, *args):
@@ -50,11 +50,6 @@ class JustRecipesStartThroughUv(unittest.TestCase):
     def test_setup_starts_the_installer_with_uv_run_script(self):
         self._just("setup")
         self.assertEqual(self.calls(), ["run --script cli/okf-cli.py install"])
-
-
-def _uv_dir(kind):
-    """The uv cache or managed-Python directory of the real home, kept when a test swaps HOME."""
-    return subprocess.run(["uv", kind, "dir"], capture_output=True, text=True, check=True).stdout.strip()
 
 
 if __name__ == "__main__":

@@ -10,7 +10,6 @@ Edits never guess: rc files, TOML and YAML get one marker-bounded block
 one-time `<file>.okf-cli.bak` of a file that existed. A config that cannot be
 edited safely turns its step into BLOCKED and prints the manual edit instead.
 """
-import importlib.util
 import json
 import os
 import re
@@ -18,10 +17,7 @@ import shlex
 import shutil
 import subprocess
 import sys
-try:
-    import tomllib
-except ImportError:  # Python < 3.11: run() says so instead of crashing
-    tomllib = None
+import tomllib
 
 from okf.errors import OkfError
 
@@ -37,7 +33,6 @@ WRAPPER_HEAD = "#!/bin/sh\n" + MANAGED + "\n"
 SCRIPT = "okf_mcp.py"  # an MCP entry that names this script is okf's own
 CHANGES = ("create", "update", "remove")
 IGNORED = shutil.ignore_patterns(".DS_Store", "__pycache__")
-GIT_URL = "git+https://github.com/xRiErOS/okf-cli"
 
 
 class Unsafe(Exception):
@@ -55,7 +50,7 @@ class Failed(Exception):
 class Ctx:
     """Everything install reads from the machine; tests inject tmp values."""
 
-    def __init__(self, env=None, home=None, pkg_root=None, platform=None, argcomplete=None, timeout=30):
+    def __init__(self, env=None, home=None, pkg_root=None, platform=None, timeout=30):
         self.env = dict(os.environ if env is None else env)
         self.home = os.path.abspath(home or self.env.get("HOME") or os.path.expanduser("~"))
         # same relative layout in a git checkout and in the installed wheel:
@@ -63,8 +58,6 @@ class Ctx:
         self.pkg_root = os.path.abspath(
             pkg_root or os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
         self.platform = platform or sys.platform
-        self.argcomplete = (importlib.util.find_spec("argcomplete") is not None
-                            if argcomplete is None else argcomplete)
         self.timeout = timeout  # seconds a harness CLI may take
 
     @property
@@ -678,20 +671,6 @@ def argcomplete_code(shell):
     return "{}\n{}".format(MANAGED, shellcode(["okf-cli"], shell=shell))
 
 
-def argcomplete_hint():
-    prefix = sys.prefix.replace("\\", "/")
-    if "/pipx/venvs/" in prefix:
-        how = "pipx inject okf-cli argcomplete"
-    elif "/uv/tools/" in prefix:
-        how = "uv tool install --force --with argcomplete " + GIT_URL
-    elif importlib.util.find_spec("pip") is None:  # e.g. a `uv venv`
-        how = 'uv pip install --python {} "argcomplete>=3"'.format(shlex.quote(sys.executable))
-    else:
-        how = '{} -m pip install "argcomplete>=3"'.format(shlex.quote(sys.executable))
-    return ("needs argcomplete in the Python that runs okf-cli; install it with:\n{}\n"
-            "then re-run `okf-cli install --apply`".format(how))
-
-
 def owned_file(content, un, where):
     def t(old):
         if old is not None and old.strip() and not old.startswith(MANAGED + "\n"):
@@ -704,8 +683,6 @@ def owned_file(content, un, where):
 
 def completion_step(ctx, sh, p, un):
     subject = sh + " completion"
-    if not un and not ctx.argcomplete:
-        return Step("shell", subject, "skip", argcomplete_hint())
     if sh == "zsh":
         return put_step(ctx, "shell", subject, os.path.join(ctx.pkg_root, "cli", "_okf-cli"),
                         p["zsh_comp"], not ctx.source_tree, un)
@@ -885,11 +862,6 @@ def run(args, ctx=None):
     ctx = ctx or Ctx()
     if ctx.platform == "win32":
         raise OkfError("internal", "ERROR: okf-cli install supports macOS and Linux only")
-    if tomllib is None:  # needed to read and validate Codex's config.toml
-        raise OkfError("internal",
-                       "ERROR: okf-cli install needs Python 3.11 or newer (this is {}). Start it with "
-                       "`uv run --script cli/okf-cli.py install` (uv fetches a suitable Python), or install the tool with "
-                       "`uv tool install {}`.".format(sys.version.split()[0], GIT_URL))
     only = None
     if args.only is not None:
         only = [n.strip() for n in args.only.split(",") if n.strip()]

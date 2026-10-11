@@ -61,6 +61,13 @@ def run_json(root, *argv, **kw):
     return envelope, err, code
 
 
+def uv_dirs():
+    """UV_CACHE_DIR and UV_PYTHON_INSTALL_DIR of the real home, for a test that swaps HOME and must
+    still find the uv cache and the managed Pythons."""
+    return {var: subprocess.run(["uv", kind, "dir"], capture_output=True, text=True, check=True).stdout.strip()
+            for var, kind in (("UV_CACHE_DIR", "cache"), ("UV_PYTHON_INSTALL_DIR", "python"))}
+
+
 def uv_start_log(case):
     """Put a `uv` shim first on PATH for the test `case`. The shim appends its arguments, one call
     per line, to a log and then runs the real uv. Returns a function that gives the logged calls,
