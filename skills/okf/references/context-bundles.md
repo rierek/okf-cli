@@ -63,7 +63,7 @@ okf-cli --root <catalogue> ctx inbound <slug>
 - `ctx read <slug>`: prints the full text of every required entry in position order, each after a `===== i/n <path> =====` separator. Reference entries are not printed. This is the one call that loads a whole ctx into context.
 - `ctx toc <slug>`: headings of every entry; `--depth N` limits the heading level.
 - `ctx outbound` and `ctx inbound`: links leaving or reaching each entry; `--file <title, path or stem>` limits to one entry, `--include-internal` adds links between members.
-- `--json` exists on `ctx list`, `ctx show`, `ctx check`, `ctx inbound` and `ctx outbound`.
+- `--json` exists on every ctx verb and prints the one envelope `{command, ok, data, warnings, error}` (`command` is `ctx <verb>`); the result of the verb is `data`. `ctx check` and `ctx show` with a dead entry exit 4, `ok` is `false` and `data` still carries the result.
 
 ## Create a ctx
 

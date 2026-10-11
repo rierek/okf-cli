@@ -6,6 +6,7 @@ Run: python3 -m unittest tests.test_okf_ctx -v
 """
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -151,7 +152,7 @@ class CtxListCreate(CtxFixtureMixin, unittest.TestCase):
         self.assertEqual((r.returncode, r.stdout),
                          (0, "no ctx bundles under %s\n" % os.path.join(self.root, "_ctx")))
         r = self._cli("ctx", "list", "--json")
-        self.assertEqual((r.returncode, r.stdout.strip()), (0, "[]"))
+        self.assertEqual((r.returncode, json.loads(r.stdout)["data"]), (0, []))
 
     def test_list_slug_order_alignment_and_json_keys(self):
         self._create("zz", "b/one")
@@ -160,7 +161,7 @@ class CtxListCreate(CtxFixtureMixin, unittest.TestCase):
         self.assertEqual([l.split()[0] for l in lines], ["a", "zz"])
         self.assertEqual(lines[0].index("("), lines[1].index("("))  # w = longest slug... padded
         import json
-        data = json.loads(self._cli("ctx", "list", "--json").stdout)
+        data = json.loads(self._cli("ctx", "list", "--json").stdout)["data"]
         self.assertEqual(data[0], {"slug": "a", "description": "", "entries": 2,
                                    "required": 2, "path": "_ctx/a.md"})
 
@@ -168,14 +169,14 @@ class CtxListCreate(CtxFixtureMixin, unittest.TestCase):
         self._create("one", "b/one")
         self._create("both", "b/one", "b/two")
         r = self._cli("ctx", "list", "--for", "b/two.md", "--json")
-        self.assertEqual([d["slug"] for d in __import__("json").loads(r.stdout)], ["both"])
+        self.assertEqual([d["slug"] for d in json.loads(r.stdout)["data"]], ["both"])
         os.remove(os.path.join(self.root, "b", "two.md"))
         r = self._cli("ctx", "list", "--for", "b/two.md", "--json")
-        self.assertEqual([d["slug"] for d in __import__("json").loads(r.stdout)], ["both"])
+        self.assertEqual([d["slug"] for d in json.loads(r.stdout)["data"]], ["both"])
         r = self._cli("ctx", "list", "--for", "b/nope.md")
         self.assertEqual((r.returncode, r.stdout), (0, ""))
         r = self._cli("ctx", "list", "--for", "b/nope.md", "--json")
-        self.assertEqual((r.returncode, r.stdout.strip()), (0, "[]"))
+        self.assertEqual((r.returncode, json.loads(r.stdout)["data"]), (0, []))
 
     def test_list_fields_each_observed_text_and_json(self):
         okf_catalogue.save_ctx(self.root, {"slug": "alpha", "description": "Alpha desc", "entries": [
@@ -183,7 +184,7 @@ class CtxListCreate(CtxFixtureMixin, unittest.TestCase):
             E(None, "nachschlag", "ext/three.md")]})
         okf_catalogue.save_ctx(self.root, {"slug": "be", "description": "Be desc", "entries": [
             E(1, "pflicht", "b/one.md")]})
-        data = __import__("json").loads(self._cli("ctx", "list", "--json").stdout)
+        data = json.loads(self._cli("ctx", "list", "--json").stdout)["data"]
         self.assertEqual(data, [
             {"slug": "alpha", "description": "Alpha desc", "entries": 3, "required": 2,
              "path": "_ctx/alpha.md"},
@@ -298,7 +299,7 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
         import json
         r = self._cli("ctx", "show", "demo", "--json")
         self.assertEqual((r.returncode, r.stderr), (0, ""))
-        d = json.loads(r.stdout)
+        d = json.loads(r.stdout)["data"]
         self.assertEqual(list(d), ["slug", "description", "path", "entries", "dead", "tokens_required"])
         self.assertEqual((d["slug"], d["path"], d["dead"]), ("demo", "_ctx/demo.md", 0))
         e1, e2, e3 = d["entries"]
@@ -314,7 +315,7 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
     def test_show_json_follows_title_change(self):
         import json
         self._w("b/one.md", "---\ntype: Concept\ntitle: Renamed\n---\n\nx\n")
-        d = json.loads(self._cli("ctx", "show", "demo", "--json").stdout)
+        d = json.loads(self._cli("ctx", "show", "demo", "--json").stdout)["data"]
         self.assertEqual(d["entries"][0]["title"], "Renamed")
 
     def test_show_json_dead_stdout_only_object(self):
@@ -322,12 +323,15 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
         self._kill_one()
         r = self._cli("ctx", "show", "demo", "--json")
         self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
-        d = json.loads(r.stdout)
+        env = json.loads(r.stdout)
+        d = env["data"]
         self.assertEqual(d["dead"], 1)
         e = d["entries"][0]
         self.assertEqual((e["alive"], e["chars"], e["tokens"], e["type"], e["title"]),
                          (False, 0, 0, "", "one.md"))
-        self.assertIn("WARNING: 1 dead entry", r.stderr)
+        self.assertEqual((env["ok"], env["error"]["kind"]), (False, "non_conformant"))
+        self.assertIn("WARNING: 1 dead entry", env["error"]["message"])
+        self.assertEqual(r.stderr, "")
 
     def test_read_prints_required_only(self):
         r = self._cli("ctx", "read", "demo")
@@ -376,7 +380,7 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
         self.assertIn("  - [DEAD] {}\n     why: background\n".format(self.out), r.stdout)
         self.assertIn("WARNING: 1 dead entry", r.stdout)
         j = self._cli("ctx", "show", "demo", "--json")
-        self.assertEqual((j.returncode, json.loads(j.stdout)["dead"]),
+        self.assertEqual((j.returncode, json.loads(j.stdout)["data"]["dead"]),
                          (EXIT_CODES["non_conformant"], 1))
 
     def test_show_orders_required_by_pos_not_file_order(self):
@@ -397,7 +401,7 @@ class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
             f.write("---\ntype: X\ntitle: T\n---\nabcde")
         okf_catalogue.save_ctx(self.root, {"slug": "t", "description": "", "entries": [
             {"mode": "pflicht", "path": "~/notes/a.txt", "comment": ""}]})
-        e = json.loads(self._cli("ctx", "show", "t", "--json").stdout)["entries"][0]
+        e = json.loads(self._cli("ctx", "show", "t", "--json").stdout)["data"]["entries"][0]
         self.assertEqual((e["type"], e["title"], e["description"], e["chars"], e["tokens"]),
                          ("", "a.txt", "", 30, 8))
 
@@ -728,7 +732,7 @@ class CtxNavigate(CtxFixtureMixin, unittest.TestCase):
     def test_outbound_json(self):
         import json
         self._set("b/gone.md", "b/three.md")
-        d = json.loads(self._cli("ctx", "outbound", "demo", "--json").stdout)
+        d = json.loads(self._cli("ctx", "outbound", "demo", "--json").stdout)["data"]
         self.assertEqual(d, {"slug": "demo", "direction": "outbound", "include_internal": False,
                              "members": [
             {"path": "b/gone.md", "dead": True, "links": []},
@@ -738,7 +742,7 @@ class CtxNavigate(CtxFixtureMixin, unittest.TestCase):
 
     def test_inbound_json(self):
         import json
-        d = json.loads(self._cli("ctx", "inbound", "demo", "--json").stdout)
+        d = json.loads(self._cli("ctx", "inbound", "demo", "--json").stdout)["data"]
         self.assertEqual(d["direction"], "inbound")
         (m,) = d["members"]
         self.assertEqual((m["path"], sorted(l["source"] for l in m["links"]),

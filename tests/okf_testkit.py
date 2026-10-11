@@ -3,6 +3,7 @@ test_ prefix, so unittest discovery never collects it."""
 import argparse
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -34,6 +35,29 @@ def run_find(root, query, **kw):
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
         okf_find.cmd_find(root, args)
     return buf.getvalue()
+
+
+def run_cli(root, *argv, home=None, env=None):
+    """(stdout, stderr, exit code) of one real okf-cli.py call against the catalogue at
+    `root`. VOYAGE_API_KEY is dropped, so no call reaches the embedding backend; `env`
+    adds or overrides variables."""
+    full_env = {k: v for k, v in os.environ.items() if k != "VOYAGE_API_KEY"}
+    if home is not None:
+        full_env["HOME"] = home
+    full_env.update(env or {})
+    proc = _cli(root, *argv, env=full_env, cwd=root)
+    return proc.stdout, proc.stderr, proc.returncode
+
+
+def run_json(root, *argv, **kw):
+    """(envelope, stderr, exit code) of `okf-cli.py --root <root> <argv> --json`. Fails
+    unless stdout is exactly one JSON object on one line carrying the five envelope keys."""
+    out, err, code = run_cli(root, *argv, "--json", **kw)
+    assert out.count("\n") == 1 and out.endswith("\n"), "stdout is not one line: {!r}".format(out)
+    envelope = json.loads(out)
+    assert isinstance(envelope, dict), "stdout is not a JSON object: {!r}".format(out)
+    assert set(envelope) == {"command", "ok", "data", "warnings", "error"}, sorted(envelope)
+    return envelope, err, code
 
 
 def _scan(root, target, **kw):
@@ -94,9 +118,14 @@ class SyncFixtureMixin:
         return self._run(okf_sync.cmd_sync_insert, **kw)
 
     def _status(self, **over):
+        """(data of `sync-status --json`, exit code): the handler's result, or what its drift
+        failure carries."""
         kw = dict(target=None, source=None, block=None, json=True)
         kw.update(over)
-        return self._run(okf_sync.cmd_sync_status, **kw)
+        try:
+            return okf_sync.cmd_sync_status(self.tmp, argparse.Namespace(**kw)), 0
+        except OkfError as e:
+            return e.result, e.code
 
     def _update(self, **over):
         kw = dict(target=None, source=None, block=None, apply=True, force=False)
@@ -122,15 +151,16 @@ needs_case_insensitive_fs = unittest.skipUnless(
 
 
 _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+CLI = os.path.join(_HERE, "okf-cli.py")
 
 
-def _cli(root, *argv):
-    """Drive the REAL cli/okf-cli.py as a subprocess. The `command:` acceptance
-    criteria of docs/wikilink-awareness/SPEC.md are written against the shell
-    surface (exit code, stdout shape), which an in-process call cannot pin."""
-    return subprocess.run(
-        [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", root] + list(argv),
-        capture_output=True, text=True)
+def _cli(root, *argv, env=None, cwd=None):
+    """Drive the REAL cli/okf-cli.py as a subprocess: the one subprocess path of the tests.
+    The `command:` acceptance criteria of docs/wikilink-awareness/SPEC.md are written
+    against the shell surface (exit code, stdout shape), which an in-process call cannot
+    pin."""
+    return subprocess.run([sys.executable, CLI, "--root", root] + list(argv),
+                          capture_output=True, text=True, env=env, cwd=cwd)
 
 
 # --- the ctx fixture shared by the ctx command and catalogue (ctx storage) suites ---
@@ -169,9 +199,7 @@ class CtxFixtureMixin:
             f.write(text)
 
     def _cli(self, *argv):
-        return subprocess.run(
-            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", self.root, *argv],
-            capture_output=True, text=True, env={**os.environ, "HOME": self.home})
+        return _cli(self.root, *argv, env={**os.environ, "HOME": self.home})
 
     def _home(self):
         return mock.patch.dict(os.environ, {"HOME": self.home})

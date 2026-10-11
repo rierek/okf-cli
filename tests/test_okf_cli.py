@@ -489,7 +489,7 @@ class ExitCodePerClass(unittest.TestCase):
         self.assertEqual(js.returncode, 4, js.stderr)
         self.assertIn(("okf/frontmatter/parseable", "error", "b/bad.md"),
                       [(f["rule"], f["severity"], f["path"])
-                       for f in json.loads(js.stdout)["findings"]])
+                       for f in json.loads(js.stdout)["data"]["findings"]])
 
     def test_reindex_check_stale_is_5(self):
         self._w("b/index.md", "# B\n\n<!-- okf:index -->\nstale\n<!-- /okf:index -->\n")

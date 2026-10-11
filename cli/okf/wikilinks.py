@@ -4,12 +4,12 @@ that `check` runs."""
 
 import os
 import re
-import sys
 import unicodedata
 from okf.errors import OkfError
 
 from okf.catalogue import RESERVED, iter_all_md, list_bundles, read_file, resolve_scopes
 from okf.linkscan import wikilink_regions, wikilink_scan_text
+from okf.output import _add_output, _note
 from okf.parser_support import _complete_scopes, _sub
 
 
@@ -214,15 +214,15 @@ def wikilink_checked_bundles(config, root=None):
     .okf.toml means the empty set: the rule ships silent and is switched on per
     bundle, so introducing it cannot bury a clean catalogue in warnings.
 
-    A value the gate cannot honour is announced on stderr rather than silently
+    A value the gate cannot honour is announced as a call note rather than silently
     disabling the rule — a config that reads as if it opted a bundle in, but
     does not, is worse than no config at all."""
     if "wikilink_checked_bundles" not in config:
         return set()
     v = config["wikilink_checked_bundles"]
     if not isinstance(v, (list, tuple)) or not all(isinstance(x, str) for x in v):
-        sys.stderr.write("note: wikilink_checked_bundles must be an array of "
-                         "bundle names; got {!r} — wikilink check stays off\n".format(v))
+        _note("wikilink_checked_bundles must be an array of "
+              "bundle names; got {!r} — wikilink check stays off".format(v))
         return set()
     # Casefolded: the store's filesystem is, so `check A` reaches bundle `a`
     # and its ctx["bundle"] reads "A". An exact-string gate switched this one
@@ -232,8 +232,8 @@ def wikilink_checked_bundles(config, root=None):
         known = {b.lower() for b in list_bundles(root)}
         unknown = sorted(x for x in v if x.lower() not in known)
         if unknown:
-            sys.stderr.write("note: wikilink_checked_bundles names non-bundle(s): "
-                             "{} — no file will be checked for them\n".format(", ".join(unknown)))
+            _note("wikilink_checked_bundles names non-bundle(s): "
+                  "{} — no file will be checked for them".format(", ".join(unknown)))
     return out
 
 
@@ -281,7 +281,6 @@ def cmd_wikilinks(root, args):
         totals[r["status"]] += 1
     shown = [r for r in links if r["status"] != "resolved"] if args.unresolved else links
     if args.json:
-        import json
         # by_bundle counts what `links` carries, so the two never contradict
         # each other; `totals` is always the unfiltered census and `filtered`
         # says which of the two a consumer is looking at.
@@ -290,9 +289,8 @@ def cmd_wikilinks(root, args):
             b = r["source"].split("/", 1)[0]
             by_bundle.setdefault(b, {"resolved": 0, "ambiguous": 0, "unresolved": 0})
             by_bundle[b][r["status"]] += 1
-        print(json.dumps({"links": shown, "by_bundle": by_bundle,
-                          "totals": totals, "filtered": bool(args.unresolved)}))
-        return
+        return {"links": shown, "by_bundle": by_bundle,
+                "totals": totals, "filtered": bool(args.unresolved)}
     for r in shown:
         line = "{:<10} {:<11} {}  {}{}".format(
             r["status"], r["region"], r["source"], r["raw"],
@@ -311,7 +309,7 @@ def add_wikilinks_parser(sub):
                      help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pwl.add_argument("--unresolved", action="store_true",
                      help="list only unresolved and ambiguous occurrences (summary stays complete)")
-    pwl.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pwl)
 
 
 COMMANDS = {

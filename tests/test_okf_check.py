@@ -1155,7 +1155,10 @@ class FindingShape(unittest.TestCase):
         self._with_error()
         r = _cli(self.tmp, "check", "--json")
         self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
-        out = json.loads(r.stdout)
+        env = json.loads(r.stdout)
+        self.assertEqual(list(env), ["command", "ok", "data", "warnings", "error"])
+        self.assertEqual(env["warnings"], [])  # findings never travel as call warnings
+        out = env["data"]
         self.assertEqual(list(out), ["findings"])
         self.assertEqual([list(f) for f in out["findings"]], [self.FINDING_KEYS] * 2)
         self.assertEqual(sorted((f["rule"], f["severity"], f["path"]) for f in out["findings"]), [
@@ -1165,14 +1168,14 @@ class FindingShape(unittest.TestCase):
     def test_strict_json_keeps_the_warning_severity_and_still_fails(self):
         r = _cli(self.tmp, "check", "--strict", "--json")
         self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
-        out = json.loads(r.stdout)
+        out = json.loads(r.stdout)["data"]
         self.assertEqual([(f["rule"], f["severity"]) for f in out["findings"]],
                          [("kc/frontmatter/english-keys", "warning")])
 
     def test_without_strict_a_warning_is_reported_and_exits_0(self):
         r = _cli(self.tmp, "check", "--json")
         self.assertEqual((r.returncode, r.stderr), (0, ""))
-        self.assertEqual([(f["rule"], f["severity"]) for f in json.loads(r.stdout)["findings"]],
+        self.assertEqual([(f["rule"], f["severity"]) for f in json.loads(r.stdout)["data"]["findings"]],
                          [("kc/frontmatter/english-keys", "warning")])
 
     def test_text_line_starts_with_own_severity_and_summary_counts_errors_only(self):
@@ -1212,15 +1215,16 @@ class FindingShape(unittest.TestCase):
             ("kc/a/w", "warning", "b/a.md"), ("kc/a/e", "error", "b/b.md"))]
 
         def report(fs, as_json):
+            """The printed text; in envelope mode what the failure carries as its result."""
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                with self.assertRaises(okf_check.OkfError):
+                with self.assertRaises(okf_check.OkfError) as raised:
                     okf_check.report_findings(fs, False, as_json)
-            return buf.getvalue()
+            return raised.exception.result if as_json else buf.getvalue()
 
         for as_json in (False, True):
             self.assertEqual(report(findings, as_json), report(findings[::-1], as_json))
-        self.assertEqual([f["path"] for f in json.loads(report(findings, True))["findings"]],
+        self.assertEqual([f["path"] for f in report(findings, True)["findings"]],
                          ["b/b.md", "b/y.md", "b/a.md", "b/z.md"])
 
 
@@ -1258,7 +1262,7 @@ class SuppressRules(unittest.TestCase):
         self._w("b/g.md", "---\ntype: Concept\ntitel: X\n---\n# G\n")
 
     def _rules(self, r):
-        return [f["rule"] for f in json.loads(r.stdout)["findings"]]
+        return [f["rule"] for f in json.loads(r.stdout)["data"]["findings"]]
 
     def test_ignore_prefix_turns_exit_4_into_0(self):
         self._config()
@@ -1322,7 +1326,7 @@ class SuppressRules(unittest.TestCase):
         r = _cli(self.tmp, "check", "--strict", "--ignore", "kc/frontmatter/*")
         self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self.OK, ""))
         js = _cli(self.tmp, "check", "--strict", "--json", "--ignore", self.KC_WARNING)
-        self.assertEqual((js.returncode, json.loads(js.stdout)), (0, {"findings": []}))
+        self.assertEqual((js.returncode, json.loads(js.stdout)["data"]), (0, {"findings": []}))
 
     def test_flag_and_config_patterns_are_united_and_the_flag_repeats(self):
         self._kc_error()

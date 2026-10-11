@@ -2,14 +2,13 @@
 engine that runs them (`run_checks`), the crosslink and XML-like-tag repairs, and
 the check, fix-crosslinks and fix-xml-tags commands."""
 
-import json
 from collections import namedtuple
 import os
 import re
-import sys
 
 from okf.errors import OkfError
 from okf import sync, wikilinks
+from okf.output import _add_output, _note
 from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, FM_DELIM, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE, _dequote,
     _mask_managed_block, _split_managed_block, ctx_findings, extract_tags, index_h1_and_desc,
@@ -322,6 +321,9 @@ def cmd_fix_xml_tags(root, args):
             raise OkfError("not_found", "not a directory: {}".format(target))
     touched = fix_xml_like_tags(root, target, dry_run=args.check)
     verb = "would wrap" if args.check else "wrapped"
+    if getattr(args, "json", False):
+        return {"applied": not args.check,
+                "files": [{"path": rel, "chains": n} for rel, n in touched]}
     for rel, n in touched:
         print("{:<12} {}  ({} chain(s))".format(verb, rel, n))
     print("fix-xml-tags: {} file(s) {}, {} chain(s) total".format(
@@ -477,6 +479,10 @@ def cmd_fix_crosslinks(root, args):
     touched, unresolved = fix_crosslinks(root, target, dry_run=args.check,
                                           include_reserved=args.include_reserved)
     verb = "would rewrite" if args.check else "rewrote"
+    if getattr(args, "json", False):
+        return {"applied": not args.check,
+                "files": [{"path": rel, "links": n} for rel, n in touched],
+                "unresolved": [{"path": rel, "target": tgt} for rel, tgt in unresolved]}
     for rel, n in touched:
         print("{:<14} {}  ({} link(s))".format(verb, rel, n))
     for rel, tgt in unresolved:
@@ -615,7 +621,7 @@ def cmd_check(root, args):
     patterns = ignore_patterns(load_okf_config(root), args.ignore)
     findings = [f for f in run_checks(root, target, types_source=getattr(args, "types", None))
                 if not is_suppressed(f.rule, patterns)]
-    report_findings(findings, args.strict, args.json)
+    return report_findings(findings, args.strict, args.json)
 
 
 def ignore_patterns(config, flag_patterns):
@@ -629,8 +635,8 @@ def ignore_patterns(config, flag_patterns):
         if isinstance(v, list) and all(isinstance(x, str) for x in v):
             patterns += v
         else:
-            sys.stderr.write("note: ignore_rules must be an array of rule-ID patterns; "
-                             "got {!r} — it suppresses no rule\n".format(v))
+            _note("ignore_rules must be an array of rule-ID patterns; "
+                  "got {!r} — it suppresses no rule".format(v))
     return patterns
 
 
@@ -651,11 +657,13 @@ def report_findings(findings, strict, as_json):
     counting = [f for f in findings if strict or f.severity == "error"]
     ordered = sorted(findings, key=lambda f: (f.severity != "error", f.path))
     if as_json:
-        print(json.dumps({"findings": [f._asdict() for f in ordered]}))
-    else:
-        for f in ordered:
-            print("{:<9}{:<20} {}  ({})".format(f.severity.upper(), f.rule, f.path, f.message))
-        print("{} VIOLATIONS".format(len(counting)) if counting else "OK — 0 violations")
+        result = {"findings": [f._asdict() for f in ordered]}
+        if counting:
+            raise OkfError("non_conformant", "", result)
+        return result
+    for f in ordered:
+        print("{:<9}{:<20} {}  ({})".format(f.severity.upper(), f.rule, f.path, f.message))
+    print("{} VIOLATIONS".format(len(counting)) if counting else "OK — 0 violations")
     if counting:
         raise OkfError("non_conformant", "")
 
@@ -670,7 +678,7 @@ def add_check_parser(sub):
                     help="suppress rules: an exact rule ID, or a prefix ending in `*` "
                          "(kc/*, okf/link/*); repeatable, added to .okf.toml ignore_rules; "
                          "suppressed findings neither print nor count")
-    pc.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pc)
     pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
 
 
@@ -686,6 +694,7 @@ def add_fix_crosslinks_parser(sub):
                            "outside the managed <!-- okf:index --> block, "
                            "which stays byte-identical (D-fxcr-01, off by "
                            "default)")
+    _add_output(pfx)
 
 
 def add_fix_xml_tags_parser(sub):
@@ -693,6 +702,7 @@ def add_fix_xml_tags_parser(sub):
                 "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
     pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
+    _add_output(pfxt)
 
 
 COMMANDS = {

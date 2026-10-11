@@ -5,7 +5,6 @@ ranking, rendering and the recent command. Stdlib unittest, no deps.
 Run: python3 -m unittest tests.test_okf_recent -v
 """
 import datetime
-import json
 import os
 import shutil
 import sys
@@ -227,6 +226,8 @@ class RecentFixtureMixin:
         return ap
 
     def _run(self, **kw):
+        """(stdout, stderr); with json=True the first item is the handler's result, the
+        envelope's `data`, and stdout must have stayed empty."""
         import contextlib
         import io
         import types
@@ -236,7 +237,10 @@ class RecentFixtureMixin:
             setattr(args, k, v)
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            okf_recent.cmd_recent(self.tmp, args)
+            data = okf_recent.cmd_recent(self.tmp, args)
+        if args.json:
+            self.assertEqual(out.getvalue(), "")
+            return data, err.getvalue()
         return out.getvalue(), err.getvalue()
 
 
@@ -321,8 +325,7 @@ class RecentCommand(RecentFixtureMixin, unittest.TestCase):
     def test_json_carries_created_and_created_ts(self):
         self._concept("a/one.md")
         self._stub_catalogue_events({"a/one.md": 1785955683})
-        out, _ = self._run(json=True)
-        data = json.loads(out)
+        data, _ = self._run(json=True)
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["created_ts"], 1785955683)
         self.assertEqual(data[0]["path"], "a/one")
@@ -333,16 +336,15 @@ class RecentCommand(RecentFixtureMixin, unittest.TestCase):
     def test_json_undated_concept_has_null_dates(self):
         self._concept("a/one.md")
         self._stub_catalogue_events({})
-        out, _ = self._run(json=True)
-        data = json.loads(out)
+        data, _ = self._run(json=True)
         self.assertIsNone(data[0]["created"])
         self.assertIsNone(data[0]["created_ts"])
 
     def test_json_empty_result_is_empty_array(self):
         os.makedirs(os.path.join(self.tmp, "a"))
         self._stub_catalogue_events({})
-        out, _ = self._run(json=True)
-        self.assertEqual(json.loads(out), [])
+        data, _ = self._run(json=True)
+        self.assertEqual(data, [])
 
     def test_symlinked_bundle_resolves_against_its_own_repo(self):
         """D08 end to end — the foreign repo answers for its own concepts, and

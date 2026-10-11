@@ -6,6 +6,7 @@ import os
 import sys
 from okf.errors import OkfError
 
+from okf.output import _add_output
 from okf.parser_support import _sub
 
 
@@ -23,9 +24,10 @@ def cmd_install(_root, args):
     spec = importlib.util.spec_from_file_location("okf_install", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    code = mod.run(args)
+    code, report = mod.run(args)
     if code:
-        raise OkfError("internal", "install failed with exit code {}".format(code))
+        raise OkfError("internal", "install failed with exit code {}".format(code), report)
+    return report
 
 
 # commands main() runs without resolving a catalogue root
@@ -44,7 +46,7 @@ def add_install_parser(sub):
                      help="comma-separated subset: claude, omp, codex, opencode, kimi, openclaw, hermes "
                           "(agents), zsh, bash, fish (shells). Default: install for every agent and "
                           "shell found on this machine; uninstall covers all of them")
-    pin.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pin)
 
 
 COMMANDS = {"install": (cmd_install, add_install_parser)}

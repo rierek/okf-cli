@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 from okf.errors import OkfError
+from okf.output import _add_output
 
 from okf import catalogue
 from okf.catalogue import (
@@ -97,6 +98,10 @@ def cmd_merge_tags(root, args):
             touched.append(rel)
             if args.apply:
                 write_file(ap, new_text)
+    result = {"applied": bool(args.apply), "files": touched, "unparseable": unparseable,
+              "from": sorted(sources), "into": args.into}
+    if getattr(args, "json", False):
+        return result
     verb = "rewrote" if args.apply else "would rewrite"
     for rel in touched:
         print("{:<14} {}".format(verb, rel))
@@ -134,6 +139,10 @@ def cmd_remove_tags(root, args):
             touched.append(rel)
             if args.apply:
                 write_file(ap, new_text)
+    result = {"applied": bool(args.apply), "files": touched, "emptied": emptied,
+              "unparseable": unparseable, "removed": sorted(targets)}
+    if getattr(args, "json", False):
+        return result
     verb = "rewrote" if args.apply else "would rewrite"
     for rel in touched:
         print("{:<14} {}".format(verb, rel))
@@ -179,6 +188,9 @@ def cmd_normalize_tags(root, args):
             touched.append(rel)
             if args.apply:
                 write_file(ap, new_text)
+    result = {"applied": bool(args.apply), "files": touched}
+    if getattr(args, "json", False):
+        return result
     verb = "rewrote" if args.apply else "would rewrite"
     for rel in touched:
         print("{:<14} {}".format(verb, rel))
@@ -251,54 +263,65 @@ def auto_embed_new_tags(root, tags):
 
 
 def cmd_tags(root, args):
+    as_json = getattr(args, "json", False)
     if getattr(args, "register", None):
         try:
             added, already = register_tags(root, args.register)
         except ValueError as e:
             raise OkfError("invalid_input", "ERROR: {}".format(e))
         if added:
-            print("registered {} new tag(s) in TAGS.md: {}".format(len(added), ", ".join(added)))
+            if not as_json:
+                print("registered {} new tag(s) in TAGS.md: {}".format(len(added), ", ".join(added)))
             auto_embed_new_tags(root, added)
-        if already:
+        if already and not as_json:
             print("already registered: {}".format(", ".join(already)))
-        return
+        return {"registered": added, "already_registered": already}
     if getattr(args, "validate", None):
         tags_set = load_tags(root)
         if tags_set is None:
-            print("(no TAGS.md — closed vocabulary not enabled)")
-            return
+            if not as_json:
+                print("(no TAGS.md — closed vocabulary not enabled)")
+            return {"closed_vocabulary": False, "unknown": []}
         unknown = [t for t in args.validate if t not in tags_set]
-        for t in unknown:
-            print("UNKNOWN  {}".format(t))
-        print("OK — all {} known".format(len(args.validate)) if not unknown
-              else "{} UNKNOWN — register with: okf-cli.py tags --register <tag> \"<description, max {} chars>\"".format(
-                  len(unknown), TAG_DESC_MAX))
+        if not as_json:
+            for t in unknown:
+                print("UNKNOWN  {}".format(t))
+            print("OK — all {} known".format(len(args.validate)) if not unknown
+                  else "{} UNKNOWN — register with: okf-cli.py tags --register <tag> \"<description, max {} chars>\"".format(
+                      len(unknown), TAG_DESC_MAX))
+        result = {"closed_vocabulary": True, "unknown": unknown}
         if unknown:
-            raise OkfError("non_conformant", "")
-        return
+            raise OkfError("non_conformant", "", result)
+        return result
     counts = all_tags(root)
     if not args.query:
-        if not counts:
-            print("(no tags found)")
-            return
         items = counts.items()
         if args.singletons:
             items = [(t, n) for t, n in items if n == 1]
-            if not items:
-                print("(no singleton tags)")
-                return
-        width = max(len(t) for t, _n in items)
-        for t, n in sorted(items, key=lambda kv: (-kv[1], kv[0])):
-            print("  {:<{w}}  {}".format(t, n, w=width))
+        rows = sorted(items, key=lambda kv: (-kv[1], kv[0]))
+        if as_json:
+            return {"tags": [{"tag": t, "count": n} for t, n in rows]}
+        if not counts:
+            print("(no tags found)")
+        elif not rows:
+            print("(no singleton tags)")
+        else:
+            width = max(len(t) for t, _n in rows)
+            for t, n in rows:
+                print("  {:<{w}}  {}".format(t, n, w=width))
         return
     universe = sorted(counts.keys())
-    for q in args.query:
-        print(f"== searched: {q} ==")
-        matches = fuzzy_matches(q, universe, limit=args.limit)
-        if not matches:
+    searches = [{"query": q, "matches": [{"tag": m, "count": counts[m]}
+                                         for m in fuzzy_matches(q, universe, limit=args.limit)]}
+                for q in args.query]
+    if as_json:
+        return {"searches": searches}
+    for search in searches:
+        print(f"== searched: {search['query']} ==")
+        if not search["matches"]:
             print("  (no match — new tag)")
-        for m in matches:
-            print("  - {}  ({})".format(m, counts[m]))
+        for m in search["matches"]:
+            print("  - {}  ({})".format(m["tag"], m["count"]))
         print()
 
 
@@ -310,6 +333,7 @@ def add_merge_tags_parser(sub):
     pmt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    _add_output(pmt)
 
 
 def add_normalize_tags_parser(sub):
@@ -318,6 +342,7 @@ def add_normalize_tags_parser(sub):
     pnt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    _add_output(pnt)
 
 
 def add_remove_tags_parser(sub):
@@ -327,6 +352,7 @@ def add_remove_tags_parser(sub):
     prt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    _add_output(prt)
 
 
 def add_tags_parser(sub):
@@ -342,6 +368,7 @@ def add_tags_parser(sub):
                          "DESCRIPTION is required, max 150 chars; repeat the option for several tags")
     pg.add_argument("--validate", nargs="+", metavar="TAG",
                     help="check tag(s) against TAGS.md; exit 1 if any are unregistered").completer = _complete_tags
+    _add_output(pg)
 
 
 COMMANDS = {

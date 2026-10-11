@@ -23,6 +23,8 @@ try:
 except ImportError:  # Python < 3.11: run() says so instead of crashing
     tomllib = None
 
+from okf.errors import OkfError
+
 HARNESSES = ("claude", "omp", "codex", "opencode", "kimi", "openclaw", "hermes")
 SHELLS = ("zsh", "bash", "fish")
 # harnesses that read ~/.agents/skills: one shared install covers all of them
@@ -878,28 +880,27 @@ def render(ctx, steps, apply, un):
 
 
 def run(args, ctx=None):
-    """Entry point of `okf-cli install`; returns the exit code."""
+    """Entry point of `okf-cli install`; returns (exit code, report). Prints the text report
+    unless `args.json`; a refused call raises OkfError."""
     ctx = ctx or Ctx()
     if ctx.platform == "win32":
-        sys.exit("ERROR: okf-cli install supports macOS and Linux only")
+        raise OkfError("internal", "ERROR: okf-cli install supports macOS and Linux only")
     if tomllib is None:  # needed to read and validate Codex's config.toml
-        sys.exit("ERROR: okf-cli install needs Python 3.11 or newer (this is {}). Run it with a newer "
-                 "interpreter, e.g. `python3.12 cli/okf-cli.py install`, or install the tool with "
-                 "`uv tool install {}` (uv fetches a suitable Python).".format(sys.version.split()[0], GIT_URL))
+        raise OkfError("internal",
+                       "ERROR: okf-cli install needs Python 3.11 or newer (this is {}). Run it with a newer "
+                       "interpreter, e.g. `python3.12 cli/okf-cli.py install`, or install the tool with "
+                       "`uv tool install {}` (uv fetches a suitable Python).".format(sys.version.split()[0], GIT_URL))
     only = None
     if args.only is not None:
         only = [n.strip() for n in args.only.split(",") if n.strip()]
         unknown = [n for n in only if n not in HARNESSES + SHELLS]
         if unknown or not only:
-            sys.stderr.write("install: unknown --only name(s): {}; valid: {}\n".format(
+            raise OkfError("invalid_input", "install: unknown --only name(s): {}; valid: {}".format(
                 ", ".join(unknown) or "(none given)", ", ".join(HARNESSES + SHELLS)))
-            sys.exit(2)
     steps = plan(ctx, only, args.uninstall)
     if args.apply:
         execute(steps)
     code = 1 if any(s.status in ("blocked", "failed") for s in steps) else 0
-    if args.json:
-        print(json.dumps(report(ctx, steps, args.apply, args.uninstall)))
-    else:
+    if not args.json:
         render(ctx, steps, args.apply, args.uninstall)
-    return code
+    return code, report(ctx, steps, args.apply, args.uninstall)

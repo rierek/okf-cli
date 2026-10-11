@@ -143,7 +143,7 @@ From a clone, `install` also creates `~/.local/bin/okf-cli` and puts `~/.local/b
 - **Safe edits.** JSON configs get a key-scoped merge; rc files, TOML and YAML get one block between `# >>> okf-cli >>>` and `# <<< okf-cli <<<`. Writes are atomic, symlinked dotfiles are written through, and the first edit of a file keeps `<file>.okf-cli.bak`. A config that cannot be edited safely (JSON with comments, unusual YAML, a foreign `okf` entry) is reported as BLOCKED with the exact manual edit; nothing is guessed.
 - **Uninstall.** `okf-cli install --uninstall` previews, `--uninstall --apply` removes exactly what `install` created.
 - **Locations.** `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, `CODEX_HOME`, `OPENCODE_CONFIG`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `KIMI_CODE_HOME`, `OPENCLAW_STATE_DIR`, `HERMES_HOME` and `ZDOTDIR` are honoured.
-- **Scripting.** No prompts, no network, timeouts on every agent CLI call. `--json` prints one object with a status per step. Exit code 0: done or nothing to do; 1: a step is blocked or failed; 2: usage error.
+- **Scripting.** No prompts, no network, timeouts on every agent CLI call. `--json` prints one envelope `{command, ok, data, warnings, error}`; `data` holds a status per step. Exit code 0: done or nothing to do; 1: a step is blocked or failed; 2: usage error.
 - **Platforms.** macOS and Linux, Python 3.11 or newer.
 
 ## How it differs

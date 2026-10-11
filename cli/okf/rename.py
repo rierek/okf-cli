@@ -5,8 +5,8 @@ and rewrite-path, the literal path-string replace across text files."""
 import os
 import re
 import subprocess
-import sys
 from okf.errors import OkfError
+from okf.output import _add_output, _note
 
 from okf import catalogue, check, linkscan, wikilinks
 from okf.catalogue import (
@@ -50,6 +50,8 @@ def cmd_rewrite_path(root, args):
     scan_root = os.path.abspath(args.scan_root) if getattr(args, "scan_root", None) else root
     dry = getattr(args, "check", False)
     touched = rewrite_path(scan_root, args.old, args.new, dry_run=dry)
+    if getattr(args, "json", False):
+        return {"applied": not dry, "files": [{"path": rel, "count": n} for rel, n in touched]}
     verb = "would rewrite" if dry else "rewrote"
     for rel, n in touched:
         print("{} {} ({}x)".format(verb, rel, n))
@@ -340,7 +342,7 @@ def _apply_sync_source_rewrites(abspath, old_source, new_source):
     follow."""
     text = read_file_verbatim(abspath)
     if text is None:
-        sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
+        _note("skipping {} — not valid UTF-8".format(abspath))
         return 0
     out, last, n = [], 0, 0
     for m in SYNC_OPEN_RE.finditer(text):
@@ -367,7 +369,7 @@ def _apply_link_rewrites(abspath, rewrites):
     documentation sample while claiming a smaller edit than it made."""
     text = read_file_verbatim(abspath)
     if text is None:
-        sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
+        _note("skipping {} — not valid UTF-8".format(abspath))
         return
     mapping = dict(rewrites)
     out, last = [], 0
@@ -396,7 +398,7 @@ def _apply_wikilink_rewrites(abspath, rename_map):
     it, so no offset points at it."""
     text = read_file_verbatim(abspath)
     if text is None:
-        sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
+        _note("skipping {} — not valid UTF-8".format(abspath))
         return
     out, last = [], 0
     for rec in wikilinks.parse_wikilinks(text):
@@ -470,7 +472,7 @@ def _git_mv(root, old_abs, new_abs):
 
 
 def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
-                   plan=None):
+                   plan=None, quiet=False):
     """The validation, planning and application core shared by `rename` and
     (per okf-cli-16rg) `archive`/`archive --restore`. Callers pass already
     resolved absolute paths; `verb` only steers the prefix of error messages
@@ -538,6 +540,7 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
 
     if plan is None:
         plan = plan_rename(root, old_abs, new_abs)
+    say = (lambda *_a, **_k: None) if quiet else print
     old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
     new_rel = os.path.relpath(new_abs, root).replace(os.sep, "/")
     ctx_hits = ctx_memberships(root, old_rel)
@@ -557,14 +560,14 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
 
     def _print_skipped():
         for r in wl_skipped:
-            print("  skipped-ambiguous  {} [{}]  {}  candidates: {}".format(
+            say("  skipped-ambiguous  {} [{}]  {}  candidates: {}".format(
                 r["source"], r["region"], r["raw"], ", ".join(r["candidates"])))
         for c in collisions:
-            print("  wikilink-collision  new basename already taken by {}".format(c))
+            say("  wikilink-collision  new basename already taken by {}".format(c))
         for r in wl_ambiguous:
-            print("  turns-ambiguous  {} [{}]  {}  candidates after the move: {}"
-                  .format(r["source"], r["region"], r["raw"],
-                          ", ".join(r["candidates"])))
+            say("  turns-ambiguous  {} [{}]  {}  candidates after the move: {}"
+                .format(r["source"], r["region"], r["raw"],
+                        ", ".join(r["candidates"])))
 
     if apply and wl_ambiguous and not force:
         die("this move leaves {} inbound wikilink(s) ambiguous: {} — the same "
@@ -573,35 +576,54 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
             .format(len(wl_ambiguous),
                     ", ".join(sorted({r["source"] for r in wl_ambiguous}))))
 
+    def _wikilink_row(r):
+        return {"source": r["source"], "region": r["region"], "raw": r["raw"],
+                "candidates": r["candidates"]}
+
+    result = {
+        "applied": bool(apply), "old": old_rel, "new": new_rel,
+        "inbound": [{"source": s, "old": o, "new": n} for s, o, n in plan["inbound"]],
+        "outbound": [{"old": o, "new": n} for o, n in plan["outbound"]],
+        "wikilinks": [{"source": r["source"], "region": r["region"], "raw": r["raw"],
+                       "new_raw": r["new_raw"]} for r in wl_rewrite],
+        "sync_sources": [{"consumer": c, "blocks": n} for c, n in plan["sync_sources"]],
+        "ctx": ctx_where,
+        "skipped_ambiguous": [_wikilink_row(r) for r in wl_skipped],
+        "wikilink_collisions": list(collisions),
+        "turns_ambiguous": [_wikilink_row(r) for r in wl_ambiguous],
+        "reindex_bundles": list(plan["bundles"]),
+    }
+
     if not apply:
-        print("would move   {}  ->  {}".format(old_rel, new_rel))
+        say("would move   {}  ->  {}".format(old_rel, new_rel))
         for src, oraw, nraw in plan["inbound"]:
-            print("  inbound    {}   {}  ->  {}".format(src, oraw, nraw))
+            say("  inbound    {}   {}  ->  {}".format(src, oraw, nraw))
         for oraw, nraw in plan["outbound"]:
-            print("  outbound   {}  ->  {}".format(oraw, nraw))
+            say("  outbound   {}  ->  {}".format(oraw, nraw))
         for r in wl_rewrite:
-            print("  wikilink   {} [{}]   {}  ->  {}".format(
+            say("  wikilink   {} [{}]   {}  ->  {}".format(
                 r["source"], r["region"], r["raw"], r["new_raw"]))
         for consumer_rel, n in plan["sync_sources"]:
-            print("  sync-source  {}   {} block(s)".format(consumer_rel, n))
+            say("  sync-source  {}   {} block(s)".format(consumer_rel, n))
         for w in ctx_where:
-            print("  ctx        " + w)
+            say("  ctx        " + w)
         _print_skipped()
-        print("  reindex    {}".format(", ".join(plan["bundles"])))
-        print("rename (dry-run): {} inbound, {} outbound link(s), {} wikilink(s) "
-              "({} skipped-ambiguous), {} bundle(s), {} sync source(s). "
-              "Re-run with --apply.".format(
-                  len(plan["inbound"]), len(plan["outbound"]), len(wl_rewrite),
-                  len(wl_skipped), len(plan["bundles"]),
-                  len(plan["sync_sources"])))
-        return
+        say("  reindex    {}".format(", ".join(plan["bundles"])))
+        say("rename (dry-run): {} inbound, {} outbound link(s), {} wikilink(s) "
+            "({} skipped-ambiguous), {} bundle(s), {} sync source(s). "
+            "Re-run with --apply.".format(
+                len(plan["inbound"]), len(plan["outbound"]), len(wl_rewrite),
+                len(wl_skipped), len(plan["bundles"]),
+                len(plan["sync_sources"])))
+        return result
 
     if os.path.exists(new_abs) and not os.path.samefile(old_abs, new_abs):
         # --force got us here. Say what it costs: the destination's content is
         # gone and every reference to it now addresses different content.
         clobbered = linkscan.build_ref_matrix(root, new_abs)
-        print("overwrote      {}  ({} inbound markdown reference(s) now point at "
-              "different content)".format(new_rel, len(clobbered)))
+        result["overwrote_inbound"] = len(clobbered)
+        say("overwrote      {}  ({} inbound markdown reference(s) now point at "
+            "different content)".format(new_rel, len(clobbered)))
     os.makedirs(os.path.dirname(new_abs), exist_ok=True)
     moved, git_repo, git_reason = _git_mv(root, old_abs, new_abs)
     if plan["outbound"]:
@@ -634,17 +656,16 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
     for slug in dict.fromkeys(s for s, _ in ctx_hits):
         c = load_ctx(root, slug)
         if c["problems"]:
-            ctx_notes.append("  ctx        {}: not refreshed, {} parse problem(s) — "
-                             "run okf ctx check".format(slug, len(c["problems"])))
+            ctx_notes.append({"slug": slug, "problems": len(c["problems"])})
         else:
             save_ctx(root, c)
     reidx = []
     for b in plan["bundles"]:
         reidx += reindex_tree(root, os.path.join(root, b))
-    print("moved ({})  {}  ->  {}".format("git mv" if moved else "fs", old_rel, new_rel))
+    say("moved ({})  {}  ->  {}".format("git mv" if moved else "fs", old_rel, new_rel))
     if moved:
         if git_repo:
-            print("  tracked in {} (repository differs from --root)".format(git_repo))
+            say("  tracked in {} (repository differs from --root)".format(git_repo))
     else:
         # AC3 (okf-cli-mk7m, widened by the PO review 2026-08-10): never say
         # this looks tracked, whichever of the two causes git declined for —
@@ -652,23 +673,33 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
         # git's own reason (point 4 of the gate: proc.stderr read, not
         # dropped) and, only when a different repository actually received
         # part of the write, name it (AC2).
-        print("  untracked — git declined: {}".format(
+        say("  untracked — git declined: {}".format(
             git_reason if git_reason else "git binary unavailable"))
         if git_repo:
-            print("  the untracked change also touches {} (repository "
-                  "differs from --root)".format(git_repo))
-    print("rewrote {} inbound link(s) in {} file(s), {} outbound link(s)".format(
+            say("  the untracked change also touches {} (repository "
+                "differs from --root)".format(git_repo))
+    say("rewrote {} inbound link(s) in {} file(s), {} outbound link(s)".format(
         len(plan["inbound"]), len(by_src), len(plan["outbound"])))
-    print("rewrote {} wikilink(s) in {} file(s)".format(len(wl_rewrite), len(wl_by_src)))
-    print("rewrote {} sync source(s) in {} file(s)".format(
+    say("rewrote {} wikilink(s) in {} file(s)".format(len(wl_rewrite), len(wl_by_src)))
+    say("rewrote {} sync source(s) in {} file(s)".format(
         n_sync, len(plan["sync_sources"])))
     if ctx_where:
-        print("listed in {} ctx bundle(s): {}".format(len(ctx_where), ", ".join(ctx_where)))
+        say("listed in {} ctx bundle(s): {}".format(len(ctx_where), ", ".join(ctx_where)))
         for note in ctx_notes:
-            print(note)
+            say("  ctx        {}: not refreshed, {} parse problem(s) — "
+                "run okf ctx check".format(note["slug"], note["problems"]))
     _print_skipped()
-    print("reindexed {} index file(s) across: {}".format(len(reidx), ", ".join(plan["bundles"])))
-    print("staged for commit — run `okf-cli.py check` before committing.")
+    say("reindexed {} index file(s) across: {}".format(len(reidx), ", ".join(plan["bundles"])))
+    say("staged for commit — run `okf-cli.py check` before committing.")
+    result.update(
+        moved_with="git mv" if moved else "fs", tracked_in=git_repo or None,
+        untracked_reason=None if moved else (git_reason if git_reason else "git binary unavailable"),
+        rewritten={"inbound_links": len(plan["inbound"]), "inbound_files": len(by_src),
+                   "outbound_links": len(plan["outbound"]), "wikilinks": len(wl_rewrite),
+                   "wikilink_files": len(wl_by_src), "sync_sources": n_sync,
+                   "sync_files": len(plan["sync_sources"])},
+        ctx_not_refreshed=ctx_notes, reindexed=len(reidx))
+    return result
 
 
 def cmd_rename(root, args):
@@ -700,7 +731,8 @@ def cmd_rename(root, args):
                        "rename: source lies under _archive/ — use archive --restore to "
                        "bring it back: {}".format(old_rel))
 
-    perform_rename(root, old_abs, new_abs, args.apply, args.force)
+    return perform_rename(root, old_abs, new_abs, args.apply, args.force,
+                          quiet=getattr(args, "json", False))
 
 
 def _prune_empty_archive_dirs(root, freed_dir):
@@ -782,14 +814,19 @@ def cmd_archive(root, args):
     # A nonexistent source with no archived counterpart is left to
     # perform_rename's own "source not found", so a plan is only built once
     # there is a file to plan a move for.
+    as_json = getattr(args, "json", False)
     plan = None
+    n_concepts = None
     if os.path.isfile(src_abs):
         plan = plan_rename(root, src_abs, dest_abs)
         n_concepts = len({src for src, _o, _n in plan["inbound"]})
-        print("{} active concept(s) still link to this concept".format(n_concepts))
+        if not as_json:
+            print("{} active concept(s) still link to this concept".format(n_concepts))
 
-    perform_rename(root, src_abs, dest_abs, args.apply, args.force, verb=verb,
-                   plan=plan)
+    result = perform_rename(root, src_abs, dest_abs, args.apply, args.force, verb=verb,
+                            plan=plan, quiet=as_json)
+    result["restore"] = bool(args.restore)
+    result["active_inbound_concepts"] = n_concepts
 
     # okf-cli-gqss (AC1/AC2): only a restore can empty an _archive/ directory
     # — `archive` in the other direction only ever adds to one. perform_rename
@@ -797,6 +834,7 @@ def cmd_archive(root, args):
     # happened; freed_dir is the directory the concept just vacated.
     if args.restore and args.apply:
         _prune_empty_archive_dirs(root, os.path.dirname(src_abs))
+    return result
 
 
 def add_archive_parser(sub):
@@ -811,6 +849,7 @@ def add_archive_parser(sub):
     pah.add_argument("--force", action="store_true",
                      help="overwrite an existing destination, and proceed when the new "
                           "basename is already taken and inbound wikilinks would turn ambiguous")
+    _add_output(pah)
 
 
 def add_rename_parser(sub):
@@ -822,6 +861,7 @@ def add_rename_parser(sub):
     prn.add_argument("--force", action="store_true",
                      help="overwrite an existing destination, and proceed when the new "
                           "basename is already taken and inbound wikilinks would turn ambiguous")
+    _add_output(prn)
 
 
 def add_rewrite_path_parser(sub):
@@ -831,6 +871,7 @@ def add_rewrite_path_parser(sub):
     prw.add_argument("new", help="replacement path string")
     prw.add_argument("--scan-root", help="dir to scan (default: --root)").completer = _complete_dirs
     prw.add_argument("--check", action="store_true", help="dry-run: report, write nothing")
+    _add_output(prw)
 
 
 COMMANDS = {

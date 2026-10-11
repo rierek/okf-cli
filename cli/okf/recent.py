@@ -2,12 +2,11 @@
 rendering of the newest concepts, and the recent command."""
 
 import datetime
-import json
 import os
 import re
 import subprocess
-import sys
 from okf.errors import OkfError
+from okf.output import _add_output, _note
 
 from okf import catalogue
 from okf.catalogue import (
@@ -157,7 +156,7 @@ def _git_add_events(repo, prefixes):
     return res.stdout, None
 
 
-def _recent_scopes(root, target, notes):
+def _recent_scopes(root, target):
     """[(bundle, bundle_path, repo_top_or_None, prefix_or_None), …].
 
     Classification is by realpath, not os.path.islink: islink only sees a link
@@ -182,8 +181,8 @@ def _recent_scopes(root, target, notes):
     for bundle, bp in resolve_scopes(root, target):
         real = os.path.realpath(bp)
         if not os.path.isdir(real):
-            notes.append("note: scope `{}` is a broken symlink — nothing to "
-                         "list; repoint or remove the link".format(bundle))
+            _note("scope `{}` is a broken symlink — nothing to "
+                  "list; repoint or remove the link".format(bundle))
             continue
         if real == realroot or real.startswith(realroot + os.sep):
             sub = os.path.relpath(real, realroot).replace(os.sep, "/")
@@ -193,10 +192,9 @@ def _recent_scopes(root, target, notes):
             continue
         repo, why = catalogue._git_toplevel(real)
         if repo is None:
-            notes.append(
-                "note: bundle `{}` resolves outside any git repository — its "
-                "concepts are listed undated; run `git init` in {}".format(
-                    bundle, real if why == "no-repo" else real))
+            _note("bundle `{}` resolves outside any git repository — its "
+                  "concepts are listed undated; run `git init` in {}".format(
+                      bundle, real if why == "no-repo" else real))
             scopes.append((bundle, bp, None, None))
             continue
         prefix = os.path.relpath(real, repo).replace(os.sep, "/")
@@ -205,15 +203,14 @@ def _recent_scopes(root, target, notes):
 
 
 def cmd_recent(root, args):
-    notes = []
-    scopes = _recent_scopes(root, args.scope, notes)
+    scopes = _recent_scopes(root, args.scope)
     by_repo = {}
     for repo, members in group_scopes_by_repo(
             [(b, repo, prefix) for b, _bp, repo, prefix in scopes]):
         stdout, why = _git_add_events(repo, [p for _b, p in members if p])
         if stdout is None:
-            notes.append("note: git log failed in {} — its concepts are listed "
-                         "undated; check the repository".format(repo))
+            _note("git log failed in {} — its concepts are listed "
+                  "undated; check the repository".format(repo))
             continue
         by_repo[repo] = parse_add_events(stdout)
 
@@ -251,20 +248,17 @@ def cmd_recent(root, args):
 
     undated = sum(1 for path, ts in entries if ts is None and dated_repo.get(path))
     if undated:
-        notes.append("note: {} concept(s) have no commit that added them — "
-                     "listed undated at the end; commit them to give them a "
-                     "creation date".format(undated))
-    for note in notes:
-        print(note, file=sys.stderr)
+        _note("{} concept(s) have no commit that added them — "
+              "listed undated at the end; commit them to give them a "
+              "creation date".format(undated))
 
     if getattr(args, "json", False):
-        print(json.dumps([
+        return [
             {"created": iso_created(ts), "created_ts": ts,
              "title": meta[path][1], "type": meta[path][0],
              "path": path, "description": meta[path][2]}
             for path, ts in rows
-        ]))
-        return
+        ]
     if not rows:
         print("(no matches)")
         return
@@ -285,7 +279,7 @@ def add_recent_parser(sub):
                      help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
     prc.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
     prc.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
-    prc.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(prc)
 
 
 COMMANDS = {"recent": (cmd_recent, add_recent_parser)}

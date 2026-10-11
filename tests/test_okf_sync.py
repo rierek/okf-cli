@@ -235,10 +235,9 @@ class SyncOwnerInStagingDir(SyncFixtureMixin, unittest.TestCase):
         self._insert(concept="kc-gov/_archive/ownership")
 
     def test_status_reports_synced_not_source_missing(self):
-        out, code = self._status()
+        data, code = self._status()
         self.assertEqual(code, 0)
-        self.assertIn('"status": "synced"', out)
-        self.assertNotIn('"status": "source-missing"', out)
+        self.assertEqual([b["status"] for b in data["blocks"]], ["synced"])
 
     def test_update_after_owner_change_reaches_the_staged_owner(self):
         self._w("kc-gov/_archive/ownership.md",

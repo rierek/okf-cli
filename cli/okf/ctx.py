@@ -3,12 +3,12 @@ Holds its 14 verbs, the `ctx <slug>` shorthand, the slug completer and the parse
 block; the ctx storage layer (load_ctx, save_ctx, ctx_findings, ...) stays in
 okf.catalogue."""
 
-import json
 import os
 import shlex
 import subprocess
 import sys
 from okf.errors import OkfError
+from okf.output import _add_output
 
 from okf import check, linkscan, rename
 from okf.catalogue import (
@@ -39,8 +39,7 @@ def _ctx_list_rows(root, for_path):
 def cmd_ctx_list(root, args):
     rows = _ctx_list_rows(root, args.for_path)
     if args.json:
-        print(json.dumps(rows, ensure_ascii=False, indent=2))
-        return
+        return rows
     if not rows:
         if args.for_path is None:
             print("no ctx bundles under {}".format(ctx_dir(root)))
@@ -82,6 +81,9 @@ def cmd_ctx_create(root, args):
     entries.sort(key=lambda e: e["path"].casefold())
     save_ctx(root, {"slug": args.slug, "description": args.description or "",
                     "entries": entries})
+    if getattr(args, "json", False):
+        return {"applied": True, "slug": args.slug, "path": "{}/{}.md".format(CTX_DIR, args.slug),
+                "entries": len(entries)}
     print("created {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(entries)))
 
 
@@ -119,13 +121,12 @@ def cmd_ctx_show(root, args):
     dead = sum(1 for m in ms if not m["alive"])
     t_req = sum(m["tokens"] for m in req)
     if args.json:
-        print(json.dumps({"slug": args.slug, "description": c["description"],
-                          "path": "{}/{}.md".format(CTX_DIR, args.slug), "entries": ms,
-                          "dead": dead, "tokens_required": t_req},
-                         ensure_ascii=False, indent=2))
+        result = {"slug": args.slug, "description": c["description"],
+                  "path": "{}/{}.md".format(CTX_DIR, args.slug), "entries": ms,
+                  "dead": dead, "tokens_required": t_req}
         if dead:
-            raise OkfError("non_conformant", _ctx_dead_warning(args.slug, dead))
-        return
+            raise OkfError("non_conformant", _ctx_dead_warning(args.slug, dead), result)
+        return result
 
     def block(m, head):
         if not m["alive"]:
@@ -163,33 +164,42 @@ def cmd_ctx_read(root, args):
     _c, ms = _ctx_members(root, args.slug)
     req = [m for m in ms if m["mode"] == "pflicht"]
     r = len(ms) - len(req)
-    dead = False
-    for i, m in enumerate(req, 1):
-        if not m["alive"]:
-            dead = True
-            print("===== {}/{} [DEAD] {} =====".format(i, len(req), m["abspath"]))
-            continue
-        print("===== {}/{} {} =====".format(i, len(req), m["abspath"]))
-        text = read_file(m["abspath"])
-        print(text, end="" if text.endswith("\n") else "\n")
-    if r:
-        print("===== {} reference entr{} not printed — ctx show {} =====".format(
-            r, "y" if r == 1 else "ies", args.slug))
-    if dead:
-        raise OkfError("non_conformant", "")
+    entries = [{"position": i, "path": m["path"], "abspath": m["abspath"], "alive": m["alive"],
+                "text": read_file(m["abspath"]) if m["alive"] else None}
+               for i, m in enumerate(req, 1)]
+    result = {"slug": args.slug, "entries": entries, "references_not_printed": r}
+    if not getattr(args, "json", False):
+        for e in entries:
+            if not e["alive"]:
+                print("===== {}/{} [DEAD] {} =====".format(e["position"], len(req), e["abspath"]))
+                continue
+            print("===== {}/{} {} =====".format(e["position"], len(req), e["abspath"]))
+            print(e["text"], end="" if e["text"].endswith("\n") else "\n")
+        if r:
+            print("===== {} reference entr{} not printed — ctx show {} =====".format(
+                r, "y" if r == 1 else "ies", args.slug))
+    if not all(e["alive"] for e in entries):
+        raise OkfError("non_conformant", "", result)
+    return result
 
 
 def cmd_ctx_toc(root, args):
-    blocks = []
+    entries = []
     for m in _ctx_members(root, args.slug)[1]:
-        lines = ["# {}{}".format(m["path"], "" if m["alive"] else " [DEAD]")]
-        if m["alive"]:
-            hs = []
-            if m["path"].endswith(".md"):
-                body = split_frontmatter(read_file(m["abspath"]))[1]
-                hs = ["{} {}".format("#" * min(lv + 1, 6), t) for lv, t, _line in iter_headings(body)
-                      if not args.depth or lv <= args.depth]
-            lines += hs or ["(no headings)"]
+        heads = []
+        if m["alive"] and m["path"].endswith(".md"):
+            body = split_frontmatter(read_file(m["abspath"]))[1]
+            heads = [{"level": lv, "text": t} for lv, t, _line in iter_headings(body)
+                     if not args.depth or lv <= args.depth]
+        entries.append({"path": m["path"], "alive": m["alive"], "headings": heads})
+    if getattr(args, "json", False):
+        return {"slug": args.slug, "entries": entries}
+    blocks = []
+    for e in entries:
+        lines = ["# {}{}".format(e["path"], "" if e["alive"] else " [DEAD]")]
+        if e["alive"]:
+            lines += ["{} {}".format("#" * min(h["level"] + 1, 6), h["text"])
+                      for h in e["headings"]] or ["(no headings)"]
         blocks.append("\n".join(lines))
     print("\n\n".join(blocks))
 
@@ -246,10 +256,8 @@ def _ctx_nav(root, args, direction):
                 row["dead"] = not m["alive"]
             row["links"] = links[id(m)]
             rows.append(row)
-        print(json.dumps({"slug": args.slug, "direction": direction,
-                          "include_internal": args.include_internal, "members": rows},
-                         ensure_ascii=False, indent=2))
-        return
+        return {"slug": args.slug, "direction": direction,
+                "include_internal": args.include_internal, "members": rows}
     out = ["{} \u2014 ctx {}, {} member(s), {}:".format(
         direction, args.slug, len(shown),
         "including internal links" if args.include_internal
@@ -269,11 +277,11 @@ def _ctx_nav(root, args, direction):
 
 
 def cmd_ctx_inbound(root, args):
-    _ctx_nav(root, args, "inbound")
+    return _ctx_nav(root, args, "inbound")
 
 
 def cmd_ctx_outbound(root, args):
-    _ctx_nav(root, args, "outbound")
+    return _ctx_nav(root, args, "outbound")
 
 
 def _ctx_editable(root, slug):
@@ -321,6 +329,8 @@ def cmd_ctx_add(root, args):
         _ctx_die("{} is already in {} ({})".format(norm, args.slug, _ctx_where(pf, old)))
     where = _ctx_put(root, c, pf, rest, {"pos": None, "path": norm, "comment": args.comment},
                      args.mode, args.pos)
+    if getattr(args, "json", False):
+        return {"applied": True, "slug": args.slug, "path": norm, "where": where}
     print("added {} to {} ({})".format(norm, args.slug, where))
 
 
@@ -331,6 +341,8 @@ def cmd_ctx_drop(root, args):
         _ctx_die("{} is not in {}".format(norm, args.slug), "not_found")
     c["entries"] = [x for x in pf + rest if x is not e]
     save_ctx(root, c)
+    if getattr(args, "json", False):
+        return {"applied": True, "slug": args.slug, "path": norm}
     print("dropped {} from {}".format(norm, args.slug))
 
 
@@ -347,6 +359,8 @@ def cmd_ctx_move(root, args):
     pf = [x for x in pf if x is not e]
     rest = [x for x in rest if x is not e]
     where = _ctx_put(root, c, pf, rest, e, mode, args.pos)
+    if getattr(args, "json", False):
+        return {"applied": True, "slug": args.slug, "path": norm, "where": where}
     print("moved {} in {} to {}".format(norm, args.slug, where))
 
 
@@ -356,13 +370,13 @@ def _ctx_report(root, slugs, stale, as_json):
         rel = "{}/{}.md".format(CTX_DIR, s)
         findings += [check.finding_of(rule, rel, m)
                      for rule, m in ctx_findings(root, ctx_file(root, s), stale)]
-    check.report_findings(findings, False, as_json)
+    return check.report_findings(findings, False, as_json)
 
 
 def cmd_ctx_check(root, args):
     if args.slug:
         load_ctx(root, args.slug)
-    _ctx_report(root, [args.slug] if args.slug else ctx_slugs(root), args.stale, args.json)
+    return _ctx_report(root, [args.slug] if args.slug else ctx_slugs(root), args.stale, args.json)
 
 
 def cmd_ctx_edit(root, args):
@@ -372,7 +386,7 @@ def cmd_ctx_edit(root, args):
     if rc:
         _ctx_die("editor exited {}".format(rc))
     reindex_tree(root, ctx_dir(root))
-    _ctx_report(root, [args.slug], False, False)
+    return _ctx_report(root, [args.slug], False, getattr(args, "json", False))
 
 
 def cmd_ctx_rename(root, args):
@@ -382,9 +396,11 @@ def cmd_ctx_rename(root, args):
         _ctx_die('invalid slug "{}": {}'.format(args.new, problem))
     if os.path.exists(ctx_file(root, args.new)):
         _ctx_die("{} already exists".format(args.new))
-    rename.perform_rename(root, ctx_file(root, args.old), ctx_file(root, args.new), True, False)
+    result = rename.perform_rename(root, ctx_file(root, args.old), ctx_file(root, args.new), True,
+                                   False, quiet=getattr(args, "json", False))
     if not c["problems"]:
         save_ctx(root, load_ctx(root, args.new))  # refreshes the H1 (D-pzho-16)
+    return dict(result, old_slug=args.old, new_slug=args.new)
 
 
 def cmd_ctx_remove(root, args):
@@ -395,6 +411,10 @@ def cmd_ctx_remove(root, args):
                               if s.replace(os.sep, "/") != CTX_DIR + "/index.md"))
     os.remove(f)
     reindex_tree(root, ctx_dir(root))
+    result = {"applied": True, "slug": args.slug, "path": "{}/{}.md".format(CTX_DIR, args.slug),
+              "entries": len(c["entries"]), "linked_from": srcs}
+    if getattr(args, "json", False):
+        return result
     print("removed {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(c["entries"])))
     if srcs:
         print("warning: {} file(s) still link to {}/{}.md:".format(len(srcs), CTX_DIR, args.slug))
@@ -411,7 +431,7 @@ CTX_DISPATCH = {"add": cmd_ctx_add, "check": cmd_ctx_check, "create": cmd_ctx_cr
 
 
 def cmd_ctx(root, args):
-    CTX_DISPATCH[args.ctx_verb](root, args)
+    return CTX_DISPATCH[args.ctx_verb](root, args)
 
 
 def _ctx_shorthand(argv):
@@ -453,13 +473,14 @@ def add_ctx_parser(sub):
     pcxa.add_argument("--pos", type=int, help="required position (clamped to 1..n+1)")
     pcxa.add_argument("--mode", choices=CTX_MODES, default="pflicht", help="entry mode")
     pcxa.add_argument("--comment", default="", help="entry comment")
+    _add_output(pcxa)
     pcxk = ctx_verbs.add_parser(
         "check", help="validate ctx bundles",
         description="report ctx errors and warnings in the `check` line format; exit 1 on any error")
     pcxk.add_argument("slug", nargs="?", help="ctx slug (default: all)").completer = _complete_ctx_slugs
     pcxk.add_argument("--stale", action="store_true",
                       help="warn for every member modified after the ctx file")
-    pcxk.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pcxk)
     pcxc = ctx_verbs.add_parser(
         "create", help="create a ctx bundle from paths and/or an import file",
         description="create _ctx/<slug>.md; every path becomes a required entry, "
@@ -473,24 +494,27 @@ def add_ctx_parser(sub):
                       help="read one path per line (blank and # lines skipped, "
                            "text after a TAB is the entry comment)").completer = _complete_files
     pcxc.add_argument("--description", help="one-line description of the bundle")
+    _add_output(pcxc)
     pcxd = ctx_verbs.add_parser(
         "drop", help="remove one entry from a ctx bundle",
         description="remove an entry (also when its file is gone); required positions are "
                     "renumbered 1..n")
     pcxd.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
     pcxd.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
+    _add_output(pcxd)
     pcxe = ctx_verbs.add_parser(
         "edit", help="open a ctx bundle in $VISUAL/$EDITOR/vi and validate it",
         description="open _ctx/<slug>.md in $VISUAL, else $EDITOR, else vi; afterwards refresh "
                     "the _ctx index and run `ctx check` on the file; exit 1 on errors")
     pcxe.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    _add_output(pcxe)
     pcxl = ctx_verbs.add_parser(
         "list", help="list ctx bundles with entry and required counts",
         description="list ctx bundles: slug, description, entry and required counts")
     pcxl.add_argument("--for", dest="for_path", metavar="PATH",
                       help="only bundles whose entries contain PATH (also when the file is gone)"
                       ).completer = _complete_files
-    pcxl.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pcxl)
     pcxm = ctx_verbs.add_parser(
         "move", help="reorder an entry or change its mode",
         description="move an entry to required position N (--pos) and/or change its mode; "
@@ -499,6 +523,7 @@ def add_ctx_parser(sub):
     pcxm.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
     pcxm.add_argument("--pos", type=int, help="required position (clamped to 1..n)")
     pcxm.add_argument("--mode", choices=CTX_MODES, help="new mode")
+    _add_output(pcxm)
     pcxo = ctx_verbs.add_parser(
         "outbound", help="list the links each entry points to",
         description="per entry, markdown link targets; missing targets are marked [missing], "
@@ -513,30 +538,32 @@ def add_ctx_parser(sub):
                         help="only the entry whose title, path or stem equals X (case-insensitive)")
         pn.add_argument("--include-internal", action="store_true",
                         help="also list links between members of the ctx")
-        pn.add_argument("--json", action="store_true", help="machine-readable output")
+        _add_output(pn)
     pcxr = ctx_verbs.add_parser(
         "read", help="print the full content of every required entry",
         description="print every required entry of a ctx in position order, each after a "
                     "`===== i/p <abspath> =====` separator; reference entries are not printed; "
                     "exit 1 when a required entry is dead")
     pcxr.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    _add_output(pcxr)
     pcxrm = ctx_verbs.add_parser(
         "remove", help="delete a ctx bundle and list files that still link to it",
         description="delete _ctx/<slug>.md, refresh the _ctx index and list every file "
                     "that still links to the removed ctx")
     pcxrm.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    _add_output(pcxrm)
     pcxrn = ctx_verbs.add_parser(
         "rename", help="rename a ctx bundle and rewrite inbound links",
         description="move _ctx/<old>.md to _ctx/<new>.md; inbound links and the _ctx index follow")
     pcxrn.add_argument("old", help="current ctx slug").completer = _complete_ctx_slugs
     pcxrn.add_argument("new", help="new ctx slug: lowercase letters, digits, hyphens")
+    _add_output(pcxrn)
     pcxs = ctx_verbs.add_parser(
         "show", help="list a ctx in reading order with live metadata and token estimates",
         description="list the required entries in reading order, then the reference entries; "
                     "`ctx <slug>` is short for `ctx show <slug>`; exit 1 when an entry is dead")
     pcxs.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
-    pcxs.add_argument("--json", action="store_true",
-                      help="machine-readable output (stdout carries only the JSON object)")
+    _add_output(pcxs)
     pcxt = ctx_verbs.add_parser(
         "toc", help="print the headings of every entry",
         description="print per entry an H1 with the entry path, then the member's headings "
@@ -544,6 +571,7 @@ def add_ctx_parser(sub):
     pcxt.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
     pcxt.add_argument("--depth", type=int, default=0, metavar="N",
                       help="only headings of original level <= N (default 0 = all)")
+    _add_output(pcxt)
 
 
 COMMANDS = {"ctx": (cmd_ctx, add_ctx_parser)}

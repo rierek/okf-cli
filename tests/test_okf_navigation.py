@@ -68,27 +68,28 @@ class CmdRefs(unittest.TestCase):
             f.write(text)
 
     def test_scan_root_relative_path_resolves(self):
-        import io, json, contextlib, types
+        import types
         self._w("docs/arch.md", "# A\n")
         self._w("README.md", "[a](docs/arch.md)\n")
         # skill-style call: --root <repo>/docs, --scan-root <repo>, repo-relative path
         args = types.SimpleNamespace(path="docs/arch.md", scan_root=self.tmp, json=True)
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            okf_navigation.cmd_refs(os.path.join(self.tmp, "docs"), args)
-        out = json.loads(buf.getvalue())
+        out = okf_navigation.cmd_refs(os.path.join(self.tmp, "docs"), args)
         self.assertEqual([h["source"] for h in out["inbound"]], ["README.md"])
 
     def _refs(self, path, **flags):
-        import io, json, contextlib, types
+        """The text printed; with json=True the handler's result, the envelope's `data`."""
+        import io, contextlib, types
         args = types.SimpleNamespace(path=path, scan_root=self.tmp, json=False,
                                      only_in=False, only_out=False)
         for k, v in flags.items():
             setattr(args, k, v)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            okf_navigation.cmd_refs(self.tmp, args)
-        return json.loads(buf.getvalue()) if args.json else buf.getvalue()
+            data = okf_navigation.cmd_refs(self.tmp, args)
+        if args.json:
+            self.assertEqual(buf.getvalue(), "")
+            return data
+        return buf.getvalue()
 
     def _link_fixture(self):
         self._w("b/one.md", "---\ntype: Concept\n---\n[T](/b/two.md) [G](gone.md#x) "
@@ -174,28 +175,28 @@ class CmdListJson(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run(self, **kw):
+        """The text printed; with json=True the handler's result, the envelope's `data`."""
         import io, contextlib, types
         args = types.SimpleNamespace(type=None, tag=None, scope=None, json=False)
         for k, v in kw.items():
             setattr(args, k, v)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            okf_navigation.cmd_list(self.tmp, args)
+            data = okf_navigation.cmd_list(self.tmp, args)
+        if args.json:
+            self.assertEqual(buf.getvalue(), "")
+            return data
         return buf.getvalue()
 
     def test_json_output_is_parseable_array(self):
-        import json
-        out = self._run(type="Runbook", json=True)
-        data = json.loads(out)
+        data = self._run(type="Runbook", json=True)
         self.assertIsInstance(data, list)
         self.assertEqual(len(data), 2)
         self.assertTrue(all("path" in r and "type" in r and "title" in r
                             and "description" in r for r in data))
 
     def test_json_empty_result_is_parseable_empty_array(self):
-        import json
-        out = self._run(type="Nope", json=True)
-        data = json.loads(out)
+        data = self._run(type="Nope", json=True)
         self.assertEqual(data, [])
 
     def test_non_json_output_unchanged(self):
@@ -339,13 +340,12 @@ class StagingExcludedFromIndexListFind(unittest.TestCase):
     def test_index_json_excludes_staging_keeps_regular(self):
         import io
         import contextlib
-        import json
         import types
         args = types.SimpleNamespace(bundle="b", json=True, full=True)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            okf_index.cmd_index(self.tmp, args)
-        ids = [c["id"] for c in json.loads(buf.getvalue())["concepts"]]
+            data = okf_index.cmd_index(self.tmp, args)
+        ids = [c["id"] for c in data["concepts"]]
         self.assertNotIn("_intake/konzept", ids)
         self.assertIn("sub/regular", ids)
 

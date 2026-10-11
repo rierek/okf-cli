@@ -7,6 +7,7 @@ import os
 from okf.catalogue import ctx_slugs, iter_concepts, list_bundles, load_tags
 from okf.fts import _fts_db_path
 from okf.index import render_bundle_block, render_bundle_line
+from okf.output import _add_output
 from okf.parser_support import _sub, subcommand_parsers
 from okf.semantic import _tagvec_db_path, semantic_coverage
 
@@ -185,32 +186,37 @@ def cmd_prime(root, args):
     state, and drops the prose that is one call away."""
     from okf.parser import build_parser, command_overview
     if args.compact:
-        print(_PRIME_INTRO_COMPACT)
-        print(command_overview(width=10 ** 6))
-        print()
-        print(render_find_compact())
+        guide, commands, find = (_PRIME_INTRO_COMPACT, command_overview(width=10 ** 6),
+                                 render_find_compact())
     else:
-        print(_PRIME_INTRO)
-        print(command_overview())
-        print()
-        print("## find — the entry point, in full\n")
-        print(subcommand_parsers(build_parser())["find"].format_help().strip())
+        guide, commands = _PRIME_INTRO, command_overview()
+        find = "## find — the entry point, in full\n\n{}".format(
+            subcommand_parsers(build_parser())["find"].format_help().strip())
+    state = render_catalogue_state(root, thorough=getattr(args, "check_semantic", False))
+    bundles = [render_bundle_line(root, b) if args.compact
+               else render_bundle_block(root, b, full=args.full) for b in list_bundles(root)]
+    if getattr(args, "json", False):
+        return {"guide": guide, "commands": commands, "find": find, "state": state,
+                "bundles": bundles}
+    print(guide)
+    print(commands)
     print()
-    print(render_catalogue_state(root, thorough=getattr(args, "check_semantic", False)))
+    print(find)
+    print()
+    print(state)
     print()
     print("## Bundles\n")
     print("The catalogue TOC, as `index` renders it. Each name is a path: "
           "`toc <bundle>`,\n`index <bundle>`, `--scope <bundle>` on find and "
           "list.\n")
-    bundles = list_bundles(root)
     if args.compact:
-        for b in bundles:
-            print("- " + render_bundle_line(root, b))
+        for line in bundles:
+            print("- " + line)
         print("(`prime` without --compact inlines each bundle's description and "
               "directories)")
     else:
-        for b in bundles:
-            print(render_bundle_block(root, b, full=args.full))
+        for block in bundles:
+            print(block)
             print("-----")
         if not args.full:
             print("(types+tags per bundle: `prime --full`; name+count only: "
@@ -230,6 +236,7 @@ def add_prime_parser(sub):
                      help="run the exact content-hash semantic coverage check "
                           "(~2s on a large catalogue) instead of reporting only "
                           "whether the semantic index is present")
+    _add_output(pp)
 
 
 COMMANDS = {"prime": (cmd_prime, add_prime_parser)}

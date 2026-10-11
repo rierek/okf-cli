@@ -741,7 +741,7 @@ class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
         json.loads(out.stdout)
 
     def test_json_shape(self):
-        data = json.loads(_cli(self.tmp, "wikilinks", "--json").stdout)
+        data = json.loads(_cli(self.tmp, "wikilinks", "--json").stdout)["data"]
         keys = {"source", "region", "raw", "page", "alias", "suffix", "embed",
                 "status", "candidates"}
         for link in data["links"]:
@@ -751,8 +751,8 @@ class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
         self.assertEqual(sorted(data["by_bundle"]), ["a", "b"])
 
     def test_target_argument_scopes_the_scan(self):
-        scoped = json.loads(_cli(self.tmp, "wikilinks", "a", "--json").stdout)
-        whole = json.loads(_cli(self.tmp, "wikilinks", "--json").stdout)
+        scoped = json.loads(_cli(self.tmp, "wikilinks", "a", "--json").stdout)["data"]
+        whole = json.loads(_cli(self.tmp, "wikilinks", "--json").stdout)["data"]
         self.assertEqual(sorted(scoped["by_bundle"]), ["a"])
         self.assertGreater(len(whole["links"]), len(scoped["links"]))
 
@@ -764,7 +764,7 @@ class WikilinkCommand(WikilinkFixtureMixin, unittest.TestCase):
     def test_by_bundle_never_contradicts_the_link_list(self):
         """Under --unresolved the two must still agree; a by_bundle computed
         over the unfiltered set would report counts the caller cannot see."""
-        data = json.loads(_cli(self.tmp, "wikilinks", "--unresolved", "--json").stdout)
+        data = json.loads(_cli(self.tmp, "wikilinks", "--unresolved", "--json").stdout)["data"]
         self.assertTrue(data["filtered"])
         self.assertEqual(sum(sum(c.values()) for c in data["by_bundle"].values()),
                          len(data["links"]))

@@ -3,7 +3,6 @@ hashing, the catalogue-wide canon index, the status classification, and the
 sync-export, sync-insert, sync-status and sync-update commands."""
 
 import hashlib
-import json
 import os
 import sys
 from okf.errors import OkfError
@@ -13,6 +12,7 @@ from okf.catalogue import (
     read_file, read_file_verbatim, resolve_concept, resolve_scopes, split_frontmatter,
     write_file_verbatim,
 )
+from okf.output import _add_output, _note
 from okf.parser_support import _complete_concepts, _complete_scopes, _completion_root, _sub
 
 
@@ -211,10 +211,17 @@ def _sync_addr(rec):
     return "{}#{}".format(rec["source"] or "?", rec["id"] or "?")
 
 
+def _block_row(rel, rec):
+    return {"consumer": rel, "source": rec["source"], "id": rec["id"]}
+
+
 def cmd_sync_export(root, args):
     _, _, payload = _canon_payload(root, args.concept, args.block_id)
+    payload = payload.strip("\n")
+    if getattr(args, "json", False):
+        return {"payload": payload}
     # Payload only, nothing else, so the output pipes.
-    sys.stdout.write(payload.strip("\n") + "\n")
+    sys.stdout.write(payload + "\n")
 
 
 def cmd_sync_insert(root, args):
@@ -245,14 +252,19 @@ def cmd_sync_insert(root, args):
         raise OkfError("invalid_input", message)
     block = render_sync_block(args.block_id, source, payload)
     new_body = body.rstrip("\n") + "\n\n" + block + "\n"
+    result = {"applied": bool(args.apply), "consumer": consumer_rel, "source": source,
+              "id": args.block_id}
     if not args.apply:
-        print("would insert    {}   {}#{}".format(
-            consumer_rel, source, args.block_id))
-        print("sync-insert (dry-run): re-run with --apply.")
-        return
+        if not getattr(args, "json", False):
+            print("would insert    {}   {}#{}".format(
+                consumer_rel, source, args.block_id))
+            print("sync-insert (dry-run): re-run with --apply.")
+        return result
     write_file_verbatim(cap, head + new_body)
-    print("inserted        {}   {}#{}".format(
-        consumer_rel, source, args.block_id))
+    if not getattr(args, "json", False):
+        print("inserted        {}   {}#{}".format(
+            consumer_rel, source, args.block_id))
+    return result
 
 
 def cmd_sync_status(root, args):
@@ -268,16 +280,19 @@ def cmd_sync_status(root, args):
         totals[status] += 1
         rows.append({"consumer": rel, "id": rec["id"], "source": rec["source"],
                      "status": status})
+    drift = any(r["status"] != "synced" for r in rows)
     if getattr(args, "json", False):
-        print(json.dumps({"blocks": rows, "totals": totals}))
-    else:
-        for row in rows:
-            print("{:<18} {:<32} {}#{}".format(
-                row["status"], row["consumer"], row["source"] or "?",
-                row["id"] or "?"))
-        print("sync-status: " + ", ".join(
-            "{} {}".format(totals[s], s) for s in SYNC_STATUSES))
-    if any(r["status"] != "synced" for r in rows):
+        result = {"blocks": rows, "totals": totals}
+        if drift:
+            raise OkfError("drift", "", result)
+        return result
+    for row in rows:
+        print("{:<18} {:<32} {}#{}".format(
+            row["status"], row["consumer"], row["source"] or "?",
+            row["id"] or "?"))
+    print("sync-status: " + ", ".join(
+        "{} {}".format(totals[s], s) for s in SYNC_STATUSES))
+    if drift:
         raise OkfError("drift", "")
 
 
@@ -306,8 +321,7 @@ def cmd_sync_update(root, args):
     for ap, recs in per_file.items():
         text = read_file_verbatim(ap)
         if text is None:
-            print("note: skipping {} — not valid UTF-8".format(ap),
-                  file=sys.stderr)
+            _note("skipping {} — not valid UTF-8".format(ap))
             continue
         _, body = split_frontmatter(text)
         head = text[:len(text) - len(body)]
@@ -322,19 +336,26 @@ def cmd_sync_update(root, args):
         out.append(body[last:])
         if args.apply:
             write_file_verbatim(ap, head + "".join(out))
-    for rel, rec in updated:
-        print("{:<14} {}   {}".format(verb, rel, _sync_addr(rec)))
-    for rel, rec, _status in refused:
-        print("refused        {}   {}  (consumer copy modified — reconcile "
-              "into the canon owner first, or --force to discard)".format(
-                  rel, _sync_addr(rec)))
-    for rel, rec, status in unresolvable:
-        print("{:<14} {}   {}".format(status, rel, _sync_addr(rec)))
-    print("sync-update: {} {}, {} refused, {} unresolvable.{}".format(
-        len(updated), verb, len(refused), len(unresolvable),
-        "" if args.apply else " Re-run with --apply."))
+    result = {"applied": bool(args.apply),
+              "updated": [_block_row(rel, rec) for rel, rec in updated],
+              "refused": [_block_row(rel, rec) for rel, rec, _status in refused],
+              "unresolvable": [dict(_block_row(rel, rec), status=status)
+                               for rel, rec, status in unresolvable]}
+    if not getattr(args, "json", False):
+        for rel, rec in updated:
+            print("{:<14} {}   {}".format(verb, rel, _sync_addr(rec)))
+        for rel, rec, _status in refused:
+            print("refused        {}   {}  (consumer copy modified — reconcile "
+                  "into the canon owner first, or --force to discard)".format(
+                      rel, _sync_addr(rec)))
+        for rel, rec, status in unresolvable:
+            print("{:<14} {}   {}".format(status, rel, _sync_addr(rec)))
+        print("sync-update: {} {}, {} refused, {} unresolvable.{}".format(
+            len(updated), verb, len(refused), len(unresolvable),
+            "" if args.apply else " Re-run with --apply."))
     if refused or unresolvable:
-        raise OkfError("drift", "")
+        raise OkfError("drift", "", result)
+    return result
 
 
 def _complete_block_ids(parsed_args, **_):
@@ -372,6 +393,7 @@ def add_sync_export_parser(sub):
     pse.add_argument("concept", help="canonical concept (<bundle>/<concept-id>)").completer = _complete_concepts
     pse.add_argument("block_id", metavar="block-id",
                      help="canon block id declared in that concept").completer = _complete_block_ids
+    _add_output(pse)
 
 
 def add_sync_insert_parser(sub):
@@ -382,6 +404,7 @@ def add_sync_insert_parser(sub):
     psi.add_argument("block_id", metavar="block-id", help="canon block id to materialise").completer = _complete_block_ids
     psi.add_argument("--apply", action="store_true",
                      help="write the block (default: dry-run preview only)")
+    _add_output(psi)
 
 
 def add_sync_status_parser(sub):
@@ -392,7 +415,7 @@ def add_sync_status_parser(sub):
     pss.add_argument("--source",
                      help="only blocks whose canonical source is this path (/bundle/concept.md)").completer = _complete_canon_sources
     pss.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id").completer = _complete_canon_block_ids
-    pss.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pss)
 
 
 def add_sync_update_parser(sub):
@@ -407,6 +430,7 @@ def add_sync_update_parser(sub):
                      help="write changes (default: dry-run preview only)")
     psu.add_argument("--force", action="store_true",
                      help="also overwrite a consumer copy that was modified locally (discards it)")
+    _add_output(psu)
 
 
 COMMANDS = {

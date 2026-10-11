@@ -5,12 +5,11 @@ build-index command."""
 import os
 import re
 import sqlite3
-import sys
-
 from okf.catalogue import (
     _dequote, extract_tags, iter_concepts, list_search_bundles, read_file, split_frontmatter,
 )
 from okf.find_filters import FTS_FILTER_COLUMNS
+from okf.output import _add_output, _note
 from okf.parser_support import _sub
 
 
@@ -200,9 +199,13 @@ def cmd_build_index(root, args):
             finally:
                 conn.close()
             if not stale:
+                if getattr(args, "json", False):
+                    return {"applied": False, "concepts": None, "path": db_path}
                 print("index is current, skipping rebuild -> {}".format(db_path))
                 return
     n, db = build_fts_index(root, include_topics=getattr(args, "include_topics", False))
+    if getattr(args, "json", False):
+        return {"applied": True, "concepts": n, "path": db}
     print("indexed {} concept(s) -> {}".format(n, db))
 
 
@@ -227,9 +230,8 @@ def _fts_ranking(root, query, limit, filters, notify=True):
         # arm" look identical from the outside. It goes to stderr, so stdout
         # stays byte-identical to the pre-plan output.
         if notify:
-            print("note: lexical index absent — falling back to substring "
-                  "scan; run `okf-cli build-index` for BM25 ranking",
-                  file=sys.stderr)
+            _note("lexical index absent — falling back to substring "
+                  "scan; run `okf-cli build-index` for BM25 ranking")
         return None
     terms = tokenize(query)
     if not terms:
@@ -272,14 +274,13 @@ def _fts_ranking(root, query, limit, filters, notify=True):
             if (notify and not topic_corpus_missing
                     and _fts_index_stale(
                         root, conn, filters.include_topics, check_corpus=False)):
-                print("note: lexical index is stale (catalogue changed since "
-                      "build) — run `okf-cli build-index`", file=sys.stderr)
+                _note("lexical index is stale (catalogue changed since "
+                      "build) — run `okf-cli build-index`")
         finally:
             conn.close()
     except sqlite3.DatabaseError:
         if notify:
-            print("note: lexical index unusable — falling back to substring "
-                  "scan", file=sys.stderr)
+            _note("lexical index unusable — falling back to substring scan")
         return None
     return [(p, -r) for p, r in rows]
 
@@ -307,6 +308,7 @@ def add_build_index_parser(sub):
     pbi.add_argument("--if-stale", action="store_true",
                       help="skip the rebuild when the existing index is "
                            "already current (default: always rebuild)")
+    _add_output(pbi)
 
 
 COMMANDS = {"build-index": (cmd_build_index, add_build_index_parser)}

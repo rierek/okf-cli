@@ -392,17 +392,20 @@ class CmdIndexJson(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run(self, bundle=None, json_flag=False, full=False):
+        """The text printed; with --json what the handler returns, the envelope's `data`
+        (and nothing is printed)."""
         import io, contextlib, types
         args = types.SimpleNamespace(bundle=bundle, full=full, json=json_flag)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            okf_index.cmd_index(self.tmp, args)
+            data = okf_index.cmd_index(self.tmp, args)
+        if json_flag:
+            self.assertEqual(buf.getvalue(), "")
+            return data
         return buf.getvalue()
 
     def test_json_output_with_bundle_is_parseable_object(self):
-        import json
-        out = self._run(bundle="b", json_flag=True)
-        data = json.loads(out)
+        data = self._run(bundle="b", json_flag=True)
         self.assertEqual(data["bundle"], "b")
         self.assertIsInstance(data["concepts"], list)
         self.assertEqual(len(data["concepts"]), 1)
@@ -410,9 +413,7 @@ class CmdIndexJson(unittest.TestCase):
         self.assertTrue(all(k in concept for k in ("id", "title", "type", "description")))
 
     def test_json_output_without_bundle_is_parseable_object(self):
-        import json
-        out = self._run(bundle=None, json_flag=True)
-        data = json.loads(out)
+        data = self._run(bundle=None, json_flag=True)
         self.assertIsInstance(data["bundles"], list)
         self.assertTrue(any(entry.get("bundle") == "b" for entry in data["bundles"]))
 
@@ -429,18 +430,16 @@ class CmdIndexJson(unittest.TestCase):
         every concept of every bundle produced 794 KB against the real
         catalogue; concepts/directories now sit behind --full for the same
         reason the compact default exists (SC-002)."""
-        import json
-        entry = json.loads(self._run(bundle=None, json_flag=True, full=True))["bundles"][0]
+        entry = self._run(bundle=None, json_flag=True, full=True)["bundles"][0]
         self.assertEqual(entry["concepts"], 1)
 
     def test_json_full_without_bundle_carries_description_and_directories(self):
         """okf-cli-7u5z (D01), revised okf-cli-t2w8 — the other two fields
         the full text block shows, now gated the same way."""
-        import json
         os.makedirs(os.path.join(self.tmp, "b", "sub"))
         with open(os.path.join(self.tmp, "b", "index.md"), "w", encoding="utf-8") as f:
             f.write("# B\n\nthe b bundle\n")
-        entry = json.loads(self._run(bundle=None, json_flag=True, full=True))["bundles"][0]
+        entry = self._run(bundle=None, json_flag=True, full=True)["bundles"][0]
         self.assertEqual(entry["description"], "the b bundle")
         self.assertEqual(entry["directories"], ["sub"])
 
@@ -448,8 +447,7 @@ class CmdIndexJson(unittest.TestCase):
         """okf-cli-t2w8 SC-001/SC-002 — default catalogue-wide --json shrinks
         to bundle+description, same distinction the text form makes; no
         --full means no concepts/directories keys at all."""
-        import json
-        entry = json.loads(self._run(bundle=None, json_flag=True))["bundles"][0]
+        entry = self._run(bundle=None, json_flag=True)["bundles"][0]
         self.assertEqual(entry, {"bundle": "b", "description": ""})
         self.assertNotIn("concepts", entry)
         self.assertNotIn("directories", entry)

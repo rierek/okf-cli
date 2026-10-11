@@ -6,9 +6,9 @@ import argparse
 import difflib
 import os
 import re
-import sys
 
 from okf import semantic
+from okf.output import _add_output, _note
 from okf.catalogue import (
     _dequote, all_tags, iter_concepts, list_search_bundles, load_okf_config, read_file,
     resolve_scopes, split_frontmatter,
@@ -27,6 +27,21 @@ def _format_contrib(contrib):
         if terms:
             parts.append("{}=[{}]".format(field, ",".join(terms)))
     return "; ".join(parts) if parts else "(none)"
+
+
+def _hit_record(rank, hit, breakdown, max_score):
+    """One hit as the envelope carries it: the fields cmd_find prints per hit, under
+    --breakdown also the arm's own values."""
+    record = {"rank": rank, "title": hit["title"], "type": hit["type"]}
+    if hit.get("superseded_by"):
+        record["superseded_by"] = hit["superseded_by"]
+    record.update(path=hit["path"], description=hit["desc"], snippet=hit["snip"],
+                  provenance=hit.get("provenance", "lexical"))
+    if breakdown:
+        record["breakdown"] = (
+            {"cosine": hit["cosine"]} if hit.get("provenance") == "semantic" else
+            {"score": hit["score"], "max_score": max_score, "contrib": hit.get("contrib")})
+    return record
 
 
 def _hydrate_hit(root, path, terms, score, provenance, cosine=None):
@@ -247,9 +262,11 @@ def _zero_hit_suggestions(root, query, limit=5):
 
 def cmd_find(root, args):
     if getattr(args, "include_topics", False) and _fts_index_includes_topics(root) is False:
-        print("note: lexical index excludes topic folders — run `okf-cli build-index --include-topics`", file=sys.stderr)
+        _note("lexical index excludes topic folders — run `okf-cli build-index --include-topics`")
     terms = tokenize(args.query)
     if not terms:
+        if getattr(args, "json", False):
+            return {"hits": [], "nearest_tags": []}
         print("(empty query)")
         return
     breakdown = getattr(args, "breakdown", False)
@@ -292,8 +309,7 @@ def cmd_find(root, args):
     if getattr(args, "expand_tags", False) and not lexical_owned_provisionally:
         extra = semantic._expand_query_tags(root, args.query)
         if extra:
-            print("note: query expanded with tag(s): {}".format(
-                ", ".join(extra)), file=sys.stderr)
+            _note("query expanded with tag(s): {}".format(", ".join(extra)))
             terms = terms + [t for t in extra if t not in terms]
             # notify=False: this is the SAME index, looked at a second time
             # within one invocation. Repeating its degradation note here
@@ -318,14 +334,18 @@ def cmd_find(root, args):
     # the semantic arm actually contributed hits), not the flag alone, and
     # printed at most once per invocation (PF-4).
     if filters.include_archive and semantic_hits:
-        print("note: --include-archive covers the lexical arm only; "
-              "embeddings stay on the active catalogue", file=sys.stderr)
+        _note("--include-archive covers the lexical arm only; "
+              "embeddings stay on the active catalogue")
 
     all_hits, lexical_owned = fuse_conditional(hits, semantic_hits, args.limit)
     if not lexical_owned and semantic_hits:
-        print("note: semantic arm owns this ranking (lexical top-1 lacked a "
-              "clear margin)", file=sys.stderr)
+        _note("semantic arm owns this ranking (lexical top-1 lacked a "
+              "clear margin)")
 
+    if getattr(args, "json", False):
+        return {"hits": [_hit_record(i, h, breakdown, max_score)
+                         for i, h in enumerate(all_hits[: args.limit], start=1)],
+                "nearest_tags": [] if all_hits else _zero_hit_suggestions(root, args.query)}
     if not all_hits:
         print("(no matches for: {})".format(args.query))
         near = _zero_hit_suggestions(root, args.query)
@@ -437,6 +457,7 @@ def add_find_parser(sub):
                          "full catalogue and found ineffective for the "
                          "vocabulary-mismatch class it was built for, so it "
                          "stays off by default (Q05/D17)")
+    _add_output(pf)
 
 
 COMMANDS = {"find": (cmd_find, add_find_parser)}
