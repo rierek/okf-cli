@@ -110,8 +110,8 @@ _CTX_INDEX_SKELETON = (
     "## Contents\n\n" + MARK_START + "\n" + MARK_END + "\n")
 
 
-def _ctx_die(msg):
-    raise OkfError("invalid_input", "ctx: {}".format(msg))
+def _ctx_die(msg, kind="invalid_input"):
+    raise OkfError(kind, "ctx: {}".format(msg))
 
 
 def ctx_dir(root):
@@ -251,7 +251,7 @@ def ctx_findings(root, ap, stale=False):
 def load_ctx(root, slug):
     f = ctx_file(root, slug)
     if not os.path.isfile(f):
-        _ctx_die("unknown slug: {}".format(slug))
+        _ctx_die("unknown slug: {}".format(slug), "not_found")
     desc, entries, problems = parse_ctx(read_file(f))
     return {"slug": slug, "description": desc, "entries": entries, "problems": problems}
 

@@ -60,7 +60,7 @@ def cmd_ctx_create(root, args):
     raw = [(p, "") for p in args.paths]
     if args.import_file:
         if not os.path.isfile(args.import_file):
-            _ctx_die("import file not found: {}".format(args.import_file))
+            _ctx_die("import file not found: {}".format(args.import_file), "not_found")
         for line in read_file(args.import_file).splitlines():
             if not line.strip() or line.lstrip().startswith("#"):
                 continue
@@ -210,7 +210,7 @@ def _ctx_nav(root, args, direction):
         shown = [m for m in ms if x in (m["title"].lower(), m["path"].lower(),
                                         os.path.splitext(os.path.basename(m["path"]))[0].lower())]
         if not shown:
-            _ctx_die('no entry in {} matches --file "{}"'.format(args.slug, args.file))
+            _ctx_die('no entry in {} matches --file "{}"'.format(args.slug, args.file), "not_found")
         if len(shown) > 1:
             _ctx_die('--file "{}" matches several entries: {}'.format(
                 args.file, ", ".join(m["path"] for m in shown)))
@@ -315,7 +315,7 @@ def cmd_ctx_add(root, args):
         _ctx_die("--pos applies only to mode pflicht")
     norm = ctx_normalize_path(root, args.path)
     if norm is None:
-        _ctx_die("not found: {}".format(args.path))
+        _ctx_die("not found: {}".format(args.path), "not_found")
     old = next((e for e in c["entries"] if e["path"] == norm), None)
     if old:
         _ctx_die("{} is already in {} ({})".format(norm, args.slug, _ctx_where(pf, old)))
@@ -328,7 +328,7 @@ def cmd_ctx_drop(root, args):
     c, pf, rest = _ctx_editable(root, args.slug)
     norm, e = _ctx_find(root, c, args.path)
     if e is None:
-        _ctx_die("{} is not in {}".format(norm, args.slug))
+        _ctx_die("{} is not in {}".format(norm, args.slug), "not_found")
     c["entries"] = [x for x in pf + rest if x is not e]
     save_ctx(root, c)
     print("dropped {} from {}".format(norm, args.slug))
@@ -340,7 +340,7 @@ def cmd_ctx_move(root, args):
         _ctx_die("move needs --pos or --mode")
     norm, e = _ctx_find(root, c, args.path)
     if e is None:
-        _ctx_die("{} is not in {}".format(norm, args.slug))
+        _ctx_die("{} is not in {}".format(norm, args.slug), "not_found")
     mode = args.mode or e["mode"]
     if args.pos is not None and mode != "pflicht":
         _ctx_die("--pos applies only to mode pflicht")

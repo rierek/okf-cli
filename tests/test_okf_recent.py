@@ -18,6 +18,7 @@ if _HERE not in sys.path:  # cli/ holds the okf package
 
 from okf import catalogue as okf_catalogue
 from okf import recent as okf_recent
+from okf.errors import OkfError
 
 
 class RecentAddEventParse(unittest.TestCase):
@@ -369,16 +370,16 @@ class RecentDegradationNotes(RecentFixtureMixin, unittest.TestCase):
     def test_missing_git_binary_is_a_hard_error(self):
         self.toplevels[os.path.realpath(self.tmp)] = (None, "no-git")
         self._concept("a/one.md")
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(OkfError) as cm:
             self._run()
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual((cm.exception.kind, cm.exception.message[:7]), ("internal", "recent:"))
 
     def test_non_repo_root_is_a_hard_error(self):
         self.toplevels[os.path.realpath(self.tmp)] = (None, "no-repo")
         self._concept("a/one.md")
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(OkfError) as cm:
             self._run()
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual((cm.exception.kind, cm.exception.message[:7]), ("invalid_input", "recent:"))
 
     def test_unreachable_foreign_repo_names_the_bundle_and_lists_undated(self):
         foreign = tempfile.mkdtemp()

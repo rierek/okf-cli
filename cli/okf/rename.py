@@ -482,13 +482,13 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
     recomputes exactly as before — cmd_rename's call site is unchanged,
     which is what keeps AC3 (rename byte-identical) cheap to satisfy."""
 
-    def die(msg):
-        raise OkfError("invalid_input", "{}: {}".format(verb, msg))
+    def die(msg, kind="invalid_input"):
+        raise OkfError(kind, "{}: {}".format(verb, msg))
 
     if not old_abs.endswith(".md") or not new_abs.endswith(".md"):
         die("both paths must be .md concept files")
     if not os.path.isfile(old_abs):
-        die("source not found: {}".format(old_abs))
+        die("source not found: {}".format(old_abs), "not_found")
     if os.path.basename(old_abs).lower() in RESERVED:
         die("refusing to move a reserved file ({})".format(os.path.basename(old_abs)))
     if os.path.basename(new_abs).lower() in RESERVED:
@@ -740,8 +740,8 @@ def cmd_archive(root, args):
     are not part of that shared core (SPEC.md §2)."""
     verb = "archive"
 
-    def die(msg):
-        raise OkfError("invalid_input", "{}: {}".format(verb, msg))
+    def die(msg, kind="invalid_input"):
+        raise OkfError(kind, "{}: {}".format(verb, msg))
 
     ref = args.path[:-3] if args.path.endswith(".md") else args.path
     p = ref + ".md"
@@ -773,9 +773,9 @@ def cmd_archive(root, args):
     if not os.path.isfile(src_abs) and os.path.isfile(dest_abs):
         if args.restore:
             die("source not found: {} — the active copy already exists at "
-                "{}".format(src_abs, dest_rel))
+                "{}".format(src_abs, dest_rel), "not_found")
         die("source not found: {} — already archived at {} (use --restore "
-            "to bring it back)".format(src_abs, dest_rel))
+            "to bring it back)".format(src_abs, dest_rel), "not_found")
 
     # The inbound-reference count is a report line, not a guard: it must not
     # gate the move, only disclose what the move leaves behind (SPEC.md §1).

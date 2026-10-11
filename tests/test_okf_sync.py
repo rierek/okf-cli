@@ -16,6 +16,7 @@ if _ROOT not in sys.path:
 
 from okf import catalogue as okf_catalogue
 from okf import sync as okf_sync
+from okf.errors import EXIT_CODES
 from tests.okf_testkit import SyncFixtureMixin
 
 
@@ -143,12 +144,12 @@ class SyncInsertCommand(SyncFixtureMixin, unittest.TestCase):
         self._insert()
         before = self._r("kc-proj/setup.md")
         _, code = self._insert()
-        self.assertEqual(code, 1)
+        self.assertEqual(code, EXIT_CODES["invalid_input"])
         self.assertEqual(self._r("kc-proj/setup.md"), before)
 
     def test_unknown_block_id_exits_one(self):
         _, code = self._insert(block_id="nope")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, EXIT_CODES["not_found"])
         self.assertNotIn("okf:sync", self._r("kc-proj/setup.md"))
 
 
@@ -191,7 +192,7 @@ class SyncUpdateCommand(SyncFixtureMixin, unittest.TestCase):
         self._retype_consumer("Lokal umgeschrieben.\n")
         before = self._r("kc-proj/setup.md")
         out, code = self._update()
-        self.assertEqual(code, 1)
+        self.assertEqual(code, EXIT_CODES["drift"])
         self.assertIn("refused", out)
         self.assertEqual(self._r("kc-proj/setup.md"), before)
 
@@ -206,7 +207,7 @@ class SyncUpdateCommand(SyncFixtureMixin, unittest.TestCase):
         os.remove(os.path.join(self.tmp, "kc-gov/ownership.md"))
         before = self._r("kc-proj/setup.md")
         out, code = self._update(force=True)
-        self.assertEqual(code, 1)
+        self.assertEqual(code, EXIT_CODES["drift"])
         self.assertIn("source-missing", out)
         self.assertEqual(self._r("kc-proj/setup.md"), before)
 

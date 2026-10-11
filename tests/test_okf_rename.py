@@ -24,6 +24,7 @@ from okf import catalogue as okf_catalogue
 from okf import linkscan as okf_linkscan
 from okf import rename as okf_rename
 from okf import wikilinks as okf_wikilinks
+from okf.errors import OkfError
 from tests.okf_testkit import needs_case_insensitive_fs
 from tests.test_okf_wikilinks import WikilinkFixtureMixin
 
@@ -207,22 +208,18 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         return buf.getvalue()
 
     def _rename_fails(self, old, new, message, apply=False):
-        """Assert a refusal AND which one. `assertRaises(SystemExit)` alone is
-        not an assertion about the guard under test: cmd_rename has ten of them
-        plus the turns-ambiguous refusal, so dropping the guard a test names
-        still produced an exit and the test still passed. The message is the
-        only thing that distinguishes them."""
+        """Assert the precise error kind and message of one refusal guard."""
         import contextlib
         import io
         import types
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(OkfError) as ctx:
                 okf_rename.cmd_rename(self.tmp, types.SimpleNamespace(
                     old=old, new=new, apply=apply, force=False))
-        self.assertEqual(ctx.exception.code, 2)
-        self.assertIn(message, err.getvalue())
-        return err.getvalue()
+        self.assertEqual(ctx.exception.kind, "invalid_input")
+        self.assertIn(message, ctx.exception.message)
+        return ctx.exception.message
 
     def test_inbound_plain_is_rewritten(self):
         self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
@@ -324,7 +321,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self._w("b/new.md", "---\ntype: Concept\n---\n# Other New\n")
         self._w("c/src.md", "---\ntype: Concept\n---\nDistinct: [[old]] and [[new]].\n")
         before = self._r("c/src.md")
-        with self.assertRaises(SystemExit) as ctx:
+        with self.assertRaises(OkfError) as ctx:
             self._rename("a/old.md", "a/new.md", apply=True)
         self.assertEqual(ctx.exception.code, 2)
         self.assertEqual(self._r("c/src.md"), before)
@@ -419,7 +416,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         through."""
         self._w("b/new.md", "---\ntype: Concept\n---\n# Other New\n")
         self._w("c/ref.md", "---\ntype: Concept\n---\nOnly [[new]] here.\n")
-        with self.assertRaises(SystemExit) as ctx:
+        with self.assertRaises(OkfError) as ctx:
             self._rename("a/old.md", "a/new.md", apply=True)
         self.assertEqual(ctx.exception.code, 2)
         self.assertIn("turns-ambiguous", self._rename("a/old.md", "a/new.md"))
@@ -560,7 +557,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self._w("d/old.md", "---\ntype: Concept\n---\n# D Old\n")
         self._w("b/src.md", "---\ntype: Concept\n---\nsee [[old]].\n")
         self.assertEqual(self._status("b/src.md", "old"), ("resolved", ["/b/old.md"]))
-        with self.assertRaises(SystemExit) as ctx:
+        with self.assertRaises(OkfError) as ctx:
             self._rename("b/old.md", "c/old.md", apply=True)
         self.assertEqual(ctx.exception.code, 2)
         self.assertTrue(os.path.isfile(os.path.join(self.tmp, "b/old.md")))
@@ -686,7 +683,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
         before = self._r("a/src.md")
         for dest in ("a/sub/index.md", "a/log.md", "a/README.md"):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(OkfError) as ctx:
                 self._rename("a/old.md", dest, apply=True)
             self.assertEqual(ctx.exception.code, 2, dest)
         self.assertEqual(self._r("a/src.md"), before)
@@ -703,7 +700,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
 
     def test_empty_destination_basename_is_refused(self):
         self._w("a/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(OkfError):
             self._rename("a/old.md", "a/.md", apply=True)
         self.assertIn("[[old]]", self._r("a/src.md"))
 
@@ -760,7 +757,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         itself indexes."""
         self._w("a/_draft/new.md", "---\ntype: Concept\n---\n# Draft New\n")
         self._w("c/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
-        with self.assertRaises(SystemExit) as ctx:
+        with self.assertRaises(OkfError) as ctx:
             self._rename("a/old.md", "a/new.md", apply=True)
         self.assertEqual(ctx.exception.code, 2)
 
@@ -769,7 +766,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
         and the differently-cased collision must still be seen."""
         self._w("b/Foo.md", "---\ntype: Concept\n---\n# Foo\n")
         self._w("c/src.md", "---\ntype: Concept\n---\nSee [[old]].\n")
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(OkfError):
             self._rename("a/old.md", "a/foo.md", apply=True)
 
     def test_collision_the_tie_break_absorbs_is_not_refused(self):
@@ -832,21 +829,21 @@ class PerformRenameDirectCall(WikilinkFixtureMixin, unittest.TestCase):
         import io
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(OkfError) as ctx:
                 okf_rename.perform_rename(self.tmp, self._ap("a/old.md"), self._ap("a/y.txt"),
                                           apply=False, force=False, verb="archive")
-        self.assertEqual(ctx.exception.code, 2)
-        self.assertTrue(err.getvalue().startswith("archive:"))
+        self.assertEqual(ctx.exception.kind, "invalid_input")
+        self.assertTrue(ctx.exception.message.startswith("archive:"))
 
     def test_default_verb_is_rename(self):
         import contextlib
         import io
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(OkfError) as ctx:
                 okf_rename.perform_rename(self.tmp, self._ap("a/old.md"), self._ap("a/y.txt"),
                                           apply=False, force=False)
-        self.assertTrue(err.getvalue().startswith("rename:"))
+        self.assertTrue(ctx.exception.message.startswith("rename:"))
 
     # -- AC4 (okf-cli-5436): the missing-source/existing-counterpart signal
     # is cmd_archive's, not perform_rename's. `rename` has no archive
@@ -860,13 +857,13 @@ class PerformRenameDirectCall(WikilinkFixtureMixin, unittest.TestCase):
         os.remove(self._ap("a/old.md"))
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(OkfError) as ctx:
                 okf_rename.perform_rename(self.tmp, self._ap("a/old.md"), self._ap("a/new.md"),
                                           apply=False, force=False)
-        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(ctx.exception.kind, "not_found")
         self.assertEqual(
-            "rename: source not found: {}\n".format(self._ap("a/old.md")),
-            err.getvalue())
+            "rename: source not found: {}".format(self._ap("a/old.md")),
+            ctx.exception.message)
 
     # -- AC4 (okf-cli-tk33): the "source under _archive/" refusal is
     # cmd_rename's guard, not perform_rename's — that shared function is
@@ -916,12 +913,12 @@ class ArchiveConcept(WikilinkFixtureMixin, unittest.TestCase):
         import types
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(OkfError) as ctx:
                 okf_rename.cmd_archive(self.tmp, types.SimpleNamespace(
                     path=path, restore=restore, apply=apply, force=force))
-        self.assertEqual(ctx.exception.code, 2)
-        self.assertIn(message, err.getvalue())
-        return err.getvalue()
+        self.assertEqual(ctx.exception.kind, "invalid_input")
+        self.assertIn(message, ctx.exception.message)
+        return ctx.exception.message
 
     # -- A01/SC-01: dry run --------------------------------------------
     def test_dry_run_prints_the_plan_and_touches_nothing(self):
@@ -1121,11 +1118,11 @@ class ArchiveMissingSourcePointsAtCounterpart(WikilinkFixtureMixin, unittest.Tes
         import types
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(OkfError) as ctx:
                 okf_rename.cmd_archive(self.tmp, types.SimpleNamespace(
                     path=path, restore=restore, apply=apply, force=force))
-        self.assertEqual(ctx.exception.code, 2)
-        return err.getvalue()
+        self.assertEqual(ctx.exception.kind, "not_found")
+        return ctx.exception.message
 
     # -- SC-02: regression guard on the untouched path, written first ----
     # A missing source with no counterpart anywhere must keep the CURRENT
@@ -1135,7 +1132,7 @@ class ArchiveMissingSourcePointsAtCounterpart(WikilinkFixtureMixin, unittest.Tes
     def test_sc02_missing_source_with_no_counterpart_keeps_current_message(self):
         err = self._archive_fails("a/ghost.md")
         self.assertEqual(
-            "archive: source not found: {}\n".format(self._ap("a/ghost.md")),
+            "archive: source not found: {}".format(self._ap("a/ghost.md")),
             err)
 
     # -- AC1/SC-01: missing source, an archived counterpart exists -------
@@ -1150,7 +1147,7 @@ class ArchiveMissingSourcePointsAtCounterpart(WikilinkFixtureMixin, unittest.Tes
         self.assertIn("--restore", err)
         self.assertEqual(
             "archive: source not found: {} — already archived at "
-            "_archive/a/old.md (use --restore to bring it back)\n"
+            "_archive/a/old.md (use --restore to bring it back)"
             .format(self._ap("a/old.md")),
             err)
 
@@ -1164,7 +1161,7 @@ class ArchiveMissingSourcePointsAtCounterpart(WikilinkFixtureMixin, unittest.Tes
         err = self._archive_fails("_archive/a/old.md", restore=True)
         self.assertEqual(
             "archive: source not found: {} — the active copy already "
-            "exists at a/old.md\n".format(self._ap("_archive/a/old.md")),
+            "exists at a/old.md".format(self._ap("_archive/a/old.md")),
             err)
 
 
@@ -1203,11 +1200,11 @@ class RenameSourceUnderArchiveRefuses(WikilinkFixtureMixin, unittest.TestCase):
         import types
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            with self.assertRaises(SystemExit) as ctx:
+            with self.assertRaises(OkfError) as ctx:
                 okf_rename.cmd_rename(self.tmp, types.SimpleNamespace(
                     old=old, new=new, apply=apply, force=False))
-        self.assertEqual(ctx.exception.code, 2)
-        return out.getvalue(), err.getvalue()
+        self.assertEqual(ctx.exception.kind, "invalid_input")
+        return out.getvalue(), ctx.exception.message
 
     # -- SC-03 regression, written first: both untouched paths must keep
     # behaving exactly as before the refusal exists. ----------------------

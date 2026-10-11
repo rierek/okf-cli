@@ -22,6 +22,7 @@ from okf import linkscan as okf_linkscan
 from okf import navigation as okf_navigation
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
+from okf.errors import OkfError
 from tests.okf_testkit import run_find
 
 
@@ -142,7 +143,7 @@ class CmdRefs(unittest.TestCase):
     def test_missing_target_exits_nonzero(self):
         import types
         args = types.SimpleNamespace(path="ghost.md", scan_root=self.tmp, json=True)
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(OkfError) as cm:
             okf_navigation.cmd_refs(os.path.join(self.tmp, "docs"), args)
         self.assertNotEqual(cm.exception.code, 0)
 
@@ -388,47 +389,47 @@ class BundleArgumentIsValidated(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _call(self, fn, args):
-        """Run a command, returning (exit_code_or_None, stdout, stderr)."""
+        """Run a command, returning (error_or_None, stdout)."""
         import io, contextlib
-        out, err = io.StringIO(), io.StringIO()
-        code = None
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        out = io.StringIO()
+        error = None
+        with contextlib.redirect_stdout(out):
             try:
                 fn(self.tmp, args)
-            except SystemExit as e:
-                code = e.code
-        return code, out.getvalue(), err.getvalue()
+            except OkfError as caught:
+                error = caught
+        return error, out.getvalue()
 
     def _index_args(self, bundle, json_flag=False):
         import types
         return types.SimpleNamespace(bundle=bundle, full=False, json=json_flag)
 
     def test_index_refuses_a_bundle_that_does_not_exist(self):
-        code, out, err = self._call(okf_index.cmd_index, self._index_args("nope"))
-        self.assertEqual(code, 1)
-        self.assertIn("nope", err)
+        error, out = self._call(okf_index.cmd_index, self._index_args("nope"))
+        self.assertEqual(error.kind, "not_found")
+        self.assertIn("nope", error.message)
         self.assertNotIn("# nope", out)
 
     def test_index_json_refuses_too(self):
         """The --json branch returns before the text branch, so it needs the
         same gate — otherwise a consumer gets `{"bundle": "nope", ...}` and a
         zero exit for a bundle that is not there."""
-        code, out, _err = self._call(okf_index.cmd_index,
-                                     self._index_args("nope", json_flag=True))
-        self.assertEqual(code, 1)
+        error, out = self._call(okf_index.cmd_index,
+                                self._index_args("nope", json_flag=True))
+        self.assertEqual(error.kind, "not_found")
         self.assertEqual(out, "")
 
     def test_index_still_prints_an_existing_bundle(self):
-        code, out, _err = self._call(okf_index.cmd_index, self._index_args("real"))
-        self.assertIsNone(code)
+        error, out = self._call(okf_index.cmd_index, self._index_args("real"))
+        self.assertIsNone(error)
         self.assertIn("One", out)
 
     def test_visualize_refuses_a_bundle_that_does_not_exist(self):
         import types
-        code, _out, err = self._call(
+        error, _out = self._call(
             okf_navigation.cmd_visualize, types.SimpleNamespace(bundle="nope", out=None))
-        self.assertEqual(code, 1)
-        self.assertIn("nope", err)
+        self.assertEqual(error.kind, "not_found")
+        self.assertIn("nope", error.message)
 
     def test_visualize_creates_nothing_for_a_bundle_that_does_not_exist(self):
         """The actual damage: os.makedirs() on a path derived from an
@@ -441,9 +442,9 @@ class BundleArgumentIsValidated(unittest.TestCase):
 
     def test_visualize_still_writes_for_an_existing_bundle(self):
         import types
-        code, out, _err = self._call(
+        error, out = self._call(
             okf_navigation.cmd_visualize, types.SimpleNamespace(bundle="real", out=None))
-        self.assertIsNone(code)
+        self.assertIsNone(error)
         self.assertTrue(os.path.isfile(
             os.path.join(self.tmp, "real", "assets", "viz.html")))
         self.assertIn("1 nodes", out)
@@ -457,8 +458,8 @@ class BundleArgumentIsValidated(unittest.TestCase):
         os.makedirs(os.path.dirname(ap))
         with open(ap, "w", encoding="utf-8") as f:
             f.write("---\ntype: Runbook\ntitle: Old\n---\n# Old\n")
-        code, out, _err = self._call(okf_index.cmd_index, self._index_args("_archive"))
-        self.assertIsNone(code)
+        error, out = self._call(okf_index.cmd_index, self._index_args("_archive"))
+        self.assertIsNone(error)
         self.assertIn("Old", out)
 
 
