@@ -25,6 +25,7 @@ if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf import parser as okf_parser
+from tests.okf_testkit import uv_start_log
 
 _spec = importlib.util.spec_from_file_location(
     "okf_mcp", os.path.join(_HERE, "..", "mcp", "okf_mcp.py"))
@@ -72,6 +73,18 @@ class McpBoundaryTestBase(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
         mcp.OKF_CLI = self._prev_okf_cli
+
+
+class McpStartsTheCliThroughUv(McpBoundaryTestBase):
+    """R-11 — every okf_mcp call starts okf-cli as `uv run --script <OKF_CLI>`, so the PEP 723
+    header of the script, not the Python on PATH, supplies the dependencies."""
+
+    def test_run_okf_starts_the_cli_with_uv_run_script_and_the_OKF_CLI_path(self):
+        calls = uv_start_log(self)
+        self.assertIn("data", mcp.run_okf(self.root, "list", {"where": "type = Runbook"}))
+        self.assertEqual(len(calls()), 1, calls())
+        self.assertTrue(calls()[0].startswith("run --script {} --root {} list".format(mcp.OKF_CLI, self.root)),
+                        calls()[0])
 
 
 class McpIndexListBoundary(McpBoundaryTestBase):
@@ -575,7 +588,7 @@ class McpCtxBoundary(McpBoundaryTestBase):
     """OKFT-eyhm — okf_ctx_list / okf_ctx_show over the real CLI."""
 
     def _ctx_create(self, slug, *paths):
-        subprocess.run(["python3", mcp.OKF_CLI, "--root", self.root, "ctx",
+        subprocess.run([sys.executable, mcp.OKF_CLI, "--root", self.root, "ctx",
                         "create", slug, *paths], check=True, capture_output=True)
 
     def _tool(self, name):

@@ -116,7 +116,7 @@ def run_okf(root, command, params):
     one envelope, raises. The CLI's call notes arrive as `warnings`; nothing is read
     from stderr except to explain a stdout that is not an envelope."""
     argv = build_argv(root, command, params)
-    proc = subprocess.run(["python3", OKF_CLI] + argv, capture_output=True, text=True)
+    proc = subprocess.run(["uv", "run", "--script", OKF_CLI] + argv, capture_output=True, text=True)
     out = proc.stdout
     if len(out) > MAX_OUTPUT_CHARS:
         raise RuntimeError(

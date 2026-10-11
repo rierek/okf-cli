@@ -642,7 +642,7 @@ def wrapper_step(ctx, un):
     -> (step, whether ~/.local/bin must be on PATH)"""
     dest = ctx.path(".local", "bin", "okf-cli")
     cli = os.path.join(ctx.pkg_root, "cli", "okf-cli.py")
-    text = WRAPPER_HEAD + 'exec python3 {} "$@"\n'.format(shlex.quote(cli))
+    text = WRAPPER_HEAD + 'exec uv run --script {} "$@"\n'.format(shlex.quote(cli))
     what = "{} (runs {})".format(ctx.short(dest), ctx.short(cli))
     try:
         ours = (read(dest) or "").startswith(WRAPPER_HEAD)
@@ -887,9 +887,9 @@ def run(args, ctx=None):
         raise OkfError("internal", "ERROR: okf-cli install supports macOS and Linux only")
     if tomllib is None:  # needed to read and validate Codex's config.toml
         raise OkfError("internal",
-                       "ERROR: okf-cli install needs Python 3.11 or newer (this is {}). Run it with a newer "
-                       "interpreter, e.g. `python3.12 cli/okf-cli.py install`, or install the tool with "
-                       "`uv tool install {}` (uv fetches a suitable Python).".format(sys.version.split()[0], GIT_URL))
+                       "ERROR: okf-cli install needs Python 3.11 or newer (this is {}). Start it with "
+                       "`uv run --script cli/okf-cli.py install` (uv fetches a suitable Python), or install the tool with "
+                       "`uv tool install {}`.".format(sys.version.split()[0], GIT_URL))
     only = None
     if args.only is not None:
         only = [n.strip() for n in args.only.split(",") if n.strip()]

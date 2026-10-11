@@ -12,7 +12,7 @@ okf-cli searches, validates and refactors Open Knowledge Format (OKF) catalogues
 | Need | Check | Used for |
 |---|---|---|
 | okf-cli, or a checkout of it | `okf-cli --help` | Everything |
-| Python 3.7 or newer; okf-cli uses only the standard library | `python3 --version` | Running okf-cli |
+| uv, when you start okf-cli from a checkout | `uv --version` | `uv run --script` resolves the dependencies in the header of `okf-cli.py`, Python 3.11 or newer included |
 | git | `git --version` | `recent`, staged moves in `rename` and `archive`, commits |
 | POSIX tools | `command -v grep find ls ln rm rmdir test date` | Steps in the reference files that call them |
 | Network | none | Optional: semantic search (hard rule 12); opening `visualize` output loads scripts from public CDNs |
@@ -20,7 +20,7 @@ okf-cli searches, validates and refactors Open Knowledge Format (OKF) catalogues
 
 ## First step, every session
 
-1. Run `okf-cli --help`. Not found: run `python3 <okf-cli checkout>/cli/okf-cli.py --help` and use that form in every command. No shell but `okf_*` tools: call `okf_prime` and follow "CLI or MCP". Neither works: tell the user that okf-cli is not installed and stop.
+1. Run `okf-cli --help`. Not found: run `uv run --script <okf-cli checkout>/cli/okf-cli.py --help` and use that form in every command. No shell but `okf_*` tools: call `okf_prime` and follow "CLI or MCP". Neither works: tell the user that okf-cli is not installed and stop.
 2. Find the catalogue root. The user names it, or okf-cli detects it: the current directory, an ancestor, or the `docs/` child of either, holding `.okf.toml` or `SPEC.md` plus `TYPES.md`. Nothing found (`ERROR: no catalogue found`): ask the user for the path. The user wants a new catalogue: follow create-bundle.md, step 2.
 3. Run `okf-cli --root <catalogue> prime --compact`. Read the `root:` line, the index state (`fts index`, `semantic index`), the tag vocabulary (`open` or `closed`) and the bundle list. Without `--compact`, `prime` adds a usage guide; if that guide points to another skill for writing, use write-concepts.md instead.
 4. Pass `--root <catalogue>` on every later call. A stderr note `carries no catalogue marker` means `--root` is wrong: fix it before writing anything.

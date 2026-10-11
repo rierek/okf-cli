@@ -30,6 +30,7 @@ from okf import errors as okf_errors
 from okf import install as okf_install_cmd
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
+from tests.okf_testkit import uv_start_log
 
 
 def _load(name, filename):
@@ -743,15 +744,14 @@ class ShellBlocks(Machine):
         self.assertFalse(os.path.exists(self.h(".local/bin/okf-cli")))
         self.assertNotIn(".local/bin", self.get(self.h(".zshrc")))
 
-    def test_wrapper_runs_the_checkout_and_passes_arguments(self):
+    def test_wrapper_starts_the_checkout_through_uv_run_script_and_passes_arguments(self):
         self.apply(only="zsh", argcomplete=True)
         wrapper = self.h(".local/bin/okf-cli")
         self.assertTrue(os.access(wrapper, os.X_OK))
-        path = os.path.dirname(sys.executable) + os.pathsep + "/usr/bin" + os.pathsep + "/bin"
-        if not shutil.which("python3", path=path):
-            self.skipTest("no python3 next to the test interpreter")
-        done = subprocess.run([wrapper, "a", "b c"], capture_output=True, text=True, env={"PATH": path})
+        calls = uv_start_log(self)
+        done = subprocess.run([wrapper, "a", "b c"], capture_output=True, text=True)
         self.assertEqual(done.stdout.strip(), "['a', 'b c']")
+        self.assertEqual(calls(), ["run --script {} a b c".format(os.path.join(self.pkg, "cli", "okf-cli.py"))])
 
     def test_an_installed_wheel_gets_no_wrapper_but_a_hint(self):
         os.remove(os.path.join(self.pkg, "pyproject.toml"))

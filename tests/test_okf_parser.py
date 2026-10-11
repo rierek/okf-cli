@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 if _HERE not in sys.path:  # cli/ holds the okf package
@@ -157,7 +158,7 @@ class ShellCompletion(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
 
-    def _complete(self, words):
+    def _complete(self, words, start=None):
         import subprocess
         import sys
         line = "okf-cli --root ~/cat " + words
@@ -165,7 +166,7 @@ class ShellCompletion(unittest.TestCase):
         env = dict(os.environ, HOME=self.tmp, COMP_LINE=line, COMP_POINT=str(len(line)),
                    _ARGCOMPLETE="1", _ARGCOMPLETE_SHELL="zsh",
                    _ARGCOMPLETE_SUPPRESS_SPACE="1", _ARGCOMPLETE_STDOUT_FILENAME=out)
-        subprocess.run([sys.executable, os.path.join(_HERE, "okf-cli.py")],
+        subprocess.run((start or [sys.executable]) + [os.path.join(_HERE, "okf-cli.py")],
                        env=env, cwd=self.tmp, capture_output=True)
         if not os.path.exists(out):
             return []
@@ -174,6 +175,17 @@ class ShellCompletion(unittest.TestCase):
         if not raw:
             return []
         return [tuple(e.split(":", 1)) if ":" in e else (e, "") for e in raw.split("\x0b")]
+
+    def test_completion_through_uv_run_script_returns_the_same_candidates(self):
+        """R-11 — the zsh glue calls the `okf-cli` wrapper, which starts `uv run --script`. The
+        script environment holds argcomplete only when the PEP 723 header declares it; without it
+        the call returns no candidates and no error."""
+        import subprocess
+        uv_dirs = {k: subprocess.run(["uv", d, "dir"], capture_output=True, text=True, check=True).stdout.strip()
+                   for k, d in (("UV_CACHE_DIR", "cache"), ("UV_PYTHON_INSTALL_DIR", "python"))}
+        with mock.patch.dict(os.environ, uv_dirs):  # kept when _complete swaps HOME for the fixture
+            self.assertEqual(self._complete("merge-tags q --into ", start=["uv", "run", "--script"]),
+                             [("x", "concepts: 2"), ("y", "concepts: 1")])
 
     def _values(self, words):
         """Candidates minus option strings: argcomplete offers `-h/--help`

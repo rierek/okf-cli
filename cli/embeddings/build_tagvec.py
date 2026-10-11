@@ -26,8 +26,9 @@ This is an OFFLINE, NON-runtime-dependency script:
   dry-run: it reports which (tag/concept, model) pairs are missing from the
   cache and writes nothing.
 
-Usage:
-    python3 cli/embeddings/build_tagvec.py [--root ROOT] [--output PATH]
+Usage (the script imports the okf package, so uv starts it with the dependencies of the
+PEP 723 header of cli/okf-cli.py; there is no second dependency list):
+    uv run --no-project --with-requirements cli/okf-cli.py python cli/embeddings/build_tagvec.py [--root ROOT] [--output PATH]
         [--model bge-m3] [--model voyage-3-large]
         [--target {tags,concepts,both}]
         [--concept-path-prefix PREFIX] [--concept-limit N] [--produce]
