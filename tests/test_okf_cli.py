@@ -493,6 +493,15 @@ class ExitCodePerClass(unittest.TestCase):
         self.assertIn("STALE", r.stdout)
         self.assertIn("reindex --check: 1 stale", r.stdout)
 
+    def test_tags_validate_unknown_is_4_with_report_known_is_0(self):
+        self._w("TAGS.md", "| Tag | Description |\n|---|---|\n| `known` | d |\n")
+        r = self._cli("tags", "--validate", "known", "ghost")
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertIn("UNKNOWN  ghost", r.stdout)
+        self.assertIn("1 UNKNOWN — register with", r.stdout)
+        r = self._cli("tags", "--validate", "known")
+        self.assertEqual((r.returncode, r.stdout), (0, "OK — all 1 known\n"))
+
     def test_unknown_flag_is_2_in_both_modes(self):
         for argv in (["check", "--nope"], ["check", "--json", "--nope"]):
             self.assertEqual(self._cli(*argv).returncode, 2, argv)

@@ -269,11 +269,13 @@ def cmd_tags(root, args):
             return
         unknown = [t for t in args.validate if t not in tags_set]
         for t in unknown:
-            print("unknown tag: {}".format(t), file=sys.stderr)
-        print("tags --validate: {} unknown tag(s) ({} chars max): {}".format(
-              len(unknown), TAG_DESC_MAX))
+            print("UNKNOWN  {}".format(t))
+        print("OK — all {} known".format(len(args.validate)) if not unknown
+              else "{} UNKNOWN — register with: okf-cli.py tags --register <tag> \"<description, max {} chars>\"".format(
+                  len(unknown), TAG_DESC_MAX))
         if unknown:
             raise OkfError("non_conformant", "")
+        return
     counts = all_tags(root)
     if not args.query:
         if not counts:
