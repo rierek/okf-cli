@@ -225,8 +225,8 @@ class Output(VerifyCase):
         out, _, code = run_cli(self.tmp, "--help")
         self.assertEqual(code, 0)
         before, _, maintenance = out.partition("  maintenance:\n")
-        self.assertIn("    verify ", maintenance)
-        self.assertNotIn("    verify ", before)
+        self.assertRegex(maintenance, r"(?m)^    verify {2,}\S")
+        self.assertNotRegex(before, r"(?m)^    verify {2,}\S")
 
 
 if __name__ == "__main__":
