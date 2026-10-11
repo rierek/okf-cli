@@ -59,3 +59,44 @@ def verified_entries(fm):
     if isinstance(value, Mapping):
         return [value]
     return list(value) if isinstance(value, list) else None
+
+
+def utcnow():
+    """The instant of a call, in UTC: the one clock of every comparison with `stale_after`."""
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def filled(value):
+    """A value that says something: not None, not blank text, not an empty list or mapping."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, Mapping)):
+        return bool(value)
+    return True
+
+
+def trust_tier(fm):
+    """The trust tier of a frontmatter mapping (OKF §5.3), from `verified` alone: `unverified`
+    without an entry that names a `by`, `human-reviewed` when one such actor is `human:<id>`,
+    else `machine-confirmed` (an actor outside the convention is no human)."""
+    actors = [entry.get("by") for entry in verified_entries(fm) or []
+              if isinstance(entry, Mapping) and filled(entry.get("by"))]
+    if not actors:
+        return "unverified"
+    if any((parse_actor(by) or ("",))[0] == "human" for by in actors):
+        return "human-reviewed"
+    return "machine-confirmed"
+
+
+def is_stale(fm, now):
+    """Whether `stale_after` (OKF §5.5), the one source, parses and `now` has reached it. `now` is
+    timezone-aware; absent or unparseable `stale_after` is not stale."""
+    at = parse_okf_datetime(fm.get("stale_after")) if fm is not None else None
+    return at is not None and now >= at
+
+
+def trust_fields(fm, now):
+    """The `tier` and `stale` keys every concept record of `--json` output carries."""
+    return {"tier": trust_tier(fm), "stale": is_stale(fm, now)}

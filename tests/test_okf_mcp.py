@@ -775,7 +775,8 @@ class McpReadTargeted(McpBoundaryTestBase):
            "---\ntype: Runbook\ntitle: S\n---\n# S\n## Alpha\nalpha text\n## Beta\nbeta text\n")
         out = mcp._register(_ToolCollector()).tools["okf_read"](
             self.root, path="b/two-sections", section="Alpha")
-        self.assertEqual(out["data"], {"path": "b/two-sections", "text": "## Alpha\nalpha text\n"})
+        self.assertEqual((out["data"]["path"], out["data"]["text"]),
+                         ("b/two-sections", "## Alpha\nalpha text\n"))
 
     def test_the_registered_tool_returns_frontmatter_or_body_alone(self):
         _w(self.root, ".okf.toml", "")

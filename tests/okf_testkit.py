@@ -272,3 +272,65 @@ class SpecCase(unittest.TestCase):
 
     def _group(self, prefix, target: "str | None" = "b"):
         return [f for f in self._findings(target) if f.rule.startswith(prefix)]
+
+
+needs_git = unittest.skipUnless(subprocess.run(["git", "--version"], capture_output=True).returncode == 0,
+                                "git not available")
+
+
+@needs_git
+class GitCatalogue(SpecCase):
+    """The catalogue root `self.tmp` is a git repository; every commit pins author, committer and dates."""
+
+    def setUp(self):
+        super().setUp()
+        patch = mock.patch.dict(os.environ)
+        patch.start()
+        self.addCleanup(patch.stop)
+        for key in [k for k in os.environ if k.startswith("GIT_")]:
+            del os.environ[key]  # a hook that runs the tests must not steer the fixture's git
+        os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null",
+                          GIT_TERMINAL_PROMPT="0")
+        self._git("init", "-q")
+
+    def _git(self, *argv, env=None, cwd=None):
+        res = subprocess.run(["git", "-C", cwd or self.tmp, "-c", "init.defaultBranch=main",
+                              "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", *argv],
+                             capture_output=True, text=True, env={**os.environ, **(env or {})})
+        self.assertEqual(res.returncode, 0, res.stderr)
+        return res.stdout
+
+    def _commit(self, message, when, author="a@x.org", author_when=None):
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", message, env={
+            "GIT_AUTHOR_NAME": "A", "GIT_AUTHOR_EMAIL": author, "GIT_COMMITTER_NAME": "C",
+            "GIT_COMMITTER_EMAIL": "c@x.org", "GIT_AUTHOR_DATE": author_when or when,
+            "GIT_COMMITTER_DATE": when})
+
+    def _doc(self, rel="b/x.md", body="body\n", front="type: Note"):
+        self._w(rel, "---\n{}\n---\n{}".format(front, body))
+
+    def _reset(self):
+        """An empty catalogue in a fresh repository."""
+        for name in os.listdir(self.tmp):
+            path = os.path.join(self.tmp, name)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+        self._git("init", "-q")
+
+    def _count_git(self):
+        """The list that collects argv[0] of every process started from here on (run goes through Popen)."""
+        started = []
+        real_popen = subprocess.Popen
+
+        def popen(argv, *a, **k):
+            started.append(argv[0])
+            return real_popen(argv, *a, **k)
+
+        patch = mock.patch.object(subprocess, "Popen", popen)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return started
+

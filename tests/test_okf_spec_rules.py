@@ -18,6 +18,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from okf import check as okf_check
+from okf import spec as okf_spec
 from tests.okf_testkit import DECLARE, SpecCase, run_json
 
 FAMILIES = ("okf/trust/", "okf/lifecycle/", "okf/format/", "okf/computation/")
@@ -128,13 +129,13 @@ class LifecycleRules(RuleCase):
 
     def test_stale_after_equal_to_now_is_stale_and_one_second_later_is_not(self):
         now = datetime.datetime(2026, 9, 23, 12, 0, 0, tzinfo=UTC)
-        with mock.patch.object(okf_check, "_utcnow", return_value=now):
+        with mock.patch.object(okf_spec, "utcnow", return_value=now):
             self._one("stale_after: 2026-09-23T12:00:00Z", "warning")
             self._none("stale_after: 2026-09-23T12:00:01Z")
 
     def test_stale_after_compares_as_an_instant_across_offsets(self):
         now = datetime.datetime(2026, 9, 22, 23, 0, 0, tzinfo=UTC)
-        with mock.patch.object(okf_check, "_utcnow", return_value=now):
+        with mock.patch.object(okf_spec, "utcnow", return_value=now):
             # 00:00+02:00 is 22:00Z, before now; 00:00Z is after it.
             self._one("stale_after: 2026-09-23T00:00:00+02:00", "warning")
             self._none("stale_after: 2026-09-23T00:00:00Z")
@@ -145,18 +146,18 @@ class LifecycleRules(RuleCase):
         for rel in ("b/1.md", "b/2.md", "c/3.md"):
             self._concept("stale_after: " + PAST, rel=rel)
         calls = []
-        real = okf_check._utcnow
+        real = okf_spec.utcnow
 
         def counting():
             calls.append(real())
             return calls[-1]
 
-        with mock.patch.object(okf_check, "_utcnow", counting):
+        with mock.patch.object(okf_spec, "utcnow", counting):
             hits = [f for f in okf_check.run_checks(self.tmp, None) if f.rule.startswith(self.GROUP)]
         self.assertEqual((len(calls), len(hits)), (1, 3))
 
     def test_the_instant_is_taken_in_utc(self):
-        self.assertEqual(okf_check._utcnow().utcoffset(), datetime.timedelta(0))
+        self.assertEqual(okf_spec.utcnow().utcoffset(), datetime.timedelta(0))
 
     def test_a_passed_stale_after_exits_0_and_4_under_strict(self):
         self._bundle()

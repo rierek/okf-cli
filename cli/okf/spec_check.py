@@ -5,21 +5,10 @@ v0.2. Each rule reads the frontmatter mapping of the file context and returns me
 from collections.abc import Mapping
 
 from okf.catalogue import fm_text, scalar_text
-from okf.spec import parse_actor, parse_okf_datetime, verified_entries
+from okf.spec import filled, is_stale, parse_actor, parse_okf_datetime, verified_entries
 
 STATUSES = ("draft", "stable", "deprecated")
 COMPUTATION_TYPE = "Attested Computation"
-
-
-def _filled(value):
-    """A value that says something: not None, not blank text, not an empty list or mapping."""
-    if value is None:
-        return False
-    if isinstance(value, str):
-        return bool(value.strip())
-    if isinstance(value, (list, Mapping)):
-        return bool(value)
-    return True
 
 
 def _sources(ctx):
@@ -75,7 +64,7 @@ def check_generated(ctx):
     generated = ctx["fm"]["generated"]
     if not isinstance(generated, Mapping):
         return ["`generated` is not a mapping"]
-    return [] if _filled(generated.get("by")) else ["`generated` has no non-empty `by`"]
+    return [] if filled(generated.get("by")) else ["`generated` has no non-empty `by`"]
 
 
 def check_verified(ctx):
@@ -89,7 +78,7 @@ def check_verified(ctx):
     for i, entry in enumerate(entries or []):
         if isinstance(entry, Mapping):
             out += ["`verified[{}]` has no non-empty `{}`".format(i, key)
-                    for key in ("by", "at") if not _filled(entry.get(key))]
+                    for key in ("by", "at") if not filled(entry.get(key))]
     return out
 
 
@@ -105,10 +94,7 @@ def check_status(ctx):
 
 def check_stale_after(ctx):
     """OKF §5.5: a `stale_after` that is an instant at or before the run's `now` has passed."""
-    if not ctx["has_fm"]:
-        return []
-    at = parse_okf_datetime(ctx["fm"].get("stale_after"))
-    if at is None or ctx["now"] < at:
+    if not ctx["has_fm"] or not is_stale(ctx["fm"], ctx["now"]):
         return []
     return ["`stale_after` {} has passed".format(scalar_text(ctx["fm"]["stale_after"]))]
 
@@ -123,7 +109,7 @@ def _actor_fields(fm):
     for i, entry in enumerate(verified_entries(fm) or []):
         if isinstance(entry, Mapping):
             pairs.append(("verified[{}].by".format(i), entry.get("by")))
-    return [(label, value) for label, value in pairs if _filled(value)]
+    return [(label, value) for label, value in pairs if filled(value)]
 
 
 def _window_fields(label, window):
@@ -139,7 +125,7 @@ def _timestamp_fields(fm):
     if isinstance(generated, Mapping) and "at" in generated:
         pairs.append(("generated.at", generated["at"]))
     for i, entry in enumerate(verified_entries(fm) or []):
-        if isinstance(entry, Mapping) and _filled(entry.get("at")):
+        if isinstance(entry, Mapping) and filled(entry.get("at")):
             pairs.append(("verified[{}].at".format(i), entry["at"]))
     if "stale_after" in fm:
         pairs.append(("stale_after", fm["stale_after"]))
@@ -176,7 +162,7 @@ def check_runtime(ctx):
     """OKF §10.2: an Attested Computation names its `runtime`; no other field of the type is required."""
     if not ctx["has_fm"] or fm_text(ctx["fm"], "type").strip() != COMPUTATION_TYPE:
         return []
-    return [] if _filled(ctx["fm"].get("runtime")) else [
+    return [] if filled(ctx["fm"].get("runtime")) else [
         "`{}` has no non-empty `runtime`".format(COMPUTATION_TYPE)]
 
 

@@ -3,7 +3,6 @@ engine that runs them (`run_checks`), the crosslink and XML-like-tag repairs, an
 the check, fix-crosslinks and fix-xml-tags commands."""
 
 from collections import namedtuple
-import datetime
 import os
 import re
 
@@ -567,11 +566,6 @@ def finding_of(rule_id, path, message):
     return Finding(rule_id, {r.id: r.severity for r in RULES}[rule_id], path, message)
 
 
-def _utcnow():
-    """The instant of a run, in UTC: the one source of `now` for every stale_after comparison."""
-    return datetime.datetime.now(datetime.timezone.utc)
-
-
 def _gated(rules, version):
     """The rules that apply to a bundle declaring `version`: ungated ones always, an entry gated
     to an OKF version only on a match."""
@@ -613,7 +607,7 @@ def run_checks(root, target, types_source=None):
 
     history = History(root)
     run = {"types_set": types_set, "tags_set": tags_set, "wl_checked": wl_checked,
-           "wl_index": wl_index, "canon_index": canon_index, "now": _utcnow(), "history": history}
+           "wl_index": wl_index, "canon_index": canon_index, "now": spec.utcnow(), "history": history}
     file_rules = [r for r in RULES if r.scope == "file"]
     bundle_rules = [r for r in RULES if r.scope == "bundle"]
 

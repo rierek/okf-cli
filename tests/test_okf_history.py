@@ -21,7 +21,7 @@ if _ROOT not in sys.path:
 
 from okf import check as okf_check
 from okf import history as okf_history
-from tests.okf_testkit import SpecCase, run_json
+from tests.okf_testkit import GitCatalogue, SpecCase, needs_git, run_json
 
 UTC = datetime.timezone.utc
 T1 = "2026-01-01T10:00:00+02:00"  # 08:00Z
@@ -30,41 +30,10 @@ T3 = "2026-03-01T00:00:00Z"
 T4 = "2026-04-01T00:00:00Z"
 T5 = "2026-05-01T00:00:00Z"
 GENERATED = "type: Note\ngenerated: {{by: claude/4, at: {at}}}"
-needs_git = unittest.skipUnless(subprocess.run(["git", "--version"], capture_output=True).returncode == 0,
-                                "git not available")
 
 
-@needs_git
-class GitCatalogue(SpecCase):
-    """The catalogue root `self.tmp` is a git repository; every commit pins author, committer and dates."""
-
-    def setUp(self):
-        super().setUp()
-        patch = mock.patch.dict(os.environ)
-        patch.start()
-        self.addCleanup(patch.stop)
-        for key in [k for k in os.environ if k.startswith("GIT_")]:
-            del os.environ[key]  # a hook that runs the tests must not steer the fixture's git
-        os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null",
-                          GIT_TERMINAL_PROMPT="0")
-        self._git("init", "-q")
-
-    def _git(self, *argv, env=None, cwd=None):
-        res = subprocess.run(["git", "-C", cwd or self.tmp, "-c", "init.defaultBranch=main",
-                              "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", *argv],
-                             capture_output=True, text=True, env={**os.environ, **(env or {})})
-        self.assertEqual(res.returncode, 0, res.stderr)
-        return res.stdout
-
-    def _commit(self, message, when, author="a@x.org", author_when=None):
-        self._git("add", "-A")
-        self._git("commit", "-q", "-m", message, env={
-            "GIT_AUTHOR_NAME": "A", "GIT_AUTHOR_EMAIL": author, "GIT_COMMITTER_NAME": "C",
-            "GIT_COMMITTER_EMAIL": "c@x.org", "GIT_AUTHOR_DATE": author_when or when,
-            "GIT_COMMITTER_DATE": when})
-
-    def _doc(self, rel="b/x.md", body="body\n", front="type: Note"):
-        self._w(rel, "---\n{}\n---\n{}".format(front, body))
+class HistoryCase(GitCatalogue):
+    """A GitCatalogue with the lookup of cli/okf/history.py at hand."""
 
     def _lookup(self, rel="b/x.md", root=None, **kw):
         history = okf_history.History(root or self.tmp)
@@ -76,32 +45,9 @@ class GitCatalogue(SpecCase):
         got = self._lookup(*args, **kw)
         return got.email if got is not None else None
 
-    def _reset(self):
-        """An empty catalogue in a fresh repository."""
-        for name in os.listdir(self.tmp):
-            path = os.path.join(self.tmp, name)
-            if os.path.isdir(path):
-                shutil.rmtree(path)
-            else:
-                os.remove(path)
-        self._git("init", "-q")
 
-    def _count_git(self):
-        """The list that collects argv[0] of every process started from here on (run goes through Popen)."""
-        started = []
-        real_popen = subprocess.Popen
-
-        def popen(argv, *a, **k):
-            started.append(argv[0])
-            return real_popen(argv, *a, **k)
-
-        patch = mock.patch.object(subprocess, "Popen", popen)
-        patch.start()
-        self.addCleanup(patch.stop)
-        return started
-
-
-class BodyCommitLookup(GitCatalogue):
+@needs_git
+class BodyCommitLookup(HistoryCase):
     """AC1-AC5 of OKFT-0l2i."""
 
     def test_returns_the_committer_instant_and_the_author_email_of_the_last_body_commit(self):
@@ -326,7 +272,7 @@ class BodyCommitLookup(GitCatalogue):
 
 
 @needs_git
-class DriftWarning(GitCatalogue):
+class DriftWarning(HistoryCase):
     """AC6-AC12 of OKFT-0l2i: the `okf/trust/` warning of `check`."""
 
     def _drift(self, target="b"):
