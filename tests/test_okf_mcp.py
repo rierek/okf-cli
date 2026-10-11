@@ -789,5 +789,44 @@ class McpReadTargeted(McpBoundaryTestBase):
                          "# S\n## Alpha\nalpha text\n\n")
 
 
+class McpReadFollow(McpBoundaryTestBase):
+    """OKFT-5x3b (R-08 part 2) — okf_read passes follow, inbound and max_tokens to the CLI's read;
+    the three exist for read alone."""
+
+    _read_argv = McpReadTargeted._read_argv
+
+    def test_each_parameter_builds_its_flag_and_follow_zero_survives(self):
+        base = ["--root", "/root", "read", "b/one"]
+        self.assertEqual(self._read_argv(follow=2), base + ["--follow", "2", "--json"])
+        self.assertEqual(self._read_argv(follow=0), base + ["--follow", "0", "--json"])
+        self.assertEqual(self._read_argv(inbound=True), base + ["--inbound", "--json"])
+        self.assertEqual(self._read_argv(max_tokens=500), base + ["--max-tokens", "500", "--json"])
+        self.assertEqual(self._read_argv(follow=1, inbound=True, max_tokens=9, section="A"),
+                         base + ["--section", "A", "--follow", "1", "--max-tokens", "9", "--inbound", "--json"])
+
+    def test_no_other_command_emits_the_three_flags(self):
+        for command in sorted(set(mcp._COMMANDS) - {"read"}):
+            argv = mcp.build_argv("/root", command, {"follow": 1, "inbound": True, "max_tokens": 5})
+            for flag in ("--follow", "--inbound", "--max-tokens"):
+                self.assertNotIn(flag, argv, "command {!r} must never emit {}".format(command, flag))
+
+    def test_the_new_parameters_are_optional(self):
+        params = inspect.signature(mcp._register(_ToolCollector()).tools["okf_read"]).parameters
+        for name, default in (("follow", None), ("inbound", False), ("max_tokens", None)):
+            self.assertEqual(params[name].default, default, name)
+
+    def test_the_registered_tool_returns_the_followed_block(self):
+        _w(self.root, ".okf.toml", "")
+        _w(self.root, "b/one.md", "---\ntitle: One\n---\n[two](two.md)\n")
+        _w(self.root, "b/two.md", "---\ntitle: Two\ndescription: second\n---\ntwo body\n")
+        read = mcp._register(_ToolCollector()).tools["okf_read"]
+        nodes = read(self.root, path="b/one", follow=1)["data"]["nodes"]
+        self.assertEqual([(n["path"], n["depth"], n["reduced"]) for n in nodes],
+                         [("b/one", 0, False), ("b/two", 1, False)])
+        nodes = read(self.root, path="b/one", follow=1, max_tokens=1)["data"]["nodes"]
+        self.assertEqual((nodes[1]["reduced"], nodes[1]["title"], nodes[1]["description"]),
+                         (True, "Two", "second"))
+
+
 if __name__ == "__main__":
     unittest.main()

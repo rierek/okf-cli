@@ -45,11 +45,12 @@ _COMMANDS = {
 # optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "where": "--where", "limit": "--limit",
           "source": "--source", "block": "--block",
-          "for_path": "--for", "section": "--section"}
+          "for_path": "--for", "section": "--section",
+          "follow": "--follow", "max_tokens": "--max-tokens"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
                "compact": "--compact", "full": "--full", "frontmatter_only": "--frontmatter-only",
-               "body_only": "--body-only"}
+               "body_only": "--body-only", "inbound": "--inbound"}
 # _BOOL_FLAGS is shared across every command's params dict, but okf-cli's own
 # argparse defines some of them on one command only — any OTHER command handed
 # that flag would fail at the subprocess boundary with an argparse error.
@@ -58,9 +59,11 @@ _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolv
 # before (apply/force/unresolved/compact are untouched, out of this task's
 # scope). `full` (okf-cli-t2w8, SC-002): argparse only defines --full on
 # index/prime, and okf_prime never populates the key, so scoping to index
-# alone is enough. frontmatter_only and body_only exist on read alone (OKFT-0kcz).
-_BOOL_FLAG_COMMANDS = {"full": {"index"},
-                       "frontmatter_only": {"read"}, "body_only": {"read"}}
+# alone is enough. frontmatter_only, body_only, follow, inbound and max_tokens exist on read alone
+# (OKFT-0kcz, OKFT-5x3b); value flags are scoped the same way.
+_FLAG_COMMANDS = {"full": {"index"},
+                  "frontmatter_only": {"read"}, "body_only": {"read"},
+                  "follow": {"read"}, "inbound": {"read"}, "max_tokens": {"read"}}
 
 
 def build_argv(root, command, params):
@@ -81,10 +84,13 @@ def build_argv(root, command, params):
             # find's --bundle alias was removed D02, PO-grilling 2026-07-26;
             # guard stays as defense against a future one.)
             continue
+        allowed = _FLAG_COMMANDS.get(key)
+        if allowed is not None and command not in allowed:
+            continue
         if params.get(key) not in (None, ""):
             argv += [flag, str(params[key])]
     for key, flag in _BOOL_FLAGS.items():
-        allowed = _BOOL_FLAG_COMMANDS.get(key)
+        allowed = _FLAG_COMMANDS.get(key)
         if allowed is not None and command not in allowed:
             continue
         if params.get(key):
@@ -176,18 +182,29 @@ def _register(server):
 
     @server.tool()
     def okf_read(root: str = "", *, path: str, section: str = "",
-                 frontmatter_only: bool = False, body_only: bool = False) -> dict:
-        """Print one concept page (bundle/concept-id). At most one of the three
-        optional parameters: `section` prints only that section — the heading
+                 frontmatter_only: bool = False, body_only: bool = False,
+                 follow: int | None = None, inbound: bool = False,
+                 max_tokens: int | None = None) -> dict:
+        """Print one concept page (bundle/concept-id). At most one of `section`,
+        `frontmatter_only`, `body_only`: `section` prints only that section — the heading
         text, case-insensitive and exact, up to the next heading of equal or
         higher level, sub-sections included; "A > B" resolves B inside A. An
         ambiguous heading is an error whose `data.candidates` lists the matching
         headings with their lines, an unknown one a plain error. `frontmatter_only=True` prints
         only the frontmatter block (delimiters included), `body_only=True`
-        everything after it."""
+        everything after it.
+
+        `follow` (integer, at least 0): also return the concepts the page links to, up to that
+        many hops, as `data.nodes` (path, depth, tokens, reduced, text); combines with `section`,
+        not with the two booleans.
+        `inbound=True`: with `follow`, the pages that link to a page count as its neighbours too.
+        `max_tokens` (integer, at least 1): with `follow`, keep the block within that many
+        tokens (chars/4); the root stays in full, from the first page that does not fit on,
+        pages carry title and description only (`reduced`)."""
         return run_okf(root, "read", {
             "path": path, "section": section,
             "frontmatter_only": frontmatter_only, "body_only": body_only,
+            "follow": follow, "inbound": inbound, "max_tokens": max_tokens,
         })
 
     @server.tool()

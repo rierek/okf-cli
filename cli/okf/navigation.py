@@ -1,6 +1,7 @@
 """The navigation commands: list, read, info, toc, visualize and refs, with the
 concept graph and HTML template behind visualize and their parser blocks."""
 
+import argparse
 import os
 import re
 import sys
@@ -12,6 +13,7 @@ from okf.catalogue import (
     fm_meta, fm_text, iter_concepts, iter_headings, read_file, read_frontmatter, require_bundle_dir,
     resolve_concept, resolve_scopes,
 )
+from okf.ctx import _ctx_same_file
 from okf.find_filters import compile_where
 from okf.linkscan import _refs_display
 from okf.parser_support import (
@@ -114,7 +116,90 @@ def _concept_path(root, ap):
     return rel[:-3] if rel.endswith(".md") else rel
 
 
+def follow_nodes(root, start_abs, depth, inbound):
+    """The `read --follow` node list [(absolute path, depth)]: BFS over markdown links from
+    `start_abs`, root first at depth 0, each file once at its first depth. Neighbours of a node
+    are its outbound targets in order of first appearance, then (inbound) the files linking to it
+    sorted by catalogue-relative path. Depth 0 scans nothing; otherwise the catalogue is walked
+    once and both link directions come from that one pass. Only scanned .md files are nodes."""
+    if depth < 1:
+        return [(start_abs, 0)]
+    files = list(linkscan.iter_rename_scan_md(root))
+    by_lower = {}
+    for f in files:
+        by_lower.setdefault(f.lower(), []).append(f)
+
+    def node(p):
+        # a link may spell an existing file in another case: same file, same node
+        return next((f for f in by_lower.get(p.lower(), ()) if _ctx_same_file(p, f)), None)
+
+    out, back = {}, {}
+    for f in files:
+        for _raw, p in linkscan._file_md_links(root, f):
+            t = node(p)
+            if t is not None:
+                out.setdefault(f, {})[t] = None  # insertion-ordered set
+                back.setdefault(t, set()).add(f)
+    start = node(start_abs) or start_abs
+    seen, order, frontier = {start}, [(start, 0)], [start]
+    for d in range(1, depth + 1):
+        nxt = []
+        for n in frontier:
+            nbrs = list(out.get(n, ()))
+            if inbound:
+                nbrs += sorted(back.get(n, ()), key=lambda p: _concept_path(root, p))
+            for m in nbrs:
+                if m not in seen:
+                    seen.add(m)
+                    order.append((m, d))
+                    nxt.append(m)
+        frontier = nxt
+    return order
+
+
+def _tokens(text):
+    # ponytail: chars/4 heuristic (D21), same as ctx show; use a tokenizer if budgets get tight
+    return (len(text) + 3) // 4
+
+
+def _follow_block(root, args, start_abs, root_text):
+    """The `read --follow` block: [{path, depth, tokens, reduced, text | title, description}].
+    The root is always full; with --max-tokens the walk stops printing nodes in full at the
+    first one that would push the running total over the budget (no later small node jumps
+    ahead of it)."""
+    nodes, used, reduced = [], 0, False
+    for i, (ap, depth) in enumerate(follow_nodes(root, start_abs, args.follow, args.inbound)):
+        text = root_text if i == 0 else read_file(ap)
+        if i and args.max_tokens is not None and used + _tokens(text) > args.max_tokens:
+            reduced = True
+        rec = {"path": _concept_path(root, ap), "depth": depth}
+        if reduced:
+            _t, title, desc = fm_meta(read_frontmatter(text).data, os.path.basename(ap)[:-3])
+            rec.update(reduced=True, title=title, description=desc)
+            rec["tokens"] = _tokens(_reduced_text(rec))
+        else:
+            rec.update(reduced=False, text=text, tokens=_tokens(text))
+        used += rec["tokens"]
+        nodes.append(rec)
+    return nodes
+
+
+def _reduced_text(rec):
+    return rec["title"] + ("\n" + rec["description"] if rec["description"] else "")
+
+
+def _print_block(nodes):
+    """One header line per node: `===== depth N path =====`, plus ` [reduced]` for a node shown
+    as title and description only."""
+    for n in nodes:
+        print("===== depth {} {}{} =====".format(n["depth"], n["path"], " [reduced]" if n["reduced"] else ""))
+        body = _reduced_text(n) if n["reduced"] else n["text"]
+        print(body, end="" if body.endswith("\n") else "\n")
+
+
 def cmd_read(root, args):
+    if args.follow is not None and (args.frontmatter_only or args.body_only):
+        raise OkfError("invalid_input", "error: --follow is not allowed with --frontmatter-only or --body-only")
     ap = resolve_concept(root, args.path)
     text = read_file(ap)
     split = read_frontmatter(text)
@@ -127,6 +212,11 @@ def cmd_read(root, args):
         out, end = body, "\n"
     else:
         out, end = text, "\n"
+    if args.follow:
+        nodes = _follow_block(root, args, ap, out + end)
+        if getattr(args, "json", False):
+            return {"nodes": nodes}
+        return _print_block(nodes)
     if getattr(args, "json", False):
         return {"path": _concept_path(root, ap), "text": out + end,
                 **spec.trust_fields(split.data, spec.utcnow())}
@@ -304,6 +394,18 @@ def add_list_parser(sub):
     _add_output(pls)
 
 
+def _count(minimum):
+    def parse(raw):
+        try:
+            n = int(raw)
+        except ValueError:
+            n = None
+        if n is None or n < minimum:
+            raise argparse.ArgumentTypeError("{!r} is not an integer of at least {}".format(raw, minimum))
+        return n
+    return parse
+
+
 def add_read_parser(sub):
     pr = _sub(sub, "read", "navigation", "print one concept page")
     pr.add_argument("path", help="<bundle>/<concept-id> of the page to print").completer = _complete_concepts
@@ -316,6 +418,16 @@ def add_read_parser(sub):
                       help="print only the frontmatter block, delimiters included")
     only.add_argument("--body-only", action="store_true",
                       help="print everything after the frontmatter block")
+    pr.add_argument("--follow", type=_count(0), metavar="N",
+                    help="also print the concepts the page links to, up to N hops deep, as one block "
+                         "(BFS, each page once); combines with --section (narrows the root), not with "
+                         "--frontmatter-only or --body-only")
+    pr.add_argument("--inbound", action="store_true",
+                    help="with --follow: the pages linking to a page count as its neighbours too")
+    pr.add_argument("--max-tokens", type=_count(1), metavar="K",
+                    help="with --follow: keep the block within K tokens (chars/4); the root always "
+                         "prints in full, from the first page that does not fit on, pages show "
+                         "title and description only")
     _add_output(pr)
 
 
