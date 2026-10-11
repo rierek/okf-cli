@@ -2,7 +2,7 @@
 """Tests for the ctx command module cli/okf/ctx.py (OKFT-t0lj). The ctx storage layer
 they sit on is tested in test_okf_catalogue.py.
 
-Run: python3 -m unittest test_okf_ctx -v
+Run: python3 -m unittest tests.test_okf_ctx -v
 """
 import contextlib
 import io
@@ -14,14 +14,17 @@ import tempfile
 import unittest
 from unittest import mock
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
+_ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from okf import catalogue as okf_catalogue
 from okf import ctx as okf_ctx
 from okf import linkscan as okf_linkscan
-from okf_testkit import CtxFixtureMixin, E
+from tests.okf_testkit import CtxFixtureMixin, E
 
 
 class CtxRenameArchive(CtxFixtureMixin, unittest.TestCase):

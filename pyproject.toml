@@ -55,4 +55,4 @@ packages = ["okf_cli"]
 "skills/okf" = "okf_cli/skills/okf"
 
 [tool.hatch.build.targets.sdist]
-include = ["/okf_cli", "/cli", "/mcp", "/skills", "/README.md", "/LICENSE", "/pyproject.toml"]
+include = ["/okf_cli", "/cli", "/mcp", "/skills", "/tests", "/README.md", "/LICENSE", "/pyproject.toml"]

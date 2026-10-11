@@ -18,7 +18,7 @@ import sys
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 GATE_PATH = os.path.join(_HERE, "eval", "gate.py")
 
 _spec = importlib.util.spec_from_file_location("gate", GATE_PATH)

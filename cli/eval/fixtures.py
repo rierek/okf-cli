@@ -51,7 +51,7 @@ Fixture = collections.namedtuple(
 # not derived from list_bundles() alphabetical order. Matches the bundle
 # segment cli/eval/golden.json's expected_path / s4-index-walk query.bundle
 # fields already hardcode — golden.json's literals are checked against
-# these two constants by cli/test_eval_runner.py's
+# these two constants by tests/test_eval_runner.py's
 # GoldenBundleConsistencyTest, so the two files cannot drift silently.
 # Changing either constant without updating golden.json (or vice versa)
 # fails that guard immediately.

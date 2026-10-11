@@ -7,7 +7,7 @@ none of it calls Ollama or Voyage. The --produce network path is exercised
 manually only (see ../docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md); it must never run under test
 or at import time.
 
-Run: python3 -m unittest cli.test_embeddings_tagvec -v
+Run: python3 -m unittest tests.test_embeddings_tagvec -v
 """
 import hashlib
 import importlib.util
@@ -19,7 +19,7 @@ import struct
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 _spec = importlib.util.spec_from_file_location(
     "build_tagvec", os.path.join(_HERE, "embeddings", "build_tagvec.py"))
 bt = importlib.util.module_from_spec(_spec)

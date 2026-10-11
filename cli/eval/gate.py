@@ -12,7 +12,7 @@ and per-scenario delta table, and enforces the WS1 direction:
         regression shows up as a worse rank for id "s1-literal").
 
 Pure stdlib. The delta/verdict logic is importable and pinned by
-cli/test_eval_gate.py against hand-built blobs.
+tests/test_eval_gate.py against hand-built blobs.
 """
 
 import argparse

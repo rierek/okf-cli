@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/find_filters.py — the filters every search arm shares. Stdlib unittest, no deps.
 
-Run: python3 -m unittest test_okf_find_filters -v
+Run: python3 -m unittest tests.test_okf_find_filters -v
 """
 import os
 import sys
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf import find_filters as okf_find_filters

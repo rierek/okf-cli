@@ -2,7 +2,7 @@
 """Tests for cli/okf/navigation.py — the list, read, info, toc, visualize and refs
 commands. Stdlib unittest, no deps.
 
-Run: python3 -m unittest test_okf_navigation -v
+Run: python3 -m unittest tests.test_okf_navigation -v
 """
 import os
 import shutil
@@ -10,16 +10,19 @@ import sys
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
+_ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from okf import index as okf_index
 from okf import linkscan as okf_linkscan
 from okf import navigation as okf_navigation
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
-from okf_testkit import run_find
+from tests.okf_testkit import run_find
 
 
 class VisualizeDefaultOutputPath(unittest.TestCase):
