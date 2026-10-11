@@ -119,9 +119,14 @@ class SyncFixtureMixin:
         return self._run(okf_sync.cmd_sync_insert, **kw)
 
     def _status(self, **over):
+        """(data of `sync-status --json`, exit code): the handler's result, or what its drift
+        failure carries."""
         kw = dict(target=None, source=None, block=None, json=True)
         kw.update(over)
-        return self._run(okf_sync.cmd_sync_status, **kw)
+        try:
+            return okf_sync.cmd_sync_status(self.tmp, argparse.Namespace(**kw)), 0
+        except OkfError as e:
+            return e.result, e.code
 
     def _update(self, **over):
         kw = dict(target=None, source=None, block=None, apply=True, force=False)

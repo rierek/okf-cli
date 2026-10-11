@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""The `--json` envelope of the read and report commands (find, info, prime, read,
-sync-export, tags, toc, ctx read, ctx toc): one five-key document per call, `data` carrying
+"""The `--json` envelope of the commands that print one: the read and report commands
+(find, info, prime, read, sync-export, tags, toc, ctx read, ctx toc) and those that always had
+a JSON form (check, ctx check/inbound/list/outbound/show, index, list, recent, refs,
+sync-status, wikilinks). One five-key document per call, `data` carrying
 what the text output prints, classified failures in `error`. Every call runs the real entry
 file against a throwaway catalogue; no call reaches an embedding backend.
 
@@ -13,6 +15,7 @@ import re
 import shutil
 import sqlite3
 import struct
+import subprocess
 import sys
 import tempfile
 import types
@@ -36,7 +39,7 @@ ALPHA = ("---\ntype: Note\ntitle: Alpha Note\ndescription: the alpha note about 
          "## Dup\n\nfirst\n\n## Dup\n\nsecond\n\n### Deep\n\ndeep text\n")
 BETA = ("---\ntype: Note\ntitle: Beta Note\ndescription: the beta note\ntags:\n  - beta\n"
         "  - gamma\n---\n\n# Beta\n\nBananas.\n\n## Only\n\nx\n")
-OLD = ("---\ntype: Note\ntitle: Old Note\ndescription: zebra relic\nsuperseded_by: kc-a/beta\n"
+OLD = ("---\ntype: Note\ntitle: Old Note\ndescription: zebra relic\nsuperseded_by: /kc-a/beta.md\n"
        "---\n\n# Old\n\nZebra.\n")
 OWNERSHIP = ("---\ntype: Rule\ndescription: d\n---\n\n# Ownership\n\n"
              "<!-- okf:canon id=ownership-rule -->\nEvery statement has one owner.\n"
@@ -118,8 +121,8 @@ class FindData(Fixture):
         env, _err, _code = run_json(self.root, "find", "zebra")
         text = self.text("find", "zebra")
         (hit,) = env["data"]["hits"]
-        self.assertEqual(hit.get("superseded_by"), "kc-a/beta")
-        self.assertIn("superseded_by: kc-a/beta", text)
+        self.assertEqual(hit.get("superseded_by"), "/kc-a/beta.md")
+        self.assertIn("superseded_by: /kc-a/beta.md", text)
         plain = run_json(self.root, "find", "pineapples")[0]["data"]["hits"][0]
         self.assertNotIn("superseded_by", plain)
 
@@ -441,6 +444,163 @@ class ClassifiedFailures(Fixture):
             with self.subTest(argv=argv):
                 env, code = self._failure(*argv)
                 self.assertEqual((env["error"]["kind"], code), ("not_found", 3))
+
+
+class ExistingJsonCommands(Fixture):
+    """The twelve commands that had their own `--json` before the envelope: check, ctx check,
+    ctx inbound, ctx list, ctx outbound, ctx show, index, list, recent, refs, sync-status,
+    wikilinks. A git history is committed first, so `recent` has something to read."""
+
+    CALLS = [
+        ("check", ["check"]),
+        ("ctx check", ["ctx", "check"]),
+        ("ctx inbound", ["ctx", "inbound", "demo"]),
+        ("ctx list", ["ctx", "list"]),
+        ("ctx outbound", ["ctx", "outbound", "demo"]),
+        ("ctx show", ["ctx", "show", "demo"]),
+        ("index", ["index"]),
+        ("index", ["index", "kc-a"]),
+        ("list", ["list", "--type", "Note"]),
+        ("recent", ["recent"]),
+        ("refs", ["refs", "kc-a/alpha.md"]),
+        ("sync-status", ["sync-status"]),
+        ("wikilinks", ["wikilinks"]),
+    ]
+
+    def setUp(self):
+        super().setUp()
+        self._git("init", "-q")
+        self._git("add", "-A")
+        self._git("commit", "-qm", "fixture")
+
+    def _git(self, *argv):
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        subprocess.run(["git", "-c", "commit.gpgsign=false", "-C", self.root, *argv],
+                       check=True, env=env, capture_output=True)
+
+    def test_each_command_prints_one_envelope_naming_itself(self):
+        for name, argv in self.CALLS:
+            with self.subTest(argv=argv):
+                env, err, code = run_json(self.root, *argv)
+                self.assertEqual((env["command"], env["ok"], env["error"], code, err),
+                                 (name, True, None, 0, ""))
+
+    def test_data_is_the_payload_the_command_printed_before(self):
+        data = lambda *argv: run_json(self.root, *argv)[0]["data"]
+        self.assertEqual(list(data("index")), ["bundles"])
+        self.assertEqual(list(data("index", "kc-a")), ["bundle", "concepts"])
+        self.assertEqual(data("index", "kc-a")["bundle"], "kc-a")
+        self.assertEqual([r["path"] for r in data("list", "--type", "Note")],
+                         ["kc-a/alpha", "kc-a/beta", "kc-a/old"])
+        self.assertEqual(list(data("refs", "kc-a/alpha.md")), ["target", "inbound", "outbound"])
+        self.assertEqual(list(data("wikilinks")), ["links", "by_bundle", "totals", "filtered"])
+        self.assertEqual(list(data("ctx", "list")[0]), ["slug", "description", "entries", "required", "path"])
+        self.assertEqual(list(data("ctx", "show", "demo")),
+                         ["slug", "description", "path", "entries", "dead", "tokens_required"])
+        self.assertEqual(list(data("ctx", "inbound", "demo")),
+                         ["slug", "direction", "include_internal", "members"])
+        self.assertEqual(list(data("recent")[0]),
+                         ["created", "created_ts", "title", "type", "path", "description"])
+
+    def test_a_note_arrives_as_a_warning_and_not_on_stderr(self):
+        self._w("kc-a/late.md", BETA)  # never committed
+        env, err, code = run_json(self.root, "recent")
+        self.assertEqual((code, err), (0, ""))
+        (warning,) = env["warnings"]
+        self.assertIn("have no commit that added them", warning)
+        _out, text_err, _code = run_cli(self.root, "recent")
+        self.assertIn("note: 1 concept(s) have no commit that added them", text_err)
+
+    def test_a_config_note_of_check_arrives_as_a_warning(self):
+        self._w(".okf.toml", 'ignore_rules = "kc/*"\n')
+        env, err, _code = run_json(self.root, "check")
+        self.assertEqual(err, "")
+        self.assertTrue(any("ignore_rules must be an array" in w for w in env["warnings"]), env["warnings"])
+
+    def test_other_classified_failures_keep_their_class(self):
+        for argv, kind, code in ((["list"], "invalid_input", 2),
+                                 (["ctx", "show", "nosuch"], "not_found", 3),
+                                 (["index", "nosuch"], "not_found", 3),
+                                 (["refs", "nosuch.md"], "not_found", 3),
+                                 (["check", "nosuch"], "not_found", 3)):
+            with self.subTest(argv=argv):
+                env, err, exit_code = run_json(self.root, *argv)
+                self.assertEqual((env["ok"], env["data"], env["error"]["kind"], env["error"]["code"],
+                                  exit_code, err), (False, None, kind, code, code, ""))
+
+
+class CheckFindings(unittest.TestCase):
+    """`check` and `ctx check`: findings live in data.findings with rule and severity; the
+    envelope's warnings stay for notes about the call."""
+
+    KEYS = ["rule", "severity", "path", "message"]
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self._w(".okf.toml", "")
+        self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n")
+        self._w("b/g.md", "---\ntype: Concept\ntitel: X\n---\n# G\n")  # a warning-severity finding
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.root, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_an_error_finding_is_non_conformant_with_the_findings_in_data(self):
+        self._w("b/nofm.md", "# no frontmatter\n")
+        env, err, code = run_json(self.root, "check")
+        self.assertEqual((env["ok"], env["error"]["kind"], env["error"]["code"], code, err),
+                         (False, "non_conformant", 4, 4, ""))
+        self.assertEqual(list(env["data"]), ["findings"])
+        self.assertEqual(sorted((f["rule"], f["severity"], f["path"]) for f in env["data"]["findings"]),
+                         [("kc/frontmatter/english-keys", "warning", "b/g.md"),
+                          ("okf/frontmatter/parseable", "error", "b/nofm.md")])
+        self.assertEqual([list(f) for f in env["data"]["findings"]], [self.KEYS] * 2)
+        self.assertEqual(env["warnings"], [])
+
+    def test_a_warning_only_tree_passes_and_still_lists_the_warning(self):
+        env, err, code = run_json(self.root, "check")
+        self.assertEqual((env["ok"], env["error"], code, err), (True, None, 0, ""))
+        self.assertEqual([(f["rule"], f["severity"]) for f in env["data"]["findings"]],
+                         [("kc/frontmatter/english-keys", "warning")])
+        self.assertEqual(env["warnings"], [])
+
+    def test_strict_counts_the_warning(self):
+        env, _err, code = run_json(self.root, "check", "--strict")
+        self.assertEqual((env["ok"], env["error"]["kind"], code), (False, "non_conformant", 4))
+        self.assertEqual(env["data"]["findings"][0]["severity"], "warning")
+
+    def test_ctx_check_reports_a_dead_entry_the_same_way(self):
+        out, err, code = run_cli(self.root, "ctx", "create", "bad", "b/g.md")
+        self.assertEqual(code, 0, err)
+        os.remove(os.path.join(self.root, "b/g.md"))
+        env, err, code = run_json(self.root, "ctx", "check")
+        self.assertEqual((env["command"], env["ok"], env["error"]["kind"], code, err),
+                         ("ctx check", False, "non_conformant", 4, ""))
+        (finding,) = [f for f in env["data"]["findings"] if f["rule"] == "kc/ctx/dead-entry"]
+        self.assertEqual((list(finding), finding["severity"], finding["path"]),
+                         (self.KEYS, "error", "_ctx/bad.md"))
+
+
+class SyncStatusDrift(Fixture):
+    def test_an_outdated_block_is_drift_with_the_rows_in_data(self):
+        out, err, code = run_cli(self.root, "sync-insert", "kc-a/beta", "kc-gov/ownership",
+                                 "ownership-rule", "--apply")
+        self.assertEqual(code, 0, err)
+        env, _err, code = run_json(self.root, "sync-status")
+        self.assertEqual((env["ok"], env["error"], code), (True, None, 0))
+        self.assertEqual(env["data"]["totals"]["synced"], 1)
+        self._w("kc-gov/ownership.md", OWNERSHIP.replace("Every statement has one owner.", "Neuer Kanon."))
+        env, err, code = run_json(self.root, "sync-status")
+        self.assertEqual((env["ok"], env["error"]["kind"], env["error"]["code"], code, err),
+                         (False, "drift", 5, 5, ""))
+        (block,) = env["data"]["blocks"]
+        self.assertEqual((block["consumer"], block["id"], block["status"]),
+                         ("kc-a/beta.md", "ownership-rule", "source-changed"))
+        self.assertEqual(env["data"]["totals"]["source-changed"], 1)
 
 
 if __name__ == "__main__":

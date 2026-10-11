@@ -9,7 +9,7 @@ from okf.errors import OkfError
 
 from okf.catalogue import RESERVED, iter_all_md, list_bundles, read_file, resolve_scopes
 from okf.linkscan import wikilink_regions, wikilink_scan_text
-from okf.output import _note
+from okf.output import _add_output, _note
 from okf.parser_support import _complete_scopes, _sub
 
 
@@ -281,7 +281,6 @@ def cmd_wikilinks(root, args):
         totals[r["status"]] += 1
     shown = [r for r in links if r["status"] != "resolved"] if args.unresolved else links
     if args.json:
-        import json
         # by_bundle counts what `links` carries, so the two never contradict
         # each other; `totals` is always the unfiltered census and `filtered`
         # says which of the two a consumer is looking at.
@@ -290,9 +289,8 @@ def cmd_wikilinks(root, args):
             b = r["source"].split("/", 1)[0]
             by_bundle.setdefault(b, {"resolved": 0, "ambiguous": 0, "unresolved": 0})
             by_bundle[b][r["status"]] += 1
-        print(json.dumps({"links": shown, "by_bundle": by_bundle,
-                          "totals": totals, "filtered": bool(args.unresolved)}))
-        return
+        return {"links": shown, "by_bundle": by_bundle,
+                "totals": totals, "filtered": bool(args.unresolved)}
     for r in shown:
         line = "{:<10} {:<11} {}  {}{}".format(
             r["status"], r["region"], r["source"], r["raw"],
@@ -311,7 +309,7 @@ def add_wikilinks_parser(sub):
                      help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pwl.add_argument("--unresolved", action="store_true",
                      help="list only unresolved and ambiguous occurrences (summary stays complete)")
-    pwl.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pwl)
 
 
 COMMANDS = {

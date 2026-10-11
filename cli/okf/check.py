@@ -2,14 +2,13 @@
 engine that runs them (`run_checks`), the crosslink and XML-like-tag repairs, and
 the check, fix-crosslinks and fix-xml-tags commands."""
 
-import json
 from collections import namedtuple
 import os
 import re
 
 from okf.errors import OkfError
 from okf import sync, wikilinks
-from okf.output import _note
+from okf.output import _add_output, _note
 from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, FM_DELIM, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE, _dequote,
     _mask_managed_block, _split_managed_block, ctx_findings, extract_tags, index_h1_and_desc,
@@ -615,7 +614,7 @@ def cmd_check(root, args):
     patterns = ignore_patterns(load_okf_config(root), args.ignore)
     findings = [f for f in run_checks(root, target, types_source=getattr(args, "types", None))
                 if not is_suppressed(f.rule, patterns)]
-    report_findings(findings, args.strict, args.json)
+    return report_findings(findings, args.strict, args.json)
 
 
 def ignore_patterns(config, flag_patterns):
@@ -651,11 +650,13 @@ def report_findings(findings, strict, as_json):
     counting = [f for f in findings if strict or f.severity == "error"]
     ordered = sorted(findings, key=lambda f: (f.severity != "error", f.path))
     if as_json:
-        print(json.dumps({"findings": [f._asdict() for f in ordered]}))
-    else:
-        for f in ordered:
-            print("{:<9}{:<20} {}  ({})".format(f.severity.upper(), f.rule, f.path, f.message))
-        print("{} VIOLATIONS".format(len(counting)) if counting else "OK — 0 violations")
+        result = {"findings": [f._asdict() for f in ordered]}
+        if counting:
+            raise OkfError("non_conformant", "", result)
+        return result
+    for f in ordered:
+        print("{:<9}{:<20} {}  ({})".format(f.severity.upper(), f.rule, f.path, f.message))
+    print("{} VIOLATIONS".format(len(counting)) if counting else "OK — 0 violations")
     if counting:
         raise OkfError("non_conformant", "")
 
@@ -670,7 +671,7 @@ def add_check_parser(sub):
                     help="suppress rules: an exact rule ID, or a prefix ending in `*` "
                          "(kc/*, okf/link/*); repeatable, added to .okf.toml ignore_rules; "
                          "suppressed findings neither print nor count")
-    pc.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pc)
     pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
 
 

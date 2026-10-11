@@ -262,7 +262,8 @@ class McpJsonCommandParsesDespiteStderrNote(unittest.TestCase):
     def test_json_command_return_value_ignores_stderr_note(self):
         stub = subprocess.CompletedProcess(
             args=["python3", "okf-cli.py"], returncode=0,
-            stdout='[{"title": "One"}]\n',
+            stdout='{"command": "list", "ok": true, "data": [{"title": "One"}], '
+                   '"warnings": [], "error": null}\n',
             stderr="note: some future degradation\n")
         # Patch the `mcp` module's OWN `subprocess` name binding, not the
         # real subprocess module (which fastmcp/other code also imports) —
@@ -624,8 +625,12 @@ class McpExitClassHandling(unittest.TestCase):
             return mcp.run_okf("/root", command, {})
 
     def test_findings_and_drift_return_stdout_as_data(self):
-        self.assertEqual(self._run("check", 4, stdout='{"findings": [1]}'), {"findings": [1]})
-        self.assertEqual(self._run("sync-status", 5, stdout='{"blocks": []}'), {"blocks": []})
+        gate = '{"command": "%s", "ok": false, "data": %s, "warnings": [], "error": ' \
+               '{"kind": "%s", "code": %d, "message": ""}}'
+        self.assertEqual(self._run("check", 4, stdout=gate % ("check", '{"findings": [1]}', "non_conformant", 4)),
+                         {"findings": [1]})
+        self.assertEqual(self._run("sync-status", 5, stdout=gate % ("sync-status", '{"blocks": []}', "drift", 5)),
+                         {"blocks": []})
         self.assertEqual(self._run("sync-update", 5, stdout="report\n"), "report\n")
 
     def test_internal_invalid_and_not_found_raise_with_stderr(self):

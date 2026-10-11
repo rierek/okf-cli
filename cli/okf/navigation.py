@@ -1,7 +1,6 @@
 """The navigation commands: list, read, info, toc, visualize and refs, with the
 concept graph and HTML template behind visualize and their parser blocks."""
 
-import json
 import os
 import re
 import sys
@@ -37,11 +36,8 @@ def cmd_list(root, args):
             hits.append((title, t, path, desc))
     hits.sort(key=lambda x: x[0].casefold())
     if getattr(args, "json", False):
-        print(json.dumps([
-            {"title": title, "type": t, "path": path, "description": desc}
-            for (title, t, path, desc) in hits
-        ]))
-        return
+        return [{"title": title, "type": t, "path": path, "description": desc}
+                for (title, t, path, desc) in hits]
     if not hits:
         print("(no matches)")
         return
@@ -214,7 +210,6 @@ def cmd_visualize(root, args):
 
 
 def cmd_refs(root, args):
-    import json
     scan_root = os.path.abspath(args.scan_root) if getattr(args, "scan_root", None) else root
     if os.path.isabs(args.path):
         target = args.path
@@ -239,8 +234,7 @@ def cmd_refs(root, args):
             d["inbound"] = [{"source": s, "link": l} for s, l in hits]
         if want_out:
             d["outbound"] = [{"link": l, "target": t, "exists": ex} for l, t, ex in out]
-        print(json.dumps(d))
-        return
+        return d
     if want_in:
         print("inbound ({}):".format(len(hits)))
         for s, l in hits:
@@ -308,7 +302,7 @@ def add_list_parser(sub):
                     help="also list _archive/<bundle>/<cid>; excluded by "
                          "default (combine with --scope to reach the "
                          "archived concepts of one bundle)")
-    pls.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pls)
 
 
 def add_read_parser(sub):
@@ -331,11 +325,10 @@ def add_refs_parser(sub):
                "list inbound and outbound markdown links of a file")
     prf.add_argument("path", help="target file (abs, or relative to --root)").completer = _complete_concept_files
     prf.add_argument("--scan-root", help="dir to scan (default: --root); pass repo root for repo-wide").completer = _complete_dirs
-    prf.add_argument("--json", action="store_true",
-                     help="machine-readable output")
     prf_dir = prf.add_mutually_exclusive_group()
     prf_dir.add_argument("--in", dest="only_in", action="store_true", help="only inbound links")
     prf_dir.add_argument("--out", dest="only_out", action="store_true", help="only outbound links")
+    _add_output(prf)
 
 
 def add_toc_parser(sub):

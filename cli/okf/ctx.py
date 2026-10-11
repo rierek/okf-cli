@@ -3,7 +3,6 @@ Holds its 14 verbs, the `ctx <slug>` shorthand, the slug completer and the parse
 block; the ctx storage layer (load_ctx, save_ctx, ctx_findings, ...) stays in
 okf.catalogue."""
 
-import json
 import os
 import shlex
 import subprocess
@@ -40,8 +39,7 @@ def _ctx_list_rows(root, for_path):
 def cmd_ctx_list(root, args):
     rows = _ctx_list_rows(root, args.for_path)
     if args.json:
-        print(json.dumps(rows, ensure_ascii=False, indent=2))
-        return
+        return rows
     if not rows:
         if args.for_path is None:
             print("no ctx bundles under {}".format(ctx_dir(root)))
@@ -120,13 +118,12 @@ def cmd_ctx_show(root, args):
     dead = sum(1 for m in ms if not m["alive"])
     t_req = sum(m["tokens"] for m in req)
     if args.json:
-        print(json.dumps({"slug": args.slug, "description": c["description"],
-                          "path": "{}/{}.md".format(CTX_DIR, args.slug), "entries": ms,
-                          "dead": dead, "tokens_required": t_req},
-                         ensure_ascii=False, indent=2))
+        result = {"slug": args.slug, "description": c["description"],
+                  "path": "{}/{}.md".format(CTX_DIR, args.slug), "entries": ms,
+                  "dead": dead, "tokens_required": t_req}
         if dead:
-            raise OkfError("non_conformant", _ctx_dead_warning(args.slug, dead))
-        return
+            raise OkfError("non_conformant", _ctx_dead_warning(args.slug, dead), result)
+        return result
 
     def block(m, head):
         if not m["alive"]:
@@ -256,10 +253,8 @@ def _ctx_nav(root, args, direction):
                 row["dead"] = not m["alive"]
             row["links"] = links[id(m)]
             rows.append(row)
-        print(json.dumps({"slug": args.slug, "direction": direction,
-                          "include_internal": args.include_internal, "members": rows},
-                         ensure_ascii=False, indent=2))
-        return
+        return {"slug": args.slug, "direction": direction,
+                "include_internal": args.include_internal, "members": rows}
     out = ["{} \u2014 ctx {}, {} member(s), {}:".format(
         direction, args.slug, len(shown),
         "including internal links" if args.include_internal
@@ -279,11 +274,11 @@ def _ctx_nav(root, args, direction):
 
 
 def cmd_ctx_inbound(root, args):
-    _ctx_nav(root, args, "inbound")
+    return _ctx_nav(root, args, "inbound")
 
 
 def cmd_ctx_outbound(root, args):
-    _ctx_nav(root, args, "outbound")
+    return _ctx_nav(root, args, "outbound")
 
 
 def _ctx_editable(root, slug):
@@ -366,13 +361,13 @@ def _ctx_report(root, slugs, stale, as_json):
         rel = "{}/{}.md".format(CTX_DIR, s)
         findings += [check.finding_of(rule, rel, m)
                      for rule, m in ctx_findings(root, ctx_file(root, s), stale)]
-    check.report_findings(findings, False, as_json)
+    return check.report_findings(findings, False, as_json)
 
 
 def cmd_ctx_check(root, args):
     if args.slug:
         load_ctx(root, args.slug)
-    _ctx_report(root, [args.slug] if args.slug else ctx_slugs(root), args.stale, args.json)
+    return _ctx_report(root, [args.slug] if args.slug else ctx_slugs(root), args.stale, args.json)
 
 
 def cmd_ctx_edit(root, args):
@@ -469,7 +464,7 @@ def add_ctx_parser(sub):
     pcxk.add_argument("slug", nargs="?", help="ctx slug (default: all)").completer = _complete_ctx_slugs
     pcxk.add_argument("--stale", action="store_true",
                       help="warn for every member modified after the ctx file")
-    pcxk.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pcxk)
     pcxc = ctx_verbs.add_parser(
         "create", help="create a ctx bundle from paths and/or an import file",
         description="create _ctx/<slug>.md; every path becomes a required entry, "
@@ -500,7 +495,7 @@ def add_ctx_parser(sub):
     pcxl.add_argument("--for", dest="for_path", metavar="PATH",
                       help="only bundles whose entries contain PATH (also when the file is gone)"
                       ).completer = _complete_files
-    pcxl.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pcxl)
     pcxm = ctx_verbs.add_parser(
         "move", help="reorder an entry or change its mode",
         description="move an entry to required position N (--pos) and/or change its mode; "
@@ -523,7 +518,7 @@ def add_ctx_parser(sub):
                         help="only the entry whose title, path or stem equals X (case-insensitive)")
         pn.add_argument("--include-internal", action="store_true",
                         help="also list links between members of the ctx")
-        pn.add_argument("--json", action="store_true", help="machine-readable output")
+        _add_output(pn)
     pcxr = ctx_verbs.add_parser(
         "read", help="print the full content of every required entry",
         description="print every required entry of a ctx in position order, each after a "
@@ -546,8 +541,7 @@ def add_ctx_parser(sub):
         description="list the required entries in reading order, then the reference entries; "
                     "`ctx <slug>` is short for `ctx show <slug>`; exit 1 when an entry is dead")
     pcxs.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
-    pcxs.add_argument("--json", action="store_true",
-                      help="machine-readable output (stdout carries only the JSON object)")
+    _add_output(pcxs)
     pcxt = ctx_verbs.add_parser(
         "toc", help="print the headings of every entry",
         description="print per entry an H1 with the entry path, then the member's headings "

@@ -3,7 +3,6 @@ hashing, the catalogue-wide canon index, the status classification, and the
 sync-export, sync-insert, sync-status and sync-update commands."""
 
 import hashlib
-import json
 import os
 import sys
 from okf.errors import OkfError
@@ -272,16 +271,19 @@ def cmd_sync_status(root, args):
         totals[status] += 1
         rows.append({"consumer": rel, "id": rec["id"], "source": rec["source"],
                      "status": status})
+    drift = any(r["status"] != "synced" for r in rows)
     if getattr(args, "json", False):
-        print(json.dumps({"blocks": rows, "totals": totals}))
-    else:
-        for row in rows:
-            print("{:<18} {:<32} {}#{}".format(
-                row["status"], row["consumer"], row["source"] or "?",
-                row["id"] or "?"))
-        print("sync-status: " + ", ".join(
-            "{} {}".format(totals[s], s) for s in SYNC_STATUSES))
-    if any(r["status"] != "synced" for r in rows):
+        result = {"blocks": rows, "totals": totals}
+        if drift:
+            raise OkfError("drift", "", result)
+        return result
+    for row in rows:
+        print("{:<18} {:<32} {}#{}".format(
+            row["status"], row["consumer"], row["source"] or "?",
+            row["id"] or "?"))
+    print("sync-status: " + ", ".join(
+        "{} {}".format(totals[s], s) for s in SYNC_STATUSES))
+    if drift:
         raise OkfError("drift", "")
 
 
@@ -396,7 +398,7 @@ def add_sync_status_parser(sub):
     pss.add_argument("--source",
                      help="only blocks whose canonical source is this path (/bundle/concept.md)").completer = _complete_canon_sources
     pss.add_argument("--block", metavar="BLOCK_ID", help="only blocks with this id").completer = _complete_canon_block_ids
-    pss.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pss)
 
 
 def add_sync_update_parser(sub):

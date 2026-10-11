@@ -111,6 +111,17 @@ EXIT_CODE_IS_DATA = {"check", "sync-status", "sync-update", "ctx"}
 DATA_EXIT_CODES = {4, 5}
 
 
+def _failure_detail(command, proc):
+    """The CLI's own words for a failed call: the envelope's error message for a --json
+    command (its stderr is empty), else stderr."""
+    if _COMMANDS[command][1]:
+        try:
+            return json.loads(proc.stdout)["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            pass
+    return proc.stderr.strip()
+
+
 def run_okf(root, command, params):
     """Invoke okf-cli.py, return parsed JSON for --json commands else raw text.
     check and ctx exit 4 on findings, sync-status and sync-update (and
@@ -127,7 +138,7 @@ def run_okf(root, command, params):
     proc = subprocess.run(["python3", OKF_CLI] + argv, capture_output=True, text=True)
     if proc.returncode != 0 and not (command in EXIT_CODE_IS_DATA
                                      and proc.returncode in DATA_EXIT_CODES):
-        raise RuntimeError("okf-cli {} failed: {}".format(command, proc.stderr.strip()))
+        raise RuntimeError("okf-cli {} failed: {}".format(command, _failure_detail(command, proc)))
     out = proc.stdout
     if len(out) > MAX_OUTPUT_CHARS:
         raise RuntimeError(
@@ -135,7 +146,7 @@ def run_okf(root, command, params):
             "Narrow the call -- pass a bundle/scope/type filter, or use find "
             "for a ranked subset.".format(command, len(out), MAX_OUTPUT_CHARS))
     if _COMMANDS[command][1]:  # supports_json
-        return json.loads(out) if out.strip() else {}
+        return json.loads(out)["data"] if out.strip() else {}
     if proc.stderr:
         return proc.stderr + out
     return out

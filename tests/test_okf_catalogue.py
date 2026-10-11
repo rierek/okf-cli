@@ -842,7 +842,7 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
         self.assertEqual((r.returncode, r.stdout, r.stderr),
                          (EXIT_CODES["not_found"], "", "ctx: unknown slug: nope\n"))
         r = self._cli("ctx", "check", "--json")
-        self.assertEqual((r.returncode, json.loads(r.stdout)), (EXIT_CODES["non_conformant"], {
+        self.assertEqual((r.returncode, json.loads(r.stdout)["data"]), (EXIT_CODES["non_conformant"], {
             "findings": [
                 {"rule": "kc/ctx/dead-entry", "severity": "error", "path": "_ctx/bad.md",
                  "message": "dead entry: b/gone.md"},

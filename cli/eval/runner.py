@@ -124,7 +124,7 @@ def _score_list_row(root, row):
     if q.get("scope"):
         argv += ["--scope", q["scope"]]
     out = _run_cli(root, argv)
-    entries = json.loads(out) if out.strip() else []
+    entries = json.loads(out)["data"]
     hit = any(e.get("path") == row["expected_path"] for e in entries)
     return {"rank": 1 if hit else float("inf"), "score_ratio": None}
 
@@ -132,8 +132,7 @@ def _score_list_row(root, row):
 def _score_index_row(root, row):
     bundle = row["query"]["bundle"]
     out = _run_cli(root, ["index", bundle, "--json"])
-    data = json.loads(out) if out.strip() else {}
-    concepts = data.get("concepts", [])
+    concepts = json.loads(out)["data"]["concepts"]
     hit = any(
         "{}/{}".format(bundle, c.get("id")) == row["expected_path"]
         for c in concepts

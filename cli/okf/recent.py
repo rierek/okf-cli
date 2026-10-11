@@ -2,12 +2,11 @@
 rendering of the newest concepts, and the recent command."""
 
 import datetime
-import json
 import os
 import re
 import subprocess
 from okf.errors import OkfError
-from okf.output import _note
+from okf.output import _add_output, _note
 
 from okf import catalogue
 from okf.catalogue import (
@@ -254,13 +253,12 @@ def cmd_recent(root, args):
               "creation date".format(undated))
 
     if getattr(args, "json", False):
-        print(json.dumps([
+        return [
             {"created": iso_created(ts), "created_ts": ts,
              "title": meta[path][1], "type": meta[path][0],
              "path": path, "description": meta[path][2]}
             for path, ts in rows
-        ]))
-        return
+        ]
     if not rows:
         print("(no matches)")
         return
@@ -281,7 +279,7 @@ def add_recent_parser(sub):
                      help="<bundle> or <bundle>/<subdir> to limit (default: whole catalogue)").completer = _complete_scopes
     prc.add_argument("--type", help="filter by frontmatter `type` (exact match)").completer = _complete_types
     prc.add_argument("--tag", help="filter by tag (exact match)").completer = _complete_tags
-    prc.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(prc)
 
 
 COMMANDS = {"recent": (cmd_recent, add_recent_parser)}

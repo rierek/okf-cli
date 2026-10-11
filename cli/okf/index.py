@@ -2,7 +2,6 @@
 bundle summary renderers prime shares, and `reindex` (marker-bounded index.md
 and index-map.md generation, the --init migration and the --check report)."""
 
-import json
 import os
 import re
 import sys
@@ -13,6 +12,7 @@ from okf.catalogue import (
     iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_of, read_file,
     replace_managed_block, require_bundle_dir, write_file,
 )
+from okf.output import _add_output
 from okf.parser_support import _complete_bundles, _complete_scopes, _sub
 
 
@@ -111,11 +111,9 @@ def cmd_index(root, args):
     if getattr(args, "json", False):
         if args.bundle:
             bp = os.path.join(root, args.bundle)
-            print(json.dumps({"bundle": args.bundle, "concepts": _concepts_json(bp)}))
-            return
-        print(json.dumps({"bundles": [_bundle_summary_json(root, b, full=args.full)
-                                      for b in list_bundles(root)]}))
-        return
+            return {"bundle": args.bundle, "concepts": _concepts_json(bp)}
+        return {"bundles": [_bundle_summary_json(root, b, full=args.full)
+                            for b in list_bundles(root)]}
     if args.bundle:
         bp = os.path.join(root, args.bundle)
         if args.full:
@@ -318,7 +316,7 @@ def add_index_parser(sub):
                          "instead of the default one-line name+description "
                          "listing; with a bundle arg: print the structured "
                          "bundle summary instead of the raw index.md")
-    pi.add_argument("--json", action="store_true", help="machine-readable output")
+    _add_output(pi)
 
 
 def add_reindex_parser(sub):
