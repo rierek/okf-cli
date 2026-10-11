@@ -43,5 +43,22 @@ class WritePlan(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(tmp, "d/same.md")))
 
 
+class MovedAndDeletedFile(unittest.TestCase):
+    def test_a_moved_file_has_the_rename_header_even_when_its_text_is_unchanged(self):
+        changed, same = unified_diffs([("n/same.md", "x\n", "x\n"), ("n/chg.md", "x\n", "y\n")],
+                                      {"n/same.md": "o/same.md", "n/chg.md": "o/chg.md"})
+        self.assertEqual(changed, {"path": "n/chg.md", "old_path": "o/chg.md", "diff": (
+            "rename from o/chg.md\nrename to n/chg.md\n--- a/o/chg.md\n+++ b/n/chg.md\n@@ -1 +1 @@\n-x\n+y\n")})
+        self.assertEqual(same["diff"], "rename from o/same.md\nrename to n/same.md\n")
+
+    def test_a_deleted_file_is_headed_dev_null_and_write_plan_skips_it(self):
+        (entry,) = unified_diffs([("d/gone.md", "x\n", None)])
+        self.assertEqual(entry["diff"], "--- a/d/gone.md\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n")
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        write_plan(tmp, [("d/gone.md", "x\n", None)])
+        self.assertFalse(os.path.exists(os.path.join(tmp, "d")))
+
+
 if __name__ == "__main__":
     unittest.main()

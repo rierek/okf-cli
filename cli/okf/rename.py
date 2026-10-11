@@ -11,10 +11,11 @@ from okf.output import _add_output, _note
 from okf.diffs import unified_diffs, write_plan
 from okf import catalogue, check, linkscan, wikilinks
 from okf.catalogue import (
-    CROSSLINK_RE, RESERVED, SYNC_OPEN_LIT, SYNC_OPEN_RE, _prune_walk_dirs, ctx_memberships,
-    iter_all_md, load_ctx, read_file, read_file_verbatim, read_frontmatter, reindex_tree,
-    resolve_scopes, save_ctx, write_file_verbatim,
+    _CTX_INDEX_SKELETON, CROSSLINK_RE, CTX_DIR, RESERVED, SYNC_OPEN_LIT, SYNC_OPEN_RE, RealFs, _prune_walk_dirs,
+    ctx_dir, ctx_memberships, ctx_text, iter_all_md, parse_ctx, read_file, read_file_verbatim, read_frontmatter,
+    resolve_scopes,
 )
+from okf.index import plan_reindex
 from okf.linkscan import iter_rename_scan_md, wikilink_scan_text
 from okf.parser_support import _complete_concept_files, _complete_concepts, _complete_dirs, _sub
 from okf.sync import parse_sync_blocks
@@ -339,19 +340,11 @@ def find_sync_source_refs(root, source_value):
     return sorted(out)
 
 
-def _apply_sync_source_rewrites(abspath, old_source, new_source):
-    """Repoint every `source=old_source` sync marker in one file at
-    `new_source`, splicing only that attribute's slice so the payload, the
-    recorded hash and the attribution line stay byte-identical — the block was
-    not re-materialised, only its owner moved.
-
-    Re-scans at apply time rather than trusting a span computed during
-    planning, the same idiom _apply_link_rewrites and _apply_wikilink_rewrites
-    follow."""
-    text = read_file_verbatim(abspath)
-    if text is None:
-        _note("skipping {} — not valid UTF-8".format(abspath))
-        return 0
+def _sync_source_text(text, old_source, new_source):
+    """(new text, count): `text` with every `source=old_source` sync marker repointed at
+    `new_source`, splicing only that attribute's slice so the payload, the recorded hash and the
+    attribution line stay byte-identical — the block was not re-materialised, only its owner
+    moved."""
     out, last, n = [], 0, 0
     for m in SYNC_OPEN_RE.finditer(text):
         if m.group("source") != old_source:
@@ -362,23 +355,18 @@ def _apply_sync_source_rewrites(abspath, old_source, new_source):
         last = b
         n += 1
     if not n:
-        return 0
+        return text, 0
     out.append(text[last:])
-    write_file_verbatim(abspath, "".join(out))
-    return n
+    return "".join(out), n
 
 
-def _apply_link_rewrites(abspath, rewrites):
-    """Rewrite one file's markdown link targets, splicing by offset over the
-    same dead-zone mask build_ref_matrix used to find them.
+def link_rewrite_text(text, rewrites):
+    """`text` with its markdown link targets rewritten, splicing by offset over the same
+    dead-zone mask build_ref_matrix used to find them.
 
     A whole-file `str.replace` edited bytes the planner never reported: a link
     inside a code fence was rewritten and not counted, so the run changed a
     documentation sample while claiming a smaller edit than it made."""
-    text = read_file_verbatim(abspath)
-    if text is None:
-        _note("skipping {} — not valid UTF-8".format(abspath))
-        return
     mapping = dict(rewrites)
     out, last = [], 0
     for m in CROSSLINK_RE.finditer(wikilink_scan_text(text)):
@@ -390,24 +378,15 @@ def _apply_link_rewrites(abspath, rewrites):
         out.append(new_raw)
         last = b
     out.append(text[last:])
-    write_file_verbatim(abspath, "".join(out))
+    return "".join(out)
 
 
-def _apply_wikilink_rewrites(abspath, rename_map):
-    """Rewrite one file's wikilinks. `rename_map` maps an old raw token to its
-    replacement; every occurrence the scanner accepts and the map names is
-    spliced in by offset.
-
-    The file is re-scanned here rather than trusting offsets from planning
-    time, so this is correct regardless of what else has already rewritten the
-    file in this run. Splicing by offset — instead of replacing the token
-    string — is what guarantees an identical-looking `[[old]]` inside a fence,
-    an indented block or a comment is never touched: the scanner never returned
-    it, so no offset points at it."""
-    text = read_file_verbatim(abspath)
-    if text is None:
-        _note("skipping {} — not valid UTF-8".format(abspath))
-        return
+def _wikilink_rewrite_text(text, rename_map):
+    """`text` with its wikilinks rewritten. `rename_map` maps an old raw token to its
+    replacement; every occurrence the scanner accepts and the map names is spliced in by
+    offset. Splicing by offset — instead of replacing the token string — is what guarantees an
+    identical-looking `[[old]]` inside a fence, an indented block or a comment is never touched:
+    the scanner never returned it, so no offset points at it."""
     out, last = [], 0
     for rec in wikilinks.parse_wikilinks(text):
         new_raw = rename_map.get(rec["raw"])
@@ -418,7 +397,7 @@ def _apply_wikilink_rewrites(abspath, rename_map):
         out.append(new_raw)
         last = b
     out.append(text[last:])
-    write_file_verbatim(abspath, "".join(out))
+    return "".join(out)
 
 
 def _git_mv(root, old_abs, new_abs):
@@ -477,6 +456,144 @@ def _git_mv(root, old_abs, new_abs):
 
     os.rename(old_abs, new_abs)
     return False, foreign_repo, reason
+
+
+class PlannedFs(RealFs):
+    """The catalogue tree after a write run that removes the absolute paths in `removed` and
+    writes `texts` ({absolute path: text}), computed without touching the disk."""
+
+    def __init__(self, removed, texts):
+        self.removed, self.texts = removed, texts
+
+    def listdir(self, d):
+        names = set(os.listdir(d)) if os.path.isdir(d) else set()
+        names = {n for n in names if os.path.join(d, n) not in self.removed}
+        pre = d.rstrip(os.sep) + os.sep
+        names |= {p[len(pre):].split(os.sep, 1)[0] for p in self.texts if p.startswith(pre)}
+        return sorted(names)
+
+    def isfile(self, p):
+        return p in self.texts or (p not in self.removed and os.path.isfile(p))
+
+    def isdir(self, p):
+        pre = p.rstrip(os.sep) + os.sep
+        return any(t.startswith(pre) for t in self.texts) or (p not in self.removed and os.path.isdir(p))
+
+    def walk(self, top):
+        dirs, files = [], []
+        for n in self.listdir(top):
+            (dirs if self.isdir(os.path.join(top, n)) else files).append(n)
+        yield top, dirs, files
+        for d in dirs:
+            if not os.path.islink(os.path.join(top, d)):
+                yield from self.walk(os.path.join(top, d))
+
+    def read(self, p):
+        return self.texts[p].replace("\r\n", "\n").replace("\r", "\n") if p in self.texts else read_file(p)
+
+    def read_verbatim(self, p):
+        return self.texts[p] if p in self.texts else read_file_verbatim(p)
+
+
+def plan_move_texts(root, old_abs, new_abs, plan, wl_rewrite, ctx_hits):
+    """The whole write run of a move as text, before anything is written: returns (entries, moves,
+    info). `entries` are (rel path, stored text, new text) for the moved file, every file with a
+    rewritten link, wikilink or sync `source=`, the ctx bundle files and the managed index files
+    of the affected bundles, the last two computed for the tree after the move. `moves` is
+    {new rel: old rel} for the moved file. A destination that exists is overwritten: its text is
+    the old side of the new path's entry and the old path is deleted instead of moved. `info`
+    carries the counts and ctx parse problems the report lines name. Undecodable files stay out
+    of the plan, as the splice writers always left them alone."""
+    old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
+    new_rel = os.path.relpath(new_abs, root).replace(os.sep, "/")
+    stored, cur = {}, {}
+
+    def final(rel):
+        return new_rel if rel == old_rel else rel
+
+    def text_of(rel):
+        if rel not in cur:
+            src = old_abs if rel == new_rel else os.path.join(root, rel)
+            cur[rel] = stored[rel] = read_file_verbatim(src)
+            if cur[rel] is None:
+                _note("skipping {} — not valid UTF-8".format(src))
+        return cur[rel]
+
+    def edit(rel, fn):
+        t = text_of(rel)
+        if t is not None:
+            cur[rel] = fn(t)
+
+    text_of(new_rel)
+    if plan["outbound"]:
+        edit(new_rel, lambda t: link_rewrite_text(t, plan["outbound"]))
+    by_src = {}
+    for src, oraw, nraw in plan["inbound"]:
+        by_src.setdefault(final(src), []).append((oraw, nraw))
+    for rel, rw in by_src.items():
+        edit(rel, lambda t, rw=rw: link_rewrite_text(t, _dedupe(rw)))
+    wl_by_src = {}
+    for r in wl_rewrite:
+        wl_by_src.setdefault(final(r["source"]), {})[r["raw"]] = r["new_raw"]
+    for rel, rename_map in wl_by_src.items():
+        edit(rel, lambda t, m=rename_map: _wikilink_rewrite_text(t, m))
+    # The `source=` attribute of a materialised canon block is not a link, so neither link
+    # rewriter touches it — without this the move silently breaks every consumer of the moved
+    # concept's canon blocks into `source-missing`.
+    n_sync = 0
+
+    def sync(t):
+        nonlocal n_sync
+        t, n = _sync_source_text(t, "/" + old_rel, "/" + new_rel)
+        n_sync += n
+        return t
+
+    for consumer_rel, _ in plan["sync_sources"]:
+        edit(final(consumer_rel), sync)
+
+    ctx_notes, ctx_refresh = [], False
+    for slug in dict.fromkeys(s for s, _ in ctx_hits):
+        rel = final("{}/{}.md".format(CTX_DIR, slug))
+        text = text_of(rel)
+        if text is None:
+            continue
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        desc, entries, problems = parse_ctx(text)
+        if problems:
+            ctx_notes.append({"slug": slug, "problems": len(problems)})
+            continue
+        cur[rel] = ctx_text({"slug": slug, "description": desc, "entries": entries}, text)
+        ctx_refresh = True
+    ctx_index = "{}/index.md".format(CTX_DIR)
+    if ctx_refresh and not os.path.exists(os.path.join(root, ctx_index)):
+        stored[ctx_index], cur[ctx_index] = None, _CTX_INDEX_SKELETON
+
+    # Managed index blocks for the tree after the move: plan_reindex reads it through PlannedFs.
+    view = {os.path.join(root, rel): t for rel, t in cur.items() if t is not None}
+    view.setdefault(new_abs, read_file(old_abs))
+    fs = PlannedFs({old_abs}, view)
+    bundle_idx, ctx_idx = {}, {}
+    for b in plan["bundles"]:
+        bundle_idx.update({rel: (st, fin) for rel, st, fin in plan_reindex(root, os.path.join(root, b), fs=fs)[0]})
+    if ctx_refresh:
+        ctx_idx = {rel: (st, fin) for rel, st, fin in plan_reindex(root, ctx_dir(root), fs=fs)[0]}
+    for rel, (st, fin) in {**ctx_idx, **bundle_idx}.items():
+        stored.setdefault(rel, st)
+        cur[rel] = fin
+
+    entries = [(rel, stored[rel], t) for rel, t in cur.items() if t is not None and rel != new_rel]
+    moves = {}
+    if cur[new_rel] is not None:
+        if os.path.exists(new_abs) and not os.path.samefile(old_abs, new_abs):
+            dest = read_file_verbatim(new_abs)
+            if dest is not None:
+                entries += [(new_rel, dest, cur[new_rel]), (old_rel, stored[new_rel], None)]
+        else:
+            entries.append((new_rel, stored[new_rel], cur[new_rel]))
+            moves[new_rel] = old_rel
+    info = {"sync_blocks": n_sync, "ctx_notes": ctx_notes, "inbound_files": len(by_src),
+            "wikilink_files": len(wl_by_src), "reindexed": len(bundle_idx)}
+    return entries, moves, info
 
 
 def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
@@ -602,7 +719,14 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
         "reindex_bundles": list(plan["bundles"]),
     }
 
+    entries, moves, info = plan_move_texts(root, old_abs, new_abs, plan, wl_rewrite, ctx_hits)
+    files = unified_diffs(entries, moves)
+    result["files"] = files
+
     if not apply:
+        if not quiet:
+            for entry in files:
+                print(entry["diff"], end="")
         say("would move   {}  ->  {}".format(old_rel, new_rel))
         for src, oraw, nraw in plan["inbound"]:
             say("  inbound    {}   {}  ->  {}".format(src, oraw, nraw))
@@ -634,42 +758,9 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
             "different content)".format(new_rel, len(clobbered)))
     os.makedirs(os.path.dirname(new_abs), exist_ok=True)
     moved, git_repo, git_reason = _git_mv(root, old_abs, new_abs)
-    if plan["outbound"]:
-        _apply_link_rewrites(new_abs, plan["outbound"])
-    by_src = {}
-    for src, oraw, nraw in plan["inbound"]:
-        by_src.setdefault(src, []).append((oraw, nraw))
-    for src, rw in by_src.items():
-        _apply_link_rewrites(os.path.join(root, src), _dedupe(rw))
-    wl_by_src = {}
-    for r in wl_rewrite:
-        # A self-reference lives in the file that just moved — rewrite it at its
-        # new location, not at the path it no longer occupies.
-        ap = new_abs if r["source"] == old_rel else os.path.join(root, r["source"])
-        wl_by_src.setdefault(ap, {})[r["raw"]] = r["new_raw"]
-    for ap, rename_map in wl_by_src.items():
-        _apply_wikilink_rewrites(ap, rename_map)
-    # The `source=` attribute of a materialised canon block is not a link, so
-    # neither link rewriter touches it — without this the move silently breaks
-    # every consumer of the moved concept's canon blocks into `source-missing`.
-    old_source = "/" + old_rel
-    new_source = "/" + new_rel
-    n_sync = 0
-    for consumer_rel, _ in plan["sync_sources"]:
-        # A self-reference lives in the file that just moved — same rule as the
-        # wikilink pass above.
-        ap = new_abs if consumer_rel == old_rel else os.path.join(root, consumer_rel)
-        n_sync += _apply_sync_source_rewrites(ap, old_source, new_source)
-    ctx_notes = []
-    for slug in dict.fromkeys(s for s, _ in ctx_hits):
-        c = load_ctx(root, slug)
-        if c["problems"]:
-            ctx_notes.append({"slug": slug, "problems": len(c["problems"])})
-        else:
-            save_ctx(root, c)
-    reidx = []
-    for b in plan["bundles"]:
-        reidx += reindex_tree(root, os.path.join(root, b))
+    write_plan(root, entries)
+    ctx_notes, n_sync = info["ctx_notes"], info["sync_blocks"]
+    by_src_n, wl_files, reidx_n = info["inbound_files"], info["wikilink_files"], info["reindexed"]
     say("moved ({})  {}  ->  {}".format("git mv" if moved else "fs", old_rel, new_rel))
     if moved:
         if git_repo:
@@ -687,8 +778,8 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
             say("  the untracked change also touches {} (repository "
                 "differs from --root)".format(git_repo))
     say("rewrote {} inbound link(s) in {} file(s), {} outbound link(s)".format(
-        len(plan["inbound"]), len(by_src), len(plan["outbound"])))
-    say("rewrote {} wikilink(s) in {} file(s)".format(len(wl_rewrite), len(wl_by_src)))
+        len(plan["inbound"]), by_src_n, len(plan["outbound"])))
+    say("rewrote {} wikilink(s) in {} file(s)".format(len(wl_rewrite), wl_files))
     say("rewrote {} sync source(s) in {} file(s)".format(
         n_sync, len(plan["sync_sources"])))
     if ctx_where:
@@ -697,16 +788,16 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
             say("  ctx        {}: not refreshed, {} parse problem(s) — "
                 "run okf ctx check".format(note["slug"], note["problems"]))
     _print_skipped()
-    say("reindexed {} index file(s) across: {}".format(len(reidx), ", ".join(plan["bundles"])))
+    say("reindexed {} index file(s) across: {}".format(reidx_n, ", ".join(plan["bundles"])))
     say("staged for commit — run `okf-cli.py check` before committing.")
     result.update(
         moved_with="git mv" if moved else "fs", tracked_in=git_repo or None,
         untracked_reason=None if moved else (git_reason if git_reason else "git binary unavailable"),
-        rewritten={"inbound_links": len(plan["inbound"]), "inbound_files": len(by_src),
+        rewritten={"inbound_links": len(plan["inbound"]), "inbound_files": by_src_n,
                    "outbound_links": len(plan["outbound"]), "wikilinks": len(wl_rewrite),
-                   "wikilink_files": len(wl_by_src), "sync_sources": n_sync,
+                   "wikilink_files": wl_files, "sync_sources": n_sync,
                    "sync_files": len(plan["sync_sources"])},
-        ctx_not_refreshed=ctx_notes, reindexed=len(reidx))
+        ctx_not_refreshed=ctx_notes, reindexed=reidx_n)
     return result
 
 

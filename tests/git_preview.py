@@ -58,3 +58,30 @@ class GitPreviewMixin:
             out = re.sub(r"(?m)^(@@ [^@]*@@).*$", r"\1", out)  # git adds the nearest line as a hunk heading
             self.assertEqual(f["diff"], out[out.index("--- "):], f["path"])
         return preview
+
+    def assert_preview_equals_staged_diff(self, repo, check, write):
+        """Like `assert_preview_equals_git_diff` for a write run that also moves files and stages
+        them (`git mv`): after the write run `git add -A` and `git diff --cached -M` give one block
+        per file, and each preview diff equals its block, `rename from`/`rename to` lines included
+        (`similarity index` is git's own number and is excluded with the other git-only lines)."""
+        preview = check()
+        self.assertTrue(preview)
+        self.assertEqual(self._git(repo, "status", "--porcelain"), "")
+        write()
+        self._git(repo, "add", "-A")
+        out = self._git(repo, "diff", "--cached", "--no-color", "--no-ext-diff", "-M")
+        blocks = {}
+        for block in re.split(r"(?m)^(?=diff --git )", out):
+            if not block:
+                continue
+            lines, in_header = [], True
+            for ln in block.splitlines(keepends=True)[1:]:
+                in_header = in_header and not ln.startswith(("--- ", "@@"))
+                if not (in_header and re.match(r"(index |similarity index |(new|deleted) file mode|(old|new) mode)", ln)):
+                    lines.append(ln)
+            path = re.match(r"diff --git a/.* b/(.*)\n", block).group(1)
+            blocks[path] = re.sub(r"(?m)^(@@ [^@]*@@).*$", r"\1", "".join(lines))
+        self.assertEqual(sorted(blocks), [f["path"] for f in preview])
+        for f in preview:
+            self.assertEqual(f["diff"], blocks[f["path"]], f["path"])
+        return preview

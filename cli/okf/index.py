@@ -10,7 +10,7 @@ from okf import spec
 from okf.diffs import unified_diffs, write_plan
 from okf.errors import OkfError
 from okf.catalogue import (
-    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, fm_text, index_h1_and_desc,
+    EXEMPT, MARK_END, MARK_START, REAL_FS, _collapse, _find_reserved_name, fm_text, index_h1_and_desc,
     iter_headings, iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_and_fm, meta_of, read_file,
     read_file_verbatim, read_frontmatter, replace_managed_block, require_bundle_dir, tags_of,
 )
@@ -228,7 +228,7 @@ def init_indexes(root, target, force=False):
     return results, plan
 
 
-def plan_reindex(root, tp, init=False, force=False):
+def plan_reindex(root, tp, init=False, force=False, fs=REAL_FS):
     """The final text of every index file the `reindex` write run changes or creates: with `init`
     the stub of a missing index.md in tp, then the flat-index conversions, then the refreshed
     managed blocks, one (rel, stored_text, new_text) entry per file (stored_text None for a
@@ -248,7 +248,7 @@ def plan_reindex(root, tp, init=False, force=False):
         for rel, old, new in conv:
             stored[rel], final[rel] = old, new
     dirs = []
-    for dp, dn, fn in os.walk(tp):
+    for dp, dn, fn in fs.walk(tp):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
         if created and dp == tp and "index.md" not in fn:
             fn = fn + ["index.md"]                    # the write run walks the file it created
@@ -262,14 +262,14 @@ def plan_reindex(root, tp, init=False, force=False):
         if rel in final:
             text = final[rel]
         else:
-            text = read_file_verbatim(idx)
+            text = fs.read_verbatim(idx)
             if text is None:
                 info["unreadable"].append(rel)
                 continue
         if MARK_START not in text:
             info["skipped"].append(rel)
             continue
-        new_text, _ = replace_managed_block(text, managed_block_for(dp, root, idx_name))
+        new_text, _ = replace_managed_block(text, managed_block_for(dp, root, idx_name, fs))
         if new_text == text:
             continue
         info["stale"].append(rel)
