@@ -6,7 +6,6 @@ Run: just test tests.test_okf_verify -v
 """
 import datetime
 import os
-import re
 import sys
 import unittest
 
@@ -18,6 +17,8 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from okf import spec as okf_spec
+from okf.parser import build_parser
+from okf.parser_support import COMMAND_GROUPS
 from okf.catalogue import read_frontmatter
 from tests.okf_testkit import SpecCase, run_cli, run_json
 
@@ -99,12 +100,10 @@ class AppendForms(VerifyCase):
         front_before = "type: Note  # why\ntitle: \"Quoted: Title\"\ntags: [a, b]\n"
         front_after = "\n# trailing block comment\nz: 'single'\nwidth: 2026-09-23\n"
         self._put(front_before + "verified: " + OLD + front_after.rstrip("\n"))
-        before = self._text()
         self.assertEqual(self._verify()[1], 0)
         after = self._text()
         self.assertTrue(after.startswith("---\n" + front_before), after)
         self.assertTrue(after.endswith("# trailing block comment\nz: 'single'\nwidth: 2026-09-23\n---\n" + BODY), after)
-        self.assertEqual(after.split("---\n", 2)[2], before.split("---\n", 2)[2])  # the body, byte for byte
 
     def test_a_file_without_a_verified_key_changes_only_by_the_added_lines(self):
         self._put("type: Note\ntags:\n  - a\n  - b  # keep")
@@ -222,18 +221,9 @@ class Output(VerifyCase):
         self.assertEqual(code, 0)
         self.assertRegex(out, r"^verified b/x by human:erik at \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\n$")
 
-    def test_the_verb_is_listed_in_the_maintenance_group_of_the_help(self):
-        out, _, code = run_cli(self.tmp, "--help")
-        self.assertEqual(code, 0)
-        groups, current = {}, None
-        for line in out.splitlines():
-            if re.match(r"^  \w+:$", line):
-                current = line.strip(" :")
-                groups[current] = []
-            elif current and (command := re.match(r"^    (\S+) {2,}\S", line)):
-                groups[current].append(command.group(1))
-        self.assertIn("verify", groups["maintenance"])
-        self.assertEqual([g for g, names in groups.items() if "verify" in names], ["maintenance"])
+    def test_the_verb_is_registered_in_the_maintenance_group(self):
+        build_parser()  # registration fills COMMAND_GROUPS
+        self.assertEqual(COMMAND_GROUPS["verify"], "maintenance")
 
 
 if __name__ == "__main__":

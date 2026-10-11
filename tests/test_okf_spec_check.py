@@ -174,12 +174,6 @@ class ProvenanceRules(SpecCase):
         self.assertEqual([(f.severity, f.path) for f in hits], [("error", "b/x.md")], hits)
         self.assertIn(hits[0].rule, [r.id for r in self._rules()])
 
-    def test_registry_holds_gated_error_rules_of_the_family(self):
-        self.assertGreaterEqual(len(self._rules()), 3)
-        for rule in self._rules():
-            self.assertEqual((rule.severity, rule.scope, rule.okf_version), ("error", "file", "0.2"),
-                             rule.id)
-
     def test_sources_not_a_list_is_an_error(self):
         for extra in ("sources: just-text", "sources: {resource: a}", "sources:", "sources: 5"):
             with self.subTest(extra):

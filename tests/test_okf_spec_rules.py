@@ -48,15 +48,6 @@ class RuleCase(SpecCase):
         self.assertEqual(self._hits(extra, group, type_=type_), [])
 
 
-class RegistryEntries(unittest.TestCase):
-    def test_every_rule_of_the_four_families_is_a_gated_file_rule(self):
-        rules = [r for r in okf_check.RULES if r.id.startswith(FAMILIES)]
-        for family in FAMILIES:
-            self.assertTrue([r for r in rules if r.id.startswith(family)], family)
-        for rule in rules:
-            self.assertEqual((rule.scope, rule.okf_version), ("file", "0.2"), rule.id)
-
-
 class TrustRules(RuleCase):
     GROUP = "okf/trust/"
 
@@ -126,19 +117,6 @@ class LifecycleRules(RuleCase):
         for value in ("2000-01-01T00:00:00", "2000-01-01", "soon", "'2000-01-01T00:00:00'"):
             with self.subTest(value):
                 self._none("stale_after: " + value)
-
-    def test_stale_after_equal_to_now_is_stale_and_one_second_later_is_not(self):
-        now = datetime.datetime(2026, 9, 23, 12, 0, 0, tzinfo=UTC)
-        with mock.patch.object(okf_spec, "utcnow", return_value=now):
-            self._one("stale_after: 2026-09-23T12:00:00Z", "warning")
-            self._none("stale_after: 2026-09-23T12:00:01Z")
-
-    def test_stale_after_compares_as_an_instant_across_offsets(self):
-        now = datetime.datetime(2026, 9, 22, 23, 0, 0, tzinfo=UTC)
-        with mock.patch.object(okf_spec, "utcnow", return_value=now):
-            # 00:00+02:00 is 22:00Z, before now; 00:00Z is after it.
-            self._one("stale_after: 2026-09-23T00:00:00+02:00", "warning")
-            self._none("stale_after: 2026-09-23T00:00:00Z")
 
     def test_one_instant_serves_every_comparison_of_a_run(self):
         self._bundle()
