@@ -148,7 +148,7 @@ class Refusals(VerifyCase):
 
     def _refused(self, code, kind, **kw):
         envelope, got = self._verify(**kw)
-        self.assertEqual((got, envelope["ok"], envelope["error"]["kind"]), (code, False, kind), envelope)
+        self.assertEqual((got, envelope["ok"], (envelope["error"] or {}).get("kind")), (code, False, kind), envelope)
         return envelope
 
     def _unchanged_after(self, front, rel="b/x.md", **kw):
