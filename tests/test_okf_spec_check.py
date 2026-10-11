@@ -239,7 +239,10 @@ class ProvenanceRules(SpecCase):
         self.assertEqual(self._group(self.GROUP), [])
 
     def test_shared_usage_window_that_is_not_a_mapping_is_an_error(self):
-        self._assert_one_error("usage_window: last-year")
+        for extra in ("usage_window: last-year", "usage_window: from 2026-01-01 to 2026-02-01",
+                      "usage_window: [from, to]"):
+            with self.subTest(extra):
+                self._assert_one_error(extra)
 
     def test_shared_usage_window_without_to_is_an_error(self):
         self._assert_one_error("usage_window:\n  from: 2026-01-01T00:00:00Z")
@@ -252,7 +255,9 @@ class ProvenanceRules(SpecCase):
                                "      from: 2026-01-01T00:00:00Z")
 
     def test_per_entry_usage_window_not_a_mapping_is_an_error(self):
-        self._assert_one_error("sources:\n  - resource: a\n    usage_window: [x]")
+        for window in ("[x]", "[from, to]", "from 2026-01-01 to 2026-02-01"):
+            with self.subTest(window):
+                self._assert_one_error("sources:\n  - resource: a\n    usage_window: " + window)
 
     def test_valid_usage_windows_pass(self):
         self._bundle()
