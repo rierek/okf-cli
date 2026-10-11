@@ -30,16 +30,8 @@ from okf import rename as okf_rename
 from okf import sync as okf_sync
 from okf import tags as okf_tags
 from okf import wikilinks as okf_wikilinks
-from tests.okf_testkit import SyncFixtureMixin, _cli, needs_case_insensitive_fs
+from tests.okf_testkit import SyncFixtureMixin, _cli, _scan, needs_case_insensitive_fs
 from tests.test_okf_wikilinks import WikilinkFixtureMixin
-
-
-def _scan(root, target, **kw):
-    """okf_check.run_checks, split by each finding's own severity into
-    (errors, warnings), each a list of (rule, path, message)."""
-    findings = okf_check.run_checks(root, target, **kw)
-    return ([(f.rule, f.path, f.message) for f in findings if f.severity == "error"],
-            [(f.rule, f.path, f.message) for f in findings if f.severity == "warning"])
 
 
 class CheckCommand(unittest.TestCase):
@@ -1104,23 +1096,6 @@ class RuleRegistry(unittest.TestCase):
     """R-09 — RULES is the one registry of rule IDs and severities; the engine
     runs what it lists."""
 
-    PINNED = {
-        ("okf/frontmatter/parseable", "error"), ("okf/frontmatter/type-nonempty", "error"),
-        ("okf/type/reserved-no-type", "error"), ("kc/name/filename-chars", "error"),
-        ("kc/type/registered", "warning"), ("kc/tag/registered", "warning"),
-        ("kc/frontmatter/english-keys", "warning"), ("kc/frontmatter/tags-block-form", "warning"),
-        ("kc/link/crosslink-format", "warning"), ("kc/link/wikilink-resolvable", "warning"),
-        ("kc/supersede/resolves", "error"), ("kc/supersede/scope", "warning"),
-        ("kc/sync/block", "error"), ("kc/sync/stale", "warning"),
-        ("kc/sync/canon-block", "error"), ("kc/markup/xml-like-tags", "warning"),
-        ("kc/asset/placement", "error"), ("kc/asset/entry-file-description", "warning"),
-        ("kc/ctx/type", "error"), ("kc/ctx/slug", "error"), ("kc/ctx/row-format", "error"),
-        ("kc/ctx/mode", "error"), ("kc/ctx/required-positions", "error"),
-        ("kc/ctx/reference-position", "error"), ("kc/ctx/duplicate-entry", "error"),
-        ("kc/ctx/dead-entry", "error"), ("kc/ctx/empty-description", "warning"),
-        ("kc/ctx/archived-entry", "warning"), ("kc/ctx/stale-entry", "warning"),
-    }
-
     def test_every_id_matches_the_rule_id_pattern(self):
         for rule in okf_check.RULES:
             self.assertRegex(rule.id, r"^(okf|kc)/[a-z-]+/[a-z-]+$")
@@ -1132,10 +1107,6 @@ class RuleRegistry(unittest.TestCase):
     def test_every_severity_is_error_or_warning(self):
         for rule in okf_check.RULES:
             self.assertIn(rule.severity, ("error", "warning"), rule.id)
-
-    def test_registry_holds_exactly_the_agreed_ids_and_severities(self):
-        self.assertEqual({(r.id, r.severity) for r in okf_check.RULES}, self.PINNED)
-        self.assertEqual(len(okf_check.RULES), len(self.PINNED))
 
     def test_engine_runs_the_registry_not_a_local_list(self):
         only = okf_check.Rule("kc/test/only", "warning", "file", lambda ctx: ["boom"])

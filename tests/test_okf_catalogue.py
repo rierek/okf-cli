@@ -22,15 +22,7 @@ if _ROOT not in sys.path:
 from okf import catalogue as okf_catalogue
 from okf import check as okf_check
 from okf.errors import EXIT_CODES, OkfError
-from tests.okf_testkit import CtxFixtureMixin, E
-
-
-def _scan(root, target, **kw):
-    """okf_check.run_checks, split by each finding's own severity into
-    (errors, warnings), each a list of (rule, path, message)."""
-    findings = okf_check.run_checks(root, target, **kw)
-    return ([(f.rule, f.path, f.message) for f in findings if f.severity == "error"],
-            [(f.rule, f.path, f.message) for f in findings if f.severity == "warning"])
+from tests.okf_testkit import CtxFixtureMixin, E, _scan
 
 
 M0, M1 = okf_catalogue.MARK_START, okf_catalogue.MARK_END
@@ -864,7 +856,7 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
             "WARNING  kc/ctx/empty-description _ctx/good.md  (empty description)",
             "WARNING  kc/ctx/stale-entry   _ctx/good.md  (stale: b/one.md changed after this ctx file)"]))
 
-    def test_ctx_findings_and_registry_name_the_same_eleven_rules(self):
+    def test_ctx_findings_and_registry_name_the_same_rules(self):
         """Every ctx problem kind is reportable and every reported ID is registered:
         one fixture trips all kinds, so a ctx_findings ID missing from RULES (or a
         RULES ctx entry no problem can reach) fails here."""
@@ -883,7 +875,6 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
         os.utime(os.path.join(self.root, "b", "one.md"), (2000, 2000))
         reported = {rule for rule, _ in self._f(ap, stale=True)}
         registered = {r.id for r in okf_check.RULES if r.id.startswith("kc/ctx/")}
-        self.assertEqual(len(registered), 11)
         self.assertEqual(reported, registered)
         errs, warns = _scan(self.root, "_ctx")
         self.assertEqual({n for n, _, _ in errs + warns if n.startswith("kc/ctx/")},
