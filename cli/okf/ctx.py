@@ -351,15 +351,12 @@ def cmd_ctx_move(root, args):
 
 
 def _ctx_report(root, slugs, stale, as_json):
-    errors, warnings = [], []
+    findings = []
     for s in slugs:
-        es, ws = ctx_findings(root, ctx_file(root, s), stale)
         rel = "{}/{}.md".format(CTX_DIR, s)
-        errors += [("ctx", rel, m) for m in es]
-        warnings += [("ctx", rel, m) for m in ws]
-    check._print_findings(errors, warnings, as_json)
-    if errors:
-        raise OkfError("non_conformant", "")
+        findings += [check.finding_of(rule, rel, m)
+                     for rule, m in ctx_findings(root, ctx_file(root, s), stale)]
+    check.report_findings(findings, False, as_json)
 
 
 def cmd_ctx_check(root, args):

@@ -13,6 +13,7 @@ import unittest
 from unittest import mock
 
 from okf import catalogue as okf_catalogue
+from okf import check as okf_check
 from okf import find as okf_find
 from okf.errors import OkfError
 from okf import sync as okf_sync
@@ -33,6 +34,14 @@ def run_find(root, query, **kw):
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
         okf_find.cmd_find(root, args)
     return buf.getvalue()
+
+
+def _scan(root, target, **kw):
+    """okf_check.run_checks, split by each finding's own severity into
+    (errors, warnings), each a list of (rule, path, message)."""
+    findings = okf_check.run_checks(root, target, **kw)
+    return ([(f.rule, f.path, f.message) for f in findings if f.severity == "error"],
+            [(f.rule, f.path, f.message) for f in findings if f.severity == "warning"])
 
 
 # --- canon block synchronisation -------------------------------------------

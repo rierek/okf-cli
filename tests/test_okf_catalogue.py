@@ -22,7 +22,8 @@ if _ROOT not in sys.path:
 from okf import catalogue as okf_catalogue
 from okf import check as okf_check
 from okf.errors import EXIT_CODES, OkfError
-from tests.okf_testkit import CtxFixtureMixin, E
+from tests.okf_testkit import CtxFixtureMixin, E, _scan
+
 
 M0, M1 = okf_catalogue.MARK_START, okf_catalogue.MARK_END
 
@@ -683,8 +684,8 @@ class CtxSaveEffects(CtxFixtureMixin, unittest.TestCase):
 
     def test_check_reports_nothing_for_ctx(self):
         self._save_full()
-        errors, warnings = okf_check.run_checks(self.root, None)
-        names = ("entry-file-description", "asset-placement", "type-registered")
+        errors, warnings = _scan(self.root, None)
+        names = ("kc/asset/entry-file-description", "kc/asset/placement", "kc/type/registered")
         bad = [x for x in errors + warnings if x[0] in names and "_ctx" in repr(x)]
         self.assertEqual(bad, [])
 
@@ -697,7 +698,7 @@ class CtxSaveEffects(CtxFixtureMixin, unittest.TestCase):
 
 
 class CtxFindings(CtxFixtureMixin, unittest.TestCase):
-    """ctx_findings, the `ctx` entries of run_checks and `ctx check`."""
+    """ctx_findings, the `kc/ctx/*` sub-rules of run_checks and `ctx check`."""
 
     def _ctx(self, slug="demo", entries=None, desc="Demo", typ="Context"):
         if entries is None:
@@ -710,97 +711,114 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
         return okf_catalogue.ctx_findings(self.root, ap, **kw)
 
     def _run_checks_ctx(self):
-        errs, warns = okf_check.run_checks(self.root, None)
-        return ([m for n, _, m in errs if n == "ctx"], [m for n, _, m in warns if n == "ctx"])
+        errs, warns = _scan(self.root, None)
+        return ([(n, m) for n, _, m in errs if n.startswith("kc/ctx/")],
+                [(n, m) for n, _, m in warns if n.startswith("kc/ctx/")])
 
     def _sc01(self):
         return self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(3, "pflicht", "b/two.md"),
                                   E(None, "nachschlag", "b/one.md"),
                                   E(None, "nachschlag", "b/gone.md")])
 
-    SC01 = ["required positions are not 1..2 in table order: 1, 3",
-            "duplicate entry: b/one.md", "dead entry: b/gone.md"]
+    SC01 = [("kc/ctx/required-positions", "required positions are not 1..2 in table order: 1, 3"),
+            ("kc/ctx/duplicate-entry", "duplicate entry: b/one.md"),
+            ("kc/ctx/dead-entry", "dead entry: b/gone.md")]
 
     def test_sc01_check_and_ctx_check_three_errors(self):
         ap = self._sc01()
-        self.assertEqual(self._f(ap), (self.SC01, []))
+        self.assertEqual(self._f(ap), self.SC01)
         self.assertEqual(self._run_checks_ctx(), (self.SC01, []))
         r = self._cli("ctx", "check")
         self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
         self.assertEqual(r.stdout.splitlines(), [
-            "ERROR    ctx                  _ctx/demo.md  ({})".format(m) for m in self.SC01]
+            "ERROR    {:<20} _ctx/demo.md  ({})".format(rule, m) for rule, m in self.SC01]
             + ["3 VIOLATIONS"])
 
     def test_sc02_clean_ctx(self):
         ap = self._ctx()
-        self.assertEqual(self._f(ap), ([], []))
+        self.assertEqual(self._f(ap), [])
         self.assertEqual(self._run_checks_ctx(), ([], []))
         for argv in (("ctx", "check"), ("ctx", "check", "demo")):
             r = self._cli(*argv)
             self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "OK — 0 violations\n", ""))
 
     def test_wrong_type(self):
-        self.assertEqual(self._f(self._ctx(typ="Concept"))[0],
-                         ['type is "Concept", expected "Context"'])
+        self.assertEqual(self._f(self._ctx(typ="Concept")),
+                         [("kc/ctx/type", 'type is "Concept", expected "Context"')])
 
     def test_invalid_slug(self):
         ap = self._ctx(slug="Bad_Slug")
-        self.assertEqual(self._f(ap)[0],
-                         ['slug "Bad_Slug" invalid: use lowercase letters, digits and hyphens'])
+        self.assertEqual(self._f(ap), [
+            ("kc/ctx/slug", 'slug "Bad_Slug" invalid: use lowercase letters, digits and hyphens')])
 
-    def test_parse_problems_unchanged(self):
+    def test_parse_problems_all_report_row_format(self):
+        demo = os.path.join(self.root, "_ctx", "demo.md")
         self._w("_ctx/demo.md", "---\ntype: Context\ndescription: \"d\"\n---\n\n# demo\n\nno table\n")
-        self.assertEqual(self._f(os.path.join(self.root, "_ctx", "demo.md"))[0],
-                         ['no table with header "pos | mode | path | comment"'])
+        self.assertEqual(self._f(demo), [
+            ("kc/ctx/row-format", 'no table with header "pos | mode | path | comment"')])
+        self._w("_ctx/demo.md", "---\ntype: Context\ndescription: \"d\"\n---\n\n# demo\n\n"
+                                "| pos | mode | path | comment |\n|---|---|---|---|\n"
+                                "| 1 | pflicht | [one](/b/one.md) |\n"
+                                "| x | pflicht | [one](/b/one.md) | c |\n"
+                                "| 2 | pflicht | plain | c |\n")
+        self.assertEqual(self._f(demo), [
+            ("kc/ctx/row-format", "row 1: expected 4 cells, found 3"),
+            ("kc/ctx/row-format", 'row 2: pos "x" is neither an integer nor -'),
+            ("kc/ctx/row-format",
+             "row 3: path cell is neither a catalogue link nor a code span")])
 
     def test_unknown_mode_with_and_without_pos(self):
         ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(2, "maybe", "b/two.md"),
                                 E(None, "wat", "ext/three.md")])
-        self.assertEqual(self._f(ap)[0], ['pos 2: mode "maybe" is not pflicht or nachschlag',
-                                          'pos -: mode "wat" is not pflicht or nachschlag'])
+        self.assertEqual(self._f(ap), [
+            ("kc/ctx/mode", 'pos 2: mode "maybe" is not pflicht or nachschlag'),
+            ("kc/ctx/mode", 'pos -: mode "wat" is not pflicht or nachschlag')])
 
     def test_required_positions_not_1_to_n(self):
         ap = self._ctx(entries=[E(2, "pflicht", "b/one.md"), E(1, "pflicht", "b/two.md")])
-        self.assertEqual(self._f(ap)[0],
-                         ["required positions are not 1..2 in table order: 2, 1"])
+        self.assertEqual(self._f(ap), [
+            ("kc/ctx/required-positions", "required positions are not 1..2 in table order: 2, 1")])
         ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(None, "pflicht", "b/two.md")])
-        self.assertEqual(self._f(ap)[0],
-                         ["required positions are not 1..2 in table order: 1, -"])
+        self.assertEqual(self._f(ap), [
+            ("kc/ctx/required-positions", "required positions are not 1..2 in table order: 1, -")])
 
     def test_reference_entry_with_pos(self):
         ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(5, "nachschlag", "b/two.md")])
-        self.assertEqual(self._f(ap)[0], ["reference entry carries pos 5 (use -)"])
+        self.assertEqual(self._f(ap), [
+            ("kc/ctx/reference-position", "reference entry carries pos 5 (use -)")])
 
     def test_dead_entry_only(self):
         ap = self._ctx(entries=[E(1, "pflicht", "b/gone.md")])
-        self.assertEqual(self._f(ap)[0], ["dead entry: b/gone.md"])
+        self.assertEqual(self._f(ap), [("kc/ctx/dead-entry", "dead entry: b/gone.md")])
 
     def test_duplicate_entry_only(self):
         ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(None, "nachschlag", "b/one.md")])
-        self.assertEqual(self._f(ap)[0], ["duplicate entry: b/one.md"])
+        self.assertEqual(self._f(ap), [("kc/ctx/duplicate-entry", "duplicate entry: b/one.md")])
 
     def test_empty_description_is_warning_only(self):
         ap = self._ctx(desc="")
-        self.assertEqual(self._f(ap), ([], ["empty description"]))
-        self.assertEqual(self._run_checks_ctx(), ([], ["empty description"]))
+        self.assertEqual(self._f(ap), [("kc/ctx/empty-description", "empty description")])
+        self.assertEqual(self._run_checks_ctx(),
+                         ([], [("kc/ctx/empty-description", "empty description")]))
 
     def test_archive_entry_is_warning_only(self):
         self._w("_archive/b/old.md", "---\ntype: Concept\n---\n\n# Old\n")
         ap = self._ctx(entries=[E(1, "pflicht", "_archive/b/old.md")])
-        self.assertEqual(self._f(ap), ([], ["entry under _archive/: _archive/b/old.md"]))
+        self.assertEqual(self._f(ap), [
+            ("kc/ctx/archived-entry", "entry under _archive/: _archive/b/old.md")])
 
     def test_stale_member_warns_only_with_flag(self):
         ap = self._ctx()
         os.utime(ap, (1000, 1000))
         os.utime(os.path.join(self.root, "b", "one.md"), (2000, 2000))
         os.utime(os.path.join(self.root, "b", "two.md"), (500, 500))
-        self.assertEqual(self._f(ap), ([], []))
-        self.assertEqual(self._f(ap, stale=True),
-                         ([], ["stale: b/one.md changed after this ctx file"]))
+        self.assertEqual(self._f(ap), [])
+        self.assertEqual(self._f(ap, stale=True), [
+            ("kc/ctx/stale-entry", "stale: b/one.md changed after this ctx file")])
 
     def test_stale_skips_dead_members(self):
         ap = self._ctx(entries=[E(1, "pflicht", "b/gone.md")])
-        self.assertEqual(self._f(ap, stale=True), (["dead entry: b/gone.md"], []))
+        self.assertEqual(self._f(ap, stale=True), [("kc/ctx/dead-entry", "dead entry: b/gone.md")])
 
     def test_reserved_index_of_ctx_bundle_is_skipped(self):
         okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "D", "entries": []})
@@ -818,22 +836,49 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
         self._ctx(slug="good", desc="")
         r = self._cli("ctx", "check", "good")
         self.assertEqual((r.returncode, r.stdout),
-                         (0, "WARNING  ctx                  _ctx/good.md  (empty description)\n"
+                         (0, "WARNING  kc/ctx/empty-description _ctx/good.md  (empty description)\n"
                              "OK — 0 violations\n"))
         r = self._cli("ctx", "check", "nope")
         self.assertEqual((r.returncode, r.stdout, r.stderr),
                          (EXIT_CODES["not_found"], "", "ctx: unknown slug: nope\n"))
         r = self._cli("ctx", "check", "--json")
         self.assertEqual((r.returncode, json.loads(r.stdout)), (EXIT_CODES["non_conformant"], {
-            "errors": [{"check": "ctx", "path": "_ctx/bad.md", "message": "dead entry: b/gone.md"}],
-            "warnings": [{"check": "ctx", "path": "_ctx/good.md", "message": "empty description"}]}))
+            "findings": [
+                {"rule": "kc/ctx/dead-entry", "severity": "error", "path": "_ctx/bad.md",
+                 "message": "dead entry: b/gone.md"},
+                {"rule": "kc/ctx/empty-description", "severity": "warning",
+                 "path": "_ctx/good.md", "message": "empty description"}]}))
         ap = os.path.join(self.root, "_ctx", "good.md")
         os.utime(ap, (1000, 1000))
         os.utime(os.path.join(self.root, "b", "two.md"), (500, 500))
         r = self._cli("ctx", "check", "good", "--stale")
         self.assertEqual((r.returncode, r.stdout.splitlines()[:2]), (0, [
-            "WARNING  ctx                  _ctx/good.md  (empty description)",
-            "WARNING  ctx                  _ctx/good.md  (stale: b/one.md changed after this ctx file)"]))
+            "WARNING  kc/ctx/empty-description _ctx/good.md  (empty description)",
+            "WARNING  kc/ctx/stale-entry   _ctx/good.md  (stale: b/one.md changed after this ctx file)"]))
+
+    def test_ctx_findings_and_registry_name_the_same_rules(self):
+        """Every ctx problem kind is reportable and every reported ID is registered:
+        one fixture trips all kinds, so a ctx_findings ID missing from RULES (or a
+        RULES ctx entry no problem can reach) fails here."""
+        self._w("_archive/b/old.md", "---\ntype: Concept\n---\n\n# Old\n")
+        self._w("_ctx/Bad_Slug.md",
+                "---\ntype: Concept\ndescription: \"\"\n---\n\n# x\n\n"
+                "| pos | mode | path | comment |\n|---|---|---|---|\n"
+                "| 1 | pflicht | [one](/b/one.md) |\n"
+                "| 3 | pflicht | [two](/b/two.md) | c |\n"
+                "| - | wat | [two](/b/two.md) | c |\n"
+                "| 5 | nachschlag | [one](/b/one.md) | c |\n"
+                "| - | nachschlag | [gone](/b/gone.md) | c |\n"
+                "| - | nachschlag | [old](/_archive/b/old.md) | c |\n")
+        ap = os.path.join(self.root, "_ctx", "Bad_Slug.md")
+        os.utime(ap, (1000, 1000))
+        os.utime(os.path.join(self.root, "b", "one.md"), (2000, 2000))
+        reported = {rule for rule, _ in self._f(ap, stale=True)}
+        registered = {r.id for r in okf_check.RULES if r.id.startswith("kc/ctx/")}
+        self.assertEqual(reported, registered)
+        errs, warns = _scan(self.root, "_ctx")
+        self.assertEqual({n for n, _, _ in errs + warns if n.startswith("kc/ctx/")},
+                         registered - {"kc/ctx/stale-entry"})
 
 
 if __name__ == "__main__":

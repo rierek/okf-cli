@@ -1,5 +1,5 @@
 """Obsidian wikilinks: the `[[…]]` parser, the basename index and resolver, the
-scan behind the `wikilinks` command, and the opt-in wikilink-resolvable rule
+scan behind the `wikilinks` command, and the opt-in `kc/link/wikilink-resolvable` rule
 that `check` runs."""
 
 import os
@@ -210,7 +210,7 @@ def scan_wikilinks(root, target=None, index=None):
 
 
 def wikilink_checked_bundles(config, root=None):
-    """The opt-in set for the wikilink-resolvable check. Absent key or absent
+    """The opt-in set for the `kc/link/wikilink-resolvable` check. Absent key or absent
     .okf.toml means the empty set: the rule ships silent and is switched on per
     bundle, so introducing it cannot bury a clean catalogue in warnings.
 

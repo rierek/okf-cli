@@ -847,7 +847,7 @@ class CtxEdit(CtxFixtureMixin, unittest.TestCase):
     def test_errors_after_edit_exit_1(self):
         r = self._edit(EDITOR=self._editor("ed", self.bad))
         self.assertEqual((r.returncode, r.stdout, r.stderr), (EXIT_CODES["non_conformant"],
-            "ERROR    ctx                  _ctx/demo.md  (dead entry: b/gone.md)\n1 VIOLATIONS\n", ""))
+            "ERROR    kc/ctx/dead-entry    _ctx/demo.md  (dead entry: b/gone.md)\n1 VIOLATIONS\n", ""))
 
     def test_editor_nonzero_exit(self):
         r = self._edit(EDITOR=self._editor("ed", self.good, rc=3))

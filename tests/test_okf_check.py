@@ -7,11 +7,14 @@ Run: python3 -m unittest tests.test_okf_check -v
 import argparse
 import contextlib
 import io
+import json
 import os
+import re
 import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 if _HERE not in sys.path:  # cli/ holds the okf package
@@ -27,13 +30,13 @@ from okf import rename as okf_rename
 from okf import sync as okf_sync
 from okf import tags as okf_tags
 from okf import wikilinks as okf_wikilinks
-from tests.okf_testkit import SyncFixtureMixin, _cli, needs_case_insensitive_fs
+from tests.okf_testkit import SyncFixtureMixin, _cli, _scan, needs_case_insensitive_fs
 from tests.test_okf_wikilinks import WikilinkFixtureMixin
 
 
 class CheckCommand(unittest.TestCase):
-    """T06 — okf-cli check: pluggable (name, severity, check_fn) conformance
-    scan. error = §9 hard rules + filename/asset placement (exit 1).
+    """T06 — okf-cli check: the conformance scan over the RULES registry.
+    error = §9 hard rules + filename/asset placement (exit 4).
     warning = type registration / English keys / cross-link format."""
 
     def setUp(self):
@@ -55,43 +58,43 @@ class CheckCommand(unittest.TestCase):
 
     def test_missing_frontmatter_is_error(self):
         self._w("b/x.md", "# X\n\nno frontmatter at all.\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("frontmatter-parseable", self._names(errors))
-        self.assertNotIn("type-nonempty", self._names(errors))  # not double-flagged
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("okf/frontmatter/parseable", self._names(errors))
+        self.assertNotIn("okf/frontmatter/type-nonempty", self._names(errors))  # not double-flagged
 
     def test_empty_type_is_error(self):
         self._w("b/x.md", "---\ntype: \ntitle: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("type-nonempty", self._names(errors))
-        self.assertNotIn("frontmatter-parseable", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("okf/frontmatter/type-nonempty", self._names(errors))
+        self.assertNotIn("okf/frontmatter/parseable", self._names(errors))
 
     def test_reserved_file_with_type_is_error(self):
         self._w("b/index.md", "---\ntype: Concept\n---\n# B\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("reserved-no-type", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("okf/type/reserved-no-type", self._names(errors))
 
     def test_filename_forbidden_char_is_error(self):
         self._w("b/weird%name.md", "---\ntype: Concept\n---\n# W\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("filename-chars", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/name/filename-chars", self._names(errors))
 
     def test_asset_outside_assets_dir_is_error(self):
         self._w("b/index.md", "# B\n")
         self._w("b/diagram.png", "not a real png")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("asset-placement", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/asset/placement", self._names(errors))
 
     def test_asset_inside_assets_dir_is_clean(self):
         self._w("b/index.md", "# B\n")
         self._w("b/assets/diagram.png", "not a real png")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("asset-placement", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/asset/placement", self._names(errors))
 
     def test_asset_inside_nested_assets_dir_is_clean(self):
         self._w("b/index.md", "# B\n")
         self._w("b/sub/assets/diagram.png", "not a real png")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("asset-placement", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/asset/placement", self._names(errors))
 
     def test_underscore_prefixed_dir_is_excluded_from_scan(self):
         # mirrors is_bundle_dir's convention: "_"-prefixed dirs are staging,
@@ -99,43 +102,43 @@ class CheckCommand(unittest.TestCase):
         self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n")
         self._w("b/_intake/raw.md", "# no frontmatter\n")
         self._w("b/_intake/notes.tsv", "col1\tcol2\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
+        errors, warnings = _scan(self.tmp, "b")
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
 
     def test_unregistered_type_is_warning(self):
         self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
         self._w("b/x.md", "---\ntype: Bogus\ntitle: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("type-registered", self._names(warnings))
-        self.assertNotIn("type-registered", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/type/registered", self._names(warnings))
+        self.assertNotIn("kc/type/registered", self._names(errors))
 
     def test_registered_type_has_no_warning(self):
         self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("type-registered", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/type/registered", self._names(warnings))
 
     def test_no_types_md_skips_type_registered_check(self):
         self._w("b/x.md", "---\ntype: AnythingGoes\ntitle: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("type-registered", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/type/registered", self._names(warnings))
 
     def test_german_frontmatter_key_is_warning(self):
         self._w("b/x.md", "---\ntype: Concept\ntitel: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("english-keys", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/frontmatter/english-keys", self._names(warnings))
 
     def test_relative_crosslink_is_warning(self):
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](y.md)\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("crosslink-format", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/link/crosslink-format", self._names(warnings))
 
     def test_catalogue_root_crosslink_is_clean(self):
         self._w("b/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](/b/y.md)\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("crosslink-format", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/link/crosslink-format", self._names(warnings))
 
     def test_reserved_file_relative_link_outside_marker_is_warning(self):
         """D-rx51-01 (OKFT-rx51): a hand-authored relative link in index.md's
@@ -143,8 +146,8 @@ class CheckCommand(unittest.TestCase):
         crosslink and must be caught the same as one in a concept file."""
         self._w("b/index.md", "# B\n\nSee [Old](old.md) for background.\n\n"
                               + okf_catalogue.MARK_START + "\n" + okf_catalogue.MARK_END + "\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("crosslink-format", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/link/crosslink-format", self._names(warnings))
 
     def test_reserved_file_link_inside_marker_is_clean(self):
         """D-rx51-01: the managed block is masked before the scan, so a
@@ -154,30 +157,30 @@ class CheckCommand(unittest.TestCase):
         self._w("b/index.md", "# B\n\n" + okf_catalogue.MARK_START + "\n* [X](x.md)\n"
                               + okf_catalogue.MARK_END + "\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("crosslink-format", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/link/crosslink-format", self._names(warnings))
 
     def test_cross_bundle_dotdot_link_is_flagged(self):
         """Inverted with the canonical form: check_crosslink_format flags ANY
         relative link now, `../other/y.md` included, because it resolves
         inconsistently and orphans in Obsidian. fix-crosslinks migrates it."""
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n\n[Y](../other/y.md)\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("crosslink-format", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/link/crosslink-format", self._names(warnings))
 
     def test_clean_bundle_has_zero_violations(self):
         self._w("TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
         self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n\n## Contents\n\n"
                               + okf_catalogue.MARK_START + "\n* [X](x.md)\n" + okf_catalogue.MARK_END + "\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n---\n# X\n\n[Y](/b/index.md)\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
+        errors, warnings = _scan(self.tmp, "b")
         self.assertEqual(errors, [])
         self.assertEqual(warnings, [])
 
     def test_whole_catalogue_scan_when_no_target(self):
         self._w("b1/x.md", "# X\n\nno frontmatter.\n")
         self._w("b2/y.md", "---\ntype: Concept\ntitle: Y\n---\n# Y\n")
-        errors, warnings = okf_check.run_checks(self.tmp, None)
+        errors, warnings = _scan(self.tmp, None)
         self.assertIn("b1/x.md", [e[1] for e in errors])
 
 
@@ -511,7 +514,7 @@ class CheckAndWikilinksStayWideWithDeclaredBundle(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_unscoped_check_still_reports_the_violation_outside_the_bundle(self):
-        errors, _warnings = okf_check.run_checks(self.tmp, None)
+        errors, _warnings = _scan(self.tmp, None)
         rels = [rel for _name, rel, _msg in errors]
         self.assertIn("other-scaffolding/bad.md", rels)
 
@@ -541,16 +544,16 @@ class WikilinkCheckedBundleConfigGate(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_gate_checks_declared_bundle_but_ignores_topic_folder(self):
-        errors, warnings = okf_check.run_checks(self.tmp, None)
+        errors, warnings = _scan(self.tmp, None)
         findings = errors + warnings
         paths = [path for name, path, _message in findings
-                 if name == "wikilink-resolvable"]
+                 if name == "kc/link/wikilink-resolvable"]
         self.assertIn("declared-bundle/source.md", paths)
         self.assertNotIn("topic-folder/source.md", paths)
 
 
 class ConfigAwareTypes(unittest.TestCase):
-    """type-registered check resolves TYPES.md via .okf.toml types_source,
+    """kc/type/registered check resolves TYPES.md via .okf.toml types_source,
     so a repo bundle points at the central catalogue's TYPES.md (no local copy)."""
 
     def setUp(self):
@@ -575,8 +578,8 @@ class ConfigAwareTypes(unittest.TestCase):
         self._w(self.repo, ".okf.toml",
                 'types_source = "{}"\n'.format(os.path.join(self.central, "TYPES.md")))
         self._w(self.repo, "b/x.md", "---\ntype: Bogus\ntitle: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.repo, "b")
-        self.assertIn("type-registered", [w[0] for w in warnings])
+        errors, warnings = _scan(self.repo, "b")
+        self.assertIn("kc/type/registered", [w[0] for w in warnings])
 
     def test_central_types_source_accepts_registered(self):
         self._w(self.central, "TYPES.md",
@@ -584,20 +587,20 @@ class ConfigAwareTypes(unittest.TestCase):
         self._w(self.repo, ".okf.toml",
                 'types_source = "{}"\n'.format(os.path.join(self.central, "TYPES.md")))
         self._w(self.repo, "b/g.md", "---\ntype: Glossary\ntitle: G\n---\n# G\n")
-        errors, warnings = okf_check.run_checks(self.repo, "b")
-        self.assertNotIn("type-registered", [w[0] for w in warnings])
+        errors, warnings = _scan(self.repo, "b")
+        self.assertNotIn("kc/type/registered", [w[0] for w in warnings])
 
     def test_explicit_types_source_arg_overrides_config(self):
         self._w(self.central, "TYPES.md", "| type | Meaning |\n|---|---|\n| `Concept` | x |\n")
         self._w(self.repo, "b/x.md", "---\ntype: Concept\ntitle: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(
+        errors, warnings = _scan(
             self.repo, "b", types_source=os.path.join(self.central, "TYPES.md"))
-        self.assertNotIn("type-registered", [w[0] for w in warnings])
+        self.assertNotIn("kc/type/registered", [w[0] for w in warnings])
 
 
 class TagRegistryGate(unittest.TestCase):
-    """Closed-tag-vocabulary: tag-registered check + register_tags/load_tags.
-    TAGS.md is the allow-list; unknown tags warn (escalate to error via --strict).
+    """Closed-tag-vocabulary: kc/tag/registered check + register_tags/load_tags.
+    TAGS.md is the allow-list; unknown tags warn (`--strict` counts them toward the exit code).
     Absent TAGS.md → no-op."""
 
     def setUp(self):
@@ -619,24 +622,24 @@ class TagRegistryGate(unittest.TestCase):
 
     def test_no_tags_md_is_noop(self):
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - anything\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("tag-registered", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/tag/registered", self._names(warnings))
         self.assertIsNone(okf_catalogue.load_tags(self.tmp))
 
     def test_unknown_tag_warns(self):
         self._w("TAGS.md", okf_catalogue.TAGS_HEADER + "| `known` |  |\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - known\n  - novel\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("tag-registered", self._names(warnings))
-        msgs = [m for n, _p, m in warnings if n == "tag-registered"]
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/tag/registered", self._names(warnings))
+        msgs = [m for n, _p, m in warnings if n == "kc/tag/registered"]
         self.assertTrue(any("novel" in m for m in msgs))
         self.assertFalse(any("known" in m for m in msgs))
 
     def test_all_known_tags_clean(self):
         self._w("TAGS.md", okf_catalogue.TAGS_HEADER + "| `a` |  |\n| `b` |  |\n")
         self._w("c/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n  - b\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "c")
-        self.assertNotIn("tag-registered", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "c")
+        self.assertNotIn("kc/tag/registered", self._names(warnings))
 
     def test_register_creates_and_appends(self):
         added, already = okf_catalogue.register_tags(self.tmp, [("zebra", "z"), ("alpha", "a")])
@@ -677,15 +680,15 @@ class TagRegistryGate(unittest.TestCase):
 
 
 class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
-    """REQ-13/REQ-14 — the wikilink-resolvable check and its opt-in gate."""
+    """REQ-13/REQ-14 — the kc/link/wikilink-resolvable check and its opt-in gate."""
 
     def _optin(self, *bundles):
         self._w(".okf.toml", "wikilink_checked_bundles = [{}]\n".format(
             ", ".join('"{}"'.format(b) for b in bundles)))
 
     def _findings(self, target=None):
-        errors, warnings = okf_check.run_checks(self.tmp, target)
-        return [(n, p, m) for n, p, m in errors + warnings if n == "wikilink-resolvable"]
+        errors, warnings = _scan(self.tmp, target)
+        return [(n, p, m) for n, p, m in errors + warnings if n == "kc/link/wikilink-resolvable"]
 
     def test_warns_for_opted_in_bundle(self):
         self._optin("a")
@@ -738,7 +741,7 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
         out = _cli(self.tmp, "check", "--strict")
         self.assertEqual(out.returncode, EXIT_CODES["non_conformant"])
-        self.assertIn("wikilink-resolvable", out.stdout)
+        self.assertIn("kc/link/wikilink-resolvable", out.stdout)
 
     def test_absent_config_is_silent(self):
         """The state the live catalogue is in today: 1930 unresolved wikilinks
@@ -765,9 +768,9 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         self._optin("a")
         self._w("a/index.md", "# A\n\nIntro.\n")
         self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
-        errors, warnings = okf_check.run_checks(self.tmp, None)
-        self.assertIn("wikilink-resolvable", [w[0] for w in warnings])
-        self.assertNotIn("wikilink-resolvable", [e[0] for e in errors])
+        errors, warnings = _scan(self.tmp, None)
+        self.assertIn("kc/link/wikilink-resolvable", [w[0] for w in warnings])
+        self.assertNotIn("kc/link/wikilink-resolvable", [e[0] for e in errors])
         self.assertEqual(_cli(self.tmp, "check").returncode, 0)
 
     def test_dotted_target_does_not_defeat_the_gate(self):
@@ -785,13 +788,13 @@ class WikilinkCheck(WikilinkFixtureMixin, unittest.TestCase):
         okf_wikilinks.build_concept_basename_index = lambda root: (calls.append(root), real(root))[1]
         try:
             self._w("a/x.md", "---\ntype: Concept\n---\nSee [[ghost]].\n")
-            okf_check.run_checks(self.tmp, None)
+            _scan(self.tmp, None)
             self.assertEqual(calls, [])
             self._optin("a")
-            okf_check.run_checks(self.tmp, None)
+            _scan(self.tmp, None)
             self.assertEqual(len(calls), 1)
             calls.clear()
-            okf_check.run_checks(self.tmp, "b")        # scope excludes the opted-in bundle
+            _scan(self.tmp, "b")        # scope excludes the opted-in bundle
             self.assertEqual(calls, [])
         finally:
             okf_wikilinks.build_concept_basename_index = real
@@ -904,35 +907,35 @@ class CheckSupersededBy(unittest.TestCase):
     def test_dangling_superseded_by_target_is_error(self):
         self._w("b/x.md", "---\ntype: Decision\ntitle: X\n"
                           "superseded_by: /b/nope.md\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("superseded-by-resolves", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/supersede/resolves", self._names(errors))
 
     def test_resolving_superseded_by_target_is_clean(self):
         self._w("b/y.md", "---\ntype: Decision\ntitle: Y\n---\n# Y\n")
         self._w("b/x.md", "---\ntype: Decision\ntitle: X\n"
                           "superseded_by: /b/y.md\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("superseded-by-resolves", self._names(errors))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/supersede/resolves", self._names(errors))
 
     def test_superseded_by_on_non_decision_concept_is_warning(self):
         self._w("b/y.md", "---\ntype: Decision\ntitle: Y\n---\n# Y\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\n"
                           "superseded_by: /b/y.md\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertIn("superseded-by-scope", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertIn("kc/supersede/scope", self._names(warnings))
 
     def test_superseded_by_on_decision_concept_has_no_scope_warning(self):
         self._w("b/y.md", "---\ntype: Decision\ntitle: Y\n---\n# Y\n")
         self._w("b/x.md", "---\ntype: Decision\ntitle: X\n"
                           "superseded_by: /b/y.md\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("superseded-by-scope", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/supersede/scope", self._names(warnings))
 
     def test_absent_superseded_by_is_clean(self):
         self._w("b/x.md", "---\ntype: Decision\ntitle: X\n---\n# X\n")
-        errors, warnings = okf_check.run_checks(self.tmp, "b")
-        self.assertNotIn("superseded-by-resolves", self._names(errors))
-        self.assertNotIn("superseded-by-scope", self._names(warnings))
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertNotIn("kc/supersede/resolves", self._names(errors))
+        self.assertNotIn("kc/supersede/scope", self._names(warnings))
 
 
 class SyncCheckValidators(SyncFixtureMixin, unittest.TestCase):
@@ -944,9 +947,9 @@ class SyncCheckValidators(SyncFixtureMixin, unittest.TestCase):
         self._w("kc-proj/setup.md",
                 self._r("kc-proj/setup.md").replace(
                     self.OWNER_PAYLOAD, "Lokal.\n"))
-        errors, _ = okf_check.run_checks(self.tmp, None)
+        errors, _ = _scan(self.tmp, None)
         self.assertIn(
-            ("sync-block", "kc-proj/setup.md",
+            ("kc/sync/block", "kc-proj/setup.md",
              "sync block `ownership-rule` from /kc-gov/ownership.md: "
              "consumer-modified"), errors)
 
@@ -955,25 +958,25 @@ class SyncCheckValidators(SyncFixtureMixin, unittest.TestCase):
         self._w("kc-gov/ownership.md",
                 self._r("kc-gov/ownership.md").replace(
                     self.OWNER_PAYLOAD, "Neuer Kanon.\n"))
-        errors, warnings = okf_check.run_checks(self.tmp, None)
-        self.assertEqual([e for e in errors if e[0] == "sync-block"], [])
-        self.assertIn("sync-stale", [w[0] for w in warnings])
+        errors, warnings = _scan(self.tmp, None)
+        self.assertEqual([e for e in errors if e[0] == "kc/sync/block"], [])
+        self.assertIn("kc/sync/stale", [w[0] for w in warnings])
 
     def test_duplicate_canon_id_is_an_error(self):
         self._w("kc-gov/ownership.md",
                 self._r("kc-gov/ownership.md")
                 + "\n<!-- okf:canon id=ownership-rule -->\nzweimal\n"
                 + okf_catalogue.CANON_END + "\n")
-        errors, _ = okf_check.run_checks(self.tmp, None)
-        self.assertIn(("canon-block", "kc-gov/ownership.md",
+        errors, _ = _scan(self.tmp, None)
+        self.assertIn(("kc/sync/canon-block", "kc-gov/ownership.md",
                        "canon block id `ownership-rule` declared twice"), errors)
 
     def test_unterminated_canon_marker_is_an_error(self):
         self._w("kc-gov/ownership.md",
                 "---\ntype: Rule\ndescription: d\n---\n\n"
                 "<!-- okf:canon id=x -->\ntext\n")
-        errors, _ = okf_check.run_checks(self.tmp, None)
-        self.assertIn("canon-block", [e[0] for e in errors])
+        errors, _ = _scan(self.tmp, None)
+        self.assertIn("kc/sync/canon-block", [e[0] for e in errors])
 
     def test_catalogue_without_sync_blocks_never_builds_the_canon_index(self):
         calls = []
@@ -981,7 +984,7 @@ class SyncCheckValidators(SyncFixtureMixin, unittest.TestCase):
         okf_sync.build_canon_block_index = lambda root: (calls.append(root)
                                                          or real(root))
         try:
-            errors, warnings = okf_check.run_checks(self.tmp, None)
+            errors, warnings = _scan(self.tmp, None)
         finally:
             okf_sync.build_canon_block_index = real
         self.assertEqual(calls, [])
@@ -1087,6 +1090,281 @@ class SyncProtectedFromRewriters(SyncFixtureMixin, unittest.TestCase):
         _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup2.md"))
         self.assertEqual(okf_sync.parse_sync_blocks(body)[0]["source"],
                          "/kc-gov/canon/ownership.md")
+
+
+class RuleRegistry(unittest.TestCase):
+    """R-09 — RULES is the one registry of rule IDs and severities; the engine
+    runs what it lists."""
+
+    def test_every_id_matches_the_rule_id_pattern(self):
+        for rule in okf_check.RULES:
+            self.assertRegex(rule.id, r"^(okf|kc)/[a-z-]+/[a-z-]+$")
+
+    def test_no_id_occurs_twice(self):
+        ids = [rule.id for rule in okf_check.RULES]
+        self.assertEqual(sorted(i for i in ids if ids.count(i) > 1), [])
+
+    def test_every_severity_is_error_or_warning(self):
+        for rule in okf_check.RULES:
+            self.assertIn(rule.severity, ("error", "warning"), rule.id)
+
+    def test_engine_runs_the_registry_not_a_local_list(self):
+        only = okf_check.Rule("kc/test/only", "warning", "file", lambda ctx: ["boom"])
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        os.makedirs(os.path.join(tmp, "b"))
+        with open(os.path.join(tmp, "b", "x.md"), "w", encoding="utf-8") as f:
+            f.write("# X\n\nno frontmatter at all.\n")
+        with mock.patch.object(okf_check, "RULES", [only]):
+            errors, warnings = _scan(tmp, "b")
+        self.assertEqual((errors, warnings), ([], [("kc/test/only", "b/x.md", "boom")]))
+
+
+class FindingShape(unittest.TestCase):
+    """R-09 — every finding of `check` carries rule, severity, path and message;
+    `--strict` changes what counts toward the exit code, never a severity."""
+
+    FINDING_KEYS = ["rule", "severity", "path", "message"]
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self._w(".okf.toml", "")
+        self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n")
+        # the only violation: kc/frontmatter/english-keys, a warning-severity rule
+        self._w("b/g.md", "---\ntype: Concept\ntitel: X\n---\n# G\n")
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _with_error(self):
+        self._w("b/nofm.md", "# no frontmatter\n")  # okf/frontmatter/parseable, error
+
+    def test_engine_returns_one_list_of_findings_with_severity(self):
+        self._with_error()
+        findings = okf_check.run_checks(self.tmp, "b")
+        self.assertIsInstance(findings, list)
+        self.assertEqual(sorted((f.rule, f.severity, f.path) for f in findings), [
+            ("kc/frontmatter/english-keys", "warning", "b/g.md"),
+            ("okf/frontmatter/parseable", "error", "b/nofm.md")])
+
+    def test_json_is_one_object_with_only_findings_each_with_exact_keys(self):
+        self._with_error()
+        r = _cli(self.tmp, "check", "--json")
+        self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
+        out = json.loads(r.stdout)
+        self.assertEqual(list(out), ["findings"])
+        self.assertEqual([list(f) for f in out["findings"]], [self.FINDING_KEYS] * 2)
+        self.assertEqual(sorted((f["rule"], f["severity"], f["path"]) for f in out["findings"]), [
+            ("kc/frontmatter/english-keys", "warning", "b/g.md"),
+            ("okf/frontmatter/parseable", "error", "b/nofm.md")])
+
+    def test_strict_json_keeps_the_warning_severity_and_still_fails(self):
+        r = _cli(self.tmp, "check", "--strict", "--json")
+        self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
+        out = json.loads(r.stdout)
+        self.assertEqual([(f["rule"], f["severity"]) for f in out["findings"]],
+                         [("kc/frontmatter/english-keys", "warning")])
+
+    def test_without_strict_a_warning_is_reported_and_exits_0(self):
+        r = _cli(self.tmp, "check", "--json")
+        self.assertEqual((r.returncode, r.stderr), (0, ""))
+        self.assertEqual([(f["rule"], f["severity"]) for f in json.loads(r.stdout)["findings"]],
+                         [("kc/frontmatter/english-keys", "warning")])
+
+    def test_text_line_starts_with_own_severity_and_summary_counts_errors_only(self):
+        self._with_error()
+        r = _cli(self.tmp, "check")
+        self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
+        lines = r.stdout.splitlines()
+        self.assertEqual([(l.split()[0], l.split()[1]) for l in lines[:-1]], [
+            ("ERROR", "okf/frontmatter/parseable"),
+            ("WARNING", "kc/frontmatter/english-keys")])
+        self.assertEqual(lines[-1], "1 VIOLATIONS")
+
+    def test_text_under_strict_keeps_warning_label_and_counts_it(self):
+        r = _cli(self.tmp, "check", "--strict")
+        self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
+        lines = r.stdout.splitlines()
+        self.assertEqual([l.split()[:2] for l in lines[:-1]],
+                         [["WARNING", "kc/frontmatter/english-keys"]])
+        self.assertEqual(lines[-1], "1 VIOLATIONS")
+
+    def test_text_without_counting_finding_ends_ok_summary(self):
+        r = _cli(self.tmp, "check")
+        self.assertEqual(r.returncode, 0)
+        lines = r.stdout.splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("WARNING  kc/frontmatter/english-keys"), lines[0])
+        self.assertEqual(lines[1], "OK — 0 violations")
+
+    def test_clean_tree_text_is_the_ok_summary_alone(self):
+        os.remove(os.path.join(self.tmp, "b", "g.md"))
+        r = _cli(self.tmp, "check")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "OK — 0 violations\n", ""))
+
+    def test_output_order_does_not_depend_on_discovery_order(self):
+        findings = [okf_check.Finding(rule, sev, path, "m") for rule, sev, path in (
+            ("kc/a/w", "warning", "b/z.md"), ("kc/a/e", "error", "b/y.md"),
+            ("kc/a/w", "warning", "b/a.md"), ("kc/a/e", "error", "b/b.md"))]
+
+        def report(fs, as_json):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(okf_check.OkfError):
+                    okf_check.report_findings(fs, False, as_json)
+            return buf.getvalue()
+
+        for as_json in (False, True):
+            self.assertEqual(report(findings, as_json), report(findings[::-1], as_json))
+        self.assertEqual([f["path"] for f in json.loads(report(findings, True))["findings"]],
+                         ["b/b.md", "b/y.md", "b/a.md", "b/z.md"])
+
+
+class SuppressRules(unittest.TestCase):
+    """R-10 — `check --ignore <pattern>` (repeatable) and `.okf.toml`
+    `ignore_rules` silence rules by exact ID or by prefix with a trailing `*`;
+    a suppressed finding neither prints nor counts, with or without --strict."""
+
+    KC_ERROR = "kc/name/filename-chars"
+    OKF_ERROR = "okf/frontmatter/parseable"
+    KC_WARNING = "kc/frontmatter/english-keys"
+    OK = "OK — 0 violations\n"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self._w("b/index.md", "# B\n\nBundle entry with an intro paragraph.\n")
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _config(self, body=""):
+        self._w(".okf.toml", body)
+
+    def _kc_error(self):
+        self._w("b/weird%name.md", "---\ntype: Concept\n---\n# W\n")
+
+    def _okf_error(self):
+        self._w("b/nofm.md", "# no frontmatter\n")
+
+    def _kc_warning(self):
+        self._w("b/g.md", "---\ntype: Concept\ntitel: X\n---\n# G\n")
+
+    def _rules(self, r):
+        return [f["rule"] for f in json.loads(r.stdout)["findings"]]
+
+    def test_ignore_prefix_turns_exit_4_into_0(self):
+        self._config()
+        self._kc_error()
+        control = _cli(self.tmp, "check")
+        self.assertEqual((control.returncode, control.stderr),
+                         (EXIT_CODES["non_conformant"], ""))
+        self.assertIn(self.KC_ERROR, control.stdout)
+        r = _cli(self.tmp, "check", "--ignore", "kc/*")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self.OK, ""))
+
+    def test_ignore_rules_config_entry_turns_exit_4_into_0(self):
+        self._kc_error()
+        self._config("")
+        self.assertEqual(_cli(self.tmp, "check").returncode, EXIT_CODES["non_conformant"])
+        self._config('ignore_rules = ["{}"]\n'.format(self.KC_ERROR))
+        r = _cli(self.tmp, "check")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self.OK, ""))
+
+    def test_pattern_without_star_matches_only_the_identical_id(self):
+        self._config()
+        self._kc_error()
+        for pattern in ("kc/name", "kc/name/filename", "kc/name/filename-chars-x", "kc/*/filename-chars",
+                        "kc/name/filename.chars", "KC/NAME/FILENAME-CHARS"):
+            with self.subTest(pattern=pattern):
+                r = _cli(self.tmp, "check", "--ignore", pattern)
+                self.assertEqual(r.returncode, EXIT_CODES["non_conformant"], r.stdout)
+        r = _cli(self.tmp, "check", "--ignore", self.KC_ERROR)
+        self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+
+    def test_trailing_star_matches_every_id_with_that_prefix(self):
+        self._config()
+        self._kc_error()
+        for pattern in ("kc/name/*", "kc/n*", "kc/name/filename-chars*", "kc/*", "*"):
+            with self.subTest(pattern=pattern):
+                r = _cli(self.tmp, "check", "--ignore", pattern)
+                self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+        for pattern in ("okf/*", "kc/type/*", "kc/name/x*"):
+            with self.subTest(pattern=pattern):
+                r = _cli(self.tmp, "check", "--ignore", pattern)
+                self.assertEqual(r.returncode, EXIT_CODES["non_conformant"])
+
+    def test_a_suppressed_finding_is_absent_from_text_and_json_the_rest_stays(self):
+        self._config()
+        self._kc_error()
+        self._okf_error()
+        text = _cli(self.tmp, "check", "--ignore", "kc/*")
+        self.assertEqual(text.returncode, EXIT_CODES["non_conformant"])
+        self.assertNotIn(self.KC_ERROR, text.stdout)
+        self.assertIn(self.OKF_ERROR, text.stdout)
+        self.assertEqual(text.stdout.splitlines()[-1], "1 VIOLATIONS")
+        js = _cli(self.tmp, "check", "--ignore", "kc/*", "--json")
+        self.assertEqual(js.returncode, EXIT_CODES["non_conformant"])
+        self.assertEqual(self._rules(js), [self.OKF_ERROR])
+
+    def test_strict_does_not_count_a_suppressed_warning(self):
+        self._config()
+        self._kc_warning()
+        strict = _cli(self.tmp, "check", "--strict")
+        self.assertEqual(strict.returncode, EXIT_CODES["non_conformant"])
+        r = _cli(self.tmp, "check", "--strict", "--ignore", "kc/frontmatter/*")
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, self.OK, ""))
+        js = _cli(self.tmp, "check", "--strict", "--json", "--ignore", self.KC_WARNING)
+        self.assertEqual((js.returncode, json.loads(js.stdout)), (0, {"findings": []}))
+
+    def test_flag_and_config_patterns_are_united_and_the_flag_repeats(self):
+        self._kc_error()
+        self._okf_error()
+        self._config('ignore_rules = ["kc/*"]\n')
+        for argv in (("--ignore", "okf/*"), ("--ignore", self.OKF_ERROR)):
+            with self.subTest(argv=argv):
+                r = _cli(self.tmp, "check", *argv)
+                self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+        only_config = _cli(self.tmp, "check")
+        self.assertEqual(only_config.returncode, EXIT_CODES["non_conformant"])
+        self._config("")
+        r = _cli(self.tmp, "check", "--ignore", "kc/*", "--ignore", "okf/*")
+        self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+
+    def test_malformed_ignore_rules_suppresses_nothing_and_says_so_on_stderr(self):
+        self._kc_error()
+        for toml, shown in (('"kc/*"', "'kc/*'"), ("7", "7"), ("true", "True"),
+                            ('["kc/*", 1]', "['kc/*', 1]"), ("[[1]]", "[[1]]")):
+            with self.subTest(value=toml):
+                self._config("ignore_rules = {}\n".format(toml))
+                r = _cli(self.tmp, "check")
+                self.assertEqual(r.returncode, EXIT_CODES["non_conformant"], r.stdout)
+                self.assertIn(self.KC_ERROR, r.stdout)
+                self.assertTrue(r.stderr.startswith("note: ignore_rules "), r.stderr)
+                self.assertIn("got {} ".format(shown), r.stderr)
+
+    def test_a_flag_still_applies_when_the_config_value_is_malformed(self):
+        self._kc_error()
+        self._config('ignore_rules = "kc/*"\n')
+        r = _cli(self.tmp, "check", "--ignore", self.KC_ERROR)
+        self.assertEqual((r.returncode, r.stdout), (0, self.OK))
+        self.assertTrue(r.stderr.startswith("note: ignore_rules "), r.stderr)
+
+    def test_absent_or_empty_ignore_rules_suppresses_nothing_silently(self):
+        self._kc_error()
+        for body in ("", "ignore_rules = []\n"):
+            with self.subTest(body=body):
+                self._config(body)
+                r = _cli(self.tmp, "check")
+                self.assertEqual((r.returncode, r.stderr), (EXIT_CODES["non_conformant"], ""))
+                self.assertIn(self.KC_ERROR, r.stdout)
 
 
 if __name__ == "__main__":

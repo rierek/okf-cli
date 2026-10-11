@@ -141,7 +141,7 @@ Move all adopted files first, then fix references in this order:
 
    Every `unresolved` line is a relative link the move broke. Fix it by hand to `/<bundle>/<subdir>/<slug>.md`, or to a full URL for targets outside the docs root. Rerun step 5.5 until it reports `0 unresolved link(s)`.
 
-Delete source directories that are now empty (`rmdir`). An empty directory under `docs/` still counts as a bundle: an unscoped `check` warns `entry-file-description` for it.
+Delete source directories that are now empty (`rmdir`). An empty directory under `docs/` still counts as a bundle: an unscoped `check` warns `kc/asset/entry-file-description` for it.
 
 ## 6. Generate listings and verify
 
@@ -184,7 +184,7 @@ okf-cli --root <catalogue> build-index
 - Use an absolute link target. The link name must equal `<bundle>`, so `/<bundle>/...` links resolve from both roots.
 - To aggregate several projects, mount each project bundle the same way. Bundle names must be unique in the catalogue.
 - The catalogue repository stores only the symlink. Commit concept changes in the project repository. On another machine the link dangles until the project is checked out at the same path.
-- `crosslink-format` is skipped for symlinked bundles: keep running `check <bundle>` from `<repo>/docs` as well.
+- `kc/link/crosslink-format` is skipped for symlinked bundles: keep running `check <bundle>` from `<repo>/docs` as well.
 - Unmount: confirm with `test -L <catalogue>/<bundle>`, then `rm <catalogue>/<bundle>`, without a trailing slash and without `-r`.
 
 ## 8. Commit, only when the user asked

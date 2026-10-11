@@ -3,6 +3,7 @@ engine that runs them (`run_checks`), the crosslink and XML-like-tag repairs, an
 the check, fix-crosslinks and fix-xml-tags commands."""
 
 import json
+from collections import namedtuple
 import os
 import re
 import sys
@@ -73,7 +74,8 @@ def check_type_registered(ctx, types_set):
 def check_tag_registered(ctx, tags_set):
     """Closed-vocabulary gate: every frontmatter tag must be in TAGS.md.
     No-op when TAGS.md is absent (tags_set is None). Severity is warning, so it
-    surfaces new tags without blocking; `check --strict` escalates to error.
+    surfaces new tags without blocking; `check --strict` counts it toward the exit
+    code and keeps severity warning.
     Keeps agents from exploding the tag vocabulary with creative one-offs — a tag
     only aggregates content if it is reused, not minted fresh each write."""
     if ctx["is_reserved"] or not ctx["has_fm"] or tags_set is None:
@@ -483,20 +485,80 @@ def cmd_fix_crosslinks(root, args):
         len(touched), verb, len(unresolved)))
 
 
-def _ctx_check_of(c, i):
-    if c["bundle"] != CTX_DIR or c["is_reserved"]:
-        return []
-    return ctx_findings(c["root"], c["ap"])[i]
+# One registry of every rule `check` runs: its stable ID (`okf/` = OKF spec rule,
+# `kc/` = local catalogue invariant), its severity, and the callable.
+# scope "file":   check(ctx) -> [message]            one concept file per call
+# scope "bundle": check({"bundle", "bp"}) -> [(path, message)]   one bundle per call
+Rule = namedtuple("Rule", "id severity scope check")
+Finding = namedtuple("Finding", "rule severity path message")
+
+
+def _ctx_rule(rule_id, severity):
+    """One ctx sub-rule: ctx_findings reports every ctx problem under its ID, and
+    this rule keeps the ones that carry its own."""
+    def check(ctx):
+        if ctx["bundle"] != CTX_DIR or ctx["is_reserved"]:
+            return []
+        if "ctx_findings" not in ctx:
+            ctx["ctx_findings"] = ctx_findings(ctx["root"], ctx["ap"])
+        return [m for r, m in ctx["ctx_findings"] if r == rule_id]
+    return Rule(rule_id, severity, "file", check)
+
+
+RULES = [
+    Rule("okf/frontmatter/parseable", "error", "file", check_fm_parseable),
+    Rule("okf/frontmatter/type-nonempty", "error", "file", check_type_nonempty),
+    Rule("okf/type/reserved-no-type", "error", "file", check_reserved_no_type),
+    Rule("kc/name/filename-chars", "error", "file", check_filename_chars),
+    Rule("kc/type/registered", "warning", "file",
+         lambda c: check_type_registered(c, c["types_set"])),
+    Rule("kc/tag/registered", "warning", "file",
+         lambda c: check_tag_registered(c, c["tags_set"])),
+    Rule("kc/frontmatter/english-keys", "warning", "file", check_english_keys),
+    Rule("kc/link/crosslink-format", "warning", "file", check_crosslink_format),
+    Rule("kc/supersede/resolves", "error", "file", check_superseded_by_resolves),
+    Rule("kc/supersede/scope", "warning", "file", check_superseded_by_scope),
+    Rule("kc/frontmatter/tags-block-form", "warning", "file", check_tags_block_form),
+    Rule("kc/markup/xml-like-tags", "warning", "file", check_xml_like_tags),
+    Rule("kc/link/wikilink-resolvable", "warning", "file",
+         lambda c: wikilinks.check_wikilink_resolvable(c, c["wl_checked"], c["wl_index"])),
+    Rule("kc/sync/block", "error", "file", lambda c: check_sync_integrity(c, c["canon_index"])),
+    Rule("kc/sync/stale", "warning", "file", lambda c: check_sync_stale(c, c["canon_index"])),
+    Rule("kc/sync/canon-block", "error", "file", check_canon_blocks),
+    _ctx_rule("kc/ctx/type", "error"),
+    _ctx_rule("kc/ctx/slug", "error"),
+    _ctx_rule("kc/ctx/row-format", "error"),
+    _ctx_rule("kc/ctx/mode", "error"),
+    _ctx_rule("kc/ctx/required-positions", "error"),
+    _ctx_rule("kc/ctx/reference-position", "error"),
+    _ctx_rule("kc/ctx/duplicate-entry", "error"),
+    _ctx_rule("kc/ctx/dead-entry", "error"),
+    _ctx_rule("kc/ctx/empty-description", "warning"),
+    _ctx_rule("kc/ctx/archived-entry", "warning"),
+    _ctx_rule("kc/ctx/stale-entry", "warning"),
+    Rule("kc/asset/placement", "error", "bundle",
+         lambda b: [("{}/{}".format(b["bundle"], rel), "non-md file outside assets/")
+                    for rel in check_asset_placement(b["bp"])]),
+    Rule("kc/asset/entry-file-description", "warning", "bundle",
+         lambda b: [(b["bundle"], msg) for msg in check_entry_file_description(b["bp"])]),
+]
+
+
+def finding_of(rule_id, path, message):
+    """The Finding for `rule_id`, severity taken from the registry; KeyError for
+    an ID no rule registers."""
+    return Finding(rule_id, {r.id: r.severity for r in RULES}[rule_id], path, message)
 
 
 def run_checks(root, target, types_source=None):
-    """Run the full pluggable conformance scan over `target` (bundle or
+    """Run every RULES entry over `target` (bundle or
     bundle/subdir), or the whole catalogue when target is None.
 
     types_source overrides <root>/TYPES.md; absent, falls back to the
     .okf.toml `types_source` config key, then to <root>/TYPES.md.
 
-    Returns (errors, warnings), each a list of (check_name, rel_path, message).
+    Returns a list of Finding(rule, severity, path, message); each severity is
+    the registry severity of its rule.
     """
     scopes = resolve_scopes(root, target)
     config = load_okf_config(root)
@@ -521,40 +583,27 @@ def run_checks(root, target, types_source=None):
             canon["loaded"] = True
         return canon["idx"]
 
-    per_file_checks = [
-        ("frontmatter-parseable", "error", check_fm_parseable),
-        ("type-nonempty", "error", check_type_nonempty),
-        ("reserved-no-type", "error", check_reserved_no_type),
-        ("filename-chars", "error", check_filename_chars),
-        ("type-registered", "warning", lambda c: check_type_registered(c, types_set)),
-        ("tag-registered", "warning", lambda c: check_tag_registered(c, tags_set)),
-        ("english-keys", "warning", check_english_keys),
-        ("crosslink-format", "warning", check_crosslink_format),
-        ("superseded-by-resolves", "error", check_superseded_by_resolves),
-        ("superseded-by-scope", "warning", check_superseded_by_scope),
-        ("tags-block-form", "warning", check_tags_block_form),
-        ("xml-like-tags", "warning", check_xml_like_tags),
-        ("wikilink-resolvable", "warning",
-         lambda c: wikilinks.check_wikilink_resolvable(c, wl_checked, wl_index)),
-        ("sync-block", "error", lambda c: check_sync_integrity(c, canon_index)),
-        ("sync-stale", "warning", lambda c: check_sync_stale(c, canon_index)),
-        ("canon-block", "error", check_canon_blocks),
-        ("ctx", "error", lambda c: _ctx_check_of(c, 0)),
-        ("ctx", "warning", lambda c: _ctx_check_of(c, 1)),
-    ]
+    run = {"types_set": types_set, "tags_set": tags_set, "wl_checked": wl_checked,
+           "wl_index": wl_index, "canon_index": canon_index}
+    file_rules = [r for r in RULES if r.scope == "file"]
+    bundle_rules = [r for r in RULES if r.scope == "bundle"]
 
-    errors, warnings = [], []
+    findings = []
+
+    def add(rule, path, msg):
+        findings.append(Finding(rule.id, rule.severity, path, msg))
+
     for bundle, bp in scopes:
         for ap in iter_all_md(bp):
             ctx = gather_file_context(root, bundle, ap)
-            for name, sev, fn in per_file_checks:
-                for msg in fn(ctx):
-                    (errors if sev == "error" else warnings).append((name, ctx["rel"], msg))
-        for rel in check_asset_placement(bp):
-            errors.append(("asset-placement", "{}/{}".format(bundle, rel), "non-md file outside assets/"))
-        for msg in check_entry_file_description(bp):
-            warnings.append(("entry-file-description", bundle, msg))
-    return errors, warnings
+            ctx.update(run)
+            for rule in file_rules:
+                for msg in rule.check(ctx):
+                    add(rule, ctx["rel"], msg)
+        for rule in bundle_rules:
+            for path, msg in rule.check({"bundle": bundle, "bp": bp}):
+                add(rule, path, msg)
+    return findings
 
 
 def cmd_check(root, args):
@@ -563,34 +612,64 @@ def cmd_check(root, args):
         # Without this a typo'd or renamed bundle scanned nothing and exited 0 —
         # a clean bill of health for a directory that does not exist.
         raise OkfError("not_found", "not a directory: {}".format(target))
-    errors, warnings = run_checks(root, getattr(args, "target", None),
-                                  types_source=getattr(args, "types", None))
-    if args.strict:
-        errors, warnings = errors + warnings, []
-    _print_findings(errors, warnings, args.json)
-    if errors:
-        raise OkfError("non_conformant", "")
+    patterns = ignore_patterns(load_okf_config(root), args.ignore)
+    findings = [f for f in run_checks(root, target, types_source=getattr(args, "types", None))
+                if not is_suppressed(f.rule, patterns)]
+    report_findings(findings, args.strict, args.json)
 
 
-def _print_findings(errors, warnings, as_json):
+def ignore_patterns(config, flag_patterns):
+    """The suppression set: every `--ignore` pattern plus the `.okf.toml`
+    `ignore_rules` array. A value that is not an array of strings is announced
+    on stderr and contributes nothing — the safe direction is more findings,
+    never fewer (a bare string iterated per character would yield `*`)."""
+    patterns = list(flag_patterns)
+    if "ignore_rules" in config:
+        v = config["ignore_rules"]
+        if isinstance(v, list) and all(isinstance(x, str) for x in v):
+            patterns += v
+        else:
+            sys.stderr.write("note: ignore_rules must be an array of rule-ID patterns; "
+                             "got {!r} — it suppresses no rule\n".format(v))
+    return patterns
+
+
+def is_suppressed(rule_id, patterns):
+    """`*` is the only metacharacter and only as the last character: that
+    pattern matches every ID starting with the text before it; any other
+    pattern matches only the identical ID."""
+    return any(rule_id.startswith(p[:-1]) if p.endswith("*") else rule_id == p
+               for p in patterns)
+
+
+def report_findings(findings, strict, as_json):
+    """Print `findings` and exit non_conformant when any counts. The ONE place
+    that decides what counts: an error always, a warning only under `strict`.
+    `strict` never changes a finding's severity. Errors print before warnings,
+    each group by path, so the order does not depend on filesystem walk order;
+    the report is printed first, so it is never lost to the exit."""
+    counting = [f for f in findings if strict or f.severity == "error"]
+    ordered = sorted(findings, key=lambda f: (f.severity != "error", f.path))
     if as_json:
-        print(json.dumps({
-            "errors": [{"check": n, "path": p, "message": m} for n, p, m in errors],
-            "warnings": [{"check": n, "path": p, "message": m} for n, p, m in warnings],
-        }))
+        print(json.dumps({"findings": [f._asdict() for f in ordered]}))
     else:
-        for name, path, msg in errors:
-            print("ERROR    {:<20} {}  ({})".format(name, path, msg))
-        for name, path, msg in warnings:
-            print("WARNING  {:<20} {}  ({})".format(name, path, msg))
-        print("OK — 0 violations" if not errors else "{} VIOLATIONS".format(len(errors)))
+        for f in ordered:
+            print("{:<9}{:<20} {}  ({})".format(f.severity.upper(), f.rule, f.path, f.message))
+        print("{} VIOLATIONS".format(len(counting)) if counting else "OK — 0 violations")
+    if counting:
+        raise OkfError("non_conformant", "")
 
 
 def add_check_parser(sub):
     pc = _sub(sub, "check", "maintenance",
               "conformance scan: §9 hard rules + local invariants")
     pc.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
-    pc.add_argument("--strict", action="store_true", help="promote warnings to errors")
+    pc.add_argument("--strict", action="store_true",
+                    help="count warnings toward the exit code; each finding keeps its severity")
+    pc.add_argument("--ignore", action="append", default=[], metavar="PATTERN",
+                    help="suppress rules: an exact rule ID, or a prefix ending in `*` "
+                         "(kc/*, okf/link/*); repeatable, added to .okf.toml ignore_rules; "
+                         "suppressed findings neither print nor count")
     pc.add_argument("--json", action="store_true", help="machine-readable output")
     pc.add_argument("--types", help="explicit TYPES.md path (overrides .okf.toml types_source)").completer = _complete_files
 

@@ -32,7 +32,7 @@ okf-cli --root <catalogue> recent --limit 20
 - `prime`: usage guide, command list, catalogue state and bundle list. `--compact` for a short form, `--full` adds types and tags per bundle, `--check-semantic` counts semantic index coverage exactly.
 - `index`: one line per bundle. `index <bundle>` prints its `index.md`; `--full` prints description, concept count, directories, types and tags.
 - `info`: `TYPES.md` and `PROPERTIES.md`.
-- `recent`: newest concepts first, dated by the git commit that added them. Needs git (else exit 1); uncommitted concepts appear undated at the end.
+- `recent`: newest concepts first, dated by the git commit that added them. Needs git (exit 1 when the git binary is missing, exit 2 when the catalogue root is no git repository); uncommitted concepts appear undated at the end.
 - `--json` exists on `index`, `list`, `recent`, `refs`, `wikilinks`, `check` and `sync-status`.
 
 ## 2. Retrieve
@@ -59,34 +59,36 @@ okf-cli --root <catalogue> wikilinks <target> --unresolved
 okf-cli --root <catalogue> check <target>
 okf-cli --root <catalogue> check <target> --strict
 okf-cli --root <catalogue> check <target> --json
+okf-cli --root <catalogue> check <target> --ignore 'kc/*' --ignore okf/frontmatter/parseable
 okf-cli --root <catalogue> check <target> --types <path to TYPES.md>
 ```
 
-Output: one `ERROR` or `WARNING` line per finding, then `OK — 0 violations` or `<n> VIOLATIONS` (errors only). Exit 1 on any error. `--strict` turns warnings into errors. `--types` overrides the type vocabulary source. A target that is not a directory fails with `not a directory`. Fix the findings, then rerun `check` until it is clean.
+Output: one `ERROR` or `WARNING` line per finding, then `OK — 0 violations` or `<n> VIOLATIONS`; every line carries the rule ID of the table below. Only findings that count are numbered: an error always, a warning only under `--strict`. Exit 4 (non_conformant) when any finding counts. `--strict` counts warnings toward the exit code; every finding keeps its severity. `--json` prints one object `{"findings": [{rule, severity, path, message}, ...]}`. `--ignore <pattern>` (repeatable) and the `.okf.toml` key `ignore_rules` (array of patterns) suppress rules: a pattern ending in `*` matches every rule ID with that prefix (`kc/*`, `okf/link/*`), any other pattern only the identical ID; a suppressed finding neither prints nor counts, with or without `--strict`. An `ignore_rules` that is not an array of strings suppresses nothing and prints a `note:` line on stderr. `--types` overrides the type vocabulary source. A target that is not a directory fails with `not a directory`. Fix the findings, then rerun `check` until it is clean.
 
 | Rule | Severity | Trigger | Fix |
 |---|---|---|---|
-| `frontmatter-parseable` | error | Non-reserved `.md` without a `---` block | Add frontmatter |
-| `type-nonempty` | error | `type` missing or empty | Set a type |
-| `reserved-no-type` | error | `index.md`, `INDEX-MAP.md`, `log.md` or `readme.md` (any letter case) carries `type` | Remove `type` |
-| `filename-chars` | error | `# ^ [ ] \| \ : ? * " < > %` in a file name | `rename` |
-| `asset-placement` | error | Non-markdown file outside `<bundle>/assets/` | Move it into `assets/` |
-| `superseded-by-resolves` | error | `superseded_by` target missing | Fix the path |
-| `sync-block` | error | Consumer copy edited, orphaned or malformed | `sync-status` names the state. Edited: move the change into the canon owner, then `sync-update --apply --force`. Owner gone or markers broken: delete the whole consumer copy, then `sync-insert` again |
-| `canon-block` | error | Unclosed `okf:canon` block or duplicate block id | Fix the canon owner markers |
-| `ctx` | error, warning | Problems in `_ctx/*.md` | `ctx check` |
-| `type-registered` | warning | Type not in `TYPES.md` (only when `TYPES.md` exists) | Register it or change the type |
-| `tag-registered` | warning | Tag not in `TAGS.md` (only when `TAGS.md` exists) | Section 6 |
-| `english-keys` | warning | Non-English frontmatter key from a fixed list | Rename the key |
-| `crosslink-format` | warning | Relative `.md` link, or `/`-link not resolving from the catalogue root | `fix-crosslinks`; fix the rest by hand |
-| `superseded-by-scope` | warning | `superseded_by` on a non-Decision | Remove it or change the type |
-| `tags-block-form` | warning | Inline `tags: [a, b]` | `normalize-tags --apply` |
-| `xml-like-tags` | warning | Bare `<placeholder>` outside code | `fix-xml-tags` |
-| `wikilink-resolvable` | warning | Unresolved or ambiguous `[[...]]`; only for bundles listed in `.okf.toml` `wikilink_checked_bundles = ["<bundle>"]` | Fix the link |
-| `sync-stale` | warning | Canon owner changed | `sync-update --apply` |
-| `entry-file-description` | warning | Bundle entry file (`INDEX-MAP.md`, else `index.md`) without H1 or intro paragraph | Add them |
+| `okf/frontmatter/parseable` | error | Non-reserved `.md` without a `---` block | Add frontmatter |
+| `okf/frontmatter/type-nonempty` | error | `type` missing or empty | Set a type |
+| `okf/type/reserved-no-type` | error | `index.md`, `INDEX-MAP.md`, `log.md` or `readme.md` (any letter case) carries `type` | Remove `type` |
+| `kc/name/filename-chars` | error | `# ^ [ ] \| \ : ? * " < > %` in a file name | `rename` |
+| `kc/asset/placement` | error | Non-markdown file outside `<bundle>/assets/` | Move it into `assets/` |
+| `kc/supersede/resolves` | error | `superseded_by` target missing | Fix the path |
+| `kc/sync/block` | error | Consumer copy edited, orphaned or malformed | `sync-status` names the state. Edited: move the change into the canon owner, then `sync-update --apply --force`. Owner gone or markers broken: delete the whole consumer copy, then `sync-insert` again |
+| `kc/sync/canon-block` | error | Unclosed `okf:canon` block or duplicate block id | Fix the canon owner markers |
+| `kc/ctx/type`, `kc/ctx/slug`, `kc/ctx/row-format`, `kc/ctx/mode`, `kc/ctx/required-positions`, `kc/ctx/reference-position`, `kc/ctx/duplicate-entry`, `kc/ctx/dead-entry` | error | One problem kind of a `_ctx/<slug>.md` file each | `ctx check` |
+| `kc/ctx/empty-description`, `kc/ctx/archived-entry`, `kc/ctx/stale-entry` | warning | Empty description; entry under `_archive/`; member newer than the ctx file (only `ctx check --stale`) | `ctx check` |
+| `kc/type/registered` | warning | Type not in `TYPES.md` (only when `TYPES.md` exists) | Register it or change the type |
+| `kc/tag/registered` | warning | Tag not in `TAGS.md` (only when `TAGS.md` exists) | Section 6 |
+| `kc/frontmatter/english-keys` | warning | Non-English frontmatter key from a fixed list | Rename the key |
+| `kc/link/crosslink-format` | warning | Relative `.md` link, or `/`-link not resolving from the catalogue root | `fix-crosslinks`; fix the rest by hand |
+| `kc/supersede/scope` | warning | `superseded_by` on a non-Decision | Remove it or change the type |
+| `kc/frontmatter/tags-block-form` | warning | Inline `tags: [a, b]` | `normalize-tags --apply` |
+| `kc/markup/xml-like-tags` | warning | Bare `<placeholder>` outside code | `fix-xml-tags` |
+| `kc/link/wikilink-resolvable` | warning | Unresolved or ambiguous `[[...]]`; only for bundles listed in `.okf.toml` `wikilink_checked_bundles = ["<bundle>"]` | Fix the link |
+| `kc/sync/stale` | warning | Canon owner changed | `sync-update --apply` |
+| `kc/asset/entry-file-description` | warning | Bundle entry file (`INDEX-MAP.md`, else `index.md`) without H1 or intro paragraph | Add them |
 
-Limits: `check` does not parse YAML (only the delimiters), does not see wikilinks unless opted in, does not report directories without `index.md`, and does not validate OKF v0.2 fields (`sources`, `generated`, `verified`, `status`, `stale_after`). `crosslink-format` skips bundles that are symlinks.
+Limits: `check` does not parse YAML (only the delimiters), does not see wikilinks unless opted in, does not report directories without `index.md`, and does not validate OKF v0.2 fields (`sources`, `generated`, `verified`, `status`, `stale_after`). `kc/link/crosslink-format` skips bundles that are symlinks.
 
 ## 4. Listings: reindex
 
@@ -98,7 +100,7 @@ okf-cli --root <catalogue> reindex <target> --init
 ```
 
 - `reindex` rewrites the block between `<!-- okf:index -->` and `<!-- /okf:index -->` in every `index.md` (one level) and `INDEX-MAP.md` (whole subtree) under the target, from each concept's `title` and `description`. Subdirectories are listed only when they carry an `index.md`.
-- `--check` writes nothing, prints `STALE` and `UNCOVERED` paths, and exits 1 when any exist. `UNCOVERED` = an `index.md` without markers in a directory that holds concepts.
+- `--check` writes nothing, prints `STALE` and `UNCOVERED` paths, and exits 5 (drift) when any exist. `UNCOVERED` = an `index.md` without markers in a directory that holds concepts.
 - `--init` creates a missing `index.md` for the named target and converts marker-less `index.md` files in the subtree that hold a single bullet-list section. It replaces that hand-written list with an empty marker block, then the normal run fills it. Multi-section indexes are skipped and flagged; `--force` also flattens pure heading-and-bullet multi-section lists. Preview with `--init --check`.
 - A deliberately hand-curated `index.md` stays out of `UNCOVERED` when it contains `<!-- okf:index-exempt -->`.
 - Run `reindex <bundle>` after adding, renaming or retitling a concept, and after creating a subdirectory.
@@ -133,7 +135,7 @@ okf-cli --root <catalogue> normalize-tags --scope <target>
 
 - `tags`: every tag in use with its count. `--singletons`: tags used once, the merge candidates.
 - `tags <candidate>`: fuzzy search against the tags in use, `--limit` per candidate (default 8).
-- `TAGS.md` present = closed vocabulary. `--validate` exits 1 and prints `UNKNOWN <tag>` for unregistered tags; without `TAGS.md` it prints `(no TAGS.md — closed vocabulary not enabled)`.
+- `TAGS.md` present = closed vocabulary. `--validate` exits 4 (non_conformant) and prints `UNKNOWN <tag>` for unregistered tags; without `TAGS.md` it prints `(no TAGS.md — closed vocabulary not enabled)`.
 - `--register <tag> "<description>"` writes to `TAGS.md` at once, no preview (description required, one line, at most 150 characters, no `|`); repeat the option for several tags. It also tries a local embedding service; a stderr `warning: auto-embed skipped` is harmless.
 - `merge-tags`, `remove-tags` and `normalize-tags` preview; add `--apply` to write. `normalize-tags` converts inline `tags: [a, b]` to a block list.
 - After merging or removing, delete the obsolete rows from `TAGS.md` by hand, then run `check`.
@@ -187,7 +189,7 @@ okf-cli --root <catalogue> archive --restore _archive/<bundle>/<concept-id>.md -
 
 - `archive` moves the concept to `_archive/<bundle>/<concept-id>.md`, rewrites inbound links to the new path and reindexes. The report starts with the number of active concepts that still link to it.
 - Archived concepts are hidden from `find` and `list` unless `--include-archive`; the semantic arm never covers them. `check` and `index` skip `_archive/`.
-- A ctx entry that now points into `_archive/` gives a `ctx` warning: drop or replace it.
+- A ctx entry that now points into `_archive/` gives a `kc/ctx/archived-entry` warning: drop or replace it.
 - `--restore` reverses the move and the link rewrites. One concept per call.
 
 ## 10. Links
@@ -212,7 +214,7 @@ okf-cli --root <catalogue> fix-xml-tags <target> --check
 okf-cli --root <catalogue> fix-xml-tags <target>
 ```
 
-Wraps bare `<tag>` and `<tag>.<tag2>` placeholders outside code in backticks (warning `xml-like-tags`).
+Wraps bare `<tag>` and `<tag>.<tag2>` placeholders outside code in backticks (warning `kc/markup/xml-like-tags`).
 
 ## 12. Stale content
 
@@ -242,7 +244,7 @@ Run periodically and before a release of the catalogue. Copy into your task list
 - [ ] `okf-cli --root <catalogue> reindex <bundle> --check`, per bundle -> done when it reports `0 stale, 0 uncovered` -> on failure: `reindex <bundle>` (stale) or add the marker pair (uncovered), rerun
 - [ ] `okf-cli --root <catalogue> fix-crosslinks --check` -> done when `0 file(s) would rewrite, 0 unresolved link(s)` -> on failure: run it without `--check`, repair unresolved links by hand, rerun
 - [ ] `okf-cli --root <catalogue> wikilinks --unresolved` -> done when `0 ambiguous, 0 unresolved` -> on failure: fix the links, rerun
-- [ ] `okf-cli --root <catalogue> sync-status` -> done when exit 0 -> on failure: section 3, `sync-block` and `sync-stale` rows, rerun
+- [ ] `okf-cli --root <catalogue> sync-status` -> done when exit 0 -> on failure: section 3, `kc/sync/block` and `kc/sync/stale` rows, rerun
 - [ ] `okf-cli --root <catalogue> ctx check --stale` -> done when `OK — 0 violations` and every stale warning is reviewed -> on failure: context-bundles.md failure modes, rerun
 - [ ] `okf-cli --root <catalogue> tags --singletons` -> done when each listed tag is merged or kept on purpose
 - [ ] Stale content (section 12) -> done when every past `stale_after` is reported to the user

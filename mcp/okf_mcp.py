@@ -214,7 +214,9 @@ def _register(server):
 
     @server.tool()
     def okf_check(root: str = "", target: str = "") -> dict:
-        """§9 conformance scan (config-aware TYPES). Returns {errors, warnings}."""
+        """§9 conformance scan (config-aware TYPES). Returns {findings}: a list of
+        {rule, severity, path, message}, rule an okf/ or kc/ ID, severity error or
+        warning; rules matched by the catalogue's .okf.toml ignore_rules are left out."""
         return run_okf(root, "check", {"target": target})
 
     @server.tool()
@@ -254,7 +256,7 @@ def _register(server):
         of each. Returns {links, by_bundle, totals}; every link record names its
         source file, the region it sits in (body or frontmatter), the raw
         occurrence and one of resolved / ambiguous / unresolved. The markdown
-        link surfaces (okf_refs, okf_check's crosslink-format) are blind to this
+        link surfaces (okf_refs, okf_check's kc/link/crosslink-format) are blind to this
         form — use this one before renaming a concept a wikilink may point at.
         Pass unresolved=True to list only the broken and ambiguous ones."""
         return run_okf(root, "wikilinks",
