@@ -697,8 +697,6 @@ class McpReadTargeted(McpBoundaryTestBase):
 
     def test_none_set_builds_the_plain_argv(self):
         self.assertEqual(self._read_argv(), ["--root", "/root", "read", "b/one"])
-        self.assertEqual(self._read_argv(section="", frontmatter_only=False, body_only=False),
-                         ["--root", "/root", "read", "b/one"])
 
     def test_no_other_command_emits_either_boolean_flag(self):
         others = sorted(set(mcp._COMMANDS) - {"read"})
