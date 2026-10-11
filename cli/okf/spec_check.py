@@ -178,3 +178,19 @@ def check_runtime(ctx):
         return []
     return [] if _filled(ctx["fm"].get("runtime")) else [
         "`{}` has no non-empty `runtime`".format(COMPUTATION_TYPE)]
+
+
+def check_drift(ctx):
+    """OKF §5.2 with D45: the body changed in a commit after `generated.at` that did not touch
+    `generated.at` itself, so the provenance may no longer describe the body. Nothing is written."""
+    if not ctx["has_fm"]:
+        return []
+    generated = ctx["fm"].get("generated")
+    at = parse_okf_datetime(generated.get("at")) if isinstance(generated, Mapping) else None
+    if at is None:
+        return []  # no generated.at, or one the Format rule reports: nothing to compare
+    commit = ctx["history"].last_body_commit(ctx["ap"], keep_generated=True)
+    if commit is None or commit.time <= at:
+        return []
+    return ["body changed on {} without a new `generated.at` ({})".format(
+        commit.time.isoformat(), scalar_text(generated["at"]))]

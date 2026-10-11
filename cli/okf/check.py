@@ -9,6 +9,7 @@ import re
 
 from okf.errors import OkfError
 from okf import spec, spec_check, sync, wikilinks
+from okf.history import History
 from okf.output import _add_output, _note
 from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE,
@@ -556,6 +557,7 @@ RULES = [
     Rule("okf/format/actor", "error", "file", spec_check.check_actor, "0.2"),
     Rule("okf/format/timestamp", "error", "file", spec_check.check_timestamp, "0.2"),
     Rule("okf/computation/runtime", "error", "file", spec_check.check_runtime, "0.2"),
+    Rule("okf/trust/drift", "warning", "file", spec_check.check_drift, "0.2"),
 ]
 
 
@@ -609,8 +611,9 @@ def run_checks(root, target, types_source=None):
             canon["loaded"] = True
         return canon["idx"]
 
+    history = History(root)
     run = {"types_set": types_set, "tags_set": tags_set, "wl_checked": wl_checked,
-           "wl_index": wl_index, "canon_index": canon_index, "now": _utcnow()}
+           "wl_index": wl_index, "canon_index": canon_index, "now": _utcnow(), "history": history}
     file_rules = [r for r in RULES if r.scope == "file"]
     bundle_rules = [r for r in RULES if r.scope == "bundle"]
 
@@ -619,22 +622,27 @@ def run_checks(root, target, types_source=None):
     def add(rule, path, msg):
         findings.append(Finding(rule.id, rule.severity, path, msg))
 
-    for bundle, bp in scopes:
-        # The gate reads the bundle-ROOT index.md, never an index.md under a scoped `bp`, once per
-        # bundle; an empty bundle name is a target outside the catalogue and has no root.
-        version = spec.declared_okf_version(os.path.join(root, bundle)) if bundle else None
-        file_here, bundle_here = _gated(file_rules, version), _gated(bundle_rules, version)
-        for ap in iter_all_md(bp):
-            ctx = gather_file_context(root, bundle, ap)
-            ctx.update(run)
-            for rule in file_here:
-                if rule.okf_version and ctx["is_reserved"]:
-                    continue  # a gated entry never sees a reserved file
-                for msg in rule.check(ctx):
-                    add(rule, ctx["rel"], msg)
-        for rule in bundle_here:
-            for path, msg in rule.check({"bundle": bundle, "bp": bp}):
-                add(rule, path, msg)
+    try:
+        for bundle, bp in scopes:
+            # The gate reads the bundle-ROOT index.md, never an index.md under a scoped `bp`, once per
+            # bundle; an empty bundle name is a target outside the catalogue and has no root.
+            version = spec.declared_okf_version(os.path.join(root, bundle)) if bundle else None
+            file_here, bundle_here = _gated(file_rules, version), _gated(bundle_rules, version)
+            for ap in iter_all_md(bp):
+                ctx = gather_file_context(root, bundle, ap)
+                ctx.update(run)
+                for rule in file_here:
+                    if rule.okf_version and ctx["is_reserved"]:
+                        continue  # a gated entry never sees a reserved file
+                    for msg in rule.check(ctx):
+                        add(rule, ctx["rel"], msg)
+            for rule in bundle_here:
+                for path, msg in rule.check({"bundle": bundle, "bp": bp}):
+                    add(rule, path, msg)
+    finally:
+        history.close()
+    for reason in history.notes():
+        _note("drift check skipped: " + reason)
     return findings
 
 
