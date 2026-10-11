@@ -24,15 +24,14 @@ def cmd_list(root, args):
     if args.where is None:
         raise OkfError("invalid_input", "(error: pass --where, e.g. --where 'type = Runbook')")
     filters = compile_where(args.where)
-    now = spec.utcnow()
+    now = filters.now
     hits = []
     for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
         for _cid, ap in iter_concepts(bp):
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
             path = rel[:-3] if rel.endswith(".md") else rel
-            text = read_file(ap)
-            fm = read_frontmatter(text).data
-            if not filters.matches_loaded(path, fm, text):
+            fm = read_frontmatter(read_file(ap)).data
+            if not filters.matches_loaded(path, fm):
                 continue
             t, title, desc = fm_meta(fm, os.path.basename(ap)[:-3])
             hits.append((title, t, path, desc, spec.trust_fields(fm, now)))

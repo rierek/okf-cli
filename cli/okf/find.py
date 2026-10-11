@@ -99,11 +99,10 @@ def _substring_ranking(root, query, terms, limit, filters):
         # archived one), so a hit's path is one `okf-cli read` resolves.
         prefix = os.path.relpath(bp, root).replace(os.sep, "/")
         for cid, ap in iter_concepts(bp):
-            text = read_file(ap)
-            parsed = read_frontmatter(text)
+            parsed = read_frontmatter(read_file(ap))
             fm, body = parsed.data, parsed.body
             t = fm_text(fm, "type")
-            if not filters.matches_loaded("{}/{}".format(prefix, cid), fm, text):
+            if not filters.matches_loaded("{}/{}".format(prefix, cid), fm):
                 continue
             title = fm_text(fm, "title", cid)
             hay_title = title.lower()
@@ -335,7 +334,7 @@ def cmd_find(root, args):
               "clear margin)")
 
     if getattr(args, "json", False):
-        now = spec.utcnow()
+        now = filters.now
         return {"hits": [_hit_record(i, h, breakdown, max_score, now)
                          for i, h in enumerate(all_hits[: args.limit], start=1)],
                 "nearest_tags": [] if all_hits else _zero_hit_suggestions(root, args.query)}

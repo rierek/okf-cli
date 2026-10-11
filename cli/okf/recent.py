@@ -220,9 +220,8 @@ def cmd_recent(root, args):
             path = rel[:-3] if rel.endswith(".md") else rel
             if filters:
                 # One read feeding the whole predicate and the frontmatter meta.
-                text = read_file(ap)
-                fm = read_frontmatter(text).data
-                if not filters.matches_loaded(path, fm, text):
+                fm = read_frontmatter(read_file(ap)).data
+                if not filters.matches_loaded(path, fm):
                     continue
                 meta[path] = fm_meta(fm, cid) + (fm,)
             ts = events.get(concept_git_key(prefix, cid)) if events else None
@@ -246,7 +245,7 @@ def cmd_recent(root, args):
               "creation date".format(undated))
 
     if getattr(args, "json", False):
-        now = spec.utcnow()
+        now = filters.now
         return [
             {"created": iso_created(ts), "created_ts": ts,
              "title": meta[path][1], "type": meta[path][0],
