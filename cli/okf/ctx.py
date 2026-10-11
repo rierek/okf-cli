@@ -6,7 +6,6 @@ okf.catalogue."""
 import os
 import shlex
 import subprocess
-import sys
 from okf.errors import OkfError
 from okf.output import _add_output
 

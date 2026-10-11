@@ -56,3 +56,7 @@ packages = ["okf_cli"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/okf_cli", "/cli", "/mcp", "/skills", "/tests", "/hatch_build.py", "/README.md", "/LICENSE", "/pyproject.toml"]
+
+# Correctness only (syntax errors, pyflakes); no style rules. `just lint` runs it on cli/ and mcp/.
+[tool.ruff.lint]
+select = ["E9", "F"]
