@@ -118,6 +118,39 @@ class SemanticRankingDegradation(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_a_populated_cache_with_nothing_inside_the_filter_is_an_answer_not_a_degradation(self):
+        """[] with no note is a correct, complete, empty answer; None (note) is a degradation.
+        A cache that holds embeddings, none inside the expression, must report the first."""
+        import contextlib
+        import io
+        root = tempfile.mkdtemp()
+        try:
+            db = okf_semantic._tagvec_db_path(root)
+            os.makedirs(os.path.dirname(db))
+            conn = sqlite3.connect(db)
+            conn.execute("CREATE TABLE concept_emb(key TEXT, path TEXT, "
+                         "model TEXT, dim INT, vec BLOB)")
+            conn.execute("INSERT INTO concept_emb VALUES(?,?,?,?,?)",
+                         ("k", "b/one", "voyage-3-large", 2, struct.pack("<2f", 1.0, 0.0)))
+            conn.commit()
+            conn.close()
+            outside = okf_find_filters.compile_where("path ~ zz/")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(okf_semantic.semantic_ranking(root, "x", 10, outside), [])
+            self.assertNotIn("semantic arm skipped", err.getvalue())
+            # the contrast: a cache without a single row for the model is a degradation
+            conn = sqlite3.connect(db)
+            conn.execute("UPDATE concept_emb SET model = 'other'")
+            conn.commit()
+            conn.close()
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(okf_semantic.semantic_ranking(root, "x", 10, outside), [])
+            self.assertIn("semantic arm skipped", err.getvalue())
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
 
 class SemanticCoverageSharesTheProducersDetector(unittest.TestCase):
     """OKFT-9wk6 — semantic_coverage() used to compare PATH sets against

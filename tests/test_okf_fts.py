@@ -312,14 +312,19 @@ class FtsRanking(unittest.TestCase):
         """The status key is not in the docs table: the residual runs over the ranked rows, and
         a LIMIT in SQL would have cut before it and starved the answer of the matching rows."""
         okf_fts.build_fts_index(self.root)
-        with open(os.path.join(self.root, "b", "three.md"), "w", encoding="utf-8") as f:
-            f.write("---\ntype: Concept\ntitle: Three\nstatus: draft\ndescription: d\n"
-                    "tags: []\n---\ntunnel\n")
+        for name in ("three", "four"):
+            with open(os.path.join(self.root, "b", name + ".md"), "w", encoding="utf-8") as f:
+                f.write("---\ntype: Concept\ntitle: {}\nstatus: draft\ndescription: d\n"
+                        "tags: []\n---\ntunnel\n".format(name))
         okf_fts.build_fts_index(self.root)
         every = [p for p, _s in okf_fts._fts_ranking(self.root, "tunnel", 10, compile_where(None))]
-        self.assertGreater(len(every), 1)
-        ranked = okf_fts._fts_ranking(self.root, "tunnel", 1, compile_where("status = draft"))
-        self.assertEqual([p for p, _s in ranked], ["b/three"])
+        self.assertGreater(len(every), 2)
+        draft = compile_where("status = draft")
+        ranked = okf_fts._fts_ranking(self.root, "tunnel", 1, draft)
+        self.assertEqual(len(ranked), 1)
+        self.assertIn(ranked[0][0], ("b/three", "b/four"))
+        both = okf_fts._fts_ranking(self.root, "tunnel", 10, draft)
+        self.assertEqual(sorted(p for p, _s in both), ["b/four", "b/three"])
 
     def test_equal_bm25_scores_break_the_tie_by_path(self):
         """OKFT-rx72 — ORDER BY r alone leaves tied bm25 rows in whatever
