@@ -32,7 +32,7 @@ Usage:
         [--target {tags,concepts,both}]
         [--concept-path-prefix PREFIX] [--concept-limit N] [--produce]
 
-Run: python3 -m unittest cli.test_embeddings_tagvec -v
+Run: python3 -m unittest tests.test_embeddings_tagvec -v
 """
 import argparse
 import hashlib

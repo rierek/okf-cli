@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/find.py — the find command: filters across arms, lexical and semantic hand-over, fusion, degradation notes. Stdlib unittest, no deps.
 
-Run: python3 -m unittest test_okf_find -v
+Run: python3 -m unittest tests.test_okf_find -v
 """
 import argparse
 import contextlib
@@ -13,9 +13,12 @@ import sys
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
+_ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from okf import catalogue as okf_catalogue
 from okf import find as okf_find
@@ -23,7 +26,7 @@ from okf import find_filters as okf_find_filters
 from okf import fts as okf_fts
 from okf import parser as okf_parser
 from okf import semantic as okf_semantic
-from okf_testkit import run_find
+from tests.okf_testkit import run_find
 
 
 class FindFilterContract(unittest.TestCase):

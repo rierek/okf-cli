@@ -6,7 +6,7 @@ touches the real home, the real PATH or a real harness. Stub CLIs (claude,
 codex, openclaw) behave like the real ones for the one thing install reads
 back — the config file their `mcp add/set` writes.
 
-Run: python3 -m unittest test_okf_install -v
+Run: python3 -m unittest tests.test_okf_install -v
 """
 import contextlib
 import importlib.util
@@ -22,8 +22,8 @@ import types
 import unittest
 from unittest import mock
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf import install as okf_install_cmd

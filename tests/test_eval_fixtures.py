@@ -4,7 +4,7 @@
 Runs against a throwaway catalogue in a tmpdir, never the live vault.
 teardown() runs in setUp/tearDown so a failed assertion leaves no residue.
 
-Run: python3 -m unittest test_eval_fixtures -v
+Run: python3 -m unittest tests.test_eval_fixtures -v
 """
 import importlib.util
 import io
@@ -16,8 +16,8 @@ import types
 import unittest
 from contextlib import redirect_stdout
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf import catalogue as okf_catalogue

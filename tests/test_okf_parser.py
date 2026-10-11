@@ -2,7 +2,7 @@
 """Tests for cli/okf/parser.py — the parser builder, the command directory, help
 conformance and shell completion. Stdlib unittest, no deps.
 
-Run: python3 -m unittest test_okf_parser -v
+Run: python3 -m unittest tests.test_okf_parser -v
 """
 import argparse
 import importlib.util
@@ -12,8 +12,8 @@ import sys
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf import parser as okf_parser

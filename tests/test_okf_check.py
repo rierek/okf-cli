@@ -2,7 +2,7 @@
 """Tests for cli/okf/check.py — the conformance scan: its rules, the check
 engine, and the fix-crosslinks and fix-xml-tags repairs. Stdlib unittest, no deps.
 
-Run: python3 -m unittest test_okf_check -v
+Run: python3 -m unittest tests.test_okf_check -v
 """
 import argparse
 import contextlib
@@ -13,9 +13,12 @@ import sys
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
+_ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from okf import catalogue as okf_catalogue
 from okf import check as okf_check
@@ -23,8 +26,8 @@ from okf import rename as okf_rename
 from okf import sync as okf_sync
 from okf import tags as okf_tags
 from okf import wikilinks as okf_wikilinks
-from okf_testkit import SyncFixtureMixin, _cli, needs_case_insensitive_fs
-from test_okf_wikilinks import WikilinkFixtureMixin
+from tests.okf_testkit import SyncFixtureMixin, _cli, needs_case_insensitive_fs
+from tests.test_okf_wikilinks import WikilinkFixtureMixin
 
 
 class CheckCommand(unittest.TestCase):

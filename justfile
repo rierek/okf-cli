@@ -9,18 +9,14 @@ catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
 default:
     @just --list
 
-# Testsuite (unittest discovery ueber cli/test_*.py)
+# Testsuite (unittest discovery ueber tests/test_*.py)
 test *ARGS:
-    cd {{cli_dir}} && python3 -m unittest {{ if ARGS == "" { "discover -p 'test_*.py'" } else { ARGS } }}
+    python3 -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
 
 # Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
 build:
     uv build
 
-# Gate A (EARS-Form der Acceptance Criteria) gegen rohe .beans/-Dateien, z.B. `just gate-a ../.beans/OKFT-xxxx--slug.md`. Exit 0 = sauber, 1 = Befund, 2 = Fehlaufruf.
-gate-a *ARGS:
-    @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }
-    @cd "{{invocation_directory()}}" && ahm gate-a {{ARGS}}
 
 # okf-cli bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf-cli.py install --help`)
 setup *ARGS:
@@ -33,36 +29,3 @@ check root=catalogue:
 # Agent-Onboarding gegen den echten Catalogue ausgeben
 prime root=catalogue:
     python3 {{cli_dir}}/okf-cli.py --root {{root}} prime
-
-# spec_dir wird per scripts/spec-dir.sh abgeleitet (D-siyu-07), nicht als
-# Modul-Variable -- die wuerde `just` bei JEDEM Rezept eager auswerten und
-# bei Fehlschlag auch test/check/prime mitreissen, nicht nur dieses.
-
-# EARS-Konformitaet der Rewrite-SPEC pruefen (Abgabekriterium je SPEC-Datei)
-spec-check *FILES:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
-    exec node scripts/ears-table-check.js "$@"
-
-# Eigener Schritt (D-wqge-09): spec-check prueft die EARS-Form, dieser Schritt
-# loest jeden Symbolanker an seiner Definitionsstelle auf (D-wqge-12).
-# Grounding-Wahrheit der Rewrite-SPEC pruefen
-spec-grounding *FILES:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
-    exec node scripts/spec-grounding-check.js "$@"
-
-# Fixtures der scripts/-Tests gehoeren in einen eigenen tmpdir, nie ins
-# SPEC-Verzeichnis -- der Glob von spec-check fischt dort jede *.md ein
-# (CLAUDE.md Regel 1 gilt sinngemaess).
-
-# Tests der scripts/-Werkzeuge (node built-in runner, gefiltert je Datei)
-test-scripts *FILES:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    shopt -s nullglob
-    if [ -z "{{FILES}}" ]; then set -- scripts/*.test.js; else set -- {{FILES}}; fi
-    [ "$#" -gt 0 ] || { echo 'test-scripts: no test file matched scripts/*.test.js -- nothing was checked' >&2; exit 1; }
-    exec node --test "$@"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/semantic.py — the semantic arm: query embedding, cosine ranking, tag expansion and coverage. Stdlib unittest, no deps.
 
-Run: python3 -m unittest test_okf_semantic -v
+Run: python3 -m unittest tests.test_okf_semantic -v
 """
 import json
 import os
@@ -12,17 +12,20 @@ import sys
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
+_ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 from okf import catalogue as okf_catalogue
 from okf import find as okf_find
 from okf import find_filters as okf_find_filters
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
 from okf import semantic as okf_semantic
-from okf_testkit import run_find
+from tests.okf_testkit import run_find
 
 
 class VoyageQueryEmbedding(unittest.TestCase):

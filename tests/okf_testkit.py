@@ -19,7 +19,7 @@ from okf import sync as okf_sync
 
 def run_find(root, query, **kw):
     """Module-level twin of the per-class _run() helpers in
-    cli/test_okf_find.py — same in-process convention (SimpleNamespace
+    tests/test_okf_find.py — same in-process convention (SimpleNamespace
     args, cmd_find, redirected streams), but parameterised by root so the new
     suites can each use their own temp catalogue. Returns stdout."""
     args = types.SimpleNamespace(
@@ -111,7 +111,7 @@ needs_case_insensitive_fs = unittest.skipUnless(
     _fs_is_case_insensitive(), "braucht case-insensitives Dateisystem (APFS)")
 
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 
 
 def _cli(root, *argv):

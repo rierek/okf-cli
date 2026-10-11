@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/tags.py — the tag verbs and the auto-embedding of newly
 registered tags. Stdlib unittest, no deps.
-
-Run: python3 -m unittest test_okf_tags -v
+Run: python3 -m unittest tests.test_okf_tags -v
 """
 import os
 import shutil
@@ -10,8 +9,8 @@ import sys
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf import catalogue as okf_catalogue

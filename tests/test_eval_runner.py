@@ -13,7 +13,7 @@ Three tiers:
   * Fixture-Tests (PickBundles, GoldenBundleConsistency,
     FixtureSpecGoldenAlignment) — isolierte tmpdirs, kein Live-Catalogue.
 
-Run: python3 -m unittest cli.test_eval_runner -v
+Run: python3 -m unittest tests.test_eval_runner -v
 """
 import importlib.util
 import json
@@ -22,7 +22,7 @@ import shutil
 import tempfile
 import unittest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 
 _fx_spec = importlib.util.spec_from_file_location(
     "eval_fixtures", os.path.join(_HERE, "eval", "fixtures.py")

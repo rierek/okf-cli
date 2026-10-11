@@ -167,16 +167,17 @@ Catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`. Relate
 ## Development
 
 ```bash
-just test     # unittest discovery over cli/test_*.py
+just test     # unittest discovery over tests/test_*.py
 just build    # wheel and sdist into dist/ (uv build)
 just check    # conformance scan against a real catalogue
 just prime
 just setup    # the okf-cli install plan; add --apply to perform it
 ```
 
-`just test` must be green before anything in `cli/` or `mcp/` is committed. Tests never write into a real catalogue.
+`just test` must be green before anything in `cli/`, `tests/` or `mcp/` is committed. Tests never write into a real catalogue.
 
-`cli/okf-cli.py` is only the entry point: it builds the parser, resolves the catalogue root and dispatches. The commands live in the `cli/okf/` package; tests sit beside it as `cli/test_okf_<module>.py`, and `cli/test_okf_cli.py` covers the entry itself:
+`cli/okf-cli.py` is only the entry point: it builds the parser, resolves the catalogue root and dispatches. The commands live in the `cli/okf/` package; tests live in `tests/`, and `tests/test_okf_cli.py` covers the entry itself:
+The `cli/_okf-cli` file is the zsh completion glue installed by `okf-cli install`; it stays beside the entry payload because packaging and installer tests verify that path.
 
 - Shared foundation: `catalogue` (root, bundles, concepts, tags, configuration), `linkscan` (link and reference scan), `parser_support` (command registration helpers).
 - Commands, each module defining its `COMMANDS`: `navigation` (list, read, info, toc, visualize, refs), `prime`, `index` (index, reindex), `ctx`, `recent`, `find` (with `find_filters`), `fts` (build-index), `semantic` (build-semantic-index), `tags`, `check` (check, fix-crosslinks, fix-xml-tags), `wikilinks`, `sync`, `rename` (rename, archive, rewrite-path) and `install`.

@@ -7,7 +7,7 @@ marshalling across the process boundary (build_argv -> subprocess.run ->
 json.loads). These tests instead drive okf_mcp.run_okf, which shells out to
 the REAL cli/okf-cli.py, exactly as the MCP server does.
 
-Run: python3 -m unittest cli.test_okf_mcp -v
+Run: python3 -m unittest tests.test_okf_mcp -v
 """
 import importlib.util
 import inspect
@@ -19,8 +19,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks it
+_HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf import parser as okf_parser
