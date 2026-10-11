@@ -105,7 +105,7 @@ def build_fts_index(root, db_path=None, include_topics=False):
                 conn.execute(
                     "INSERT INTO docs(path, ctype, title, tags, body)"
                     " VALUES (?, ?, ?, ?, ?)",
-                    ("{}{}/{}".format(path_prefix, b, cid), fm.get("type", ""),
+                    ("{}{}/{}".format(path_prefix, b, cid), _dequote(fm.get("type", "")),
                      title, " ".join(extract_tags(raw)), body))
                 count += 1
                 mt = os.path.getmtime(ap)
