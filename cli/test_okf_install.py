@@ -305,7 +305,7 @@ class ApplyAndIdempotence(Machine):
         for d in (".claude/skills/okf", ".agents/skills/okf"):
             self.assertTrue(os.path.islink(self.h(d)))
             self.assertEqual(os.path.realpath(self.h(d)), os.path.realpath(src))
-        self.assertFalse(os.path.islink(self.h(".hermes/skills/okf")), "hermes: symlinked skill dirs unverified")
+        self.assertFalse(os.path.islink(self.h(".hermes/skills/okf")), "hermes warns about symlinked skills outside its dir")
         self.assertTrue(os.path.isfile(self.h(".hermes/skills/okf/SKILL.md")))
         self.assertTrue(os.path.islink(self.h(".zsh/completions/_okf-cli")), "a clone links the zsh glue too")
 
@@ -556,6 +556,32 @@ class Uninstall(Machine):
         self.assertEqual(code, 0)
         self.assertIn("codex mcp remove okf", out)
         self.assertEqual(self.get(self.h(".codex/config.toml")), text)
+
+    def test_uninstall_leaves_no_empty_directories_it_created(self):
+        self.use_source_tree()
+        self.harness_dirs("claude", "hermes", "codex")
+        self.apply(only="claude,hermes,codex")
+        self.install(un=True, apply=True)
+        for rel in (".agents", ".claude/skills", ".hermes/skills", ".local"):
+            self.assertFalse(os.path.exists(self.h(rel)), rel)
+        self.assertTrue(os.path.isdir(self.h(".claude")))  # a harness dir is never pruned
+
+    def test_hermes_rewriting_config_yaml_drops_our_markers_but_uninstall_still_finds_the_entry(self):
+        # what `hermes config set` writes back: the entry survives, comments and markers do not
+        self.put(self.h(".hermes/config.yaml"),
+                 "model:\n  default: x\nmcp_servers:\n  time:\n    command: uvx\n  okf:\n    command: uv\n"
+                 "    args:\n      - run\n      - --with\n      - mcp<2\n      - %s\ndisplay:\n  compact: true\n"
+                 % self.script)
+        code, out = self.install(only="hermes", un=True, apply=True)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.get(self.h(".hermes/config.yaml")),
+                         "model:\n  default: x\nmcp_servers:\n  time:\n    command: uvx\ndisplay:\n  compact: true\n")
+
+    def test_a_foreign_okf_entry_in_config_yaml_survives_uninstall(self):
+        text = "mcp_servers:\n  okf:\n    command: other\n"
+        self.put(self.h(".hermes/config.yaml"), text)
+        self.install(only="hermes", un=True, apply=True)
+        self.assertEqual(self.get(self.h(".hermes/config.yaml")), text)
 
 
 class EnvOverrides(Machine):
@@ -913,6 +939,22 @@ class Packaging(unittest.TestCase):
             mcp = _load("okf_mcp_wheel", os.path.join(site, "okf_cli", "mcp", "okf_mcp.py"))
         self.assertTrue(os.path.isfile(mcp.OKF_CLI), mcp.OKF_CLI)
         self.assertTrue(os.path.isfile(os.path.join(site, "okf_cli", "cli", "embeddings", "build_tagvec.py")))
+
+
+class BrewPath(unittest.TestCase):
+    def test_a_cellar_path_becomes_the_opt_symlink_that_survives_an_upgrade(self):
+        with tempfile.TemporaryDirectory() as prefix:
+            prefix = os.path.realpath(prefix)
+            os.makedirs(os.path.join(prefix, "Cellar", "okf-cli", "0.1.0", "libexec", "okf_cli"))
+            os.makedirs(os.path.join(prefix, "opt"))
+            deep = os.path.join(prefix, "Cellar", "okf-cli", "0.1.0", "libexec", "okf_cli")
+            self.assertEqual(inst.brew_opt_path(deep), deep, "no opt symlink yet: unchanged")
+            os.symlink(os.path.join(prefix, "Cellar", "okf-cli", "0.1.0"), os.path.join(prefix, "opt", "okf-cli"))
+            self.assertEqual(inst.brew_opt_path(deep), os.path.join(prefix, "opt", "okf-cli", "libexec", "okf_cli"))
+            os.makedirs(os.path.join(prefix, "Cellar", "other", "1", "x"))
+            os.symlink(os.path.join(prefix, "Cellar", "okf-cli", "0.1.0"), os.path.join(prefix, "opt", "other"))
+            self.assertEqual(inst.brew_opt_path(os.path.join(prefix, "Cellar", "other", "1", "x")),
+                             os.path.join(prefix, "Cellar", "other", "1", "x"), "opt points elsewhere: unchanged")
 
 
 class CommandLine(unittest.TestCase):
