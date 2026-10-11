@@ -138,13 +138,13 @@ From a clone, `install` also creates `~/.local/bin/okf-cli` and puts `~/.local/b
 
 ### How `install` behaves
 
-- **Selection.** Agents and shells are detected by their binary on `PATH` or their config directory (shells: rc file, config directory or login shell). `--only claude,codex,zsh` names them explicitly, detected or not: `claude omp codex opencode kimi openclaw hermes zsh bash fish`.
+- **Selection.** Agents and shells are detected by their binary on `PATH` or their config directory (shells: rc file, config directory or login shell; the login shell is `$SHELL`, or the passwd entry when `$SHELL` is unset, as under `env -i`, cron or zsh). `--only claude,codex,zsh` names them explicitly, detected or not: `claude omp codex opencode kimi openclaw hermes zsh bash fish`.
 - **Clone or tool.** A clone links the skills and the zsh glue, so `git pull` updates them. A pipx or uv install copies them: re-run `okf-cli install --apply` after an upgrade. Hermes, and OpenClaw with a custom `OPENCLAW_STATE_DIR`, always get copies.
 - **Safe edits.** JSON configs get a key-scoped merge; rc files, TOML and YAML get one block between `# >>> okf-cli >>>` and `# <<< okf-cli <<<`. Writes are atomic, symlinked dotfiles are written through, and the first edit of a file keeps `<file>.okf-cli.bak`. A config that cannot be edited safely (JSON with comments, unusual YAML, a foreign `okf` entry) is reported as BLOCKED with the exact manual edit; nothing is guessed.
 - **Uninstall.** `okf-cli install --uninstall` previews, `--uninstall --apply` removes exactly what `install` created.
 - **Locations.** `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, `CODEX_HOME`, `OPENCODE_CONFIG`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `KIMI_CODE_HOME`, `OPENCLAW_STATE_DIR`, `HERMES_HOME` and `ZDOTDIR` are honoured.
 - **Scripting.** No prompts, no network, timeouts on every agent CLI call. `--json` prints one object with a status per step. Exit code 0: done or nothing to do; 1: a step is blocked or failed; 2: usage error.
-- **Platforms.** macOS and Linux, Python 3.11 or newer.
+- **Platforms.** macOS and Linux, Python 3.11 or newer. macOS ships 3.9 as `/usr/bin/python3`: `install` stops there with a message. The `~/.local/bin/okf-cli` wrapper of a clone runs the exact interpreter that ran `install`, never `python3` from `PATH`; if that Python is removed or upgraded, the wrapper says so and `okf-cli install --apply` rewrites it.
 
 ## How it differs
 

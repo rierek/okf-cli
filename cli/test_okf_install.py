@@ -643,6 +643,13 @@ class Detection(Machine):
         self.assertNotRegex(out, r"skip\s+fish\s+not detected")
         self.assertNotRegex(self.install()[1], r"skip\s+zsh\s+not detected", "SHELL=zsh makes zsh the login shell")
 
+    def test_login_shell_falls_back_to_the_passwd_entry_when_SHELL_is_unset(self):
+        env = {k: v for k, v in self.env.items() if k != "SHELL"}  # zsh does not set SHELL itself
+        with mock.patch.object(inst, "passwd_shell", return_value="/bin/zsh"):
+            self.assertNotRegex(self.install(env=env)[1], r"skip\s+zsh\s+not detected")
+        with mock.patch.object(inst, "passwd_shell", return_value=""):
+            self.assertRegex(self.install(env=env)[1], r"skip\s+zsh\s+not detected")
+
     def test_windows_is_refused(self):
         with self.assertRaises(SystemExit) as cm:
             self.install(platform="win32")
@@ -740,10 +747,8 @@ class ShellBlocks(Machine):
         self.apply(only="zsh", argcomplete=True)
         wrapper = self.h(".local/bin/okf-cli")
         self.assertTrue(os.access(wrapper, os.X_OK))
-        path = os.path.dirname(sys.executable) + os.pathsep + "/usr/bin" + os.pathsep + "/bin"
-        if not shutil.which("python3", path=path):
-            self.skipTest("no python3 next to the test interpreter")
-        done = subprocess.run([wrapper, "a", "b c"], capture_output=True, text=True, env={"PATH": path})
+        # no python3 on PATH at all: the wrapper runs the interpreter that ran install, not PATH's (macOS: 3.9)
+        done = subprocess.run([wrapper, "a", "b c"], capture_output=True, text=True, env={"PATH": "/nonexistent"})
         self.assertEqual(done.stdout.strip(), "['a', 'b c']")
 
     def test_an_installed_wheel_gets_no_wrapper_but_a_hint(self):

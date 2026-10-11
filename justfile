@@ -22,6 +22,10 @@ gate-a *ARGS:
 setup *ARGS:
     python3 {{cli_dir}}/okf-cli.py install {{ARGS}}
 
+# Verpackungs-Smoke: Wheel bauen, in Wegwerf-venv installieren, CLI + MCP-stdio gegen die installierte Kopie pruefen
+smoke-pack:
+    scripts/pack-smoke.sh
+
 # Konformitaets-Scan des Catalogue (§9 + lokale Invarianten)
 check root=catalogue:
     python3 {{cli_dir}}/okf-cli.py --root {{root}} check

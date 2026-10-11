@@ -640,8 +640,12 @@ def wrapper_step(ctx, un):
     -> (step, whether ~/.local/bin must be on PATH)"""
     dest = ctx.path(".local", "bin", "okf-cli")
     cli = os.path.join(ctx.pkg_root, "cli", "okf-cli.py")
-    text = WRAPPER_HEAD + 'exec python3 {} "$@"\n'.format(shlex.quote(cli))
-    what = "{} (runs {})".format(ctx.short(dest), ctx.short(cli))
+    # The interpreter that runs install (>= 3.11, checked in run()), not whatever `python3` is on PATH
+    # later: macOS ships 3.9 as /usr/bin/python3 and okf-cli.py needs tomllib.
+    py = sys.executable
+    text = WRAPPER_HEAD + '[ -x {0} ] || {{ echo "okf-cli: {1} is gone; run okf-cli install --apply again" >&2; exit 127; }}\n' \
+                          'exec {0} {2} "$@"\n'.format(shlex.quote(py), py, shlex.quote(cli))
+    what = "{} (runs {} with {})".format(ctx.short(dest), ctx.short(cli), py)
     try:
         ours = (read(dest) or "").startswith(WRAPPER_HEAD)
     except (Unsafe, OSError):
@@ -780,9 +784,18 @@ def shell_steps(ctx, ss, un):
 # --- selection, plan, output -------------------------------------------------
 
 
+def passwd_shell():
+    import pwd  # not at module level: Windows has no pwd, and run() rejects it with a message
+    try:
+        return pwd.getpwuid(os.getuid()).pw_shell
+    except KeyError:  # a container user without a passwd entry
+        return ""
+
+
 def shell_detected(ctx, sh):
     p = shell_paths(ctx)
-    login = os.path.basename(ctx.env.get("SHELL", ""))
+    # SHELL is set by login(1) and by bash, not by zsh: without it (cron, env -i, sudo) the passwd entry is the login shell
+    login = os.path.basename(ctx.env.get("SHELL") or passwd_shell())
     if sh == "zsh":
         return os.path.isfile(p["zsh_rc"]) or login == "zsh"
     if sh == "bash":
