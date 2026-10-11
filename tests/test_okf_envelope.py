@@ -164,8 +164,8 @@ class FindSemanticBreakdown(unittest.TestCase):
         okf_semantic._embed_query_voyage = lambda text: [1.0, 0.0]
 
     def _call(self, **kw):
-        args = types.SimpleNamespace(query="zzz-no-keyword-match-zzz", limit=10, type=None,
-                                     tag=None, scope=None, breakdown=True, **kw)
+        args = types.SimpleNamespace(query="zzz-no-keyword-match-zzz", limit=10, where=None,
+                                     breakdown=True, **kw)
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
             data = okf_find.cmd_find(self.tmp, args)
@@ -442,7 +442,7 @@ class ExistingJsonCommands(Fixture):
         self.assertEqual(list(data("index")), ["bundles"])
         self.assertEqual(list(data("index", "kc-a")), ["bundle", "concepts"])
         self.assertEqual(data("index", "kc-a")["bundle"], "kc-a")
-        self.assertEqual([r["path"] for r in data("list", "--type", "Note")],
+        self.assertEqual([r["path"] for r in data("list", "--where", "type = Note")],
                          ["kc-a/alpha", "kc-a/beta", "kc-a/old"])
         self.assertEqual(list(data("refs", "kc-a/alpha.md")), ["target", "inbound", "outbound"])
         self.assertEqual(list(data("wikilinks")), ["links", "by_bundle", "totals", "filtered"])
@@ -630,8 +630,8 @@ class TagWrites(WriteFixture):
         self.assertEqual(self.ok("normalize-tags", "--apply")["data"], {"applied": True, "files": ["kc-a/inline.md"]})
         self.assertIn("tags:\n  - alpha\n  - zeta", self.read("kc-a/inline.md"))
 
-    def test_scope_limits_the_rewrite(self):
-        self.assertEqual(self.ok("merge-tags", "alpha", "--into", "omega", "--scope", "kc-gov")["data"]["files"], [])
+    def test_where_limits_the_rewrite(self):
+        self.assertEqual(self.ok("merge-tags", "alpha", "--into", "omega", "--where", "path ~ kc-gov/")["data"]["files"], [])
 
 
 class IndexBuilds(WriteFixture):
@@ -973,7 +973,7 @@ class Conformance(WriteFixture):
         "index": ["index"],
         "info": ["info"],
         "install": ["install", "--only", "claude"],
-        "list": ["list", "--type", "Note"],
+        "list": ["list", "--where", "type = Note"],
         "merge-tags": ["merge-tags", "alpha", "--into", "omega"],
         "normalize-tags": ["normalize-tags"],
         "prime": ["prime", "--compact"],

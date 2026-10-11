@@ -73,11 +73,11 @@ class RemoveTags(unittest.TestCase):
             f.write(text)
         return ap
 
-    def _run(self, tags, scope=None, apply=True):
+    def _run(self, tags, where=None, apply=True):
         import types
         import contextlib
         import io
-        args = types.SimpleNamespace(tags=tags, scope=scope, apply=apply)
+        args = types.SimpleNamespace(tags=tags, where=where, apply=apply)
         with contextlib.redirect_stdout(io.StringIO()):
             okf_tags.cmd_remove_tags(self.tmp, args)
 
@@ -118,10 +118,10 @@ class RemoveTags(unittest.TestCase):
         self._run(["drop"], apply=False)
         self.assertEqual(open(ap, encoding="utf-8").read(), original)
 
-    def test_scope_limits_rewrite(self):
+    def test_where_limits_rewrite(self):
         a = self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - drop\n---\n# X\n")
         b = self._w("c/y.md", "---\ntype: Concept\ntitle: Y\ntags:\n  - drop\n---\n# Y\n")
-        self._run(["drop"], scope="b")
+        self._run(["drop"], where="path ~ b/")
         self.assertNotIn("drop", open(a, encoding="utf-8").read())
         self.assertIn("drop", open(b, encoding="utf-8").read())  # out of scope, untouched
 
@@ -156,7 +156,7 @@ class TagCommandsReachStagingContent(unittest.TestCase):
         import types
         import contextlib
         import io
-        kwargs = {"scope": None, "apply": False}
+        kwargs = {"where": None, "apply": False}
         kwargs.update(extra)
         args = types.SimpleNamespace(**kwargs)
         buf = io.StringIO()
@@ -188,6 +188,57 @@ class TagCommandsReachStagingContent(unittest.TestCase):
         out = self._run(okf_tags.cmd_normalize_tags)
         self.assertIn("b/_intake/staged.md", out)
         self.assertIn("b/sub/regular.md", out)
+
+class TagVerbsHonourWhere(unittest.TestCase):
+    """OKFT-zpom criteria 7 and 8 — the three tag verbs rewrite only what the --where expression
+    selects: the archive when the expression names `archived`, staging content like any other."""
+
+    ARCHIVED = "_archive/b/old.md"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        for rel, ctype in (("b/new.md", "Concept"), (self.ARCHIVED, "Concept"),
+                           ("b/_intake/staged.md", "Concept"), ("b/other.md", "Pattern")):
+            ap = os.path.join(self.tmp, rel)
+            os.makedirs(os.path.dirname(ap), exist_ok=True)
+            with open(ap, "w", encoding="utf-8") as f:
+                f.write("---\ntype: {}\ntitle: T\ntags: [oldtag]\n---\n# T\n".format(ctype))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def files(self, cmd, where, **extra):
+        import contextlib
+        import io
+        import types
+        args = types.SimpleNamespace(where=where, apply=False, json=True, **extra)
+        with contextlib.redirect_stdout(io.StringIO()):
+            return sorted(cmd(self.tmp, args)["files"])
+
+    def verbs(self):
+        return [("merge-tags", lambda where: self.files(okf_tags.cmd_merge_tags, where,
+                                                         tags=["oldtag"], into="newtag")),
+                ("remove-tags", lambda where: self.files(okf_tags.cmd_remove_tags, where,
+                                                          tags=["oldtag"])),
+                ("normalize-tags", lambda where: self.files(okf_tags.cmd_normalize_tags, where))]
+
+    def test_the_archive_is_untouched_unless_the_expression_names_it(self):
+        for name, run in self.verbs():
+            with self.subTest(verb=name):
+                hidden = run("type = Concept")
+                self.assertEqual(hidden, ["b/_intake/staged.md", "b/new.md"])
+                reached = run("type = Concept and archived in (true, false)")
+                self.assertEqual(reached, ["_archive/b/old.md", "b/_intake/staged.md", "b/new.md"])
+
+    def test_no_expression_selects_every_active_concept_staging_included(self):
+        for name, run in self.verbs():
+            with self.subTest(verb=name):
+                self.assertEqual(run(None), ["b/_intake/staged.md", "b/new.md", "b/other.md"])
+
+    def test_the_expression_narrows_by_a_field_the_path_does_not_carry(self):
+        for name, run in self.verbs():
+            with self.subTest(verb=name):
+                self.assertEqual(run("type = Pattern"), ["b/other.md"])
 
 
 if __name__ == "__main__":

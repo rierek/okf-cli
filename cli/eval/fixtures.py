@@ -112,7 +112,7 @@ def _fixture_spec(root):
                 "## Zqxeval Overview\n\n"
                 "Same placement as S1 — zqxeval in title, heading, and body "
                 "— but seeded into the wrong bundle on purpose, to isolate "
-                "location-sensitivity: find is location-blind, list --scope "
+                "location-sensitivity: find is location-blind, list --where "
                 "is not.\n"
             ),
             correct_bundle=False,

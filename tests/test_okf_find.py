@@ -30,7 +30,7 @@ from tests.okf_testkit import run_find
 
 
 class FindFilterContract(unittest.TestCase):
-    """I01 — --scope/--type/--tag constrain the ANSWER, not one arm of it.
+    """I01 — --where constrains the ANSWER, not one arm of it.
 
     The regression this locks down (B01): the filters used to be applied by
     whichever arm happened to implement them, so the moment fuse_conditional
@@ -48,11 +48,11 @@ class FindFilterContract(unittest.TestCase):
     absent) with a POSITIVE one (the wanted concept is present). Without the
     positive half a filter that wrongly drops everything would pass."""
 
-    # (filter kwarg, bait that must not survive it)
+    # (--where expression, baits that must not survive it)
     DIMENSIONS = [
-        ("scope", "keep/inner", ["keep/outer", "bait/cross"]),
-        ("type", "Concept", ["keep/inner/type-bait"]),
-        ("tag", "keeper", ["keep/inner/tag-bait"]),
+        ("path ~ keep/inner/", ["keep/outer", "bait/cross"]),
+        ("type = Concept", ["keep/inner/type-bait"]),
+        ("tag = keeper", ["keep/inner/tag-bait"]),
     ]
     WANTED = "keep/inner/wanted"
     LITERAL = "zqxcontract"
@@ -117,7 +117,7 @@ class FindFilterContract(unittest.TestCase):
     def _paths(self, query, **kw):
         import io, contextlib, types
         args = types.SimpleNamespace(
-            query=query, limit=10, type=None, tag=None, scope=None,
+            query=query, limit=10, where=None,
             breakdown=False,
         )
         for k, v in kw.items():
@@ -130,9 +130,9 @@ class FindFilterContract(unittest.TestCase):
                 if l.startswith("path: ")]
 
     def _check_every_dimension(self, query, regime):
-        for kwarg, value, baits in self.DIMENSIONS:
-            with self.subTest(regime=regime, filter=kwarg):
-                paths = self._paths(query, **{kwarg: value})
+        for expression, baits in self.DIMENSIONS:
+            with self.subTest(regime=regime, where=expression):
+                paths = self._paths(query, where=expression)
                 for bait in baits:
                     self.assertNotIn(bait, paths)
                 self.assertIn(self.WANTED, paths)
@@ -162,7 +162,7 @@ class FindFilterContract(unittest.TestCase):
         # embed to the identical vector by construction, see setUp) — only
         # membership is. assertCountEqual (not assertEqual) keeps this from
         # re-pinning whatever tiebreak order the fix below happens to give.
-        self.assertCountEqual(self._paths(self.PARAPHRASE, scope="keep/inner"),
+        self.assertCountEqual(self._paths(self.PARAPHRASE, where="path ~ keep/inner/"),
                                [self.WANTED, "keep/inner/type-bait",
                                 "keep/inner/tag-bait"])
         self._check_every_dimension(self.PARAPHRASE, "semantic")
@@ -174,22 +174,23 @@ class FindFilterContract(unittest.TestCase):
         self._check_every_dimension(self.LITERAL, "degraded")
 
     def test_scoped_substring_fallback_reports_the_real_path(self):
-        """B04 — with --scope <bundle>/<subdir> the substring arm built its
-        path from the BUNDLE name plus a cid relative to the SUBDIR, printing
-        `keep/wanted` for a concept living at `keep/inner/wanted`: a path no
-        `okf-cli read` can resolve. Unscoped output is unaffected, which is
-        what keeps the frozen eval baseline valid."""
+        """B04 — a hit's path must be the concept's true position below the
+        root. The substring arm once built it from the BUNDLE name plus a cid
+        relative to a narrowed SUBDIR, printing `keep/wanted` for a concept
+        living at `keep/inner/wanted`: a path no `okf-cli read` can resolve.
+        Unfiltered output is unaffected, which is what keeps the frozen eval
+        baseline valid."""
         self.assertFalse(os.path.isfile(okf_fts._fts_db_path(self.tmp)))
         self._silence_semantic_arm()
-        self.assertEqual(sorted(self._paths(self.LITERAL, scope="keep/inner")),
+        self.assertEqual(sorted(self._paths(self.LITERAL, where="path ~ keep/inner/")),
                          ["keep/inner/tag-bait", "keep/inner/type-bait",
                           "keep/inner/wanted"])
 
 
 class FindFilterComposition(unittest.TestCase):
-    """P8/8a (okf-cli-8uaf, FIL03/FIL04) — find gains --type/--tag/--scope
-    so keyword search is composable with exact-match filters. --bundle was
-    a duplicate --scope alias, removed D02 (PO-grilling 2026-07-26)."""
+    """P8/8a (okf-cli-8uaf, FIL03/FIL04) — find composes keyword search with a
+    --where expression: exact-match type and tag, path containment, and their
+    combination."""
 
     def setUp(self):
         import tempfile
@@ -217,7 +218,7 @@ class FindFilterComposition(unittest.TestCase):
     def _run(self, query="zqxfil", **kw):
         import io, contextlib, types
         args = types.SimpleNamespace(
-            query=query, limit=10, type=None, tag=None, scope=None,
+            query=query, limit=10, where=None,
             breakdown=False,
         )
         for k, v in kw.items():
@@ -232,33 +233,33 @@ class FindFilterComposition(unittest.TestCase):
         self.assertEqual(out.count("path: "), 3)
 
     def test_type_filter_excludes_other_types(self):
-        out = self._run(type="Runbook")
+        out = self._run(where="type = Runbook")
         self.assertIn("path: correct/one", out)
         self.assertIn("path: wrong/three", out)
         self.assertNotIn("path: correct/two", out)
 
     def test_tag_filter_excludes_non_matching_tag(self):
-        out = self._run(tag="beta")
+        out = self._run(where="tag = beta")
         self.assertIn("path: correct/two", out)
         self.assertNotIn("path: correct/one", out)
         self.assertNotIn("path: wrong/three", out)
 
     def test_scope_filter_excludes_other_bundle(self):
-        out = self._run(scope="correct")
+        out = self._run(where="path ~ correct/")
         self.assertIn("path: correct/one", out)
         self.assertIn("path: correct/two", out)
         self.assertNotIn("path: wrong/three", out)
 
     def test_composed_filters_type_tag_scope(self):
-        out = self._run(type="Runbook", tag="alpha", scope="correct")
+        out = self._run(where="type = Runbook and tag = alpha and path ~ correct/")
         self.assertIn("path: correct/one", out)
         self.assertNotIn("path: correct/two", out)
         self.assertNotIn("path: wrong/three", out)
 
 
 class FindIncludeArchive(unittest.TestCase):
-    """R-08/R-09/R-10 (okf-cli-pn72) — include_archive as FindFilters'
-    fourth dimension, default excluded, one flag away, scope-aware.
+    """R-08/R-09/R-10 (okf-cli-pn72) — the archive as a part of the expression:
+    hidden by default, reached by naming `archived`, path-aware.
 
     build_fts_index() indexes _archive/ for real since R-11 (okf-cli-fu7o)
     landed, so the fixture files below are indexed by the ordinary
@@ -298,8 +299,8 @@ class FindIncludeArchive(unittest.TestCase):
     def _paths(self, query, **kw):
         import io, contextlib, types
         args = types.SimpleNamespace(
-            query=query, limit=10, type=None, tag=None, scope=None,
-            breakdown=False, include_archive=False,
+            query=query, limit=10, where=None,
+            breakdown=False,
         )
         for k, v in kw.items():
             setattr(args, k, v)
@@ -316,13 +317,13 @@ class FindIncludeArchive(unittest.TestCase):
         self.assertNotIn("_archive/bundle-a/hidden", paths)
         self.assertNotIn("_archive/bundle-b/other-hidden", paths)
 
-    def test_sc02_include_archive_flag_returns_it_under_its_archive_path(self):
-        paths = self._paths(self.LITERAL, include_archive=True)
+    def test_sc02_archived_expression_returns_it_under_its_archive_path(self):
+        paths = self._paths(self.LITERAL, where="archived in (true, false)")
         self.assertIn("_archive/bundle-a/hidden", paths)
 
     def test_sc03_scoped_include_archive_reaches_only_that_bundle(self):
-        paths = self._paths(self.LITERAL, scope="bundle-a",
-                            include_archive=True)
+        paths = self._paths(self.LITERAL,
+                            where="path ~ bundle-a/ and archived in (true, false)")
         self.assertIn("_archive/bundle-a/hidden", paths)
         self.assertNotIn("_archive/bundle-b/other-hidden", paths)
 
@@ -332,15 +333,12 @@ class FindIncludeArchive(unittest.TestCase):
 
 
 class FindScopeLikeEscaping(unittest.TestCase):
-    """okf-cli-pn72 review B01 — sql_where()'s scope OR-chain binds the raw
-    scope value into a LIKE pattern on every branch (the pre-existing active
-    arm AND the two archive arms this bean added). LIKE's `_`/`%` are
-    single-char/any-sequence wildcards unless escaped, so an unescaped scope
-    value leaks matches from a similarly-named foreign bundle — the exact
-    I01/B01 divergence class FindFilters exists to prevent, this time inside
-    one arm's own OR-chain rather than between arms. path_in_scope() (the
-    Python-side arm) does NOT have this weakness — it compares literally —
-    which is why only the SQL arm needs the fix."""
+    """okf-cli-pn72 review B01 — a `path ~` value is bound into the SQL
+    push-down, and LIKE's `_`/`%` are single-char/any-sequence wildcards
+    unless escaped, so an unescaped value leaks matches from a similarly-named
+    foreign bundle — the exact I01/B01 divergence class FindFilters exists to
+    prevent, this time inside one arm's own SQL rather than between arms. The
+    Python-side arm compares literally, so the SQL arm has to as well."""
 
     LITERAL = "zqxesc"
 
@@ -348,7 +346,7 @@ class FindScopeLikeEscaping(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         body = "{} appears in every fixture body.\n".format(self.LITERAL)
         # underscore leak vector: unescaped `_` in a LIKE pattern matches
-        # ANY single character, so scope="my_bundle" would also match
+        # ANY single character, so `path ~ my_bundle/` would also match
         # "myXbundle" (X standing in for the wildcard slot).
         self._w("my_bundle/active.md", "Concept", "Active", ["k"], body)
         self._w("myXbundle/leak.md", "Concept", "Leak", ["k"], body)
@@ -357,18 +355,15 @@ class FindScopeLikeEscaping(unittest.TestCase):
         self._w("_archive/myXbundle/hidden.md", "Concept", "Archived Leak",
                 ["k"], body)
         # percent leak vector: unescaped `%` matches ANY sequence, so
-        # scope="c%d" would also match "cZZd".
+        # `path ~ 'c%d/'` would also match "cZZd".
         self._w("c%d/active.md", "Concept", "Percent Active", ["k"], body)
         self._w("cZZd/leak.md", "Concept", "Percent Leak", ["k"], body)
-        # review round 3, B01 (rest): the `_archive/<scope>/%` LIKE branch
-        # itself binds `_ARCHIVE_PREFIX` unescaped, so its own leading `_`
-        # acts as a single-char wildcard THERE — a top-level bundle whose
-        # name is any single character followed by "archive" (here
-        # "Xarchive") with a sub-concept matching the scope name leaks into
-        # a `--scope my_bundle --include-archive` answer. "Xarchive" is an
-        # ordinary bundle (no leading `_`), so build_fts_index() indexes it
-        # on its own, same as the `_archive/...` fixtures above since R-11
-        # (okf-cli-fu7o) — no manual FTS row needed for any of them.
+        # the default archive exclusion binds `_archive/` as a LIKE pattern:
+        # its own leading `_` is a single-char wildcard, so unescaped it would
+        # also hide a top-level bundle named "Xarchive" (any single character
+        # followed by "archive"). "Xarchive" is an ordinary bundle (no leading
+        # `_`), so build_fts_index() indexes it on its own, same as the
+        # `_archive/...` fixtures above since R-11 (okf-cli-fu7o).
         self._w("Xarchive/my_bundle/hidden2.md", "Concept",
                 "Prefix Leak", ["k"], body)
         okf_fts.build_fts_index(self.tmp)
@@ -388,8 +383,8 @@ class FindScopeLikeEscaping(unittest.TestCase):
     def _paths(self, query, **kw):
         import io, contextlib, types
         args = types.SimpleNamespace(
-            query=query, limit=10, type=None, tag=None, scope=None,
-            breakdown=False, include_archive=False,
+            query=query, limit=10, where=None,
+            breakdown=False,
         )
         for k, v in kw.items():
             setattr(args, k, v)
@@ -400,41 +395,35 @@ class FindScopeLikeEscaping(unittest.TestCase):
         return [l[len("path: "):] for l in buf.getvalue().splitlines()
                 if l.startswith("path: ")]
 
-    def test_underscore_scope_without_include_archive_excludes_lookalike(self):
-        """Covers the PRE-EXISTING arm (self.scope + "/%"), unescaped since
-        before this bean — CHANGES_REQUIRED review decided to fix it here
-        rather than leave a half-escaped OR-chain."""
-        paths = self._paths(self.LITERAL, scope="my_bundle")
+    def test_underscore_path_without_archived_excludes_lookalike(self):
+        """Covers the active-catalogue branch of the push-down."""
+        paths = self._paths(self.LITERAL, where="path ~ my_bundle/")
         self.assertIn("my_bundle/active", paths)
         self.assertNotIn("myXbundle/leak", paths)
 
-    def test_underscore_scope_with_include_archive_excludes_lookalike(self):
-        """Covers the two archive arms this bean added (R-09/AC3)."""
-        paths = self._paths(self.LITERAL, scope="my_bundle",
-                            include_archive=True)
+    def test_underscore_path_with_archived_excludes_lookalike(self):
+        """Covers the archived form (R-09/AC3)."""
+        paths = self._paths(self.LITERAL,
+                            where="path ~ my_bundle/ and archived in (true, false)")
         self.assertIn("my_bundle/active", paths)
         self.assertIn("_archive/my_bundle/hidden", paths)
         self.assertNotIn("myXbundle/leak", paths)
         self.assertNotIn("_archive/myXbundle/hidden", paths)
 
-    def test_percent_scope_excludes_lookalike_bundle(self):
-        paths = self._paths(self.LITERAL, scope="c%d")
+    def test_percent_path_excludes_lookalike_bundle(self):
+        paths = self._paths(self.LITERAL, where="path ~ 'c%d/'")
         self.assertIn("c%d/active", paths)
         self.assertNotIn("cZZd/leak", paths)
 
-    def test_archive_prefix_itself_unescaped_does_not_leak_prefix_lookalike(self):
-        """Review round 3, B01 (rest): the 4th OR branch bound
-        `self._ARCHIVE_PREFIX + esc_scope + "/%"` — `_ARCHIVE_PREFIX`'s own
-        leading `_` went into the same LIKE pattern unescaped, so a
-        top-level dir named e.g. "Xarchive" (any char standing in for `_`)
-        with a "my_bundle" sub-concept leaked into the scoped archive
-        answer. Line 883's NOT-LIKE exclusion already escaped this same
-        constant correctly; this closes the same gap on line 862."""
-        paths = self._paths(self.LITERAL, scope="my_bundle",
-                            include_archive=True)
-        self.assertIn("my_bundle/active", paths)
-        self.assertIn("_archive/my_bundle/hidden", paths)
-        self.assertNotIn("Xarchive/my_bundle/hidden2", paths)
+    def test_archive_prefix_itself_unescaped_does_not_hide_a_prefix_lookalike(self):
+        """Review round 3, B01 (rest): the default exclusion's own `_archive/`
+        pattern has a leading `_` that, unescaped, would hide a top-level dir
+        named e.g. "Xarchive" from every answer."""
+        for expression in (None, "type = Concept", "path ~ my_bundle/"):
+            with self.subTest(where=expression):
+                self.assertIn("Xarchive/my_bundle/hidden2",
+                              self._paths(self.LITERAL, where=expression))
+        self.assertNotIn("_archive/my_bundle/hidden", self._paths(self.LITERAL))
 
 
 class SubstringRankingArchive(unittest.TestCase):
@@ -475,12 +464,12 @@ class SubstringRankingArchive(unittest.TestCase):
         self.assertNotIn("_archive/bundle-b/other", paths)
 
     def test_ac2_ac3_flag_reaches_archive_under_its_true_path(self):
-        paths = self._paths(include_archive=True)
+        paths = self._paths(where="archived in (true, false)")
         self.assertIn("_archive/bundle-a/hidden", paths)
         self.assertIn("_archive/bundle-b/other", paths)
 
     def test_ac4_matches_loaded_still_discriminates_every_hit(self):
-        paths = self._paths(include_archive=True, type="Runbook")
+        paths = self._paths(where="type = Runbook and archived in (true, false)")
         self.assertIn("bundle-a/active", paths)
         self.assertIn("_archive/bundle-a/hidden", paths)
         self.assertNotIn("_archive/bundle-b/other", paths)  # type Concept
@@ -508,7 +497,7 @@ class FindScoreBreakdown(unittest.TestCase):
     def _run(self, breakdown=False):
         import io, contextlib, types
         args = types.SimpleNamespace(
-            query="zqxbrk", limit=10, type=None, tag=None, scope=None,
+            query="zqxbrk", limit=10, where=None,
             breakdown=breakdown,
         )
         buf = io.StringIO()
@@ -688,7 +677,7 @@ class SemanticBackstop(unittest.TestCase):
     def _run(self, query, **kw):
         import io, contextlib, types
         args = types.SimpleNamespace(
-            query=query, limit=10, type=None, tag=None, scope=None,
+            query=query, limit=10, where=None,
             breakdown=False,
         )
         for k, v in kw.items():
@@ -846,7 +835,7 @@ class SemanticBackstop(unittest.TestCase):
         self.assertIn("provenance: semantic", out)
 
     def test_scope_confines_the_semantic_arm(self):
-        """B01 — --scope is a filter on the ANSWER, not on one arm. The
+        """B01 — --where is a filter on the ANSWER, not on one arm. The
         lexical arm confines itself (SQL path predicate / resolve_scopes),
         so a scoped query used to return out-of-scope concepts only when
         the semantic arm owned the ranking: the user asked for
@@ -855,11 +844,11 @@ class SemanticBackstop(unittest.TestCase):
                 "totally different content words only.\n")
         self._make_tagvec([("k1", "other/leak", [1.0, 0.0])])
         okf_semantic._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, err = self._run("zzz-no-keyword-match-zzz", scope="b")
+        out, err = self._run("zzz-no-keyword-match-zzz", where="path ~ b/")
         self.assertNotIn("path: other/leak", out)
 
     def test_type_filter_confines_the_semantic_arm(self):
-        """B02 — same defect class as B01: --type is applied to the lexical
+        """B02 — same defect class as B01: `type` is applied to the lexical
         arm's SQL only, so a semantic-owned ranking returns the wrong type."""
         self._w("b/other-type.md", "Wrong Type", [],
                 "totally different content words only.\n")
@@ -870,7 +859,7 @@ class SemanticBackstop(unittest.TestCase):
             f.write(txt.replace("type: Concept", "type: Pattern"))
         self._make_tagvec([("k1", "b/other-type", [1.0, 0.0])])
         okf_semantic._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, err = self._run("zzz-no-keyword-match-zzz", type="Concept")
+        out, err = self._run("zzz-no-keyword-match-zzz", where="type = Concept")
         self.assertNotIn("path: b/other-type", out)
 
     def test_tag_filter_confines_the_semantic_arm(self):
@@ -879,7 +868,7 @@ class SemanticBackstop(unittest.TestCase):
                 "totally different content words only.\n")
         self._make_tagvec([("k1", "b/untagged", [1.0, 0.0])])
         okf_semantic._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, err = self._run("zzz-no-keyword-match-zzz", tag="zqxstrong")
+        out, err = self._run("zzz-no-keyword-match-zzz", where="tag = zqxstrong")
         self.assertNotIn("path: b/untagged", out)
 
     def test_confident_literal_top1_survives_unrelated_semantic_scale(self):
@@ -1041,13 +1030,14 @@ class SemanticBackstop(unittest.TestCase):
 
 class SemanticArmArchiveNote(unittest.TestCase):
     """R-13 (okf-cli-6dsl) — the embedding build (build_tagvec.py:174) stays
-    on the active catalogue by design; --include-archive only widens the
+    on the active catalogue by design; `archived` in --where only widens the
     lexical/substring traversal (R-12) and cmd_list. An unannounced limit is
-    a trap: a searcher who set --include-archive and got an answer shaped by
+    a trap: a searcher who named `archived` and got an answer shaped by
     the semantic arm would read an empty archive slice as an absence, not as
     an arm that never looked. AC1's conjunction is the risk: the note fires
-    only when the flag is set AND the semantic arm actually contributed
-    hits, not on the flag alone (PF-4: at most one note per invocation)."""
+    only when the expression names `archived` AND the semantic arm actually
+    contributed hits, not on the expression alone (PF-4: at most one note per
+    invocation)."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -1092,8 +1082,8 @@ class SemanticArmArchiveNote(unittest.TestCase):
     def _run(self, query, **kw):
         import io, contextlib, types
         args = types.SimpleNamespace(
-            query=query, limit=10, type=None, tag=None, scope=None,
-            breakdown=False, include_archive=False,
+            query=query, limit=10, where=None,
+            breakdown=False,
         )
         for k, v in kw.items():
             setattr(args, k, v)
@@ -1108,12 +1098,12 @@ class SemanticArmArchiveNote(unittest.TestCase):
         self._w("b/near.md", "Near Concept", "alpha beta near-body prose.\n")
         self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
         okf_semantic._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, err = self._run("zzz-no-keyword-match-zzz", include_archive=True)
+        out, err = self._run("zzz-no-keyword-match-zzz", where="archived in (true, false)")
         self.assertIn("path: b/near", out)  # sanity: semantic arm contributed
         notes = [l for l in err.splitlines()
                  if "archive" in l.lower() and "lexical" in l.lower()]
         self.assertEqual(notes, [
-            "note: --include-archive covers the lexical arm only; "
+            "note: `archived` in --where covers the lexical arm only; "
             "embeddings stay on the active catalogue"])
 
     def test_sc02_flag_not_set_writes_no_note(self):
@@ -1121,17 +1111,17 @@ class SemanticArmArchiveNote(unittest.TestCase):
         self._w("b/near.md", "Near Concept", "alpha beta near-body prose.\n")
         self._make_tagvec([("k1", "b/near", [1.0, 0.0])])
         okf_semantic._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, err = self._run("zzz-no-keyword-match-zzz", include_archive=False)
+        out, err = self._run("zzz-no-keyword-match-zzz", where="type = Concept")
         self.assertIn("path: b/near", out)
-        self.assertNotIn("include-archive covers the lexical arm only", err)
+        self.assertNotIn("covers the lexical arm only", err)
 
     def test_ac1_conjunction_flag_set_but_no_semantic_hits_writes_no_note(self):
-        """AC1's conjunction: flag alone is not enough. No tagvec cache at
+        """AC1's conjunction: naming `archived` alone is not enough. No tagvec cache at
         all -> semantic arm is skipped, contributes zero hits, so the note
-        must stay silent even though --include-archive is set."""
-        out, err = self._run("zzz-no-keyword-match-zzz", include_archive=True)
+        must stay silent even though `archived` is named."""
+        out, err = self._run("zzz-no-keyword-match-zzz", where="archived in (true, false)")
         self.assertIn("(no matches", out)
-        self.assertNotIn("include-archive covers the lexical arm only", err)
+        self.assertNotIn("covers the lexical arm only", err)
 
     def test_ac3_note_appears_at_most_once_with_multiple_semantic_hits(self):
         """AC3: several semantic hits in one answer still yield one note."""
@@ -1142,9 +1132,9 @@ class SemanticArmArchiveNote(unittest.TestCase):
             ("k2", "b/far", [0.9, 0.1]),
         ])
         okf_semantic._embed_query_voyage = lambda text: [1.0, 0.0]
-        out, err = self._run("zzz-no-keyword-match-zzz", include_archive=True)
+        out, err = self._run("zzz-no-keyword-match-zzz", where="archived in (true, false)")
         notes = [l for l in err.splitlines()
-                 if "include-archive covers the lexical arm only" in l]
+                 if "covers the lexical arm only" in l]
         self.assertEqual(len(notes), 1)
 
 
@@ -1193,7 +1183,7 @@ class FindDegradesWithoutIndex(unittest.TestCase):
                 f.write("# B\n")
             import types
             args = types.SimpleNamespace(
-                query="tunnel", limit=10, type=None, tag=None, scope=None,
+                query="tunnel", limit=10, where=None,
                 breakdown=False,
             )
             out_buf, err_buf = io.StringIO(), io.StringIO()
@@ -1284,7 +1274,7 @@ class ZeroHitSuggestionsPF4(unittest.TestCase):
         import contextlib
         import types
         args = types.SimpleNamespace(
-            query="tailscael", limit=10, type=None, tag=None, scope=None,
+            query="tailscael", limit=10, where=None,
             breakdown=False,
         )
         out_buf, err_buf = io.StringIO(), io.StringIO()
@@ -1391,8 +1381,8 @@ class CorpusScopingTask1(unittest.TestCase):
     def test_topic_request_against_narrow_index_emits_only_rebuild_note(self):
         okf_fts.build_fts_index(self.root, include_topics=False)
         args = argparse.Namespace(
-            query="UniqueTopicNeedle", limit=10, scope=None, type=None,
-            tag=None, include_archive=False, include_topics=True,
+            query="UniqueTopicNeedle", limit=10, where=None,
+            include_topics=True,
             breakdown=False)
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):

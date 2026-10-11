@@ -180,16 +180,12 @@ class ShellCompletion(unittest.TestCase):
         next to positional values."""
         return [v for v, _ in self._complete(words) if not v.startswith("-")]
 
-    def test_type_values_come_from_the_root_on_the_line(self):
-        self.assertEqual([c for c in self._complete("find q --type ") if not c[0].startswith("-")],
-                         [("Concept", "a"), ("Decision", "b")])
-
     def test_tag_values_most_used_first_with_counts(self):
-        self.assertEqual(self._complete("find q --tag "),
+        self.assertEqual(self._complete("merge-tags q --into "),
                          [("x", "concepts: 2"), ("y", "concepts: 1")])
 
     def test_scope_values_are_bundles_and_concept_dirs(self):
-        self.assertEqual(self._values("list --scope "), ["b1", "b1/sub"])
+        self.assertEqual(self._values("check "), ["b1", "b1/sub"])
 
     def test_concept_refs_and_archive_on_restore(self):
         self.assertEqual(self._values("read "), ["b1/alpha", "b1/sub/beta"])
@@ -200,7 +196,7 @@ class ShellCompletion(unittest.TestCase):
 
     def test_free_text_offers_options_not_cwd_files(self):
         values = [v for v, _ in self._complete("find ")]
-        self.assertIn("--type", values)
+        self.assertIn("--where", values)
         self.assertNotIn("stray.txt", values)
 
 

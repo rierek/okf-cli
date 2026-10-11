@@ -247,11 +247,21 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         find_help = okf_parser_support.subcommand_parsers(okf_parser.build_parser())["find"].format_help()
         self.assertIn(find_help.strip(), out)
 
+    def test_every_rendering_names_where_and_no_removed_filter_flag(self):
+        """OKFT-zpom criterion 11 — the intro step, the TOC line and the rendered find help."""
+        for kw in ({}, {"compact": True}, {"full": True}):
+            with self.subTest(**kw):
+                out = self._prime(**kw)
+                self.assertRegex(out, r'1\. find "<query>"[^\n]*\n\s+--where "')
+                if not kw.get("compact"):
+                    self.assertIn('`index <bundle>`, `--where "path ~ <bundle>/"` on find and list.', out)
+                self.assertNotRegex(out, r"--(type|tag|scope|include-archive)\b")
+
     def test_find_help_is_rendered_not_paraphrased(self):
         """Counter-mutation: pin option strings that only argparse emits, so a
         hand-written summary of `find` cannot pass this pair of tests."""
         out = self._prime()
-        for flag in ("--breakdown", "--expand-tags", "--scope"):
+        for flag in ("--breakdown", "--expand-tags", "--where"):
             self.assertIn(flag, out)
         self.assertIn("score lines:", out)
 

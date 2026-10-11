@@ -76,7 +76,7 @@ def build_fts_index(root, db_path=None, include_topics=False):
     half-written index in place of a working one.
 
     Also indexes `_archive/<bundle>/<cid>` at that exact path (R-11) —
-    without it `--include-archive` is a decoration, since FTS is the
+    without it `archived` in --where is a decoration, since FTS is the
     default retrieval arm and no predicate can surface a concept the index
     never saw. Active and archived counts are recorded separately in
     fts_meta (see _fts_index_stale) rather than summed, because a summed
@@ -105,7 +105,7 @@ def build_fts_index(root, db_path=None, include_topics=False):
                 conn.execute(
                     "INSERT INTO docs(path, ctype, title, tags, body)"
                     " VALUES (?, ?, ?, ?, ?)",
-                    ("{}{}/{}".format(path_prefix, b, cid), fm.get("type", ""),
+                    ("{}{}/{}".format(path_prefix, b, cid), _dequote(fm.get("type", "")),
                      title, " ".join(extract_tags(raw)), body))
                 count += 1
                 mt = os.path.getmtime(ap)
@@ -240,19 +240,21 @@ def _fts_ranking(root, query, limit, filters, notify=True):
     sql = ("SELECT path, bm25(docs, {}) AS r FROM docs WHERE docs MATCH ?"
            .format(FTS_BM25_WEIGHTS))
     params = [expr]
-    # `docs` carries all three dimensions, so the residual is empty and there
-    # is nothing left for this arm to enforce in Python.
+    # The `docs` table carries path, type and tag; whatever else the expression
+    # holds comes back as the residual and is applied below, BEFORE the cut to
+    # `limit` — a LIMIT in SQL would cut first and starve the result.
     where, where_params, residual = filters.sql_where(FTS_FILTER_COLUMNS)
     sql += where
     params.extend(where_params)
-    assert not residual, "docs table covers every filter dimension"
-    sql += " ORDER BY r, path LIMIT ?"  # path is the tiebreaker for equal
+    sql += " ORDER BY r, path"  # path is the tiebreaker for equal
     # bm25 scores (OKFT-rx72): the FTS5 doc-insertion order that would
     # otherwise decide ties comes from os.walk() at build-index time, which
     # is not a contract SQLite is bound to preserve run over run — an
     # explicit secondary key makes tied ranks reproducible instead of
     # accidental.
-    params.append(limit)
+    if not residual:
+        sql += " LIMIT ?"
+        params.append(limit)
     try:
         conn = sqlite3.connect(db)
         try:
@@ -268,7 +270,17 @@ def _fts_ranking(root, query, limit, filters, notify=True):
             # staleness only after a successful query keeps the corrupt path
             # at exactly one stderr note without changing what
             # _fts_index_stale() itself reports when called directly.
-            rows = conn.execute(sql, params).fetchall()
+            cursor = conn.execute(sql, params)
+            if residual:
+                # lazily, so only the candidates up to `limit` cost a file read
+                rows = []
+                for row in cursor:
+                    if len(rows) >= limit:
+                        break
+                    if residual.matches(root, row[0]):
+                        rows.append(row)
+            else:
+                rows = cursor.fetchall()
             topic_corpus_missing = (
                 filters.include_topics and _fts_index_includes_topics(root) is False)
             if (notify and not topic_corpus_missing

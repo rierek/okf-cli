@@ -404,28 +404,6 @@ class ResolveScopesArchive(unittest.TestCase):
             ("_archive/gamma", os.path.join(self.tmp, "_archive", "gamma")),
         ])
 
-    def test_scoped_include_archive_appends_only_that_bundles_archive_dir(self):
-        got = okf_catalogue.resolve_scopes(self.tmp, "alpha", include_archive=True)
-        self.assertEqual(got, [
-            ("alpha", os.path.join(self.tmp, "alpha")),
-            ("_archive/alpha", os.path.join(self.tmp, "_archive", "alpha")),
-        ])
-        got_other = okf_catalogue.resolve_scopes(self.tmp, "beta", include_archive=True)
-        self.assertNotIn(("_archive/alpha",
-                          os.path.join(self.tmp, "_archive", "alpha")),
-                          got_other)
-
-    def test_scoped_subdir_include_archive_appends_nested_archive_dir(self):
-        """AC3's easiest way to break: losing or re-deriving the prefix
-        during traversal. `alpha/sub` must map to the NESTED
-        `_archive/alpha/sub`, not `_archive/alpha` or `_archive/sub`."""
-        got = okf_catalogue.resolve_scopes(self.tmp, "alpha/sub", include_archive=True)
-        self.assertEqual(got, [
-            ("alpha", os.path.join(self.tmp, "alpha", "sub")),
-            ("_archive/alpha",
-             os.path.join(self.tmp, "_archive", "alpha", "sub")),
-        ])
-
     def test_no_archive_directory_at_all_does_not_crash(self):
         tmp2 = tempfile.mkdtemp()
         try:
@@ -596,7 +574,7 @@ class CtxLoadSave(CtxFixtureMixin, unittest.TestCase):
 
     def test_sc02_list_type_context_shows_saved_ctx(self):
         okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "d", "entries": []})
-        r = self._cli("list", "--type", "Context")
+        r = self._cli("list", "--where", "type = Context")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("_ctx/s", r.stdout)
 

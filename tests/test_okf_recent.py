@@ -231,8 +231,7 @@ class RecentFixtureMixin:
         import contextlib
         import io
         import types
-        args = types.SimpleNamespace(limit=10, scope=None, type=None,
-                                     tag=None, json=False)
+        args = types.SimpleNamespace(limit=10, where=None, json=False)
         for k, v in kw.items():
             setattr(args, k, v)
         out, err = io.StringIO(), io.StringIO()
@@ -296,7 +295,7 @@ class RecentCommand(RecentFixtureMixin, unittest.TestCase):
         self._concept("a/one.md", ctype="Runbook")
         self._concept("a/two.md", ctype="Decision")
         self._stub_catalogue_events({"a/one.md": 1, "a/two.md": 2})
-        out, _ = self._run(type="Decision")
+        out, _ = self._run(where="type = Decision")
         self.assertIn("recent: 1 of 1 concept(s)", out)
         self.assertIn("a/two", out)
 
@@ -304,17 +303,28 @@ class RecentCommand(RecentFixtureMixin, unittest.TestCase):
         self._concept("a/one.md", tags=("alpha",))
         self._concept("a/two.md", tags=("beta",))
         self._stub_catalogue_events({"a/one.md": 1, "a/two.md": 2})
-        out, _ = self._run(tag="alpha")
+        out, _ = self._run(where="tag = alpha")
         self.assertIn("recent: 1 of 1 concept(s)", out)
         self.assertIn("a/one", out)
 
-    def test_scope_narrows_to_one_bundle(self):
+    def test_path_narrows_to_one_bundle(self):
         self._concept("a/one.md")
         self._concept("b/two.md")
         self._stub_catalogue_events({"a/one.md": 1, "b/two.md": 2})
-        out, _ = self._run(scope="a")
+        out, _ = self._run(where="path ~ a/")
         self.assertIn("recent: 1 of 1 concept(s)", out)
         self.assertIn("a/one", out)
+
+    def test_archive_is_reached_only_when_the_expression_names_it(self):
+        self._concept("a/one.md")
+        self._concept("_archive/a/old.md")
+        self._stub_catalogue_events({"a/one.md": 2, "_archive/a/old.md": 1})
+        out, _ = self._run(where="type = Runbook")
+        self.assertIn("recent: 1 of 1 concept(s)", out)
+        self.assertNotIn("_archive", out)
+        out, _ = self._run(where="archived in (true, false)")
+        self.assertIn("recent: 2 of 2 concept(s)", out)
+        self.assertIn("_archive/a/old", out)
 
     def test_no_matches_on_empty_catalogue(self):
         os.makedirs(os.path.join(self.tmp, "a"))
@@ -397,13 +407,6 @@ class RecentDegradationNotes(RecentFixtureMixin, unittest.TestCase):
         self.assertIn("bundle `x-okf` resolves outside any git repository", err)
         self.assertIn("(uncommitted)", out)
         self.assertIn("recent: 1 of 1 concept(s)", out)
-
-    def test_broken_symlink_scope_notes_and_lists_nothing(self):
-        os.symlink(os.path.join(self.tmp, "gone"), os.path.join(self.tmp, "dead"))
-        self.events[os.path.realpath(self.tmp)] = ""
-        out, err = self._run(scope="dead")
-        self.assertIn("scope `dead` is a broken symlink", err)
-        self.assertEqual(out, "(no matches)\n")
 
     def test_undated_note_is_aggregated_not_per_concept(self):
         for i in range(3):

@@ -79,12 +79,12 @@ class McpIndexListBoundary(McpBoundaryTestBase):
     returns parsed JSON without raising — the exact B01 failure, now guarded."""
 
     def test_list_json_over_subprocess(self):
-        out = mcp.run_okf(self.root, "list", {"type": "Runbook"})["data"]
+        out = mcp.run_okf(self.root, "list", {"where": "type = Runbook"})["data"]
         self.assertIsInstance(out, list)
         self.assertEqual(len(out), 2)
 
     def test_list_json_filters_by_type(self):
-        out = mcp.run_okf(self.root, "list", {"type": "Nope"})["data"]
+        out = mcp.run_okf(self.root, "list", {"where": "type = Nope"})["data"]
         self.assertEqual(out, [])
 
     def test_index_json_over_subprocess_no_bundle(self):
@@ -147,7 +147,7 @@ class BuildArgvBundlePositionalGuard(unittest.TestCase):
 
 class BuildArgvIndexFullFlag(unittest.TestCase):
     """okf-cli-t2w8 SC-002 — `full` marshals to --full on `index` only,
-    scoped the same way include_archive is scoped to find/list."""
+    scoped to `index` alone."""
 
     def test_full_true_adds_the_flag(self):
         argv = mcp.build_argv("/root", "index", {"bundle": "", "full": True})
@@ -159,10 +159,9 @@ class BuildArgvIndexFullFlag(unittest.TestCase):
 
 
 class McpFindFilterBoundary(McpBoundaryTestBase):
-    """P8/8a (okf-cli-8uaf, SC-004) — okf_find exposes type/tag/scope;
-    _FLAGS marshals all three across the real subprocess boundary. A second
-    bundle sharing the query token proves the filter actually excludes
-    (not a silent no-op, per the bean's B01-class warning)."""
+    """OKFT-iy9n — okf_find and okf_list expose `where`; _FLAGS marshals it across the real
+    subprocess boundary. A second bundle sharing the query token proves the filter actually
+    excludes (not a silent no-op, per the bean's B01-class warning)."""
 
     def setUp(self):
         super().setUp()
@@ -170,18 +169,30 @@ class McpFindFilterBoundary(McpBoundaryTestBase):
            "---\ntype: Runbook\ntitle: Dupe\ndescription: third\ntags: [gamma]\n"
            "---\n# Dupe\n\nalpha shared token.\n")
 
-    def test_find_scope_reaches_cli_over_subprocess(self):
-        out = mcp.run_okf(self.root, "find", {"query": "alpha", "scope": "b"})["data"]
+    def test_find_where_path_reaches_cli_over_subprocess(self):
+        out = mcp.run_okf(self.root, "find", {"query": "alpha", "where": "path ~ b/"})["data"]
         paths = [h["path"] for h in out["hits"]]
         self.assertIn("b/one", paths)
         self.assertNotIn("other/dupe", paths)
 
-    def test_find_type_and_tag_reach_cli_over_subprocess(self):
-        out = mcp.run_okf(
-            self.root, "find", {"query": "one two", "type": "Runbook", "tag": "alpha"})["data"]
+    def test_find_where_type_and_tag_reach_cli_over_subprocess(self):
+        out = mcp.run_okf(self.root, "find", {
+            "query": "one two", "where": "type = Runbook and tag = alpha"})["data"]
         paths = [h["path"] for h in out["hits"]]
         self.assertIn("b/one", paths)
         self.assertNotIn("b/two", paths)
+
+    def test_list_where_returns_the_concepts_the_expression_selects(self):
+        out = mcp.run_okf(self.root, "list", {"where": "type = Runbook and tag = beta"})["data"]
+        self.assertEqual([r["path"] for r in out], ["b/two"])
+
+    def test_a_malformed_where_reaches_the_caller_as_the_invalid_input_error(self):
+        for command, params in (("find", {"query": "alpha"}), ("list", {})):
+            with self.subTest(command=command):
+                with self.assertRaises(RuntimeError) as caught:
+                    mcp.run_okf(self.root, command, dict(params, where="type ="))
+                self.assertIn("invalid_input", str(caught.exception))
+                self.assertIn("--where", str(caught.exception))
 
     def test_index_with_bundle_still_works_after_flags_change(self):
         # Regression guard for the positional-collision fix above.
@@ -267,7 +278,7 @@ class McpJsonCommandIgnoresStderr(unittest.TestCase):
         fake_subprocess = mock.Mock()
         fake_subprocess.run.return_value = stub
         with mock.patch.object(mcp, "subprocess", fake_subprocess):
-            out = mcp.run_okf("/root", "list", {"type": "Runbook"})
+            out = mcp.run_okf("/root", "list", {"where": "type = Runbook"})
         self.assertEqual(out, {"data": [{"title": "One"}], "warnings": []})
 
 
@@ -460,71 +471,72 @@ class McpToolSignatureContract(unittest.TestCase):
                                "{}.{}".format(name, param_name))
 
 
-class McpIncludeArchiveFlag(unittest.TestCase):
-    """R-14 (okf-cli-9e2b) — _BOOL_FLAGS is shared across every command, so
-    the tool SIGNATURE decides who can reach the flag: a command whose
-    Python signature never accepts `include_archive` can never put it in
-    `params`, and build_argv only emits `--include-archive` for a key that
-    is actually present and truthy in `params`. AC3/SC-02 is the real risk
-    (shared dict, easy to leak): tested over EVERY other command, not a
-    sample of two."""
+class McpWhereParameter(unittest.TestCase):
+    """OKFT-iy9n — `where` is the one filter parameter: a string on okf_find and okf_list that
+    reaches okf-cli as `--where`; the four removed parameters exist nowhere on the surface."""
 
-    def test_sc01_find_carries_the_flag_when_set_and_omits_it_when_unset(self):
-        with_flag = mcp.build_argv("/root", "find",
-                                    {"query": "q", "include_archive": True})
-        self.assertIn("--include-archive", with_flag)
-        without = mcp.build_argv("/root", "find",
-                                  {"query": "q", "include_archive": False})
-        self.assertNotIn("--include-archive", without)
+    REMOVED = ("type", "tag", "scope", "include_archive")
 
-    def test_sc01_list_carries_the_flag_when_set_and_omits_it_when_unset(self):
-        with_flag = mcp.build_argv("/root", "list", {"include_archive": True})
-        self.assertIn("--include-archive", with_flag)
-        without = mcp.build_argv("/root", "list", {"include_archive": False})
-        self.assertNotIn("--include-archive", without)
+    def tools(self):
+        return mcp._register(_ToolCollector()).tools
 
-    def test_ac3_sc02_no_other_command_emits_the_flag(self):
-        others = sorted(set(mcp._COMMANDS) - {"find", "list"})
-        self.assertTrue(others)  # sanity: the exclusion set is non-empty
-        for command in others:
-            argv = mcp.build_argv("/root", command, {"include_archive": True})
-            self.assertNotIn(
-                "--include-archive", argv,
-                "command {!r} must never emit --include-archive".format(command))
+    def test_where_marshals_to_the_flag_when_set_and_is_omitted_when_empty(self):
+        self.assertEqual(mcp.build_argv("/root", "list", {"where": "type = Runbook"}),
+                         ["--root", "/root", "list", "--where", "type = Runbook", "--json"])
+        self.assertEqual(mcp.build_argv("/root", "find", {"query": "q", "where": "tag = a or tag = b"}),
+                         ["--root", "/root", "find", "q", "--where", "tag = a or tag = b", "--json"])
+        for empty in ("", None):
+            self.assertNotIn("--where", mcp.build_argv("/root", "list", {"where": empty}))
 
-    def test_ac1_okf_find_tool_accepts_include_archive_and_reaches_build_argv(self):
-        argvs = []
+    def test_a_removed_parameter_marshals_to_no_flag(self):
+        for command in ("find", "list"):
+            for key in self.REMOVED:
+                with self.subTest(command=command, key=key):
+                    argv = mcp.build_argv("/root", command, {"query": "q", key: "x" if key != "include_archive" else True})
+                    self.assertEqual(argv, mcp.build_argv("/root", command, {"query": "q"}))
+
+    def test_find_and_list_accept_where(self):
+        for name in ("okf_find", "okf_list"):
+            params = inspect.signature(self.tools()[name]).parameters
+            with self.subTest(tool=name):
+                self.assertIn("where", params)
+                self.assertIs(params["where"].annotation, str)
+                self.assertEqual(params["where"].default, "")
+
+    def test_no_tool_takes_a_removed_parameter(self):
+        for name, fn in self.tools().items():
+            with self.subTest(tool=name):
+                self.assertEqual(set(self.REMOVED) & set(inspect.signature(fn).parameters), set())
+
+    def test_find_and_list_forward_where_to_run_okf(self):
+        calls = []
         real = mcp.run_okf
-
-        def spy(root, command, params):
-            argvs.append(mcp.build_argv(root, command, params))
-            return ""
-        mcp.run_okf = spy
+        mcp.run_okf = lambda root, command, params: calls.append((command, params)) or {}
         try:
-            mcp._register(_ToolCollector()).tools["okf_find"](
-                "/root", query="q", include_archive=True)
+            self.tools()["okf_find"]("/root", query="q", where="type = A")
+            self.tools()["okf_list"]("/root", where="type = B")
         finally:
             mcp.run_okf = real
-        self.assertEqual(
-            argvs[0],
-            ["--root", "/root", "find", "q", "--limit", "10", "--include-archive", "--json"])
+        self.assertEqual([(c, p.get("where")) for c, p in calls], [("find", "type = A"), ("list", "type = B")])
 
-    def test_ac1_okf_list_tool_accepts_include_archive_and_reaches_build_argv(self):
-        argvs = []
-        real = mcp.run_okf
-
-        def spy(root, command, params):
-            argvs.append(mcp.build_argv(root, command, params))
-            return ""
-        mcp.run_okf = spy
+    def test_docstrings_and_the_budget_hint_name_where_with_an_example_and_no_removed_parameter(self):
+        texts = {name: self.tools()[name].__doc__ for name in ("okf_find", "okf_list")}
+        mcp.MAX_OUTPUT_CHARS, saved = 10, mcp.MAX_OUTPUT_CHARS
         try:
-            mcp._register(_ToolCollector()).tools["okf_list"](
-                "/root", include_archive=True)
+            catalogue = tempfile.mkdtemp()
+            try:
+                with self.assertRaises(RuntimeError) as caught:
+                    mcp.run_okf(catalogue, "index", {})
+                texts["budget hint"] = str(caught.exception)
+            finally:
+                shutil.rmtree(catalogue, ignore_errors=True)
         finally:
-            mcp.run_okf = real
-        self.assertEqual(
-            argvs[0],
-            ["--root", "/root", "list", "--include-archive", "--json"])
+            mcp.MAX_OUTPUT_CHARS = saved
+        for name, text in texts.items():
+            with self.subTest(text=name):
+                self.assertIn("where", text)
+                self.assertRegex(text, r"where[= ]*[\"'`]?\w+ ?[=~] ?\w+")
+                self.assertNotRegex(text, r"include_archive|\b(type|tag|scope)=|--(type|tag|scope|include-archive)\b")
 
 
 class McpWikilinksBoundary(McpBoundaryTestBase):

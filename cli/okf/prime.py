@@ -29,7 +29,8 @@ back to its own script directory.
 
 Progressive disclosure: widen only when the cheaper step left the question open.
 
-  1. find "<query>"             ranked search across all bundles
+  1. find "<query>"             ranked search across all bundles; narrow it with
+                                --where "type = Runbook and path ~ <bundle>/"
   2. index [<bundle>]           what bundles and directories exist
   3. toc <bundle>[/<concept>]   headings before bodies — the cheapest way to
                                 decide whether a page is worth reading. A bare
@@ -67,7 +68,8 @@ plain git repo — ordinary file tools and git apply.
 
 Progressive disclosure: widen only when the cheaper step left the question open.
 
-  1. find "<query>"             ranked search across all bundles
+  1. find "<query>"             ranked search across all bundles; narrow it with
+                                --where "type = Runbook and path ~ <bundle>/"
   2. index [<bundle>]           what bundles and directories exist
   3. toc <bundle>[/<concept>]   headings before bodies — the cheapest way to
                                 decide whether a page is worth reading. A bare
@@ -207,7 +209,7 @@ def cmd_prime(root, args):
     print()
     print("## Bundles\n")
     print("The catalogue TOC, as `index` renders it. Each name is a path: "
-          "`toc <bundle>`,\n`index <bundle>`, `--scope <bundle>` on find and "
+          "`toc <bundle>`,\n`index <bundle>`, `--where \"path ~ <bundle>/\"` on find and "
           "list.\n")
     if args.compact:
         for line in bundles:

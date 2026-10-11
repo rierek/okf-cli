@@ -13,9 +13,10 @@ from okf.output import _add_output
 from okf import catalogue
 from okf.catalogue import (
     FM_DELIM, TAG_DESC_MAX, all_tags, extract_tags, iter_concepts, load_tags, parse_tag_list,
-    read_file, register_tags, resolve_scopes, write_file,
+    read_file, register_tags, resolve_scopes, split_frontmatter, write_file,
 )
-from okf.parser_support import _complete_scopes, _complete_tags, _sub
+from okf.find_filters import compile_where
+from okf.parser_support import _add_filters, _complete_tags, _sub
 
 
 TAGS_INLINE_RE = re.compile(r"^tags:[ \t]*\[.*\]\s*$", re.M)
@@ -71,14 +72,27 @@ def remove_tags_field(text):
     return None
 
 
+def _selected(filters, root, ap, text):
+    """Whether the --where expression selects the concept at `ap`; without an expression every
+    concept is selected. Staging content is judged like any other, as the verbs always reached it."""
+    if not filters:
+        return True
+    rel = os.path.relpath(ap, root).replace(os.sep, "/")
+    return filters.matches_loaded(rel[:-3] if rel.endswith(".md") else rel,
+                                  split_frontmatter(text)[0], text)
+
+
 def cmd_merge_tags(root, args):
+    filters = compile_where(args.where)
     sources = set(args.tags)
     touched, unparseable = [], []
-    for _bundle, bp in resolve_scopes(root, args.scope):
+    for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
         # prune_staging=False (OKFT-oe8t Review D02): a tag rename must reach
         # staging content too, or it silently leaves the old tag behind there.
         for _cid, ap in iter_concepts(bp, prune_staging=False):
             text = read_file(ap)
+            if not _selected(filters, root, ap, text):
+                continue
             tags = extract_tags(text)
             if not any(t in sources for t in tags):
                 continue
@@ -113,15 +127,18 @@ def cmd_merge_tags(root, args):
 
 def cmd_remove_tags(root, args):
     """Remove one or more tags from concept frontmatter (no merge target).
-    Symmetric to merge-tags: dry-run default, --scope-limited, --apply writes.
+    Symmetric to merge-tags: dry-run default, --where-limited, --apply writes.
     Emptying the tag list strips the whole `tags:` field (no dangling key)."""
+    filters = compile_where(args.where)
     targets = set(args.tags)
     touched, emptied, unparseable = [], [], []
-    for _bundle, bp in resolve_scopes(root, args.scope):
+    for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
         # prune_staging=False (OKFT-oe8t Review D02): same reasoning as
         # cmd_merge_tags — a tag removal must reach staging content too.
         for _cid, ap in iter_concepts(bp, prune_staging=False):
             text = read_file(ap)
+            if not _selected(filters, root, ap, text):
+                continue
             tags = extract_tags(text)
             if not any(t in targets for t in tags):
                 continue
@@ -175,12 +192,15 @@ def normalize_tags_in_file(text):
 
 
 def cmd_normalize_tags(root, args):
+    filters = compile_where(args.where)
     touched = []
-    for _bundle, bp in resolve_scopes(root, args.scope):
+    for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
         # prune_staging=False (OKFT-oe8t Review D02): same reasoning as
         # cmd_merge_tags — normalization must reach staging content too.
         for _cid, ap in iter_concepts(bp, prune_staging=False):
             text = read_file(ap)
+            if not _selected(filters, root, ap, text):
+                continue
             new_text = normalize_tags_in_file(text)
             if new_text is None:
                 continue
@@ -330,8 +350,7 @@ def add_merge_tags_parser(sub):
                "merge/rename one or more tags into a target tag across concept frontmatter")
     pmt.add_argument("tags", nargs="+", help="source tag(s) to merge, e.g. workflow workflows").completer = _complete_tags
     pmt.add_argument("--into", required=True, metavar="TAG", help="destination tag name").completer = _complete_tags
-    pmt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
+    _add_filters(pmt)
     pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     _add_output(pmt)
 
@@ -339,8 +358,7 @@ def add_merge_tags_parser(sub):
 def add_normalize_tags_parser(sub):
     pnt = _sub(sub, "normalize-tags", "tags",
                "convert inline `tags: [...]` fields to YAML block-list form (local convention)")
-    pnt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
+    _add_filters(pnt)
     pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     _add_output(pnt)
 
@@ -349,8 +367,7 @@ def add_remove_tags_parser(sub):
     prt = _sub(sub, "remove-tags", "tags",
                "remove one or more tags from concept frontmatter (no merge target)")
     prt.add_argument("tags", nargs="+", help="tag(s) to remove, e.g. stale draft").completer = _complete_tags
-    prt.add_argument("--scope", metavar="TARGET",
-                     help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
+    _add_filters(prt)
     prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
     _add_output(prt)
 

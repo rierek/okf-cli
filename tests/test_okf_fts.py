@@ -16,6 +16,7 @@ if _HERE not in sys.path:  # cli/ holds the okf package
 
 from okf import catalogue as okf_catalogue
 from okf import find_filters as okf_find_filters
+from okf.find_filters import compile_where
 from okf import fts as okf_fts
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
@@ -294,19 +295,36 @@ class FtsRanking(unittest.TestCase):
     def test_type_filter_narrows(self):
         okf_fts.build_fts_index(self.root)
         ranked = okf_fts._fts_ranking(self.root, "tunnel", 10,
-                                  okf_find_filters.FindFilters(type="Runbook"))
+                                  compile_where("type = Runbook"))
         self.assertEqual([p for p, _s in ranked], ["b/one"])
 
     def test_tag_filter_matches_whole_tags_only(self):
         okf_fts.build_fts_index(self.root)
-        ranked = okf_fts._fts_ranking(self.root, "tunnel", 10,
-                                  okf_find_filters.FindFilters(tag="tail"))
+        ranked = okf_fts._fts_ranking(self.root, "tunnel", 10, compile_where("tag = tail"))
         self.assertEqual(ranked, [])
 
-    def test_scope_filter_narrows_to_a_bundle(self):
+    def test_path_filter_narrows_to_a_bundle(self):
         okf_fts.build_fts_index(self.root)
-        self.assertNotEqual(okf_fts._fts_ranking(self.root, "tunnel", 10, okf_find_filters.FindFilters(scope="b")), [])
-        self.assertEqual(okf_fts._fts_ranking(self.root, "tunnel", 10, okf_find_filters.FindFilters(scope="zz")), [])
+        self.assertNotEqual(okf_fts._fts_ranking(self.root, "tunnel", 10, compile_where("path ~ b/")), [])
+        self.assertEqual(okf_fts._fts_ranking(self.root, "tunnel", 10, compile_where("path ~ zz/")), [])
+
+    def test_a_filter_the_index_cannot_apply_is_applied_before_the_limit(self):
+        """The status key is not in the docs table: the residual runs over the ranked rows, and
+        a LIMIT in SQL would have cut before it and starved the answer of the matching rows."""
+        okf_fts.build_fts_index(self.root)
+        for name in ("three", "four"):
+            with open(os.path.join(self.root, "b", name + ".md"), "w", encoding="utf-8") as f:
+                f.write("---\ntype: Concept\ntitle: {}\nstatus: draft\ndescription: d\n"
+                        "tags: []\n---\ntunnel\n".format(name))
+        okf_fts.build_fts_index(self.root)
+        every = [p for p, _s in okf_fts._fts_ranking(self.root, "tunnel", 10, compile_where(None))]
+        self.assertGreater(len(every), 2)
+        draft = compile_where("status = draft")
+        ranked = okf_fts._fts_ranking(self.root, "tunnel", 1, draft)
+        self.assertEqual(len(ranked), 1)
+        self.assertIn(ranked[0][0], ("b/three", "b/four"))
+        both = okf_fts._fts_ranking(self.root, "tunnel", 10, draft)
+        self.assertEqual(sorted(p for p, _s in both), ["b/four", "b/three"])
 
     def test_equal_bm25_scores_break_the_tie_by_path(self):
         """OKFT-rx72 — ORDER BY r alone leaves tied bm25 rows in whatever

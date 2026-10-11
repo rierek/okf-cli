@@ -11,7 +11,7 @@ import urllib.request
 
 from okf import catalogue
 from okf.catalogue import iter_concepts, list_indexable_bundles
-from okf.find_filters import EMB_FILTER_COLUMNS, FindFilters
+from okf.find_filters import EMB_FILTER_COLUMNS
 from okf.output import _add_output, _note
 from okf.parser_support import _sub
 
@@ -40,36 +40,36 @@ def _tagvec_db_path(root):
     return os.path.join(root, ".tagvec", "tag_vectors.sqlite")
 
 
-def _load_concept_vectors(db_path, model, filters=None):
+def _load_concept_vectors(db_path, model, filters):
     """([(path, [float, ...]), ...], residual) for every concept_emb row of
     `model`, or (None, _) if the cache file/table is absent or has no rows for
     this model (the graceful-skip signal semantic_ranking() acts on).
 
-    concept_emb carries only the path, so of the three filter dimensions this
-    query can enforce scope alone — with the SAME predicate the FTS arm uses,
-    since concept_emb.path and docs.path share the `<bundle>/<concept>` form.
-    Enforcing it in SQL rather than after ranking keeps --limit meaningful: an
-    out-of-scope concept never occupies a slot it would then be dropped from
-    (B01). The returned `residual` carries type/tag for the caller to apply."""
-    filters = filters or FindFilters()
+    concept_emb carries only the path, so of the --where expression this query
+    can enforce the path conjuncts alone — with the SAME predicate the FTS arm
+    uses, since concept_emb.path and docs.path share the `<bundle>/<concept>`
+    form. Enforcing them in SQL rather than after ranking keeps --limit
+    meaningful: a concept the expression excludes never occupies a slot it
+    would then be dropped from (B01). The returned `residual` carries the other
+    conjuncts for the caller to apply."""
     where, where_params, residual = filters.sql_where(EMB_FILTER_COLUMNS)
     if not os.path.isfile(db_path):
         return None, residual
-    scope = filters.scope
+    restricted = bool(filters)
     sql = "SELECT path, dim, vec FROM concept_emb WHERE model = ?" + where
     params = [model] + where_params
     try:
         conn = sqlite3.connect(db_path)
         try:
             rows = conn.execute(sql, params).fetchall()
-            # "no rows" means two different things once a scope narrows the
+            # "no rows" means two different things once an expression narrows the
             # query, and they must not share a return value: a cache with no
             # embeddings for this model is a DEGRADATION (None -> stderr
             # note), while a populated cache holding nothing inside the
-            # requested scope is a correct, complete, empty answer ([] -> no
+            # requested filter is a correct, complete, empty answer ([] -> no
             # note). Conflating them would print "embeddings absent" at the
-            # user every time they scoped to a bundle that simply has none.
-            if not rows and scope:
+            # user every time they filtered to a bundle that simply has none.
+            if not rows and restricted:
                 have_any = conn.execute(
                     "SELECT 1 FROM concept_emb WHERE model = ? LIMIT 1",
                     (model,)).fetchone()
@@ -187,11 +187,12 @@ def semantic_ranking(root, query, limit, filters):
     deduplication happens in fusion, after the owner has been decided.
 
     B01: the filters are not the lexical arm's private business. Whichever arm
-    ends up owning the ranking, --scope/--type/--tag describe the ANSWER, so
-    they are enforced here too. Scope rides along in the cache query; the
-    residual (type/tag, absent from concept_emb) is applied while walking the
-    ranked list — lazily, stopping at `limit`, so it costs one frontmatter
-    read per candidate actually considered rather than one per embedding."""
+    ends up owning the ranking, --where describes the ANSWER, so it is
+    enforced here too. The path conjuncts ride along in the cache query; the
+    residual (type, tag and the rest, absent from concept_emb) is applied while
+    walking the ranked list — lazily, stopping at `limit`, so it costs one
+    frontmatter read per candidate actually considered rather than one per
+    embedding."""
     vectors, residual = _load_concept_vectors(
         _tagvec_db_path(root), SEMANTIC_MODEL, filters)
     if vectors is None:

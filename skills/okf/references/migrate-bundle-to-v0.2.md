@@ -108,8 +108,8 @@ Keep the output: it is the work list and the comparison point. Show the user the
 ### Phase 2: mechanical normalisation
 
 ```bash
-okf-cli --root <catalogue> normalize-tags --scope <bundle>
-okf-cli --root <catalogue> normalize-tags --scope <bundle> --apply
+okf-cli --root <catalogue> normalize-tags --where "path ~ <bundle>/"
+okf-cli --root <catalogue> normalize-tags --where "path ~ <bundle>/" --apply
 okf-cli --root <catalogue> fix-crosslinks <bundle> --check
 okf-cli --root <catalogue> fix-crosslinks <bundle>
 okf-cli --root <catalogue> fix-xml-tags <bundle> --check
@@ -122,7 +122,7 @@ Fix every `unresolved` link that `fix-crosslinks` reports by hand.
 ### Phase 3: vocabulary
 
 - `kc/type/registered` warnings: add the type to `TYPES.md`, or change the concept to an existing type.
-- `kc/tag/registered` warnings (closed vocabulary): `tags <candidate>` to find the existing tag, then `merge-tags <old> --into <existing> --scope <bundle> --apply`, or `tags --register <tag> "<description>"` (writes at once).
+- `kc/tag/registered` warnings (closed vocabulary): `tags <candidate>` to find the existing tag, then `merge-tags <old> --into <existing> --where "path ~ <bundle>/" --apply`, or `tags --register <tag> "<description>"` (writes at once).
 - `kc/frontmatter/english-keys` warnings: rename the keys.
 
 Run `check <bundle>`.
@@ -192,7 +192,7 @@ grep -rl --include='*.md' '^# Citations' <catalogue>/<bundle>
 grep -rL --include='*.md' '^generated:' <catalogue>/<bundle>
 okf-cli --root <catalogue> read <bundle>/<concept-id>
 okf-cli --root <catalogue> build-index --if-stale
-okf-cli --root <catalogue> find "<term>" --scope <bundle>
+okf-cli --root <catalogue> find "<term>" --where "path ~ <bundle>/"
 ```
 
 Done when:
