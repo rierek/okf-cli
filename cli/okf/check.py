@@ -7,6 +7,7 @@ import os
 import re
 import sys
 
+from okf.errors import OkfError
 from okf import sync, wikilinks
 from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, FM_DELIM, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE, _dequote,
@@ -316,8 +317,7 @@ def cmd_fix_xml_tags(root, args):
     if target:
         tp = os.path.join(root, target.rstrip("/"))
         if not os.path.isdir(tp):
-            print("not a directory: {}".format(target), file=sys.stderr)
-            sys.exit(1)
+            raise OkfError("not_found", "not a directory: {}".format(target))
     touched = fix_xml_like_tags(root, target, dry_run=args.check)
     verb = "would wrap" if args.check else "wrapped"
     for rel, n in touched:
@@ -471,8 +471,7 @@ def cmd_fix_crosslinks(root, args):
     if target:
         tp = os.path.join(root, target.rstrip("/"))
         if not os.path.isdir(tp):
-            print("not a directory: {}".format(target), file=sys.stderr)
-            sys.exit(1)
+            raise OkfError("not_found", "not a directory: {}".format(target))
     touched, unresolved = fix_crosslinks(root, target, dry_run=args.check,
                                           include_reserved=args.include_reserved)
     verb = "would rewrite" if args.check else "rewrote"
@@ -563,14 +562,14 @@ def cmd_check(root, args):
     if target and not os.path.isdir(os.path.join(root, os.path.normpath(target))):
         # Without this a typo'd or renamed bundle scanned nothing and exited 0 —
         # a clean bill of health for a directory that does not exist.
-        print("not a directory: {}".format(target), file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("not_found", "not a directory: {}".format(target))
     errors, warnings = run_checks(root, getattr(args, "target", None),
                                   types_source=getattr(args, "types", None))
     if args.strict:
         errors, warnings = errors + warnings, []
     _print_findings(errors, warnings, args.json)
-    sys.exit(1 if errors else 0)
+    if errors:
+        raise OkfError("non_conformant", "")
 
 
 def _print_findings(errors, warnings, as_json):

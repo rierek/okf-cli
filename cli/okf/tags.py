@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+from okf.errors import OkfError
 
 from okf import catalogue
 from okf.catalogue import (
@@ -254,7 +255,7 @@ def cmd_tags(root, args):
         try:
             added, already = register_tags(root, args.register)
         except ValueError as e:
-            sys.exit("ERROR: {}".format(e))
+            raise OkfError("invalid_input", "ERROR: {}".format(e))
         if added:
             print("registered {} new tag(s) in TAGS.md: {}".format(len(added), ", ".join(added)))
             auto_embed_new_tags(root, added)
@@ -268,11 +269,11 @@ def cmd_tags(root, args):
             return
         unknown = [t for t in args.validate if t not in tags_set]
         for t in unknown:
-            print("UNKNOWN  {}".format(t))
-        print("OK — all {} known".format(len(args.validate)) if not unknown
-              else "{} UNKNOWN — register with: okf-cli.py tags --register <tag> \"<description, max {} chars>\"".format(
-                  len(unknown), TAG_DESC_MAX))
-        sys.exit(1 if unknown else 0)
+            print("unknown tag: {}".format(t), file=sys.stderr)
+        print("tags --validate: {} unknown tag(s) ({} chars max): {}".format(
+              len(unknown), TAG_DESC_MAX))
+        if unknown:
+            raise OkfError("non_conformant", "")
     counts = all_tags(root)
     if not args.query:
         if not counts:

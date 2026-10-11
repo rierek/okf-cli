@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+from okf.errors import OkfError
 
 from okf import catalogue, check, linkscan, wikilinks
 from okf.catalogue import (
@@ -482,8 +483,7 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
     which is what keeps AC3 (rename byte-identical) cheap to satisfy."""
 
     def die(msg):
-        sys.stderr.write("{}: {}\n".format(verb, msg))
-        sys.exit(2)
+        raise OkfError("invalid_input", "{}: {}".format(verb, msg))
 
     if not old_abs.endswith(".md") or not new_abs.endswith(".md"):
         die("both paths must be .md concept files")
@@ -696,10 +696,9 @@ def cmd_rename(root, args):
     resolved_old = os.path.realpath(old_abs)
     if resolved_old == archive_root or resolved_old.startswith(archive_root + os.sep):
         old_rel = os.path.relpath(old_abs, root).replace(os.sep, "/")
-        sys.stderr.write(
-            "rename: source lies under _archive/ — use archive --restore to "
-            "bring it back: {}\n".format(old_rel))
-        sys.exit(2)
+        raise OkfError("invalid_input",
+                       "rename: source lies under _archive/ — use archive --restore to "
+                       "bring it back: {}".format(old_rel))
 
     perform_rename(root, old_abs, new_abs, args.apply, args.force)
 
@@ -742,8 +741,7 @@ def cmd_archive(root, args):
     verb = "archive"
 
     def die(msg):
-        sys.stderr.write("{}: {}\n".format(verb, msg))
-        sys.exit(2)
+        raise OkfError("invalid_input", "{}: {}".format(verb, msg))
 
     ref = args.path[:-3] if args.path.endswith(".md") else args.path
     p = ref + ".md"

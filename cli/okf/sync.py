@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import sys
+from okf.errors import OkfError
 
 from okf.catalogue import (
     CANON_END, CANON_OPEN_RE, SYNC_BODY, SYNC_END, SYNC_OPEN_LIT, SYNC_OPEN_RE, iter_all_md,
@@ -173,12 +174,11 @@ def _canon_payload(root, concept, block_id):
         if blk["id"] != block_id:
             continue
         if blk["payload"] is None:
-            print("canon block `{}` in {} has no closing {}".format(
-                block_id, rel, CANON_END), file=sys.stderr)
-            sys.exit(1)
+            raise OkfError("not_found",
+                           "canon block `{}` in {} has no closing {}".format(
+                               block_id, rel, CANON_END))
         return ap, rel, blk["payload"]
-    print("no canon block `{}` in {}".format(block_id, rel), file=sys.stderr)
-    sys.exit(1)
+    raise OkfError("not_found", "no canon block `{}` in {}".format(block_id, rel))
 
 
 def scan_sync_blocks(root, target, source=None, block_id=None):
@@ -223,30 +223,26 @@ def cmd_sync_insert(root, args):
     cap = resolve_concept(root, args.consumer)
     consumer_rel = os.path.relpath(cap, root).replace(os.sep, "/")
     if cap == owner_ap:
-        print("{} owns `{}` — a canon owner does not consume its own block"
-              .format(consumer_rel, args.block_id), file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("invalid_input",
+                       "{} owns `{}` — a canon owner does not consume its own block"
+                       .format(consumer_rel, args.block_id))
     text = read_file_verbatim(cap)
     if text is None:
-        print("not valid UTF-8: {}".format(consumer_rel), file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("non_conformant", "not valid UTF-8: {}".format(consumer_rel))
     _, body = split_frontmatter(text)
     head = text[:len(text) - len(body)]
     for rec in parse_sync_blocks(body):
         if rec["id"] != args.block_id:
             continue
         if rec["source"] == source:
-            print("{} already carries `{}` from {} — use sync-update to "
-                  "refresh it".format(consumer_rel, args.block_id, source),
-                  file=sys.stderr)
+            message = "{} already carries `{}` from {} — use sync-update to refresh it".format(
+                consumer_rel, args.block_id, source)
         else:
             # Two blocks with one id read as one block to a human, and
             # `sync-status --block` could not tell them apart either.
-            print("{} already carries a block `{}` from {} — the id would be "
-                  "ambiguous in this concept".format(
-                      consumer_rel, args.block_id, rec["source"] or "?"),
-                  file=sys.stderr)
-        sys.exit(1)
+            message = "{} already carries a block `{}` from {} — the id would be ambiguous in this concept".format(
+                consumer_rel, args.block_id, rec["source"] or "?")
+        raise OkfError("invalid_input", message)
     block = render_sync_block(args.block_id, source, payload)
     new_body = body.rstrip("\n") + "\n\n" + block + "\n"
     if not args.apply:
@@ -263,8 +259,7 @@ def cmd_sync_status(root, args):
     target = getattr(args, "target", None)
     if target and not os.path.isdir(os.path.join(root, os.path.normpath(target))):
         # Same gate as cmd_check: a typo'd bundle scanned nothing and exited 0.
-        print("not a directory: {}".format(target), file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("not_found", "not a directory: {}".format(target))
     _, found = scan_sync_blocks(root, target, source=args.source,
                                 block_id=args.block)
     totals = {s: 0 for s in SYNC_STATUSES}
@@ -282,14 +277,14 @@ def cmd_sync_status(root, args):
                 row["id"] or "?"))
         print("sync-status: " + ", ".join(
             "{} {}".format(totals[s], s) for s in SYNC_STATUSES))
-    sys.exit(1 if any(r["status"] != "synced" for r in rows) else 0)
+    if any(r["status"] != "synced" for r in rows):
+        raise OkfError("drift", "")
 
 
 def cmd_sync_update(root, args):
     target = getattr(args, "target", None)
     if target and not os.path.isdir(os.path.join(root, os.path.normpath(target))):
-        print("not a directory: {}".format(target), file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("not_found", "not a directory: {}".format(target))
     canon, found = scan_sync_blocks(root, target, source=args.source,
                                     block_id=args.block)
     verb = "updated" if args.apply else "would update"
@@ -338,7 +333,8 @@ def cmd_sync_update(root, args):
     print("sync-update: {} {}, {} refused, {} unresolvable.{}".format(
         len(updated), verb, len(refused), len(unresolvable),
         "" if args.apply else " Re-run with --apply."))
-    sys.exit(1 if (refused or unresolvable) else 0)
+    if refused or unresolvable:
+        raise OkfError("drift", "")
 
 
 def _complete_block_ids(parsed_args, **_):

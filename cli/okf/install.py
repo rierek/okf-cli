@@ -4,6 +4,7 @@ registration code that lives next to cli/okf-cli.py, and registers the parser bl
 import importlib.util
 import os
 import sys
+from okf.errors import OkfError
 
 from okf.parser_support import _sub
 
@@ -15,14 +16,16 @@ def cmd_install(_root, args):
     is how people put it on PATH."""
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "okf_install.py")
     if not os.path.isfile(path):  # okf-cli.py copied out of its clone on its own
-        sys.exit("ERROR: install needs okf_install.py next to okf-cli.py ({}); run it from a full clone "
-                 "or use pipx / uv tool install".format(os.path.dirname(path)))
+        raise OkfError(
+            "internal",
+            "ERROR: install needs okf_install.py next to okf-cli.py ({}); run it from a full clone "
+            "or use pipx / uv tool install".format(os.path.dirname(path)))
     spec = importlib.util.spec_from_file_location("okf_install", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     code = mod.run(args)
     if code:
-        sys.exit(code)
+        raise OkfError("internal", "install failed with exit code {}".format(code))
 
 
 # commands main() runs without resolving a catalogue root

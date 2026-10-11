@@ -8,6 +8,7 @@ import os
 import shlex
 import subprocess
 import sys
+from okf.errors import OkfError
 
 from okf import check, linkscan, rename
 from okf.catalogue import (
@@ -76,9 +77,8 @@ def cmd_ctx_create(root, args):
             seen.add(norm)
             entries.append({"mode": "pflicht", "path": norm, "comment": comment})
     if missing:
-        for p in missing:
-            print("ctx: not found: {}".format(p), file=sys.stderr)
-        sys.exit(2)
+        raise OkfError("not_found", "\n".join(
+            "ctx: not found: {}".format(p) for p in missing))
     entries.sort(key=lambda e: e["path"].casefold())
     save_ctx(root, {"slug": args.slug, "description": args.description or "",
                     "entries": entries})
@@ -124,8 +124,7 @@ def cmd_ctx_show(root, args):
                           "dead": dead, "tokens_required": t_req},
                          ensure_ascii=False, indent=2))
         if dead:
-            print(_ctx_dead_warning(args.slug, dead), file=sys.stderr)
-            sys.exit(1)
+            raise OkfError("non_conformant", _ctx_dead_warning(args.slug, dead))
         return
 
     def block(m, head):
@@ -157,7 +156,7 @@ def cmd_ctx_show(root, args):
         out.append(_ctx_dead_warning(args.slug, dead))
     print("\n".join(out))
     if dead:
-        sys.exit(1)
+        raise OkfError("non_conformant", "")
 
 
 def cmd_ctx_read(root, args):
@@ -177,7 +176,7 @@ def cmd_ctx_read(root, args):
         print("===== {} reference entr{} not printed — ctx show {} =====".format(
             r, "y" if r == 1 else "ies", args.slug))
     if dead:
-        sys.exit(1)
+        raise OkfError("non_conformant", "")
 
 
 def cmd_ctx_toc(root, args):
@@ -359,7 +358,8 @@ def _ctx_report(root, slugs, stale, as_json):
         errors += [("ctx", rel, m) for m in es]
         warnings += [("ctx", rel, m) for m in ws]
     check._print_findings(errors, warnings, as_json)
-    sys.exit(1 if errors else 0)
+    if errors:
+        raise OkfError("non_conformant", "")
 
 
 def cmd_ctx_check(root, args):

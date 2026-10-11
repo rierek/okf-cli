@@ -36,9 +36,11 @@ def main():
             return COMMAND_DISPATCH[args.cmd](None, args)
         root = catalogue_root(args.root)
         if root is None:
-            sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
+            raise OkfError("not_found",
+                           "ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
         if not os.path.isdir(root):
-            sys.exit("ERROR: root not found: {} (pass --root <path>)".format(root))
+            raise OkfError("not_found",
+                           "ERROR: root not found: {} (pass --root <path>)".format(root))
         if args.root and not (
             os.path.isfile(os.path.join(root, ".okf.toml"))
             or (os.path.isfile(os.path.join(root, "SPEC.md")) and os.path.isfile(os.path.join(root, "TYPES.md")))
@@ -60,7 +62,8 @@ def main():
         COMMAND_DISPATCH[args.cmd](root, args)
     except OkfError as error:
         sys.stdout.flush()
-        print(error.message, file=sys.stderr)
+        if error.message:
+            print(error.message, file=sys.stderr)
         raise SystemExit(error.code)
 
 

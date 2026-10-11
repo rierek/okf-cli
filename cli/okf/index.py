@@ -7,6 +7,7 @@ import os
 import re
 import sys
 
+from okf.errors import OkfError
 from okf.catalogue import (
     EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, extract_tags, index_h1_and_desc,
     iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_of, read_file,
@@ -248,8 +249,7 @@ def cmd_reindex(root, args):
     target = args.target.rstrip("/")
     tp = os.path.join(root, target)
     if not os.path.isdir(tp):
-        print("not a directory: {}".format(target), file=sys.stderr)
-        sys.exit(1)
+        raise OkfError("not_found", "not a directory: {}".format(target))
     if args.init:
         if not args.check:
             ensure_markers(tp)                    # create-only, named target
@@ -264,7 +264,7 @@ def cmd_reindex(root, args):
         n_skip = sum(1 for _, s in conv if s not in ("converted", "already-managed"))
         print("init: {} {}, {} skipped".format(n_conv, verb, n_skip))
         if args.check:
-            sys.exit(0)                           # --init --check = conversion preview only
+            return                              # --init --check = conversion preview only
     dirs = []
     for dp, dn, fn in os.walk(tp):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
@@ -297,7 +297,8 @@ def cmd_reindex(root, args):
             print("UNCOVERED    {}".format(p))
         print("reindex --check: {} stale, {} uncovered, {} without markers".format(
             len(stale), len(un), len(skipped)))
-        sys.exit(1 if (stale or un) else 0)
+        if stale or un:
+            raise OkfError("drift", "")
     for p in changed:
         print("updated       {}".format(p))
     for p in skipped:
