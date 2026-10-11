@@ -66,6 +66,12 @@ def utcnow():
     return datetime.datetime.now(datetime.timezone.utc)
 
 
+def verified_is_well_formed(fm):
+    """Whether `verified` is a mapping or a list of mappings (§5.2); an absent key is not."""
+    entries = verified_entries(fm)
+    return entries is not None and all(isinstance(entry, Mapping) for entry in entries)
+
+
 def filled(value):
     """A value that says something: not None, not blank text, not an empty list or mapping."""
     if value is None:

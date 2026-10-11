@@ -213,7 +213,7 @@ _ORDERING = frozenset(("<", "<=", ">", ">="))
 
 def _ordered(op):
     def compare(value, wanted):
-        if _NUMBER.match(value) and _NUMBER.match(wanted):
+        if isinstance(value, str) and isinstance(wanted, str) and _NUMBER.match(value) and _NUMBER.match(wanted):
             value, wanted = float(value), float(wanted)
         return op(value, wanted)
     return compare
@@ -239,7 +239,6 @@ FIELDS = {
 INSTANT_FIELDS = frozenset((
     "generated.at", "verified.at", "stale_after", "usage_window.from", "usage_window.to",
     "sources.last_modified", "sources.usage_window.from", "sources.usage_window.to"))
-_INSTANT_COMPARE = {"=": operator.eq, "<": operator.lt, "<=": operator.le, ">": operator.gt, ">=": operator.ge}
 
 
 def _leaves(field, load):
@@ -271,20 +270,17 @@ def _evaluate(node, path, load, now):
         return _evaluate(node.left, path, load, now) or _evaluate(node.right, path, load, now)
     if isinstance(node, Not):
         return not _evaluate(node.operand, path, load, now)
-    if node.field in INSTANT_FIELDS:  # values that are no instant hold nothing to compare
+    literals = node.values if isinstance(node, In) else (node.value,)
+    if node.field in INSTANT_FIELDS:  # compared as instants; a stored value that is no instant holds nothing
         values = [t for t in map(spec.parse_okf_datetime, _leaves(node.field, load)) if t is not None]
-        wanted = [spec.parse_okf_datetime(v) for v in (node.values if isinstance(node, In) else (node.value,))]
-        if isinstance(node, In):
-            return any(v in wanted for v in values)
-        if node.op == "!=":
-            return not any(v == wanted[0] for v in values)
-        return any(_INSTANT_COMPARE[node.op](v, wanted[0]) for v in values)
-    values = _values(node.field, path, load, now)
+        literals = [spec.parse_okf_datetime(v) for v in literals]
+    else:
+        values = _values(node.field, path, load, now)
     if isinstance(node, In):
-        return any(v in node.values for v in values)
+        return any(v in literals for v in values)
     if node.op == "!=":
-        return not any(v == node.value for v in values)  # an absent key satisfies !=
-    return any(_COMPARE[node.op](v, node.value) for v in values)
+        return not any(v == literals[0] for v in values)  # an absent key satisfies !=
+    return any(_COMPARE[node.op](v, literals[0]) for v in values)
 
 
 def _validate(node):

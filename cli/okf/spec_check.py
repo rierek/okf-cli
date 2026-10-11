@@ -5,7 +5,7 @@ v0.2. Each rule reads the frontmatter mapping of the file context and returns me
 from collections.abc import Mapping
 
 from okf.catalogue import fm_text, scalar_text
-from okf.spec import filled, is_stale, parse_actor, parse_okf_datetime, verified_entries
+from okf.spec import filled, is_stale, parse_actor, parse_okf_datetime, verified_entries, verified_is_well_formed
 
 STATUSES = ("draft", "stable", "deprecated")
 COMPUTATION_TYPE = "Attested Computation"
@@ -73,7 +73,7 @@ def check_verified(ctx):
         return []
     entries = verified_entries(ctx["fm"])
     out = []
-    if entries is None or not all(isinstance(entry, Mapping) for entry in entries):
+    if not verified_is_well_formed(ctx["fm"]):
         out.append("`verified` is neither a mapping nor a list of mappings")
     for i, entry in enumerate(entries or []):
         if isinstance(entry, Mapping):

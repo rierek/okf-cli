@@ -38,7 +38,7 @@ def cmd_verify(root, args):
     at = spec.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     entry = _entry(args.by, at)
     entries = spec.verified_entries(data)
-    if "verified" in data and (entries is None or not all(isinstance(e, dict) for e in entries)):
+    if "verified" in data and not spec.verified_is_well_formed(data):
         raise OkfError("invalid_input", "`verified` is neither a mapping nor a list of mappings; "
                        "fix it by hand before verifying")
     if entries is None:

@@ -10,7 +10,7 @@ from okf.output import _add_output, _note
 
 from okf import catalogue, spec
 from okf.catalogue import (
-    fm_meta, iter_concepts, read_file, read_frontmatter, resolve_scopes,
+    fm_meta, iter_concepts, meta_and_fm, read_file, read_frontmatter, resolve_scopes,
 )
 from okf.find_filters import compile_where
 from okf.parser_support import _add_filters, _sub
@@ -235,8 +235,8 @@ def cmd_recent(root, args):
     for path, _ts in rows:
         if path not in meta:
             ap = os.path.join(root, path + ".md")
-            fm = read_frontmatter(read_file(ap)).data
-            meta[path] = fm_meta(fm, os.path.basename(ap)[:-3]) + (fm,)
+            found, fm = meta_and_fm(ap)
+            meta[path] = found + (fm,)
 
     undated = sum(1 for path, ts in entries if ts is None and dated_repo.get(path))
     if undated:

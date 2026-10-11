@@ -9,8 +9,8 @@ import sys
 from okf import spec
 from okf.errors import OkfError
 from okf.catalogue import (
-    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, fm_meta, fm_text, index_h1_and_desc,
-    iter_headings, iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_of, read_file,
+    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, fm_text, index_h1_and_desc,
+    iter_headings, iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_and_fm, meta_of, read_file,
     read_frontmatter, replace_managed_block, require_bundle_dir, tags_of, write_file,
 )
 from okf.output import _add_output
@@ -103,8 +103,7 @@ def _concepts_json(bp):
     now = spec.utcnow()
     concepts = []
     for cid, ap in sorted(iter_concepts(bp)):
-        fm = read_frontmatter(read_file(ap)).data
-        t, title, desc = fm_meta(fm, os.path.basename(ap)[:-3])
+        (t, title, desc), fm = meta_and_fm(ap)
         concepts.append({"id": cid, "title": title, "type": t, "description": desc,
                          **spec.trust_fields(fm, now)})
     return concepts
