@@ -6,6 +6,7 @@ Run: just test tests.test_okf_verify -v
 """
 import datetime
 import os
+import re
 import sys
 import unittest
 
@@ -224,9 +225,15 @@ class Output(VerifyCase):
     def test_the_verb_is_listed_in_the_maintenance_group_of_the_help(self):
         out, _, code = run_cli(self.tmp, "--help")
         self.assertEqual(code, 0)
-        before, _, maintenance = out.partition("  maintenance:\n")
-        self.assertRegex(maintenance, r"(?m)^    verify {2,}\S")
-        self.assertNotRegex(before, r"(?m)^    verify {2,}\S")
+        groups, current = {}, None
+        for line in out.splitlines():
+            if re.match(r"^  \w+:$", line):
+                current = line.strip(" :")
+                groups[current] = []
+            elif current and (command := re.match(r"^    (\S+) {2,}\S", line)):
+                groups[current].append(command.group(1))
+        self.assertIn("verify", groups["maintenance"])
+        self.assertEqual([g for g, names in groups.items() if "verify" in names], ["maintenance"])
 
 
 if __name__ == "__main__":
