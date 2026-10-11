@@ -54,8 +54,8 @@ class _Blobs:
 class _Log:
     """The commits and per-path changes of one scope."""
 
-    def __init__(self, top, prefix, raw):
-        self.top, self.prefix = top, prefix
+    def __init__(self, top, raw):
+        self.top = top
         self.commits, self.by_path = [], {}  # by_path: path -> its events, newest commit first
         for chunk in raw.split(b"\x01")[1:]:
             head, _, rest = chunk.partition(b"\0")
@@ -155,7 +155,7 @@ class History:
         top = os.path.realpath(top)
         prefix = os.path.relpath(scope, top).replace(os.sep, "/")
         res = subprocess.run(["git", "-C", top, *_LOG, "--", prefix], capture_output=True)
-        return _Log(top, prefix, res.stdout if res.returncode == 0 else b"")  # no commits yet: no history
+        return _Log(top, res.stdout if res.returncode == 0 else b"")  # no commits yet: no history
 
     def _note(self, message):
         if message not in self._notes:
