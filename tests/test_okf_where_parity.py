@@ -204,6 +204,11 @@ class WhereIsTheOnlyFilterPath(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.root, ignore_errors=True)
 
+    def assert_invalid_input(self, envelope, code):
+        self.assertEqual(code, 2)
+        self.assertFalse(envelope["ok"])
+        self.assertEqual((envelope["error"] or {}).get("kind"), "invalid_input")
+
     def test_a_removed_flag_is_an_unrecognised_argument_with_exit_2(self):
         for command in self.COMMANDS:
             for flag in (["--type", "x"], ["--tag", "x"], ["--scope", "x"], ["--include-archive"]):
@@ -218,20 +223,18 @@ class WhereIsTheOnlyFilterPath(unittest.TestCase):
                 envelope, _err, code = run_json(
                     self.root, *[a for a in command if a != "--where" and a != "type = x"],
                     "--where", "type =")
-                self.assertEqual(code, 2)
-                self.assertFalse(envelope["ok"])
-                self.assertEqual(envelope["error"]["kind"], "invalid_input")
+                self.assert_invalid_input(envelope, code)
                 self.assertIn("--where", envelope["error"]["message"])
 
     def test_a_malformed_where_fails_whatever_the_query_is(self):
         """find compiles the expression before it looks at the query: a query without a single
         term must not hide the error behind `(empty query)`."""
         envelope, _err, code = run_json(self.root, "find", "!!", "--where", "type =")
-        self.assertEqual((code, envelope["error"]["kind"]), (2, "invalid_input"))
+        self.assert_invalid_input(envelope, code)
 
     def test_a_semantic_misuse_is_the_same_envelope(self):
         envelope, _err, code = run_json(self.root, "list", "--where", "archived = maybe")
-        self.assertEqual((code, envelope["error"]["kind"]), (2, "invalid_input"))
+        self.assert_invalid_input(envelope, code)
 
     def test_the_filter_value_has_no_keyword_construction(self):
         for keyword in ("scope", "type", "tag", "include_archive"):
