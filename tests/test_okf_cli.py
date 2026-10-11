@@ -4,6 +4,7 @@ BrokenPipe handling of its __main__ guard. The commands live in cli/okf/, one te
 
 Run: python3 -m unittest tests.test_okf_cli -v
 """
+import io
 import importlib.util
 import os
 import re
@@ -12,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
 if _HERE not in sys.path:  # cli/ holds the okf package
@@ -21,7 +23,7 @@ from okf import catalogue as okf_catalogue
 from okf import fts as okf_fts
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
-
+from okf import errors as okf_errors
 
 _spec = importlib.util.spec_from_file_location("okf_cli", os.path.join(_HERE, "okf-cli.py"))
 okf = importlib.util.module_from_spec(_spec)
@@ -372,6 +374,69 @@ class MainExplicitRootMarkerWarning(unittest.TestCase):
                 os.chdir(old_cwd)
                 _sys.argv, _sys.stderr = old_argv, old_stderr
             self.assertNotIn("no catalogue marker", captured.getvalue())
+
+
+class ExitErrorMapping(unittest.TestCase):
+    def test_error_table_and_attributes(self):
+        expected = {
+            "internal": 1,
+            "invalid_input": 2,
+            "not_found": 3,
+            "non_conformant": 4,
+            "drift": 5,
+        }
+        self.assertEqual(okf_errors.EXIT_CODES, expected)
+        for kind, code in expected.items():
+            error = okf_errors.OkfError(kind, "problem")
+            self.assertEqual((error.kind, error.message, error.code),
+                             (kind, "problem", code))
+        with self.assertRaises(ValueError):
+            okf_errors.OkfError("unknown", "problem")
+
+    def test_main_maps_okf_error_without_losing_stdout(self):
+        def fail(_, __):
+            print("report")
+            raise okf_errors.OkfError("drift", "stale")
+
+        old_argv, old_stdout, old_stderr = sys.argv, sys.stdout, sys.stderr
+        sys.argv = ["okf-cli.py", "prime"]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        sys.stdout, sys.stderr = stdout, stderr
+        try:
+            with mock.patch.object(okf, "COMMAND_DISPATCH", {"prime": fail}):
+                with self.assertRaises(SystemExit) as raised:
+                    okf.main()
+        finally:
+            sys.argv, sys.stdout, sys.stderr = old_argv, old_stdout, old_stderr
+        self.assertEqual(raised.exception.code, okf_errors.EXIT_CODES["drift"])
+        self.assertEqual(stdout.getvalue(), "report\n")
+        self.assertEqual(stderr.getvalue(), "stale\n")
+
+    def test_unknown_flag_exits_two_with_or_without_json(self):
+        with tempfile.TemporaryDirectory() as root:
+            for argv in (["--root", root, "index", "--unknown"],
+                         ["--root", root, "index", "--json", "--unknown"]):
+                result = subprocess.run(
+                    [sys.executable, os.path.join(_HERE, "okf-cli.py"), *argv],
+                    capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2, result.stderr)
+
+    def test_unhandled_exception_exits_one(self):
+        program = """
+import importlib.util
+import os
+import sys
+sys.path.insert(0, {cli!r})
+spec = importlib.util.spec_from_file_location("entry", {entry!r})
+entry = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(entry)
+entry.COMMAND_DISPATCH = {{"prime": lambda _, __: (_ for _ in ()).throw(RuntimeError("broken"))}}
+sys.argv = ["okf-cli.py", "prime"]
+entry.main()
+""".format(cli=_HERE, entry=os.path.join(_HERE, "okf-cli.py"))
+        result = subprocess.run([sys.executable, "-c", program],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, okf_errors.EXIT_CODES["internal"])
 
 
 if __name__ == "__main__":

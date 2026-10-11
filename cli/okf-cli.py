@@ -17,45 +17,51 @@ import sys
 from okf.catalogue import catalogue_root
 from okf.ctx import _ctx_shorthand
 from okf.entry_support import _silence_broken_pipe_streams
+from okf.errors import OkfError
 from okf.install import CATALOGUE_FREE
 from okf.parser import COMMAND_DISPATCH, build_parser
 
 
 def main():
-    ap = build_parser(__doc__)
-    if "_ARGCOMPLETE" in os.environ:
-        # Shell TAB completion (glue installed by `install`): optional
-        # dependency, imported only on a completion run, which argcomplete
-        # ends via os._exit.
-        import argcomplete
-        argcomplete.autocomplete(ap, default_completer=argcomplete.SuppressCompleter())
-    args = ap.parse_args(_ctx_shorthand(sys.argv[1:]))
-    if args.cmd in CATALOGUE_FREE:
-        return COMMAND_DISPATCH[args.cmd](None, args)
-    root = catalogue_root(args.root)
-    if root is None:
-        sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
-    if not os.path.isdir(root):
-        sys.exit("ERROR: root not found: {} (pass --root <path>)".format(root))
-    if args.root and not (
-        os.path.isfile(os.path.join(root, ".okf.toml"))
-        or (os.path.isfile(os.path.join(root, "SPEC.md")) and os.path.isfile(os.path.join(root, "TYPES.md")))
-    ):
-        # SC-002 (test_explicit_root_returns_abspath_unchanged) requires an
-        # explicit --root to keep working with no marker present, so this
-        # never blocks. But every write command below computes emitted paths
-        # as "/" + relpath(dest, root) (resolve_crosslink_target and peers) —
-        # a --root pointed one level above the real catalogue silently
-        # prefixes every emitted link with the extra segment instead of
-        # failing (OKFT-czm9: a vault-relative alias like
-        # "SPF_Sproutling/docs/sproutling-okf/e2e-tests/README.md" got
-        # written and committed unnoticed). Loud-but-non-blocking, matching
-        # this file's stderr-degradation idiom (see find's stale-index note).
-        print("note: --root {} carries no catalogue marker (.okf.toml or "
-              "SPEC.md+TYPES.md) — if this is not the real catalogue root, "
-              "write commands will silently emit wrong paths".format(root),
-              file=sys.stderr)
-    COMMAND_DISPATCH[args.cmd](root, args)
+    try:
+        ap = build_parser(__doc__)
+        if "_ARGCOMPLETE" in os.environ:
+            # Shell TAB completion (glue installed by `install`): optional
+            # dependency, imported only on a completion run, which argcomplete
+            # ends via os._exit.
+            import argcomplete
+            argcomplete.autocomplete(ap, default_completer=argcomplete.SuppressCompleter())
+        args = ap.parse_args(_ctx_shorthand(sys.argv[1:]))
+        if args.cmd in CATALOGUE_FREE:
+            return COMMAND_DISPATCH[args.cmd](None, args)
+        root = catalogue_root(args.root)
+        if root is None:
+            sys.exit("ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
+        if not os.path.isdir(root):
+            sys.exit("ERROR: root not found: {} (pass --root <path>)".format(root))
+        if args.root and not (
+            os.path.isfile(os.path.join(root, ".okf.toml"))
+            or (os.path.isfile(os.path.join(root, "SPEC.md")) and os.path.isfile(os.path.join(root, "TYPES.md")))
+        ):
+            # SC-002 (test_explicit_root_returns_abspath_unchanged) requires an
+            # explicit --root to keep working with no marker present, so this
+            # never blocks. But every write command below computes emitted paths
+            # as "/" + relpath(dest, root) (resolve_crosslink_target and peers) —
+            # a --root pointed one level above the real catalogue silently
+            # prefixes every emitted link with the extra segment instead of
+            # failing (OKFT-czm9: a vault-relative alias like
+            # "SPF_Sproutling/docs/sproutling-okf/e2e-tests/README.md" got
+            # written and committed unnoticed). Loud-but-non-blocking, matching
+            # this file's stderr-degradation idiom (see find's stale-index note).
+            print("note: --root {} carries no catalogue marker (.okf.toml or "
+                  "SPEC.md+TYPES.md) — if this is not the real catalogue root, "
+                  "write commands will silently emit wrong paths".format(root),
+                  file=sys.stderr)
+        COMMAND_DISPATCH[args.cmd](root, args)
+    except OkfError as error:
+        sys.stdout.flush()
+        print(error.message, file=sys.stderr)
+        raise SystemExit(error.code)
 
 
 if __name__ == "__main__":
