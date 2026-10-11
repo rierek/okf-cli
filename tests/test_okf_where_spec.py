@@ -189,10 +189,16 @@ class InstantComparison(unittest.TestCase):
                  ("sources.last_modified", "= '2026-04-30T22:00:00Z'", "b/sources"),
                  ("sources.last_modified", "= 2026-01-01T00:00:00Z", "b/sources"),
                  ("sources.usage_window.from", "= '2026-03-01T01:00:00+01:00'", "b/sources"),
-                 ("sources.usage_window.to", "<= 2026-04-01T00:00:00Z", "b/sources")]
+                 ("sources.usage_window.to", "= '2026-04-01T02:00:00+02:00'", "b/sources")]
         for field, tail, path in table:
             with self.subTest(field=field, tail=tail):
                 self.assertIn(path, select("{} {}".format(field, tail)))
+
+    def test_in_matches_an_instant_with_any_literal_not_just_the_first(self):
+        # b/old: 2026-09-23T00:00:00+02:00 is 2026-09-22T22:00:00Z
+        self.assertEqual(select("stale_after in (2000-01-01T00:00:00Z, '2026-09-22T22:00:00Z')"), {"b/human", "b/old"})
+        self.assertEqual(select("stale_after in ('2026-09-22T23:00:00+01:00', 2000-01-01T00:00:00Z)"), {"b/human", "b/old"})
+        self.assertEqual(select("stale_after in (2001-01-01T00:00:00Z, 2002-01-01T00:00:00Z)"), set())
 
     def test_quoted_and_unquoted_stored_values_answer_alike(self):
         # b/listed holds an unquoted Z instant and a quoted +02:00 one
@@ -237,9 +243,11 @@ class OneFilterPath(unittest.TestCase):
         for name in ("find", "list", "recent"):
             where = next(a for a in subcommand_parsers(build_parser())[name]._actions
                          if "--where" in a.option_strings)
-            for word in ("tier", "stale", "verified", "status", "stable"):
-                with self.subTest(command=name, word=word):
-                    self.assertIn(word, where.help)
+            for phrase in ("tier (unverified, machine-confirmed or human-reviewed)", "stale (true or false)",
+                           "status (an absent status is stable)", "verified.by", "sources.resource",
+                           "compare as instants"):
+                with self.subTest(command=name, phrase=phrase):
+                    self.assertIn(phrase, where.help)
 
 
 class EndToEnd(GitCatalogue):
@@ -309,6 +317,17 @@ class EndToEnd(GitCatalogue):
         with mock.patch.object(okf_spec, "utcnow", return_value=NOW) as clock:
             records = COMMAND_DISPATCH["list"](self.tmp, args)
         self.assertEqual((clock.call_count, {r["path"] for r in records}), (1, {"b/human", "b/old"}))
+
+    def test_find_reads_the_clock_once_through_the_index_arm_and_the_full_scan_arm(self):
+        for arm in ("full scan", "index"):
+            if arm == "index":
+                okf_fts.build_fts_index(self.tmp)
+            args = build_parser().parse_args(["--root", self.tmp, "find", "needle", "--where",
+                                              "stale = true", "--json"])
+            with self.subTest(arm), mock.patch.object(okf_spec, "utcnow", return_value=NOW) as clock, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                data = COMMAND_DISPATCH["find"](self.tmp, args)
+            self.assertEqual((clock.call_count, {h["path"] for h in data["hits"]}), (1, {"b/human", "b/old"}))
 
 
 if __name__ == "__main__":
