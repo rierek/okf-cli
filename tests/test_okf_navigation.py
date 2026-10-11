@@ -28,7 +28,7 @@ from tests.okf_testkit import _cli, run_find
 
 class VisualizeDefaultOutputPath(unittest.TestCase):
     """viz.html is a generated artifact, not knowledge content — it must land
-    under <bundle>/assets/ by default so it doesn't trip asset-placement."""
+    under <bundle>/assets/ by default so it doesn't trip kc/asset/placement."""
 
     def setUp(self):
         import tempfile
