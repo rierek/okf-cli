@@ -46,7 +46,7 @@ FIND_LIMIT = 50
 
 
 def _run_cli(root, argv):
-    """Invoke okf-cli.py via subprocess (real process boundary — SC-003).
+    """Invoke okf-cli.py through `uv run --script` (real process boundary — SC-003).
     Returns stdout text; raises on nonzero exit."""
     proc = subprocess.run(
         ["uv", "run", "--script", CLI_PATH, "--root", root] + argv,
