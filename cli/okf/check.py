@@ -6,10 +6,10 @@ import json
 from collections import namedtuple
 import os
 import re
-import sys
 
 from okf.errors import OkfError
 from okf import sync, wikilinks
+from okf.output import _note
 from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, FM_DELIM, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE, _dequote,
     _mask_managed_block, _split_managed_block, ctx_findings, extract_tags, index_h1_and_desc,
@@ -629,8 +629,8 @@ def ignore_patterns(config, flag_patterns):
         if isinstance(v, list) and all(isinstance(x, str) for x in v):
             patterns += v
         else:
-            sys.stderr.write("note: ignore_rules must be an array of rule-ID patterns; "
-                             "got {!r} — it suppresses no rule\n".format(v))
+            _note("ignore_rules must be an array of rule-ID patterns; "
+                  "got {!r} — it suppresses no rule".format(v))
     return patterns
 
 

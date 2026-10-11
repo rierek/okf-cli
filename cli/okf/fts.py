@@ -5,12 +5,12 @@ build-index command."""
 import os
 import re
 import sqlite3
-import sys
 
 from okf.catalogue import (
     _dequote, extract_tags, iter_concepts, list_search_bundles, read_file, split_frontmatter,
 )
 from okf.find_filters import FTS_FILTER_COLUMNS
+from okf.output import _note
 from okf.parser_support import _sub
 
 
@@ -227,9 +227,8 @@ def _fts_ranking(root, query, limit, filters, notify=True):
         # arm" look identical from the outside. It goes to stderr, so stdout
         # stays byte-identical to the pre-plan output.
         if notify:
-            print("note: lexical index absent — falling back to substring "
-                  "scan; run `okf-cli build-index` for BM25 ranking",
-                  file=sys.stderr)
+            _note("lexical index absent — falling back to substring "
+                  "scan; run `okf-cli build-index` for BM25 ranking")
         return None
     terms = tokenize(query)
     if not terms:
@@ -272,14 +271,13 @@ def _fts_ranking(root, query, limit, filters, notify=True):
             if (notify and not topic_corpus_missing
                     and _fts_index_stale(
                         root, conn, filters.include_topics, check_corpus=False)):
-                print("note: lexical index is stale (catalogue changed since "
-                      "build) — run `okf-cli build-index`", file=sys.stderr)
+                _note("lexical index is stale (catalogue changed since "
+                      "build) — run `okf-cli build-index`")
         finally:
             conn.close()
     except sqlite3.DatabaseError:
         if notify:
-            print("note: lexical index unusable — falling back to substring "
-                  "scan", file=sys.stderr)
+            _note("lexical index unusable — falling back to substring scan")
         return None
     return [(p, -r) for p, r in rows]
 

@@ -7,12 +7,12 @@ import math
 import os
 import sqlite3
 import struct
-import sys
 import urllib.request
 
 from okf import catalogue
 from okf.catalogue import iter_concepts, list_indexable_bundles
 from okf.find_filters import EMB_FILTER_COLUMNS, FindFilters
+from okf.output import _note
 from okf.parser_support import _sub
 
 
@@ -195,16 +195,16 @@ def semantic_ranking(root, query, limit, filters):
     vectors, residual = _load_concept_vectors(
         _tagvec_db_path(root), SEMANTIC_MODEL, filters)
     if vectors is None:
-        print("note: semantic arm skipped (.tagvec cache/concept embeddings "
-              "absent) — lexical results only", file=sys.stderr)
+        _note("semantic arm skipped (.tagvec cache/concept embeddings "
+              "absent) — lexical results only")
         return []
     if not vectors:
         return []
     try:
         qvec = _query_vector(query)
     except Exception as exc:
-        print("note: semantic arm skipped (embedding backend unavailable: {})"
-              " — lexical results only".format(exc), file=sys.stderr)
+        _note("semantic arm skipped (embedding backend unavailable: {})"
+              " — lexical results only".format(exc))
         return []
     # path is the tiebreaker for equal cosine values (OKFT-rx72): the SQL
     # row order feeding this sort has no ORDER BY of its own, so without a
@@ -270,7 +270,7 @@ def cmd_build_semantic_index(root, args):
     would let a row-count check report complete while paths are missing.
 
     Never raises: a missing VOYAGE_API_KEY or an exhausted-retries network
-    failure degrades to a stderr `note: ...` (same shape as the existing
+    failure degrades to a call note `note: ...` (same shape as the existing
     lexical-index degradation notices) and a clean return, because this is
     meant to run unattended from a SessionStart hook, detached, and must
     never surface a traceback into a session transcript. The query path
@@ -286,9 +286,9 @@ def cmd_build_semantic_index(root, args):
             print("semantic index is current, skipping rebuild -> {}".format(db_path))
             return
     if not os.environ.get("VOYAGE_API_KEY"):
-        print("note: semantic index build skipped (VOYAGE_API_KEY not set) "
+        _note("semantic index build skipped (VOYAGE_API_KEY not set) "
               "-- run again once it is set, or set it before the next "
-              "SessionStart hook run", file=sys.stderr)
+              "SessionStart hook run")
         return
     bt = catalogue._load_build_tagvec()
     try:
@@ -312,12 +312,12 @@ def cmd_build_semantic_index(root, args):
             written += len(rows)
         print("embedded {} concept(s) -> {}".format(written, db_path))
         if incomplete:
-            print("note: semantic index build incomplete -- {} concept(s) "
+            _note("semantic index build incomplete -- {} concept(s) "
                   "left unembedded after retries; rerun to pick up the "
-                  "rest".format(len(delta) - written), file=sys.stderr)
+                  "rest".format(len(delta) - written))
     except Exception as exc:
-        print("note: semantic index build failed ({}: {}) -- lexical arm "
-              "unaffected".format(type(exc).__name__, exc), file=sys.stderr)
+        _note("semantic index build failed ({}: {}) -- lexical arm "
+              "unaffected".format(type(exc).__name__, exc))
 
 
 def add_build_semantic_index_parser(sub):

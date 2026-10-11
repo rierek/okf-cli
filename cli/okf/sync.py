@@ -13,6 +13,7 @@ from okf.catalogue import (
     read_file, read_file_verbatim, resolve_concept, resolve_scopes, split_frontmatter,
     write_file_verbatim,
 )
+from okf.output import _note
 from okf.parser_support import _complete_concepts, _complete_scopes, _completion_root, _sub
 
 
@@ -306,8 +307,7 @@ def cmd_sync_update(root, args):
     for ap, recs in per_file.items():
         text = read_file_verbatim(ap)
         if text is None:
-            print("note: skipping {} — not valid UTF-8".format(ap),
-                  file=sys.stderr)
+            _note("skipping {} — not valid UTF-8".format(ap))
             continue
         _, body = split_frontmatter(text)
         head = text[:len(text) - len(body)]

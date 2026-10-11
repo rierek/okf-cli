@@ -5,8 +5,8 @@ and rewrite-path, the literal path-string replace across text files."""
 import os
 import re
 import subprocess
-import sys
 from okf.errors import OkfError
+from okf.output import _note
 
 from okf import catalogue, check, linkscan, wikilinks
 from okf.catalogue import (
@@ -340,7 +340,7 @@ def _apply_sync_source_rewrites(abspath, old_source, new_source):
     follow."""
     text = read_file_verbatim(abspath)
     if text is None:
-        sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
+        _note("skipping {} — not valid UTF-8".format(abspath))
         return 0
     out, last, n = [], 0, 0
     for m in SYNC_OPEN_RE.finditer(text):
@@ -367,7 +367,7 @@ def _apply_link_rewrites(abspath, rewrites):
     documentation sample while claiming a smaller edit than it made."""
     text = read_file_verbatim(abspath)
     if text is None:
-        sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
+        _note("skipping {} — not valid UTF-8".format(abspath))
         return
     mapping = dict(rewrites)
     out, last = [], 0
@@ -396,7 +396,7 @@ def _apply_wikilink_rewrites(abspath, rename_map):
     it, so no offset points at it."""
     text = read_file_verbatim(abspath)
     if text is None:
-        sys.stderr.write("note: skipping {} — not valid UTF-8\n".format(abspath))
+        _note("skipping {} — not valid UTF-8".format(abspath))
         return
     out, last = [], 0
     for rec in wikilinks.parse_wikilinks(text):

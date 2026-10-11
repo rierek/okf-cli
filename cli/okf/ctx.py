@@ -411,7 +411,7 @@ CTX_DISPATCH = {"add": cmd_ctx_add, "check": cmd_ctx_check, "create": cmd_ctx_cr
 
 
 def cmd_ctx(root, args):
-    CTX_DISPATCH[args.ctx_verb](root, args)
+    return CTX_DISPATCH[args.ctx_verb](root, args)
 
 
 def _ctx_shorthand(argv):
