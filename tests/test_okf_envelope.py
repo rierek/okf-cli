@@ -991,6 +991,7 @@ class Conformance(WriteFixture):
         "sync-update": ["sync-update"],
         "tags": ["tags"],
         "toc": ["toc", "kc-a/alpha"],
+        "verify": ["verify", "kc-a/alpha", "--by", "human:erik"],
         "visualize": ["visualize", "kc-a"],
         "wikilinks": ["wikilinks"],
     }
