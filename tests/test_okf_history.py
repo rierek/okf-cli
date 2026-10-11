@@ -71,6 +71,11 @@ class GitCatalogue(SpecCase):
         self.addCleanup(history.close)
         return history.last_body_commit(os.path.join(root or self.tmp, rel), **kw)
 
+    def _email(self, *args, **kw):
+        """The author email of the lookup result, None when there is no result."""
+        got = self._lookup(*args, **kw)
+        return got.email if got is not None else None
+
     def _reset(self):
         """An empty catalogue in a fresh repository."""
         for name in os.listdir(self.tmp):
@@ -122,7 +127,7 @@ class BodyCommitLookup(GitCatalogue):
         self._commit("c2", T2, author="fm@x.org")
         self._doc(body="one\n", front='type: "Note"\ntags: [a]')  # a re-quoting normalisation
         self._commit("c3", T3, author="fm@x.org")
-        self.assertEqual(self._lookup().email, "body@x.org")
+        self.assertEqual(self._email(), "body@x.org")
 
     def test_a_pure_rename_is_skipped(self):
         self._doc(body="one\nline2\nline3\nline4\nline5\n")
@@ -130,7 +135,16 @@ class BodyCommitLookup(GitCatalogue):
         os.makedirs(os.path.join(self.tmp, "b", "sub"))
         self._git("mv", "b/x.md", "b/sub/y.md")
         self._commit("c2 rename", T2, author="mover@x.org")
-        self.assertEqual(self._lookup("b/sub/y.md").email, "body@x.org")
+        self.assertEqual(self._email("b/sub/y.md"), "body@x.org")
+
+    def test_a_pure_rename_is_skipped_even_when_the_repository_config_turns_rename_detection_off(self):
+        self._git("config", "diff.renames", "false")
+        self._doc(body="one\nline2\nline3\nline4\nline5\n")
+        self._commit("c1", T1, author="body@x.org")
+        os.makedirs(os.path.join(self.tmp, "b", "sub"))
+        self._git("mv", "b/x.md", "b/sub/y.md")
+        self._commit("c2 rename", T2, author="mover@x.org")
+        self.assertEqual(self._email("b/sub/y.md"), "body@x.org")
 
     def test_a_rename_that_also_changes_the_body_counts(self):
         self._doc(body="one\nline2\nline3\nline4\nline5\nline6\nline7\nline8\n")
@@ -139,7 +153,7 @@ class BodyCommitLookup(GitCatalogue):
         self._git("mv", "b/x.md", "b/sub/y.md")
         self._doc("b/sub/y.md", body="one\nline2\nline3\nline4\nline5\nline6\nline7\nEDITED\n")
         self._commit("c2 rename and edit", T2, author="mover@x.org")
-        self.assertEqual(self._lookup("b/sub/y.md").email, "mover@x.org")
+        self.assertEqual(self._email("b/sub/y.md"), "mover@x.org")
 
     def test_a_rename_that_changes_only_the_frontmatter_is_skipped(self):
         self._doc(body="one\nline2\nline3\nline4\nline5\n")
@@ -148,7 +162,7 @@ class BodyCommitLookup(GitCatalogue):
         self._git("mv", "b/x.md", "b/sub/y.md")
         self._doc("b/sub/y.md", body="one\nline2\nline3\nline4\nline5\n", front="type: Note\ntags: [a]")
         self._commit("c2", T2, author="mover@x.org")
-        self.assertEqual(self._lookup("b/sub/y.md").email, "body@x.org")
+        self.assertEqual(self._email("b/sub/y.md"), "body@x.org")
 
     def test_an_untracked_file_has_no_result(self):
         self._doc()
@@ -199,7 +213,7 @@ class BodyCommitLookup(GitCatalogue):
         self._commit("c2 rename", T2, author="mover@x.org")
         self._doc("b/x.md", body="unrelated\n")
         self._commit("c3 new file at the old path", T3, author="other@x.org")
-        self.assertEqual(self._lookup("b/y.md").email, "body@x.org")
+        self.assertEqual(self._email("b/y.md"), "body@x.org")
 
     def test_a_deletion_is_no_body_change_when_the_walk_passes_it(self):
         self._doc(body="one\n")
@@ -208,8 +222,8 @@ class BodyCommitLookup(GitCatalogue):
         self._commit("c2 delete", T2, author="deleter@x.org")
         self._doc(body="one\n", front=GENERATED.format(at="2026-01-01T00:00:00Z"))
         self._commit("c3 re-add", T3, author="readd@x.org")
-        self.assertEqual(self._lookup().email, "readd@x.org")
-        self.assertEqual(self._lookup(keep_generated=True).email, "add@x.org")
+        self.assertEqual(self._email(), "readd@x.org")
+        self.assertEqual(self._email(keep_generated=True), "add@x.org")
 
     # --- the regeneration variant (D45) ---
 
@@ -220,8 +234,8 @@ class BodyCommitLookup(GitCatalogue):
         self._commit("c2", T2, author="edit@x.org")
         self._doc(body="three\n", front=GENERATED.format(at="2026-02-20T00:00:00Z"))
         self._commit("c3 regenerate", T3, author="regen@x.org")
-        self.assertEqual(self._lookup().email, "regen@x.org")
-        self.assertEqual(self._lookup(keep_generated=True).email, "edit@x.org")
+        self.assertEqual(self._email(), "regen@x.org")
+        self.assertEqual(self._email(keep_generated=True), "edit@x.org")
 
     def test_keep_generated_treats_the_adding_commit_with_generated_at_as_a_regeneration(self):
         self._doc(front=GENERATED.format(at="2026-01-01T00:00:00Z"))
@@ -234,21 +248,21 @@ class BodyCommitLookup(GitCatalogue):
         self._commit("c1", T1, author="add@x.org")
         self._doc(body="two\n")
         self._commit("c2", T2, author="edit@x.org")
-        self.assertEqual(self._lookup(keep_generated=True).email, "edit@x.org")
+        self.assertEqual(self._email(keep_generated=True), "edit@x.org")
 
     def test_requoting_generated_at_without_changing_the_instant_is_no_change(self):
         self._doc(body="one\n", front=GENERATED.format(at="2026-01-01T00:00:00Z"))
         self._commit("c1", T1)
         self._doc(body="two\n", front=GENERATED.format(at='"2026-01-01T00:00:00+00:00"'))
         self._commit("c2", T2, author="edit@x.org")
-        self.assertEqual(self._lookup(keep_generated=True).email, "edit@x.org")
+        self.assertEqual(self._email(keep_generated=True), "edit@x.org")
 
     def test_changing_generated_at_to_the_same_instant_in_another_offset_is_no_change(self):
         self._doc(body="one\n", front=GENERATED.format(at="2026-01-01T00:00:00Z"))
         self._commit("c1", T1)
         self._doc(body="two\n", front=GENERATED.format(at="2026-01-01T02:00:00+02:00"))
         self._commit("c2", T2, author="edit@x.org")
-        self.assertEqual(self._lookup(keep_generated=True).email, "edit@x.org")
+        self.assertEqual(self._email(keep_generated=True), "edit@x.org")
 
     # --- where it looks ---
 
@@ -259,7 +273,7 @@ class BodyCommitLookup(GitCatalogue):
         self._commit("c1", T1, author="a@x.org")
         self._doc("docs/b/x.md", body="two\n")
         self._commit("c2", T2, author="b@x.org")
-        self.assertEqual(self._lookup("b/x.md", root=os.path.join(self.tmp, "docs")).email, "b@x.org")
+        self.assertEqual(self._email("b/x.md", root=os.path.join(self.tmp, "docs")), "b@x.org")
 
     def test_a_linked_worktree_resolves_its_own_checkout(self):
         self._doc(body="one\n")
@@ -270,7 +284,7 @@ class BodyCommitLookup(GitCatalogue):
         self._doc("b/x.md", body="two\n")
         self._commit("c2", T2, author="b@x.org")
         self._git("checkout", "-q", "--detach", "main", cwd=wt)
-        self.assertEqual(self._lookup("b/x.md", root=wt).email, "b@x.org")
+        self.assertEqual(self._email("b/x.md", root=wt), "b@x.org")
 
     # --- cost ---
 
