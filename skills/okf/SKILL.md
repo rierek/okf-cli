@@ -72,12 +72,12 @@ Widen only when the cheaper step leaves the question open.
 
 ## Hard rules
 
-1. Run `okf-cli --root <catalogue> check <bundle>` before every commit. Commit only when the last line reads `OK — 0 violations`. Exit code 1 means violations, not a crash.
+1. Run `okf-cli --root <catalogue> check <bundle>` before every commit. Commit only when the last line reads `OK — 0 violations`. Exit code 4 (non_conformant) means violations, not a crash.
 2. Never edit between `<!-- okf:index -->` and `<!-- /okf:index -->`. Run `reindex`.
 3. Never edit a consumer copy between `<!-- okf:sync ... -->` and `<!-- /okf:sync -->`. Change the canon owner, then run `sync-update`.
 4. Move, rename or retire concepts inside a catalogue with `rename` and `archive`, never with `mv`, `git mv` or `rm`. Exception: files adopted from outside the catalogue root move with `git mv` (integrate-project-knowledge.md). Change tags with `merge-tags`, `remove-tags` or `normalize-tags`, never with search-and-replace.
 5. `rename`, `archive`, `merge-tags`, `remove-tags`, `normalize-tags`, `sync-insert` and `sync-update` only preview by default: read the preview, then repeat with `--apply`. `reindex`, `fix-crosslinks`, `fix-xml-tags` and `rewrite-path` write by default: run them with `--check` first. `tags --register`, `build-index`, `build-semantic-index`, `visualize` and the ctx verbs `create`, `add`, `move`, `drop`, `rename`, `remove` write at once without any preview: state what you will run before you run it.
-6. Keep stderr visible. Degradation notes (stale or missing index, missing embeddings, wrong root) appear only there and do not change the exit code.
+6. Keep stderr visible. Degradation notes (stale or missing index, missing embeddings, wrong root) appear only there and do not change the exit code. Exit codes: 0 success, 1 internal error, 2 invalid input, 3 not found, 4 non_conformant (findings: `check`, `ctx`, `tags --validate`), 5 drift (stale state: `reindex --check`, `sync-status`, `sync-update`).
 7. Stage explicit paths only, never `git add -A` or `git add .`. A bundle can be a symlink into another repository: find it with `git -C <catalogue>/<bundle> rev-parse --show-toplevel` and commit there.
 8. Commit only when the user asked for a commit. Never push, merge or open pull requests.
 9. Run experiments only in a throwaway catalogue under a temporary directory, never in a live catalogue.

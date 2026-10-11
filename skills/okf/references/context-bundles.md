@@ -59,7 +59,7 @@ okf-cli --root <catalogue> ctx inbound <slug>
 ```
 
 - `ctx list`: slug, description, entry and required counts. `--for <path>`: only the ctx files that contain that path.
-- `ctx <slug>` (short for `ctx show <slug>`): required entries in reading order, then reference entries, with type, title, description and a token estimate. Exit 1 when an entry is dead.
+- `ctx <slug>` (short for `ctx show <slug>`): required entries in reading order, then reference entries, with type, title, description and a token estimate. Exit 4 (non_conformant) when an entry is dead.
 - `ctx read <slug>`: prints the full text of every required entry in position order, each after a `===== i/n <path> =====` separator. Reference entries are not printed. This is the one call that loads a whole ctx into context.
 - `ctx toc <slug>`: headings of every entry; `--depth N` limits the heading level.
 - `ctx outbound` and `ctx inbound`: links leaving or reaching each entry; `--file <title, path or stem>` limits to one entry, `--include-internal` adds links between members.
@@ -120,7 +120,7 @@ Done when `ctx check` and `check _ctx` end `OK — 0 violations` and `ctx <slug>
 |---|---|---|
 | `ctx: unknown slug: <slug>` | Typo, or the ctx was renamed | `ctx list` |
 | `ctx create` rejects the slug | Uppercase, underscore, or a reserved name | Use lowercase letters, digits, hyphens |
-| `ctx <slug>` exits 1, entry shown `[DEAD]` | Entry file deleted or moved outside `rename` | `ctx drop <slug> <path>`, then `ctx add` the new path |
+| `ctx <slug>` exits 4, entry shown `[DEAD]` | Entry file deleted or moved outside `rename` | `ctx drop <slug> <path>`, then `ctx add` the new path |
 | `WARNING kc/type/registered _ctx/<slug>.md` | `Context` missing from `TYPES.md` | Add the `Context` row |
 | `WARNING kc/ctx/archived-entry ... entry under _archive/` | Member was archived | Drop or replace the entry |
 | Reading order wrong after `create` | `create` sorts alphabetically | `ctx move <slug> <path> --pos <n>` |

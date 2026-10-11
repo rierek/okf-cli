@@ -143,7 +143,7 @@ okf-cli --root <catalogue> sync-update
 okf-cli --root <catalogue> sync-update --apply
 ```
 
-`sync-status` exits 1 unless every block is `synced`; `--source` lists the consumers of one canon owner. `sync-update` previews; `--apply` rewrites outdated consumer copies.
+`sync-status` exits 5 (drift) unless every block is `synced`; `--source` lists the consumers of one canon owner. `sync-update` previews; `--apply` rewrites outdated consumer copies.
 
 | State | Meaning | `check` | Action |
 |---|---|---|---|

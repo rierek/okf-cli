@@ -118,7 +118,7 @@ okf-cli --root <catalogue> tags --register <tag> "<one-line description, max 150
 ```
 
 - `tags <candidate>` fuzzy-matches against the tags in use, with usage counts. Reuse a close hit.
-- `tags --validate` exits 1 and prints `UNKNOWN <tag>` for an unregistered tag.
+- `tags --validate` exits 4 (non_conformant) and prints `UNKNOWN <tag>` for an unregistered tag.
 - `tags --register` writes to `TAGS.md` at once, and creates the file when absent. Creating it closes the vocabulary for the whole catalogue, so do that only with the user's agreement. Repeat `--register <tag> "<description>"` for several tags. A stderr line `warning: auto-embed skipped` (no local embedding service) is harmless.
 
 ## 5. First concept
@@ -151,7 +151,7 @@ okf-cli --root <catalogue> reindex <bundle> --check
 okf-cli --root <catalogue> reindex <bundle>
 ```
 
-- `--check` prints `STALE <path>` for listings that would change, and exits 1 while any are stale.
+- `--check` prints `STALE <path>` for listings that would change, and exits 5 (drift) while any are stale.
 - The write run prints `updated <path>` per changed `index.md` and ends `reindex: <n> updated, 0 skipped`.
 - `skipped (no markers) <path>` names an `index.md` without the marker pair. Add the pair, or run `reindex <bundle> --init`.
 

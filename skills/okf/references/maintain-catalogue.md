@@ -32,7 +32,7 @@ okf-cli --root <catalogue> recent --limit 20
 - `prime`: usage guide, command list, catalogue state and bundle list. `--compact` for a short form, `--full` adds types and tags per bundle, `--check-semantic` counts semantic index coverage exactly.
 - `index`: one line per bundle. `index <bundle>` prints its `index.md`; `--full` prints description, concept count, directories, types and tags.
 - `info`: `TYPES.md` and `PROPERTIES.md`.
-- `recent`: newest concepts first, dated by the git commit that added them. Needs git (else exit 1); uncommitted concepts appear undated at the end.
+- `recent`: newest concepts first, dated by the git commit that added them. Needs git (exit 1 when the git binary is missing, exit 2 when the catalogue root is no git repository); uncommitted concepts appear undated at the end.
 - `--json` exists on `index`, `list`, `recent`, `refs`, `wikilinks`, `check` and `sync-status`.
 
 ## 2. Retrieve
@@ -63,7 +63,7 @@ okf-cli --root <catalogue> check <target> --ignore 'kc/*' --ignore okf/frontmatt
 okf-cli --root <catalogue> check <target> --types <path to TYPES.md>
 ```
 
-Output: one `ERROR` or `WARNING` line per finding, then `OK — 0 violations` or `<n> VIOLATIONS`; every line carries the rule ID of the table below. Only findings that count are numbered: an error always, a warning only under `--strict`. Exit 1 on any error. `--strict` counts warnings toward the exit code; every finding keeps its severity. `--json` prints one object `{"findings": [{rule, severity, path, message}, ...]}`. `--ignore <pattern>` (repeatable) and the `.okf.toml` key `ignore_rules` (array of patterns) suppress rules: a pattern ending in `*` matches every rule ID with that prefix (`kc/*`, `okf/link/*`), any other pattern only the identical ID; a suppressed finding neither prints nor counts, with or without `--strict`. An `ignore_rules` that is not an array of strings suppresses nothing and prints a `note:` line on stderr. `--types` overrides the type vocabulary source. A target that is not a directory fails with `not a directory`. Fix the findings, then rerun `check` until it is clean.
+Output: one `ERROR` or `WARNING` line per finding, then `OK — 0 violations` or `<n> VIOLATIONS`; every line carries the rule ID of the table below. Only findings that count are numbered: an error always, a warning only under `--strict`. Exit 4 (non_conformant) when any finding counts. `--strict` counts warnings toward the exit code; every finding keeps its severity. `--json` prints one object `{"findings": [{rule, severity, path, message}, ...]}`. `--ignore <pattern>` (repeatable) and the `.okf.toml` key `ignore_rules` (array of patterns) suppress rules: a pattern ending in `*` matches every rule ID with that prefix (`kc/*`, `okf/link/*`), any other pattern only the identical ID; a suppressed finding neither prints nor counts, with or without `--strict`. An `ignore_rules` that is not an array of strings suppresses nothing and prints a `note:` line on stderr. `--types` overrides the type vocabulary source. A target that is not a directory fails with `not a directory`. Fix the findings, then rerun `check` until it is clean.
 
 | Rule | Severity | Trigger | Fix |
 |---|---|---|---|
@@ -100,7 +100,7 @@ okf-cli --root <catalogue> reindex <target> --init
 ```
 
 - `reindex` rewrites the block between `<!-- okf:index -->` and `<!-- /okf:index -->` in every `index.md` (one level) and `INDEX-MAP.md` (whole subtree) under the target, from each concept's `title` and `description`. Subdirectories are listed only when they carry an `index.md`.
-- `--check` writes nothing, prints `STALE` and `UNCOVERED` paths, and exits 1 when any exist. `UNCOVERED` = an `index.md` without markers in a directory that holds concepts.
+- `--check` writes nothing, prints `STALE` and `UNCOVERED` paths, and exits 5 (drift) when any exist. `UNCOVERED` = an `index.md` without markers in a directory that holds concepts.
 - `--init` creates a missing `index.md` for the named target and converts marker-less `index.md` files in the subtree that hold a single bullet-list section. It replaces that hand-written list with an empty marker block, then the normal run fills it. Multi-section indexes are skipped and flagged; `--force` also flattens pure heading-and-bullet multi-section lists. Preview with `--init --check`.
 - A deliberately hand-curated `index.md` stays out of `UNCOVERED` when it contains `<!-- okf:index-exempt -->`.
 - Run `reindex <bundle>` after adding, renaming or retitling a concept, and after creating a subdirectory.
@@ -135,7 +135,7 @@ okf-cli --root <catalogue> normalize-tags --scope <target>
 
 - `tags`: every tag in use with its count. `--singletons`: tags used once, the merge candidates.
 - `tags <candidate>`: fuzzy search against the tags in use, `--limit` per candidate (default 8).
-- `TAGS.md` present = closed vocabulary. `--validate` exits 1 and prints `UNKNOWN <tag>` for unregistered tags; without `TAGS.md` it prints `(no TAGS.md — closed vocabulary not enabled)`.
+- `TAGS.md` present = closed vocabulary. `--validate` exits 4 (non_conformant) and prints `UNKNOWN <tag>` for unregistered tags; without `TAGS.md` it prints `(no TAGS.md — closed vocabulary not enabled)`.
 - `--register <tag> "<description>"` writes to `TAGS.md` at once, no preview (description required, one line, at most 150 characters, no `|`); repeat the option for several tags. It also tries a local embedding service; a stderr `warning: auto-embed skipped` is harmless.
 - `merge-tags`, `remove-tags` and `normalize-tags` preview; add `--apply` to write. `normalize-tags` converts inline `tags: [a, b]` to a block list.
 - After merging or removing, delete the obsolete rows from `TAGS.md` by hand, then run `check`.
