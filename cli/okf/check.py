@@ -5,7 +5,6 @@ the check, fix-crosslinks and fix-xml-tags commands."""
 from collections import namedtuple
 import os
 import re
-from ruamel.yaml.comments import CommentedSeq
 
 from okf.errors import OkfError
 from okf import sync, wikilinks
@@ -14,7 +13,7 @@ from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE,
     _mask_managed_block, _split_managed_block, ctx_findings, fm_text, index_h1_and_desc,
     iter_all_md, load_okf_config, load_tags, load_types, read_file, read_frontmatter, resolve_scopes,
-    tags_of, write_file,
+    flow_tags, tags_of, write_file,
 )
 from okf.parser_support import _complete_files, _complete_scopes, _sub
 from okf.sync import classify_sync_block, parse_canon_blocks, parse_sync_blocks
@@ -95,8 +94,7 @@ def check_tags_block_form(ctx):
     block-list, not inline `[a, b]`. Empty `[]` is fine (nothing to convert)."""
     if ctx["is_reserved"] or not ctx["has_fm"]:
         return []
-    tags = ctx["fm"].get("tags")
-    if isinstance(tags, CommentedSeq) and tags and tags.fa.flow_style():
+    if flow_tags(ctx["fm"]):
         return ["tags field uses inline form — local convention requires YAML block-list"]
     return []
 

@@ -625,9 +625,10 @@ class TagWrites(WriteFixture):
 
     def test_normalize_rewrites_an_inline_list(self):
         preview = self.ok("normalize-tags")["data"]
-        self.assertEqual(preview, {"applied": False, "files": ["kc-a/inline.md"]})
+        self.assertEqual(preview, {"applied": False, "files": ["kc-a/inline.md"], "unparseable": []})
         self.assertIn("tags: [alpha, zeta]", self.read("kc-a/inline.md"))
-        self.assertEqual(self.ok("normalize-tags", "--apply")["data"], {"applied": True, "files": ["kc-a/inline.md"]})
+        self.assertEqual(self.ok("normalize-tags", "--apply")["data"],
+                         {"applied": True, "files": ["kc-a/inline.md"], "unparseable": []})
         self.assertIn("tags:\n  - alpha\n  - zeta", self.read("kc-a/inline.md"))
 
     def test_where_limits_the_rewrite(self):

@@ -532,6 +532,15 @@ class CtxLoadSave(CtxFixtureMixin, unittest.TestCase):
         self.assertEqual(saved.head, okf_catalogue.read_frontmatter(self.EXISTING).head)
         self.assertIn("| 1 | pflicht | [one](/b/one.md) | c |", saved.body)
 
+    def test_loading_and_saving_a_ctx_unchanged_returns_the_file_byte_for_byte(self):
+        """A kc-shaped ctx file: blank line after the frontmatter block, generated body. A save with
+        unchanged entries is a no-op on disk, body included."""
+        text = (self.EXISTING + "| 1 | pflicht | [one](/b/one.md) | c |\n"
+                "| - | nachschlag | `~/notes/out.md` | x |\n")
+        self._w("_ctx/s.md", text)
+        okf_catalogue.save_ctx(self.root, okf_catalogue.load_ctx(self.root, "s"))
+        self.assertEqual(okf_catalogue.read_file(okf_catalogue.ctx_file(self.root, "s")), text)
+
     def test_saving_a_changed_description_changes_only_that_line(self):
         self._w("_ctx/s.md", self.EXISTING)
         okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "Quoted: new1", "entries": []})
@@ -881,6 +890,8 @@ class ReadFrontmatter(unittest.TestCase):
                 fm = okf_catalogue.read_frontmatter(text)
                 self.assertEqual(fm.head, head)
                 self.assertEqual(fm.head + fm.body, text)
+                if not head:
+                    self.assertEqual((fm.data, fm.error), (None, None))
 
     def test_a_mapping_block_comes_back_as_the_round_trip_mapping(self):
         fm = okf_catalogue.read_frontmatter(
@@ -931,12 +942,6 @@ class ReadFrontmatter(unittest.TestCase):
         self.assertIsNone(fm.data)
         self.assertIn("duplicate", fm.error.lower())
         self.assertNotIn("\n", fm.error)
-
-    def test_no_block_means_no_data_and_no_error(self):
-        for text in ("", "plain\n", "---\nnever closed\n"):
-            with self.subTest(text=text):
-                fm = okf_catalogue.read_frontmatter(text)
-                self.assertEqual((fm.head, fm.data, fm.error, fm.body), ("", None, None, text))
 
 
 class FrontmatterAccessors(unittest.TestCase):

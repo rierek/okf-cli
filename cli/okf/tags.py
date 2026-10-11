@@ -11,7 +11,7 @@ from okf.output import _add_output
 
 from okf import catalogue
 from okf.catalogue import (
-    TAG_DESC_MAX, all_tags, iter_concepts, load_tags, read_file, read_frontmatter, register_tags,
+    TAG_DESC_MAX, all_tags, flow_tags, iter_concepts, load_tags, read_file, read_frontmatter, register_tags,
     render_frontmatter, resolve_scopes, scalar_text, tags_of, write_file,
 )
 from okf.find_filters import compile_where
@@ -145,21 +145,25 @@ def cmd_normalize_tags(root, args):
     catalogue), not an OKF spec requirement: both forms stay valid OKF. A file whose frontmatter does
     not parse is never written."""
     filters = compile_where(args.where)
-    touched = []
+    touched, unparseable = [], {}
     for ap, rel, fm in _selected_concepts(root, filters):
-        tags = fm.data.get("tags") if fm.data is not None else None
-        if not (isinstance(tags, list) and tags and tags.fa.flow_style()):
+        reason = _unparseable_reason(fm)
+        if reason:
+            unparseable[rel] = reason
+            continue
+        tags = flow_tags(fm.data)
+        if tags is None:
             continue
         tags.fa.set_block_style()
         touched.append(rel)
         if args.apply:
             write_file(ap, render_frontmatter(fm))
-    result = {"applied": bool(args.apply), "files": touched}
+    result = {"applied": bool(args.apply), "files": touched, "unparseable": list(unparseable)}
     if getattr(args, "json", False):
         return result
     verb = "rewrote" if args.apply else "would rewrite"
-    _print_write_result(verb, touched, {})
-    print("normalize-tags: {} file(s) {}".format(len(touched), verb))
+    _print_write_result(verb, touched, unparseable)
+    print("normalize-tags: {} file(s) {}, {} unparseable".format(len(touched), verb, len(unparseable)))
 
 
 def fuzzy_matches(query, candidates, limit=8):

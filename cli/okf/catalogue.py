@@ -8,7 +8,6 @@ import io
 import os
 import re
 import subprocess
-import sys
 import tomllib
 import typing
 from collections import Counter
@@ -212,7 +211,9 @@ def render_ctx(slug, description, entries, existing=None):
         fm.data["type"] = CTX_TYPE
     if "description" not in fm.data or fm_text(fm.data, "description") != description:
         fm.data["description"] = description
-    return render_frontmatter(fm._replace(body="\n".join(out) + "\n"))
+    body = "\n".join(out) + "\n"
+    # the body starts with the newline that ends the closing delimiter line, when the block already has one
+    return render_frontmatter(fm._replace(body="\n" + body if fm.head else body))
 
 
 def ctx_findings(root, ap, stale=False):
@@ -531,6 +532,12 @@ def tags_of(data):
     tags = data.get("tags") if data else None
     items = tags if isinstance(tags, list) else scalar_text(tags).split(",")
     return [text for text in (scalar_text(item).strip() for item in items) if text]
+
+
+def flow_tags(data):
+    """The `tags` list of a frontmatter mapping when it is a non-empty flow-style list `[a, b]`, else None."""
+    tags = data.get("tags") if data else None
+    return tags if isinstance(tags, list) and tags and tags.fa.flow_style() else None
 
 
 def fm_meta(data, stem):
