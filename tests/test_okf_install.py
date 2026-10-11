@@ -41,7 +41,6 @@ def _load(name, filename):
 
 
 inst = _load("okf_install", "okf_install.py")
-HAS_ARGCOMPLETE = importlib.util.find_spec("argcomplete") is not None
 
 _STUB_HEAD = ('#!%s\nimport json, os, re, sys, time\n'
               'open(os.environ["OKF_STUB_LOG"], "a").write('
@@ -688,7 +687,6 @@ class UvAndArgcomplete(Machine):
         self.assertFalse(os.path.exists(self.h(".zsh/completions/_okf-cli")))
         self.assertEqual(self.get(self.h(".zshrc")), "", "nothing is needed, so nothing is written")
 
-    @unittest.skipUnless(HAS_ARGCOMPLETE, "argcomplete not installed")
     def test_bash_and_fish_completion_are_argcomplete_shellcode(self):
         from argcomplete.shell_integration import shellcode
         self.use_source_tree()

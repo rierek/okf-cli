@@ -5,7 +5,6 @@ conformance and shell completion. unittest.
 Run: just test tests.test_okf_parser -v
 """
 import argparse
-import importlib.util
 import os
 import shutil
 import sys
@@ -135,8 +134,6 @@ class CommandHelpConformance(unittest.TestCase):
         self.assertEqual(missing, [])
 
 
-@unittest.skipUnless(importlib.util.find_spec("argcomplete"),
-                     "argcomplete not installed (pip install argcomplete)")
 class ShellCompletion(unittest.TestCase):
     """TAB completion, driven through the real cli/okf-cli.py with the env
     protocol the zsh glue cli/_okf-cli speaks. --root is the raw shell word
