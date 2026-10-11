@@ -144,8 +144,13 @@ def _register(server):
         """Ranked search across a catalogue/repo root, narrowed by a `where`
         expression: `field op value` with op one of = != < <= > >= ~ (contains)
         or `field in (a, b)`, joined by and, or, not and parentheses. Fields:
-        type, tag, path (<bundle>/<concept-id>), archived (true or false) and
-        any frontmatter key (nested: a.b). Quote a value with spaces: 'a b'.
+        type, tag, path (<bundle>/<concept-id>), archived (true or false),
+        tier (unverified, machine-confirmed or human-reviewed), stale (true or
+        false), status (an absent status is stable) and any frontmatter key
+        (nested: a.b; through lists: verified.by, sources.resource). Timestamp
+        keys (generated.at, verified.at, stale_after, usage_window.from/to,
+        sources.last_modified) compare as instants and take an ISO 8601 value
+        with an explicit offset. Quote a value with spaces or +: 'a b'.
         Example: where="type = Runbook and path ~ home-lab/".
 
         Two arms produce results: a lexical FTS5/BM25 arm and a semantic
@@ -203,8 +208,8 @@ def _register(server):
         """The complete, unranked set of concepts a `where` expression selects;
         the expression is required (an empty one fails with `invalid_input`).
         Grammar as in okf_find: `field op value` or `field in (a, b)`, joined by
-        and, or, not and parentheses, over type, tag, path, archived and any
-        frontmatter key. Example: where="type = Runbook and tag = alpha".
+        and, or, not and parentheses, over type, tag, path, archived, tier,
+        stale, status and any frontmatter key. Example: where="type = Runbook and tag = alpha".
         Archived concepts are listed only when `where` names `archived`, for
         example where="archived in (true, false)"."""
         return run_okf(root, "list", {"where": where})

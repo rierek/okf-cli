@@ -6,9 +6,11 @@ import functools
 import operator
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import NamedTuple
 
+from okf import spec
 from okf.catalogue import read_file, read_frontmatter, scalar_text, tags_of
 from okf.errors import OkfError
 
@@ -211,7 +213,7 @@ _ORDERING = frozenset(("<", "<=", ">", ">="))
 
 def _ordered(op):
     def compare(value, wanted):
-        if _NUMBER.match(value) and _NUMBER.match(wanted):
+        if isinstance(value, str) and isinstance(wanted, str) and _NUMBER.match(value) and _NUMBER.match(wanted):
             value, wanted = float(value), float(wanted)
         return op(value, wanted)
     return compare
@@ -220,44 +222,65 @@ def _ordered(op):
 _COMPARE = {"=": operator.eq, "~": lambda value, wanted: wanted in value, "<": _ordered(operator.lt),
             "<=": _ordered(operator.le), ">": _ordered(operator.gt), ">=": _ordered(operator.ge)}
 
-# The one field registry: field name -> resolver(path, load), the list of values the concept holds
-# for the field. load() returns (frontmatter mapping or None, text) and reads the file only when
-# called. A name not listed here is a frontmatter key, dotted for nested mappings. tier, stale and
-# the v0.2 keys register here later.
+# The one field registry: field name -> resolver(path, load, now), the list of values the concept
+# holds for the field. load() returns the frontmatter mapping (or None) and reads the file only
+# when called; `now` is the one instant of the call. A name not listed here is a frontmatter key,
+# dotted for nested mappings and through lists of mappings.
+TIERS = ("unverified", "machine-confirmed", "human-reviewed")
 FIELDS = {
-    "path": lambda path, load: [path],
-    "archived": lambda path, load: ["true" if path.startswith(FindFilters._ARCHIVE_PREFIX) else "false"],
-    "tag": lambda path, load: tags_of(load()[0]),
+    "path": lambda path, load, now: [path],
+    "archived": lambda path, load, now: ["true" if path.startswith(FindFilters._ARCHIVE_PREFIX) else "false"],
+    "tag": lambda path, load, now: tags_of(load()),
+    "tier": lambda path, load, now: [spec.trust_tier(load())],
+    "stale": lambda path, load, now: ["true" if spec.is_stale(load(), now) else "false"],
+    "status": lambda path, load, now: [scalar_text(v) for v in _leaves("status", load)] or ["stable"],
 }
+# The timestamp-valued OKF v0.2 keys. They compare as instants, never as text.
+INSTANT_FIELDS = frozenset((
+    "generated.at", "verified.at", "stale_after", "usage_window.from", "usage_window.to",
+    "sources.last_modified", "sources.usage_window.from", "sources.usage_window.to"))
 
 
-def _values(field, path, load):
+def _leaves(field, load):
+    """What a dotted key reaches in the frontmatter: a mapping is entered by key, a list through
+    each of its elements, so `verified.by` reads a bare mapping and a list alike. A list at the end
+    of the path gives its items, a mapping there nothing."""
+    def walk(value, parts):
+        if isinstance(value, list):
+            return [leaf for item in value for leaf in walk(item, parts)]
+        if not parts:
+            return [] if isinstance(value, Mapping) else [value]
+        if isinstance(value, Mapping) and parts[0] in value:
+            return walk(value[parts[0]], parts[1:])
+        return []  # absent
+    return walk(load(), field.split("."))
+
+
+def _values(field, path, load, now):
     resolve = FIELDS.get(field)
     if resolve:
-        return resolve(path, load)
-    value = load()[0]
-    for part in field.split("."):
-        if not isinstance(value, dict) or part not in value:
-            return []  # absent
-        value = value[part]
-    if isinstance(value, list):
-        return [scalar_text(v) for v in value]
-    return [] if isinstance(value, dict) else [scalar_text(value)]
+        return resolve(path, load, now)
+    return [scalar_text(v) for v in _leaves(field, load)]
 
 
-def _evaluate(node, path, load):
+def _evaluate(node, path, load, now):
     if isinstance(node, And):
-        return _evaluate(node.left, path, load) and _evaluate(node.right, path, load)
+        return _evaluate(node.left, path, load, now) and _evaluate(node.right, path, load, now)
     if isinstance(node, Or):
-        return _evaluate(node.left, path, load) or _evaluate(node.right, path, load)
+        return _evaluate(node.left, path, load, now) or _evaluate(node.right, path, load, now)
     if isinstance(node, Not):
-        return not _evaluate(node.operand, path, load)
-    values = _values(node.field, path, load)
+        return not _evaluate(node.operand, path, load, now)
+    literals = node.values if isinstance(node, In) else (node.value,)
+    if node.field in INSTANT_FIELDS:  # compared as instants; a stored value that is no instant holds nothing
+        values = [t for t in map(spec.parse_okf_datetime, _leaves(node.field, load)) if t is not None]
+        literals = [spec.parse_okf_datetime(v) for v in literals]
+    else:
+        values = _values(node.field, path, load, now)
     if isinstance(node, In):
-        return any(v in node.values for v in values)
+        return any(v in literals for v in values)
     if node.op == "!=":
-        return not any(v == node.value for v in values)  # an absent key satisfies !=
-    return any(_COMPARE[node.op](v, node.value) for v in values)
+        return not any(v == literals[0] for v in values)  # an absent key satisfies !=
+    return any(_COMPARE[node.op](v, literals[0]) for v in values)
 
 
 def _validate(node):
@@ -274,6 +297,15 @@ def _validate(node):
             raise OkfError("invalid_input", "--where: archived takes = != or in, with true or false")
         if node.field == "tag" and op in _ORDERING:
             raise OkfError("invalid_input", "--where: tag takes no ordering operator, got {}".format(op))
+        if node.field in ("tier", "stale"):
+            allowed = TIERS if node.field == "tier" else ("true", "false")
+            if op in _ORDERING or op == "~" or any(v not in allowed for v in values):
+                raise OkfError("invalid_input", "--where: {} takes = != or in, with {}".format(
+                    node.field, " or ".join(allowed)))
+        if node.field in INSTANT_FIELDS and (op == "~" or any(spec.parse_okf_datetime(v) is None for v in values)):
+            raise OkfError("invalid_input", "--where: {} compares instants: = != < <= > >= or in, with an "
+                           "ISO 8601 datetime and an explicit offset, e.g. 2026-09-23T00:00:00Z "
+                           "(quote a value that holds +)".format(node.field))
 
 
 def _conjuncts(node):
@@ -344,7 +376,7 @@ class FindFilters:
     skipping a conjunct is visible instead of silent: sql_where() for arms that filter in the
     database, matches()/matches_loaded() for arms that walk the file tree."""
 
-    __slots__ = ("tree", "include_archive", "include_topics", "corpus_bundles")
+    __slots__ = ("tree", "include_archive", "include_topics", "corpus_bundles", "now")
 
     _ARCHIVE_PREFIX = "_archive/"
     # Escaped once here rather than re-derived at each LIKE call site (review B01 round 3,
@@ -352,11 +384,12 @@ class FindFilters:
     # LIKE pattern as a user's value is.
     _ARCHIVE_PREFIX_ESC = _like_escape(_ARCHIVE_PREFIX)
 
-    def __init__(self, tree=None, include_topics=False, corpus_bundles=()):
+    def __init__(self, tree=None, include_topics=False, corpus_bundles=(), now=None):
         self.tree = tree  # the syntax tree of --where, None without one
         self.include_archive = _mentions(tree, "archived")
         self.include_topics = bool(include_topics)
         self.corpus_bundles = tuple(corpus_bundles or ())
+        self.now = now or spec.utcnow()  # the one instant of the call, for `stale` and the records
 
     def __bool__(self):
         # Whether an expression restricts the result. Not the archive default or the corpus
@@ -401,7 +434,7 @@ class FindFilters:
             sql += " AND {} NOT LIKE ? ESCAPE char(92)".format(path)
             params.append(self._ARCHIVE_PREFIX_ESC + "%")
         residual = FindFilters(functools.reduce(And, rest) if rest else None,
-                               self.include_topics, self.corpus_bundles)
+                               self.include_topics, self.corpus_bundles, self.now)
         return sql, params, residual
 
     def path_visible(self, path):
@@ -418,10 +451,10 @@ class FindFilters:
             return any(compared == b or compared.startswith(b + "/") for b in self.corpus_bundles)
         return True
 
-    def matches_loaded(self, path, fm, text):
-        """Full predicate for a concept whose file the caller already read."""
+    def matches_loaded(self, path, fm):
+        """Full predicate for a concept whose frontmatter the caller already read."""
         return self.path_visible(path) and (
-            self.tree is None or _evaluate(self.tree, path, lambda: (fm, text)))
+            self.tree is None or _evaluate(self.tree, path, lambda: fm, self.now))
 
     def matches(self, root, path):
         """Same predicate, reading the concept file only when the expression needs a field beyond
@@ -437,11 +470,10 @@ class FindFilters:
 
         @functools.cache
         def load():
-            text = read_file(os.path.join(root, path + ".md"))  # raises when the file is gone
-            return read_frontmatter(text).data, text
+            return read_frontmatter(read_file(os.path.join(root, path + ".md"))).data  # raises when the file is gone
 
         try:
-            return _evaluate(self.tree, path, load)
+            return _evaluate(self.tree, path, load, self.now)
         except FileNotFoundError:
             return False
 

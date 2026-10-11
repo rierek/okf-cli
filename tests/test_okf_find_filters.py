@@ -253,7 +253,7 @@ class CompileWhereSemantics(unittest.TestCase):
         ("status = draft", {"b/one"}),
         ("status != draft", ACTIVE - {"b/one"}),
         ("not status = draft", ACTIVE - {"b/one"}),
-        ("status = stable or status = draft", {"b/one", "b/two"}),
+        ("status = stable or status = draft", ACTIVE),  # an absent status is stable (OKFT-g30y)
         ("title = 'Quoted Title'", {"b/one"}),
         ("generated.by = okf", set()),
         # composition
@@ -267,7 +267,7 @@ class CompileWhereSemantics(unittest.TestCase):
         for expression, expected in self.ROWS:
             with self.subTest(expression):
                 filters = compile_where(expression)
-                selected = {p for p, fm, text in CONCEPTS.values() if filters.matches_loaded(p, fm, text)}
+                selected = {p for p, fm, _text in CONCEPTS.values() if filters.matches_loaded(p, fm)}
                 self.assertEqual(selected, expected)
 
     def test_dotted_key_walks_nested_mappings(self):
@@ -278,7 +278,7 @@ class CompileWhereSemantics(unittest.TestCase):
                                      ("generated.by.deeper = okf", False),
                                      ("generated ~ by", False)]:
             with self.subTest(expression):
-                self.assertEqual(compile_where(expression).matches_loaded("b/n", nested, ""), expected)
+                self.assertEqual(compile_where(expression).matches_loaded("b/n", nested), expected)
 
     def test_a_list_valued_key_is_membership_any_and_any_contains(self):
         fm = {"aliases": ["ax", "by"]}
@@ -287,7 +287,7 @@ class CompileWhereSemantics(unittest.TestCase):
                                      ("aliases ~ y", True), ("aliases ~ q", False),
                                      ("aliases != ax", False), ("aliases != q", True)]:
             with self.subTest(expression):
-                self.assertEqual(compile_where(expression).matches_loaded("b/n", fm, ""), expected)
+                self.assertEqual(compile_where(expression).matches_loaded("b/n", fm), expected)
 
     def test_misuse_is_invalid_input(self):
         for expression in ("archived = yes", "archived = True", "archived < true", "archived >= false",
@@ -311,9 +311,9 @@ class CompileWhereSemantics(unittest.TestCase):
                 ("type = x or archived in (true, false)", True, True)]:
             with self.subTest(expression):
                 filters = compile_where(expression)
-                p, fm, text = CONCEPTS["_archive/b/old"]
+                p, fm, _text = CONCEPTS["_archive/b/old"]
                 self.assertEqual(filters.include_archive, include_archive)
-                self.assertEqual(filters.matches_loaded(p, fm, text), archived_matches)
+                self.assertEqual(filters.matches_loaded(p, fm), archived_matches)
 
     def test_bool_means_an_expression_restricts(self):
         self.assertFalse(compile_where(None))
@@ -327,11 +327,11 @@ class CompileWhereSemantics(unittest.TestCase):
         for path, expected in [("b/one", True), ("c/three", True), ("my_bundle/x", False),
                                ("myXbundle/y", False), ("_archive/b/old", False)]:
             with self.subTest(path):
-                _p, fm, text = CONCEPTS[path]
-                self.assertEqual(filters.matches_loaded(path, fm, text), expected)
+                _p, fm, _text = CONCEPTS[path]
+                self.assertEqual(filters.matches_loaded(path, fm), expected)
         archived = compile_where("archived = true", corpus_bundles=("b",))
-        self.assertTrue(archived.matches_loaded("_archive/b/old", {}, ""))
-        self.assertFalse(archived.matches_loaded("_archive/c/old", {}, ""))
+        self.assertTrue(archived.matches_loaded("_archive/b/old", {}))
+        self.assertFalse(archived.matches_loaded("_archive/c/old", {}))
 
     def test_matches_reads_the_file_only_for_a_non_path_field_and_only_once(self):
         with mock.patch.object(okf_find_filters, "read_file", wraps=okf_find_filters.read_file) as read:
@@ -365,7 +365,7 @@ class WhereOnYamlValues(unittest.TestCase):
     def _selected(self, expression):
         filters = compile_where(expression)
         return sorted(path for path, text in self.TEXT.items()
-                      if filters.matches_loaded(path, read_frontmatter(text).data, text))
+                      if filters.matches_loaded(path, read_frontmatter(text).data))
 
     def test_a_dotted_name_walks_nested_mappings(self):
         self.assertEqual(self._selected("a.b = x"), ["n/nested"])
@@ -451,7 +451,7 @@ class SqlWherePushDown(unittest.TestCase):
                                              corpus_bundles=("b",))
         self.assertTrue(residual.include_topics)
         self.assertEqual(residual.corpus_bundles, ("b",))
-        self.assertFalse(residual.matches_loaded("c/x", {"status": "draft"}, ""))
+        self.assertFalse(residual.matches_loaded("c/x", {"status": "draft"}))
 
     def test_a_value_is_bound_never_formatted_into_the_sql(self):
         hostile = "x');DROP/**/TABLE/**/docs;--"  # no whitespace: pushed for tag too

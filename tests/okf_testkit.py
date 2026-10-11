@@ -1,6 +1,8 @@
 """Helpers shared by several test modules. Not a test module: the name has no
 test_ prefix, so unittest discovery never collects it."""
 import argparse
+import builtins
+import collections
 import contextlib
 import io
 import json
@@ -19,6 +21,7 @@ from okf import check as okf_check
 from okf import find as okf_find
 from okf.errors import OkfError
 from okf import sync as okf_sync
+from okf.parser import COMMAND_DISPATCH, build_parser
 
 
 def run_find(root, query, **kw):
@@ -240,3 +243,119 @@ class CtxFixtureMixin:
 
 def E(pos, mode, path, comment=""):
     return {"pos": pos, "mode": mode, "path": path, "comment": comment}
+
+
+DECLARE = 'okf_version: "0.2"'
+
+
+class SpecCase(unittest.TestCase):
+    """A throwaway catalogue with one bundle `b`. `_bundle` writes its root index.md. A base with
+    no tests of its own: the OKF v0.2 test modules inherit it."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.tmp, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _bundle(self, front: "str | None" = DECLARE, bundle="b"):
+        """The bundle-root index.md; `front` is its frontmatter text, None for no block."""
+        head = "" if front is None else "---\n{}\n---\n".format(front)
+        self._w(bundle + "/index.md", head + "# B\n\nA bundle for the v0.2 rule tests.\n")
+
+    def _concept(self, extra="", rel="b/x.md", type_="Note"):
+        self._w(rel, "---\ntype: {}\n{}\n---\n# X\n\nbody\n".format(type_, extra))
+
+    def _findings(self, target: "str | None" = "b"):
+        return okf_check.run_checks(self.tmp, target)
+
+    def _group(self, prefix, target: "str | None" = "b"):
+        return [f for f in self._findings(target) if f.rule.startswith(prefix)]
+
+
+needs_git = unittest.skipUnless(subprocess.run(["git", "--version"], capture_output=True).returncode == 0,
+                                "git not available")
+
+
+@needs_git
+class GitCatalogue(SpecCase):
+    """The catalogue root `self.tmp` is a git repository; every commit pins author, committer and dates."""
+
+    def setUp(self):
+        super().setUp()
+        patch = mock.patch.dict(os.environ)
+        patch.start()
+        self.addCleanup(patch.stop)
+        for key in [k for k in os.environ if k.startswith("GIT_")]:
+            del os.environ[key]  # a hook that runs the tests must not steer the fixture's git
+        os.environ.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null",
+                          GIT_TERMINAL_PROMPT="0")
+        self._git("init", "-q")
+
+    def _git(self, *argv, env=None, cwd=None):
+        res = subprocess.run(["git", "-C", cwd or self.tmp, "-c", "init.defaultBranch=main",
+                              "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", *argv],
+                             capture_output=True, text=True, env={**os.environ, **(env or {})})
+        self.assertEqual(res.returncode, 0, res.stderr)
+        return res.stdout
+
+    def _commit(self, message, when, author="a@x.org", author_when=None):
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", message, env={
+            "GIT_AUTHOR_NAME": "A", "GIT_AUTHOR_EMAIL": author, "GIT_COMMITTER_NAME": "C",
+            "GIT_COMMITTER_EMAIL": "c@x.org", "GIT_AUTHOR_DATE": author_when or when,
+            "GIT_COMMITTER_DATE": when})
+
+    def _doc(self, rel="b/x.md", body="body\n", front="type: Note"):
+        self._w(rel, "---\n{}\n---\n{}".format(front, body))
+
+    def _reset(self):
+        """An empty catalogue in a fresh repository."""
+        for name in os.listdir(self.tmp):
+            path = os.path.join(self.tmp, name)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+        self._git("init", "-q")
+
+    def _count_git(self):
+        """The list that collects argv[0] of every process started from here on (run goes through Popen)."""
+        started = []
+        real_popen = subprocess.Popen
+
+        def popen(argv, *a, **k):
+            started.append(argv[0])
+            return real_popen(argv, *a, **k)
+
+        patch = mock.patch.object(subprocess, "Popen", popen)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return started
+
+
+
+def call_command(root, *argv):
+    """The data a command returns in-process, as its `--json` envelope would carry it; the notes
+    of the call go to a discarded stderr."""
+    args = build_parser().parse_args(["--root", root, *argv, "--json"])
+    with contextlib.redirect_stderr(io.StringIO()):
+        return COMMAND_DISPATCH[args.cmd](root, args)
+
+
+def count_md_reads(root, *argv):
+    """Counter of how often each .md file under `root` is opened during one in-process call."""
+    real, seen = builtins.open, collections.Counter()
+
+    def spy(file, *a, **k):
+        if isinstance(file, str) and file.startswith(root) and file.endswith(".md"):
+            seen[file] += 1
+        return real(file, *a, **k)
+
+    with mock.patch("builtins.open", spy):
+        call_command(root, *argv)
+    return seen

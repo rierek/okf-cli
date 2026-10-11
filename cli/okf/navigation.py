@@ -7,7 +7,7 @@ import sys
 from okf.errors import OkfError
 from okf.output import _add_output
 
-from okf import linkscan
+from okf import linkscan, spec
 from okf.catalogue import (
     fm_meta, fm_text, iter_concepts, iter_headings, read_file, read_frontmatter, require_bundle_dir,
     resolve_concept, resolve_scopes,
@@ -24,25 +24,25 @@ def cmd_list(root, args):
     if args.where is None:
         raise OkfError("invalid_input", "(error: pass --where, e.g. --where 'type = Runbook')")
     filters = compile_where(args.where)
+    now = filters.now
     hits = []
     for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
         for _cid, ap in iter_concepts(bp):
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
             path = rel[:-3] if rel.endswith(".md") else rel
-            text = read_file(ap)
-            fm = read_frontmatter(text).data
-            if not filters.matches_loaded(path, fm, text):
+            fm = read_frontmatter(read_file(ap)).data
+            if not filters.matches_loaded(path, fm):
                 continue
             t, title, desc = fm_meta(fm, os.path.basename(ap)[:-3])
-            hits.append((title, t, path, desc))
+            hits.append((title, t, path, desc, spec.trust_fields(fm, now)))
     hits.sort(key=lambda x: x[0].casefold())
     if getattr(args, "json", False):
-        return [{"title": title, "type": t, "path": path, "description": desc}
-                for (title, t, path, desc) in hits]
+        return [{"title": title, "type": t, "path": path, "description": desc, **trust}
+                for (title, t, path, desc, trust) in hits]
     if not hits:
         print("(no matches)")
         return
-    for title, t, path, desc in hits:
+    for title, t, path, desc, _trust in hits:
         print("------")
         print("title: {}".format(title))
         print("type: {}".format(t))
@@ -98,11 +98,10 @@ def _read_section(body, section, first_file_line):
     return lines[heads[k][2]:heads[after][2] if after < len(heads) else None]
 
 
-def _split_head_body(text):
-    """(frontmatter block, rest) at the point read_frontmatter splits. The block
-    keeps both delimiter lines and the last newline (read_frontmatter leaves
-    that newline on the body side); without frontmatter it is "" and rest is text."""
-    split = read_frontmatter(text)
+def _split_head_body(split):
+    """(frontmatter block, rest) at the point read_frontmatter split the text into `split`. The
+    block keeps both delimiter lines and the last newline (read_frontmatter leaves that newline
+    on the body side); without frontmatter it is "" and rest is the text."""
     head, body = split.head, split.body
     if head and body.startswith("\n"):
         return head + "\n", body[1:]
@@ -118,7 +117,8 @@ def _concept_path(root, ap):
 def cmd_read(root, args):
     ap = resolve_concept(root, args.path)
     text = read_file(ap)
-    head, body = _split_head_body(text)
+    split = read_frontmatter(text)
+    head, body = _split_head_body(split)
     if args.section is not None:
         out, end = "\n".join(_read_section(body, args.section, head.count("\n") + 1)), "\n"
     elif args.frontmatter_only:
@@ -128,7 +128,8 @@ def cmd_read(root, args):
     else:
         out, end = text, "\n"
     if getattr(args, "json", False):
-        return {"path": _concept_path(root, ap), "text": out + end}
+        return {"path": _concept_path(root, ap), "text": out + end,
+                **spec.trust_fields(split.data, spec.utcnow())}
     print(out, end=end)
 
 

@@ -452,7 +452,7 @@ class ExistingJsonCommands(Fixture):
         self.assertEqual(list(data("ctx", "inbound", "demo")),
                          ["slug", "direction", "include_internal", "members"])
         self.assertEqual(list(data("recent")[0]),
-                         ["created", "created_ts", "title", "type", "path", "description"])
+                         ["created", "created_ts", "title", "type", "path", "description", "tier", "stale"])
 
     def test_a_note_arrives_as_a_warning_and_not_on_stderr(self):
         self._w("kc-a/late.md", BETA)  # never committed
@@ -991,6 +991,7 @@ class Conformance(WriteFixture):
         "sync-update": ["sync-update"],
         "tags": ["tags"],
         "toc": ["toc", "kc-a/alpha"],
+        "verify": ["verify", "kc-a/alpha", "--by", "human:erik"],
         "visualize": ["visualize", "kc-a"],
         "wikilinks": ["wikilinks"],
     }

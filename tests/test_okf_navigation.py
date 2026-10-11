@@ -704,13 +704,15 @@ class ReadCommandsOnYamlFrontmatter(unittest.TestCase):
                 self.assertEqual(self._run(*argv)[1], 0)
 
     def test_the_concept_that_fails_to_parse_has_no_frontmatter_values(self):
-        listed = self._data("list", "--where", "path ~ b")
+        listed = [{k: r[k] for k in ("title", "type", "path", "description")}
+                  for r in self._data("list", "--where", "path ~ b")]
         self.assertIn({"title": "bad", "type": "", "path": "b/bad", "description": ""}, listed)
         toc = self._data("toc", "b/bad")
         self.assertEqual((toc["title"], toc["type"]), ("bad", ""))
 
     def test_typed_values_come_back_as_the_text_written_in_every_json_output(self):
-        listed = self._data("list", "--where", "path ~ b")
+        listed = [{k: r[k] for k in ("title", "type", "path", "description")}
+                  for r in self._data("list", "--where", "path ~ b")]
         self.assertIn({"title": "2026-08-07", "type": "7", "path": "b/typed", "description": "true"}, listed)
         hit = next(h for h in self._data("find", "needle")["hits"] if h["path"] == "b/typed")
         self.assertEqual((hit["title"], hit["type"], hit["description"]), ("2026-08-07", "7", "true"))

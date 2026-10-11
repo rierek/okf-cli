@@ -546,8 +546,14 @@ def fm_meta(data, stem):
     return fm_text(data, "type"), fm_text(data, "title") or stem, fm_text(data, "description")
 
 
+def meta_and_fm(ap):
+    """((type, title, description), frontmatter mapping) of one concept file, read once."""
+    fm = read_frontmatter(read_file(ap)).data
+    return fm_meta(fm, os.path.basename(ap)[:-3]), fm
+
+
 def meta_of(ap):
-    return fm_meta(read_frontmatter(read_file(ap)).data, os.path.basename(ap)[:-3])
+    return meta_and_fm(ap)[0]
 
 
 def all_tags(root):

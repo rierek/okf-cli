@@ -81,7 +81,7 @@ sources:
 | `generated` | `{ by: <actor>, at: <time> }`, `by` required. Set on creation and on every meaningful content change. `<UTC now>`: output of `date -u +%Y-%m-%dT%H:%M:%SZ`. |
 | `sources` | One entry per material the content derives from. `resource` is required (URL, path, or a scope description such as "all queries in project X"); `id` when the body cites the source; optional `title`, `author`, `usage_count`, `last_modified`; a sibling key `usage_window: { from, to }` frames `usage_count`. Cite a claim with a footnote whose label is the id: `[^<source-id>]`. |
 | `status` | `draft`, `stable` (the default when absent) or `deprecated`. |
-| `verified` | Only for a real confirmation against the sources: `{ by: <actor>, at: <time> }`, or a list of such entries. Writing a concept is not verifying it. Trust tier: none = unverified, only non-human actors = machine-confirmed, any `human:` actor = human-reviewed. |
+| `verified` | Only for a real confirmation against the sources: `{ by: <actor>, at: <time> }`, or a list of such entries. Writing a concept is not verifying it. Record a confirmation with `okf-cli --root <catalogue> verify <bundle>/<concept-id> --by <actor>`: it appends one entry with the current UTC time and changes nothing else. Trust tier: none = unverified, only non-human actors = machine-confirmed, any `human:` actor = human-reviewed. |
 | `stale_after` | Absolute time from which the content counts as stale, for example `2027-01-31T00:00:00Z`. Only for content that expires. |
 | `superseded_by` | Only on `type: Decision`: catalogue-root-absolute path of the replacing decision, for example `/<bundle>/decisions/<new>.md`. Must resolve (error `kc/supersede/resolves`); on another type it is warning `kc/supersede/scope`. |
 
@@ -104,7 +104,7 @@ sources:
 
 1. `okf-cli --root <catalogue> read <bundle>/<concept-id>`
 2. Edit the file in place. Merge new facts into the existing structure; do not append a second copy of a section.
-3. Content changed meaningfully: set `generated` to your actor and the current time. Keep existing `verified` entries; add one only after a real re-check.
+3. Content changed meaningfully: set `generated` to your actor and the current time. Keep existing `verified` entries; add one with `verify` only after a real re-check.
 4. New file name or bundle: never `mv`. Preview with `okf-cli --root <catalogue> rename <bundle>/<old>.md <bundle>/<new>.md`, then repeat with `--apply`; it rewrites every inbound link and reindexes.
 5. Content no longer current: `status: deprecated` keeps it in place for inbound links; `okf-cli --root <catalogue> archive <bundle>/<concept-id>.md --apply` (after the preview without `--apply`) removes it from default search.
 

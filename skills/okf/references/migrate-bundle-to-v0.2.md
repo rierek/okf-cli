@@ -44,7 +44,7 @@ Unchanged from v0.1: required `type`, recommended `title`, `description`, `resou
 
 - No migrator exists. Every frontmatter change below is a manual edit; okf-cli handles only the structural steps.
 - `check` enforces the v0.2 hard rules (frontmatter block present, non-empty `type`, no `type` in reserved files) plus local rules: tag block form, link form, registered types and tags, file names, asset placement, canon and ctx integrity.
-- `check` does not validate `generated`, `sources`, `verified`, `status`, `stale_after` or `okf_version`, and does not parse YAML. A misspelled or malformed v0.2 field passes `check`. Verify those fields with the `grep` and `read` steps of phase 6.
+- In a bundle whose root `index.md` declares `okf_version: "0.2"` (quoted), `check` also validates `sources`, `usage_window`, `generated`, `verified`, `status`, `stale_after`, timestamp and actor formats and the `runtime` of an `Attested Computation` (rule IDs `okf/provenance/*`, `okf/trust/*`, `okf/lifecycle/*`, `okf/format/*`, `okf/computation/*`), and warns when a body changed after `generated.at` without a new `generated.at` (`okf/trust/drift`). Declare the version, then run `check <bundle>` after phase 5. A bundle without the declaration gets none of these findings: verify its fields with the `grep` and `read` steps of phase 6.
 
 ## Mapping from v0.1 and ad-hoc frontmatter
 

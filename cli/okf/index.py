@@ -6,10 +6,11 @@ import os
 import re
 import sys
 
+from okf import spec
 from okf.errors import OkfError
 from okf.catalogue import (
-    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, fm_text, index_h1_and_desc, iter_headings,
-    iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_of, read_file,
+    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, fm_text, index_h1_and_desc,
+    iter_headings, iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_and_fm, meta_of, read_file,
     read_frontmatter, replace_managed_block, require_bundle_dir, tags_of, write_file,
 )
 from okf.output import _add_output
@@ -97,12 +98,14 @@ def _bundle_summary_json(root, b, full=False):
 
 
 def _concepts_json(bp):
-    """[{id, title, type, description}, ...] for every concept under `bp`,
+    """[{id, title, type, description, tier, stale}, ...] for every concept under `bp`,
     sorted by concept id (F02 dedup, prelude 2026-07-25 on okf-cli-83vq)."""
+    now = spec.utcnow()
     concepts = []
     for cid, ap in sorted(iter_concepts(bp)):
-        t, title, desc = meta_of(ap)
-        concepts.append({"id": cid, "title": title, "type": t, "description": desc})
+        (t, title, desc), fm = meta_and_fm(ap)
+        concepts.append({"id": cid, "title": title, "type": t, "description": desc,
+                         **spec.trust_fields(fm, now)})
     return concepts
 
 

@@ -7,7 +7,8 @@ import os
 import re
 
 from okf.errors import OkfError
-from okf import sync, wikilinks
+from okf import spec, spec_check, sync, wikilinks
+from okf.history import History
 from okf.output import _add_output, _note
 from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE,
@@ -493,7 +494,7 @@ def cmd_fix_crosslinks(root, args):
 # `kc/` = local catalogue invariant), its severity, and the callable.
 # scope "file":   check(ctx) -> [message]            one concept file per call
 # scope "bundle": check({"bundle", "bp"}) -> [(path, message)]   one bundle per call
-Rule = namedtuple("Rule", "id severity scope check")
+Rule = namedtuple("Rule", "id severity scope check okf_version", defaults=(None,))
 Finding = namedtuple("Finding", "rule severity path message")
 
 
@@ -545,6 +546,17 @@ RULES = [
                     for rel in check_asset_placement(b["bp"])]),
     Rule("kc/asset/entry-file-description", "warning", "bundle",
          lambda b: [(b["bundle"], msg) for msg in check_entry_file_description(b["bp"])]),
+    Rule("okf/provenance/sources-shape", "error", "file", spec_check.check_sources_shape, "0.2"),
+    Rule("okf/provenance/source-resource", "error", "file", spec_check.check_source_resource, "0.2"),
+    Rule("okf/provenance/usage-window", "error", "file", spec_check.check_usage_window, "0.2"),
+    Rule("okf/trust/generated", "error", "file", spec_check.check_generated, "0.2"),
+    Rule("okf/trust/verified", "error", "file", spec_check.check_verified, "0.2"),
+    Rule("okf/lifecycle/status", "error", "file", spec_check.check_status, "0.2"),
+    Rule("okf/lifecycle/stale-after", "warning", "file", spec_check.check_stale_after, "0.2"),
+    Rule("okf/format/actor", "error", "file", spec_check.check_actor, "0.2"),
+    Rule("okf/format/timestamp", "error", "file", spec_check.check_timestamp, "0.2"),
+    Rule("okf/computation/runtime", "error", "file", spec_check.check_runtime, "0.2"),
+    Rule("okf/trust/drift", "warning", "file", spec_check.check_drift, "0.2"),
 ]
 
 
@@ -552,6 +564,12 @@ def finding_of(rule_id, path, message):
     """The Finding for `rule_id`, severity taken from the registry; KeyError for
     an ID no rule registers."""
     return Finding(rule_id, {r.id: r.severity for r in RULES}[rule_id], path, message)
+
+
+def _gated(rules, version):
+    """The rules that apply to a bundle declaring `version`: ungated ones always, an entry gated
+    to an OKF version only on a match."""
+    return [r for r in rules if r.okf_version is None or r.okf_version == version]
 
 
 def run_checks(root, target, types_source=None):
@@ -587,8 +605,9 @@ def run_checks(root, target, types_source=None):
             canon["loaded"] = True
         return canon["idx"]
 
+    history = History(root)
     run = {"types_set": types_set, "tags_set": tags_set, "wl_checked": wl_checked,
-           "wl_index": wl_index, "canon_index": canon_index}
+           "wl_index": wl_index, "canon_index": canon_index, "now": spec.utcnow(), "history": history}
     file_rules = [r for r in RULES if r.scope == "file"]
     bundle_rules = [r for r in RULES if r.scope == "bundle"]
 
@@ -597,16 +616,27 @@ def run_checks(root, target, types_source=None):
     def add(rule, path, msg):
         findings.append(Finding(rule.id, rule.severity, path, msg))
 
-    for bundle, bp in scopes:
-        for ap in iter_all_md(bp):
-            ctx = gather_file_context(root, bundle, ap)
-            ctx.update(run)
-            for rule in file_rules:
-                for msg in rule.check(ctx):
-                    add(rule, ctx["rel"], msg)
-        for rule in bundle_rules:
-            for path, msg in rule.check({"bundle": bundle, "bp": bp}):
-                add(rule, path, msg)
+    try:
+        for bundle, bp in scopes:
+            # The gate reads the bundle-ROOT index.md, never an index.md under a scoped `bp`, once per
+            # bundle; an empty bundle name is a target outside the catalogue and has no root.
+            version = spec.declared_okf_version(os.path.join(root, bundle)) if bundle else None
+            file_here, bundle_here = _gated(file_rules, version), _gated(bundle_rules, version)
+            for ap in iter_all_md(bp):
+                ctx = gather_file_context(root, bundle, ap)
+                ctx.update(run)
+                for rule in file_here:
+                    if rule.okf_version and ctx["is_reserved"]:
+                        continue  # a gated entry never sees a reserved file
+                    for msg in rule.check(ctx):
+                        add(rule, ctx["rel"], msg)
+            for rule in bundle_here:
+                for path, msg in rule.check({"bundle": bundle, "bp": bp}):
+                    add(rule, path, msg)
+    finally:
+        history.close()
+    for reason in history.notes():
+        _note("drift check skipped: " + reason)
     return findings
 
 

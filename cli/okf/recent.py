@@ -8,9 +8,9 @@ import subprocess
 from okf.errors import OkfError
 from okf.output import _add_output, _note
 
-from okf import catalogue
+from okf import catalogue, spec
 from okf.catalogue import (
-    fm_meta, iter_concepts, meta_of, read_file, read_frontmatter, resolve_scopes,
+    fm_meta, iter_concepts, meta_and_fm, read_file, read_frontmatter, resolve_scopes,
 )
 from okf.find_filters import compile_where
 from okf.parser_support import _add_filters, _sub
@@ -220,11 +220,10 @@ def cmd_recent(root, args):
             path = rel[:-3] if rel.endswith(".md") else rel
             if filters:
                 # One read feeding the whole predicate and the frontmatter meta.
-                text = read_file(ap)
-                fm = read_frontmatter(text).data
-                if not filters.matches_loaded(path, fm, text):
+                fm = read_frontmatter(read_file(ap)).data
+                if not filters.matches_loaded(path, fm):
                     continue
-                meta[path] = fm_meta(fm, cid)
+                meta[path] = fm_meta(fm, cid) + (fm,)
             ts = events.get(concept_git_key(prefix, cid)) if events else None
             dated_repo[path] = events is not None
             entries.append((path, ts))
@@ -236,7 +235,8 @@ def cmd_recent(root, args):
     for path, _ts in rows:
         if path not in meta:
             ap = os.path.join(root, path + ".md")
-            meta[path] = meta_of(ap)
+            found, fm = meta_and_fm(ap)
+            meta[path] = found + (fm,)
 
     undated = sum(1 for path, ts in entries if ts is None and dated_repo.get(path))
     if undated:
@@ -245,10 +245,11 @@ def cmd_recent(root, args):
               "creation date".format(undated))
 
     if getattr(args, "json", False):
+        now = filters.now
         return [
             {"created": iso_created(ts), "created_ts": ts,
              "title": meta[path][1], "type": meta[path][0],
-             "path": path, "description": meta[path][2]}
+             "path": path, "description": meta[path][2], **spec.trust_fields(meta[path][3], now)}
             for path, ts in rows
         ]
     if not rows:

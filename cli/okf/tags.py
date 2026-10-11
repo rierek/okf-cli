@@ -27,11 +27,9 @@ def _selected_concepts(root, filters):
     must reach staging content too, or a tag change silently leaves the old tag behind there."""
     for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
         for _cid, ap in iter_concepts(bp, prune_staging=False):
-            text = read_file(ap)
-            fm = read_frontmatter(text)
+            fm = read_frontmatter(read_file(ap))
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
-            if filters and not filters.matches_loaded(rel[:-3] if rel.endswith(".md") else rel,
-                                                      fm.data, text):
+            if filters and not filters.matches_loaded(rel[:-3] if rel.endswith(".md") else rel, fm.data):
                 continue
             yield ap, rel, fm
 

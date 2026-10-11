@@ -48,7 +48,7 @@ okf-cli --root <catalogue> wikilinks <target> --unresolved
 
 - `find`: ranked search over two arms, a lexical index (FTS5/BM25) and an optional semantic index. `rank: N` is the list position; `provenance:` names the arm. `--breakdown` adds raw `score:` and `contrib:` lines. `--where` filters; `archived in (true, false)` in it also searches `_archive/` (lexical arm only). Quote multi-word queries. With a semantic index and `VOYAGE_API_KEY` set, the query goes to Voyage AI (section 5).
 - `list`: complete, unranked set. Requires `--where`.
-- `--where "<expr>"` is the one filter on `find`, `list`, `recent`, `merge-tags`, `remove-tags` and `normalize-tags`: `field op value` with op one of `=` `!=` `<` `<=` `>` `>=` `~` (contains), or `field in (a, b)`, joined by `and`, `or`, `not` and parentheses. Fields: `type`, `tag`, `path` (`<bundle>/<concept-id>`), `archived` (`true` or `false`) and any frontmatter key (nested: `a.b`). Quote a value holding spaces: `'a b'`. A malformed expression exits with code 2.
+- `--where "<expr>"` is the one filter on `find`, `list`, `recent`, `merge-tags`, `remove-tags` and `normalize-tags`: `field op value` with op one of `=` `!=` `<` `<=` `>` `>=` `~` (contains), or `field in (a, b)`, joined by `and`, `or`, `not` and parentheses. Fields: `type`, `tag`, `path` (`<bundle>/<concept-id>`), `archived` (`true` or `false`), `tier` (`unverified`, `machine-confirmed` or `human-reviewed`), `stale` (`true` or `false`), `status` (an absent status is `stable`) and any frontmatter key (nested: `a.b`; through lists: `verified.by`, `sources.resource`). The timestamp keys `generated.at`, `verified.at`, `stale_after`, `usage_window.from`/`to` and `sources.last_modified` compare as instants and take an ISO 8601 value with an explicit offset, for example `stale_after < 2026-10-01T00:00:00Z`; any other value is exit 2. Quote a value holding spaces or `+`: `'a b'`. A malformed expression exits with code 2.
 - `toc`: headings, default h2 only; `--level 0` prints the full tree. A bare `<bundle>` resolves to its `index.md`.
 - `refs`: inbound and outbound markdown links of one file. Give the path with `.md`, relative to `--root`. `--in` or `--out` limits the direction.
 - A result with a `superseded_by:` line is an outdated decision: read the target.
@@ -73,6 +73,11 @@ Output: one `ERROR` or `WARNING` line per finding, then `OK — 0 violations` or
 | `okf/type/reserved-no-type` | error | `index.md`, `INDEX-MAP.md`, `log.md` or `readme.md` (any letter case) carries `type` | Remove `type` |
 | `kc/name/filename-chars` | error | `# ^ [ ] \| \ : ? * " < > %` in a file name | `rename` |
 | `kc/asset/placement` | error | Non-markdown file outside `<bundle>/assets/` | Move it into `assets/` |
+| `okf/provenance/sources-shape`, `okf/provenance/source-resource`, `okf/provenance/usage-window` | error | `sources` is not a list of mappings, an entry lacks a non-empty `resource`, or a `usage_window` is not a mapping with `from` and `to`; declaring bundles only | Fix the field |
+| `okf/trust/generated`, `okf/trust/verified` | error | `generated` is not a mapping with a non-empty `by`; `verified` is not a mapping or list of mappings each with non-empty `by` and `at`; declaring bundles only | Fix the field |
+| `okf/lifecycle/status` | error | `status` is not `draft`, `stable` or `deprecated`; declaring bundles only | Use one of the three |
+| `okf/format/actor`, `okf/format/timestamp` | error | `generated.by` or `verified[].by` is not `<producer>/<version>`, `human:<id>` or `process:<id>`; a timestamp key is not an ISO 8601 datetime with an explicit UTC offset; declaring bundles only | Fix the value |
+| `okf/computation/runtime` | error | Type `Attested Computation` without a non-empty `runtime`; declaring bundles only | Add `runtime` |
 | `kc/supersede/resolves` | error | `superseded_by` target missing | Fix the path |
 | `kc/sync/block` | error | Consumer copy edited, orphaned or malformed | `sync-status` names the state. Edited: move the change into the canon owner, then `sync-update --apply --force`. Owner gone or markers broken: delete the whole consumer copy, then `sync-insert` again |
 | `kc/sync/canon-block` | error | Unclosed `okf:canon` block or duplicate block id | Fix the canon owner markers |
@@ -88,8 +93,10 @@ Output: one `ERROR` or `WARNING` line per finding, then `OK — 0 violations` or
 | `kc/link/wikilink-resolvable` | warning | Unresolved or ambiguous `[[...]]`; only for bundles listed in `.okf.toml` `wikilink_checked_bundles = ["<bundle>"]` | Fix the link |
 | `kc/sync/stale` | warning | Canon owner changed | `sync-update --apply` |
 | `kc/asset/entry-file-description` | warning | Bundle entry file (`INDEX-MAP.md`, else `index.md`) without H1 or intro paragraph | Add them |
+| `okf/lifecycle/stale-after` | warning | `stale_after` has passed (compared as an instant against one UTC `now` per run); declaring bundles only | Re-check the concept, then set a new `stale_after` or `status: deprecated` |
+| `okf/trust/drift` | warning | The body changed in a commit after `generated.at` that did not change `generated.at`; frontmatter-only commits and renames do not count; declaring bundles only; needs git, else one note | Regenerate or review the concept, then set a new `generated.at` |
 
-Limits: `check` does not parse YAML (only the delimiters), does not see wikilinks unless opted in, does not report directories without `index.md`, and does not validate OKF v0.2 fields (`sources`, `generated`, `verified`, `status`, `stale_after`). `kc/link/crosslink-format` skips bundles that are symlinks.
+Limits: `check` does not parse YAML (only the delimiters), does not see wikilinks unless opted in, does not report directories without `index.md`, and reports the OKF v0.2 rules (`okf/provenance/*`, `okf/trust/*`, `okf/lifecycle/*`, `okf/format/*`, `okf/computation/*`) only in a bundle whose root `index.md` declares `okf_version: "0.2"`, quoted: an unquoted `0.2` is a number and declares nothing. `check` never writes; record a confirmation with `verify`, never by editing `verified` for the sake of a clean `check`. `kc/link/crosslink-format` skips bundles that are symlinks.
 
 ## 4. Listings: reindex
 
@@ -219,15 +226,16 @@ Wraps bare `<tag>` and `<tag>.<tag2>` placeholders outside code in backticks (wa
 
 ## 12. Stale content
 
-okf-cli has no staleness report: `check` ignores `stale_after` and `status`. List them with POSIX tools and compare each `stale_after` with the current UTC time; a concept is stale when now is at or past that instant:
+In a bundle declaring `okf_version: "0.2"`, `check` warns `okf/lifecycle/stale-after` for every concept whose `stale_after` has passed, and `list --where "stale = true"` (or `find`, `recent`) selects them in any bundle; `tier` and `stale` are also keys of every concept record in `--json` output. For a bundle without the declaration, list the values with POSIX tools and compare each `stale_after` with the current UTC time; a concept is stale when now is at or past that instant:
 
 ```bash
+okf-cli --root <catalogue> list --where "stale = true"
 grep -rn --include='*.md' '^stale_after:' <catalogue>/<bundle>
 grep -rln --include='*.md' '^status: deprecated' <catalogue>/<bundle>
 date -u +%Y-%m-%dT%H:%M:%SZ
 ```
 
-Re-check a stale concept against its `sources` with the user, then update `generated`, `verified` (only for a real check) and `stale_after` per write-concepts.md, or set `status: deprecated`.
+Re-check a stale concept against its `sources` with the user, then update `generated` and `stale_after` per write-concepts.md and record the check with `okf-cli --root <catalogue> verify <bundle>/<concept> --by human:<id>` (only for a real check; `--by` is `human:<id>`, `process:<id>` or `<producer>/<version>`; it appends one `{by, at}` entry and changes nothing else), or set `status: deprecated`.
 
 ## 13. Graph view
 
