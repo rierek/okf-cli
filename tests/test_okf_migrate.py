@@ -149,5 +149,75 @@ class Migrate(GitCatalogue):
         self.assertIn("dry-run", out)
 
 
+@needs_git
+class MigrateStatus(GitCatalogue):
+    D37 = {"obsolete": "deprecated", "deleted": "deprecated", "archived": "deprecated",
+           "accepted": "stable", "active": "stable", "passive": "stable", "stable": "stable",
+           "todo": "draft", "planned": "draft", "in-bearbeitung": "draft", "experimental": "draft",
+           "draft": "draft", "deprecated": "deprecated"}
+
+    def _fixture(self):
+        for old in self.D37:
+            self._doc("b/{}.md".format(old), "x\n", "type: Note\nstatus: {}".format(old))
+        self._doc("b/unknown.md", "x\n", "type: Note\nstatus: wibble")
+        self._doc("b/empty.md", "x\n", "type: Note\nstatus:")
+        self._doc("b/none.md", "x\n", "type: Note")
+        self._doc("b/tpl.md", "status: <status>\n", "type: Note")
+        self._commit("c", T1)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def _status(self, name):
+        return read_frontmatter(self._r("b/{}.md".format(name))).data.get("status")
+
+    def test_apply_maps_every_d37_value_and_leaves_the_rest(self):
+        self._fixture()
+        _env, _e, code = run_json(self.tmp, "migrate", "--apply")
+        self.assertEqual(code, 0)
+        for old, new in self.D37.items():
+            self.assertEqual(self._status(old), new, old)
+        self.assertEqual(self._status("unknown"), "wibble")
+        self.assertIsNone(self._status("empty"))
+        self.assertNotIn("status", read_frontmatter(self._r("b/none.md")).data)
+        self.assertIn("status: <status>", self._r("b/tpl.md"))
+        self.assertNotIn("\nstatus", self._r("b/obsolete.md").replace("status: deprecated", ""))
+
+    def test_preview_diff_shows_old_and_new_line_and_writes_nothing(self):
+        self._fixture()
+        env, _e, _c = run_json(self.tmp, "migrate")
+        diff = {f["path"]: f["diff"] for f in env["data"]["files"]}["b/accepted.md"]
+        self.assertIn("-status: accepted", diff)
+        self.assertIn("+status: stable", diff)
+        self.assertNotIn("b/draft.md", diff)
+        self.assertEqual(self._git("status", "--short"), "")
+        paths = [f["path"] for f in env["data"]["files"]]
+        self.assertNotIn("b/draft.md", paths)
+        self.assertNotIn("b/tpl.md", paths)
+
+    def test_unresolved_lists_unknown_and_empty_values(self):
+        self._fixture()
+        env, _e, _c = run_json(self.tmp, "migrate")
+        got = {u["path"]: u for u in env["data"]["unresolved"]}
+        self.assertEqual(sorted(got), ["b/empty.md", "b/unknown.md"])
+        self.assertEqual(got["b/unknown.md"]["field"], "status")
+        self.assertIn("wibble", got["b/unknown.md"]["reason"])
+
+    def test_status_mapping_plan_is_ordered_with_counts(self):
+        self._fixture()
+        self._doc("b/active2.md", "x\n", "type: Note\nstatus: active")
+        self._commit("c2", T2)
+        env, _e, _c = run_json(self.tmp, "migrate")
+        sm = env["data"]["status_mapping"]
+        self.assertEqual([m["old"] for m in sm], sorted(m["old"] for m in sm))
+        by = {m["old"]: m for m in sm}
+        self.assertEqual(by["active"], {"old": "active", "new": "stable", "count": 2})
+        self.assertEqual(by["wibble"], {"old": "wibble", "new": None, "count": 1})
+        out, _e, _c = run_cli(self.tmp, "migrate")
+        self.assertIn("active -> stable (2 concept(s))", out)
+        self.assertIn("wibble -> (no decision) (1 concept(s))", out)
+
+
 if __name__ == "__main__":
     unittest.main()

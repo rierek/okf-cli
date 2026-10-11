@@ -16,6 +16,15 @@ from okf.parser_support import _complete_scopes, _sub
 from okf.spec import parse_actor
 
 
+# D37: the binding, complete per-value `status` decision.
+STATUS_MAP = {
+    "obsolete": "deprecated", "deleted": "deprecated", "archived": "deprecated",
+    "accepted": "stable", "active": "stable", "passive": "stable", "stable": "stable",
+    "todo": "draft", "planned": "draft", "in-bearbeitung": "draft", "experimental": "draft",
+    "draft": "draft", "deprecated": "deprecated",
+}
+
+
 def _author_table(root):
     """The `git_authors` table of `.okf.toml` ({email: actor}); invalid_input when it or one of its
     values does not follow the actor convention, before any file is planned."""
@@ -30,51 +39,77 @@ def _author_table(root):
 
 
 def _plan(root, target):
-    """([(path, old_text, new_text), ...], [{path, field, reason}, ...]) for the scope."""
+    """([(path, old_text, new_text), ...], [{path, field, reason}, ...], {old status: count})."""
     authors = _author_table(root)
     history = History(root)
-    plan, unresolved = [], []
+    plan, unresolved, counts = [], [], {}
     try:
         for _bundle, bundle_path in resolve_scopes(root, target):
             for _cid, ap in iter_concepts(bundle_path):
                 text = read_file_verbatim(ap)
                 split = read_frontmatter(text) if text is not None else None
-                if split is None or split.data is None or "timestamp" not in split.data:
+                if split is None or split.data is None:
                     continue
                 path = os.path.relpath(ap, root).replace(os.sep, "/")
                 data = split.data
-                if "generated" not in data:
-                    commit = history.last_body_commit(ap)
-                    if commit is None:
-                        unresolved.append({"path": path, "field": "generated",
-                                           "reason": "no body-changing commit found in git history"})
-                        continue
-                    by = authors.get(commit.email) or "human:" + commit.email.partition("@")[0]
-                    if parse_actor(by) is None:
-                        unresolved.append({"path": path, "field": "generated.by", "reason":
-                                           "author email {!r} maps to no actor; add it to git_authors"
-                                           .format(commit.email)})
-                        continue
-                    data.insert(list(data).index("timestamp"), "generated",
-                                {"by": by, "at": commit.time.isoformat()})
-                del data["timestamp"]
-                plan.append((path, text, render_frontmatter(split)))
+                changed = False
+                if "status" in data:
+                    old = data["status"]
+                    new = STATUS_MAP.get(old) if isinstance(old, str) else None
+                    key = old if isinstance(old, str) else repr(old)
+                    counts[key] = counts.get(key, 0) + 1
+                    if new is None:
+                        unresolved.append({"path": path, "field": "status",
+                                           "reason": "no recorded decision for status value {!r}".format(old)})
+                    elif new != old:
+                        data["status"] = new
+                        changed = True
+                if "timestamp" in data:
+                    if "generated" not in data:
+                        commit = history.last_body_commit(ap)
+                        if commit is None:
+                            unresolved.append({"path": path, "field": "generated",
+                                               "reason": "no body-changing commit found in git history"})
+                            continue_ts = True
+                        else:
+                            by = authors.get(commit.email) or "human:" + commit.email.partition("@")[0]
+                            if parse_actor(by) is None:
+                                unresolved.append({"path": path, "field": "generated.by", "reason":
+                                                   "author email {!r} maps to no actor; add it to git_authors"
+                                                   .format(commit.email)})
+                                continue_ts = True
+                            else:
+                                continue_ts = False
+                                data.insert(list(data).index("timestamp"), "generated",
+                                            {"by": by, "at": commit.time.isoformat()})
+                    else:
+                        continue_ts = False
+                    if not continue_ts:
+                        del data["timestamp"]
+                        changed = True
+                if changed:
+                    plan.append((path, text, render_frontmatter(split)))
     finally:
         history.close()
     for note in history.notes():
         _note(note)
-    return plan, unresolved
+    return plan, unresolved, counts
 
 
 def cmd_migrate(root, args):
     if args.target:
         require_bundle_dir(root, args.target)
-    plan, unresolved = _plan(root, args.target)
+    plan, unresolved, counts = _plan(root, args.target)
     files = unified_diffs(plan)
     if args.apply:
         for path, _old, new in plan:
             write_file_verbatim(os.path.join(root, path), new)
+    mapping = [{"old": old, "new": STATUS_MAP.get(old), "count": n} for old, n in sorted(counts.items())]
     if not getattr(args, "json", False):
+        if mapping:
+            print("status mapping:")
+            for m in mapping:
+                print("  {} -> {} ({} concept(s))".format(m["old"], m["new"] or "(no decision)", m["count"]))
         for entry in files:
             print(entry["diff"], end="")
         for entry in unresolved:
@@ -82,12 +117,13 @@ def cmd_migrate(root, args):
         print("migrate: {} {} file(s), {} unresolved{}".format(
             "migrated" if args.apply else "would migrate", len(files), len(unresolved),
             "" if args.apply else "; dry-run: re-run with --apply"))
-    return {"applied": bool(args.apply), "files": files, "unresolved": unresolved}
+    return {"applied": bool(args.apply), "files": files, "unresolved": unresolved,
+            "status_mapping": mapping}
 
 
 def add_migrate_parser(sub):
     pm = _sub(sub, "migrate", "maintenance",
-              "replace frontmatter `timestamp` by `generated` from git history (dry-run default)")
+              "migrate frontmatter to OKF 0.2: `timestamp` to `generated` (git), `status` per D37 (dry-run default)")
     pm.add_argument("target", nargs="?",
                     help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pm.add_argument("--apply", action="store_true",
