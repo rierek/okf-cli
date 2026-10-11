@@ -84,14 +84,12 @@ def build_argv(root, command, params):
             # find's --bundle alias was removed D02, PO-grilling 2026-07-26;
             # guard stays as defense against a future one.)
             continue
-        allowed = _FLAG_COMMANDS.get(key)
-        if allowed is not None and command not in allowed:
+        if command not in _FLAG_COMMANDS.get(key, {command}):
             continue
         if params.get(key) not in (None, ""):
             argv += [flag, str(params[key])]
     for key, flag in _BOOL_FLAGS.items():
-        allowed = _FLAG_COMMANDS.get(key)
-        if allowed is not None and command not in allowed:
+        if command not in _FLAG_COMMANDS.get(key, {command}):
             continue
         if params.get(key):
             argv.append(flag)
