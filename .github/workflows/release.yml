@@ -1,9 +1,9 @@
 name: release
 
-# Runs when the PO pushes a v* tag (CLAUDE.md rule 19). Nothing here creates or pushes a tag.
+# Runs when the PO pushes a rel-* tag (CLAUDE.md rule 19). Nothing here creates or pushes a tag.
 on:
   push:
-    tags: ["v*"]
+    tags: ["rel-*"]
 
 permissions: {}
 
