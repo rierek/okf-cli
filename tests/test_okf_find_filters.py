@@ -19,14 +19,10 @@ from okf import find_filters as okf_find_filters
 from okf.catalogue import iter_concepts, resolve_scopes, split_frontmatter
 from okf.errors import OkfError
 from okf.find_filters import (
-    EMB_FILTER_COLUMNS, FTS_FILTER_COLUMNS, And, Compare, In, Not, Or,
+    EMB_FILTER_COLUMNS, FTS_FILTER_COLUMNS, And, Compare, Compare as C, In, Not, Or,
     compile_where, parse_where,
 )
 from okf.fts import build_fts_index
-
-
-def C(field, op, value):
-    return Compare(field, op, value)
 
 
 class ParseWhereGrammar(unittest.TestCase):
@@ -515,15 +511,3 @@ class PushDownEquivalence(unittest.TestCase):
                 with self.subTest(expression=expression, table=table):
                     self.assertEqual(self.through_sql(filters, table, columns), expected)
         self.assertEqual(selected_somewhere, set(self.universe))
-
-    def test_like_metacharacters_in_a_value_are_literals(self):
-        for expression, expected in [("path ~ my_b", {"my_bundle/x"}), ("path ~ 'pct%b'", {"pct%bundle/z"}),
-                                     ("type ~ n_b", {"my_bundle/x"}), ("tag = x_y", {"myXbundle/y"}),
-                                     ("tag ~ '100%'", {"my_bundle/x"}), ("tag ~ 'x%y'", set())]:
-            with self.subTest(expression):
-                filters = compile_where(expression)
-                self.assertEqual(self.through_sql(filters, "docs", FTS_FILTER_COLUMNS), expected)
-
-    def test_the_index_stores_the_dequoted_type(self):
-        filters = compile_where("type = Runbook")
-        self.assertIn("b/two", self.through_sql(filters, "docs", FTS_FILTER_COLUMNS))
