@@ -3,8 +3,191 @@ shared by every search arm, and the column maps naming which dimensions each
 search table filters natively."""
 
 import os
+import re
+from dataclasses import dataclass
+from typing import NamedTuple
 
+from okf.errors import OkfError
 from okf.catalogue import extract_tags, read_file, split_frontmatter
+
+
+# --- the --where expression: syntax tree and parser (D34) ---------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class And:
+    left: "Node"
+    right: "Node"
+
+
+@dataclass(frozen=True, slots=True)
+class Or:
+    left: "Node"
+    right: "Node"
+
+
+@dataclass(frozen=True, slots=True)
+class Not:
+    operand: "Node"
+
+
+@dataclass(frozen=True, slots=True)
+class Compare:
+    field: str
+    op: str
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
+class In:
+    field: str
+    values: tuple[str, ...]
+
+
+Node = And | Or | Not | Compare | In
+
+_KEYWORDS = frozenset(("and", "or", "not", "in"))  # lower case only; a value of that name needs quotes
+_OPERATORS = frozenset(("=", "!=", "<", "<=", ">", ">=", "~"))
+_OPERATOR_CHARS = "!<>=~"  # never part of a bare word, so `x!=y` and `path~a/b` need no spaces
+_WORD_CHARS = "-_./:"  # besides letters and digits: paths, dates and timestamps need no quotes
+_FIELD_RE = re.compile(r"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")  # frontmatter keys, dotted for nested
+
+
+def _fail(problem, position):
+    raise OkfError("invalid_input", "--where: {} at position {}".format(problem, position + 1))
+
+
+class _Token(NamedTuple):
+    kind: str  # word, str, op, (, ), comma or end
+    text: str  # a str token without its quotes
+    pos: int  # 0-based offset of the token start
+    src: str  # the token as written
+
+
+def _tokenize(text):
+    tokens, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+        elif c in "(),":
+            tokens.append(_Token(c, c, i, c))
+            i += 1
+        elif c in "'\"":
+            j = text.find(c, i + 1)  # no escapes: a value holding both quote kinds is not expressible
+            if j < 0:
+                _fail("unterminated quote {}".format(c), i)
+            tokens.append(_Token("str", text[i + 1:j], i, text[i:j + 1]))
+            i = j + 1
+        elif c in _OPERATOR_CHARS:
+            j = i
+            while j < n and text[j] in _OPERATOR_CHARS:
+                j += 1
+            if text[i:j] not in _OPERATORS:
+                _fail("unknown operator '{}'".format(text[i:j]), i)
+            tokens.append(_Token("op", text[i:j], i, text[i:j]))
+            i = j
+        elif c.isalnum() or c in _WORD_CHARS:
+            j = i
+            while j < n and (text[j].isalnum() or text[j] in _WORD_CHARS):
+                j += 1
+            tokens.append(_Token("word", text[i:j], i, text[i:j]))
+            i = j
+        else:
+            _fail("unexpected character '{}'".format(c), i)
+    tokens.append(_Token("end", "", n, ""))
+    return tokens
+
+
+def _expected(what, token):
+    found = ("end of expression" if token.kind == "end" else
+             "string " + token.src if token.kind == "str" else "'{}'".format(token.src))
+    _fail("expected {}, found {}".format(what, found), token.pos)
+
+
+def _is_keyword(token, word):
+    return token.kind == "word" and token.text == word
+
+
+def _is_value(token):
+    return token.kind == "str" or (token.kind == "word" and token.text not in _KEYWORDS)
+
+
+def _parse_or(tokens, i):
+    node, i = _parse_and(tokens, i)
+    while _is_keyword(tokens[i], "or"):
+        right, i = _parse_and(tokens, i + 1)
+        node = Or(node, right)
+    return node, i
+
+
+def _parse_and(tokens, i):
+    node, i = _parse_not(tokens, i)
+    while _is_keyword(tokens[i], "and"):
+        right, i = _parse_not(tokens, i + 1)
+        node = And(node, right)
+    return node, i
+
+
+def _parse_not(tokens, i):
+    if _is_keyword(tokens[i], "not"):
+        operand, i = _parse_not(tokens, i + 1)
+        return Not(operand), i
+    return _parse_atom(tokens, i)
+
+
+def _parse_atom(tokens, i):
+    token = tokens[i]
+    if token.kind == "(":
+        node, i = _parse_or(tokens, i + 1)
+        if tokens[i].kind != ")":
+            _expected("')'", tokens[i])
+        return node, i + 1
+    if token.kind != "word" or token.text in _KEYWORDS or not _FIELD_RE.match(token.text):
+        _expected("a field name or '('", token)
+    field, after = token.text, tokens[i + 1]
+    if _is_keyword(after, "in"):
+        return _parse_in(field, tokens, i + 2)
+    if after.kind != "op":
+        _expected("an operator or 'in'", after)
+    if not _is_value(tokens[i + 2]):
+        _expected("a value", tokens[i + 2])
+    return Compare(field, after.text, tokens[i + 2].text), i + 3
+
+
+def _parse_in(field, tokens, i):
+    if tokens[i].kind != "(":
+        _expected("'(' after 'in'", tokens[i])
+    values, i = [], i + 1
+    while True:
+        if not _is_value(tokens[i]):
+            _expected("a value", tokens[i])
+        values.append(tokens[i].text)
+        i += 1
+        if tokens[i].kind == ")":
+            return In(field, tuple(values)), i + 1
+        if tokens[i].kind != ",":
+            _expected("',' or ')'", tokens[i])
+        i += 1
+
+
+def parse_where(text):
+    """The syntax tree of one `--where` expression (D34), or OkfError("invalid_input") naming
+    the 1-based character position and the offending token. Pure: no file, index or network.
+
+    expr  := and ('or' and)*      and   := not ('and' not)*      not := 'not' not | atom
+    atom  := '(' expr ')' | field OP value | field 'in' '(' value (',' value)* ')'
+
+    A field is a frontmatter key, dotted for nested keys. A value is a bare word (letters,
+    digits and - _ . / :) or a quoted string. The parser knows no field names."""
+    try:
+        tokens = _tokenize(text)
+        tree, i = _parse_or(tokens, 0)
+        if tokens[i].kind != "end":
+            _expected("'and', 'or' or end of expression", tokens[i])
+    except RecursionError:
+        raise OkfError("invalid_input", "--where: expression is nested too deeply") from None
+    return tree
 
 
 def _like_escape(value):
