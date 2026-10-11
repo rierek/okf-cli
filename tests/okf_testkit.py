@@ -37,9 +37,6 @@ def run_find(root, query, **kw):
     return buf.getvalue()
 
 
-CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli", "okf-cli.py")
-
-
 def run_cli(root, *argv, home=None, env=None):
     """(stdout, stderr, exit code) of one real okf-cli.py call against the catalogue at
     `root`. VOYAGE_API_KEY is dropped, so no call reaches the embedding backend; `env`
@@ -48,8 +45,7 @@ def run_cli(root, *argv, home=None, env=None):
     if home is not None:
         full_env["HOME"] = home
     full_env.update(env or {})
-    proc = subprocess.run([sys.executable, CLI, "--root", root, *argv],
-                          capture_output=True, text=True, env=full_env, cwd=root)
+    proc = _cli(root, *argv, env=full_env, cwd=root)
     return proc.stdout, proc.stderr, proc.returncode
 
 
@@ -155,15 +151,16 @@ needs_case_insensitive_fs = unittest.skipUnless(
 
 
 _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli")
+CLI = os.path.join(_HERE, "okf-cli.py")
 
 
-def _cli(root, *argv):
-    """Drive the REAL cli/okf-cli.py as a subprocess. The `command:` acceptance
-    criteria of docs/wikilink-awareness/SPEC.md are written against the shell
-    surface (exit code, stdout shape), which an in-process call cannot pin."""
-    return subprocess.run(
-        [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", root] + list(argv),
-        capture_output=True, text=True)
+def _cli(root, *argv, env=None, cwd=None):
+    """Drive the REAL cli/okf-cli.py as a subprocess: the one subprocess path of the tests.
+    The `command:` acceptance criteria of docs/wikilink-awareness/SPEC.md are written
+    against the shell surface (exit code, stdout shape), which an in-process call cannot
+    pin."""
+    return subprocess.run([sys.executable, CLI, "--root", root] + list(argv),
+                          capture_output=True, text=True, env=env, cwd=cwd)
 
 
 # --- the ctx fixture shared by the ctx command and catalogue (ctx storage) suites ---
@@ -202,9 +199,7 @@ class CtxFixtureMixin:
             f.write(text)
 
     def _cli(self, *argv):
-        return subprocess.run(
-            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", self.root, *argv],
-            capture_output=True, text=True, env={**os.environ, "HOME": self.home})
+        return _cli(self.root, *argv, env={**os.environ, "HOME": self.home})
 
     def _home(self):
         return mock.patch.dict(os.environ, {"HOME": self.home})

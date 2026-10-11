@@ -19,7 +19,7 @@ from okf.ctx import _ctx_shorthand
 from okf.entry_support import _silence_broken_pipe_streams
 from okf.errors import OkfError
 from okf.install import CATALOGUE_FREE
-from okf.output import _note, run_envelope, wants_envelope
+from okf.output import _note, run_envelope
 from okf.parser import COMMAND_DISPATCH, build_parser
 
 
@@ -63,7 +63,7 @@ def main():
         import argcomplete
         argcomplete.autocomplete(ap, default_completer=argcomplete.SuppressCompleter())
     args = ap.parse_args(_ctx_shorthand(sys.argv[1:]))
-    if wants_envelope(args):
+    if args.json:
         code = run_envelope(args, lambda: _dispatch(args))
         if code:
             raise SystemExit(code)

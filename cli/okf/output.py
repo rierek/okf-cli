@@ -32,10 +32,6 @@ def _note(message):
         _warnings.append(message)
 
 
-def wants_envelope(args):
-    return bool(getattr(args, "json", False))
-
-
 def command_name(args):
     """The subcommand as typed; a ctx verb is `ctx <verb>`."""
     verb = getattr(args, "ctx_verb", None)

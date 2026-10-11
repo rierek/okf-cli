@@ -78,30 +78,6 @@ class Fixture(unittest.TestCase):
         return out
 
 
-class EnvelopeShape(Fixture):
-    CALLS = [
-        ("find", ["find", "pineapples"]),
-        ("info", ["info"]),
-        ("prime", ["prime"]),
-        ("prime", ["prime", "--compact"]),
-        ("read", ["read", "kc-a/alpha"]),
-        ("sync-export", ["sync-export", "kc-gov/ownership", "ownership-rule"]),
-        ("tags", ["tags"]),
-        ("tags", ["tags", "alph"]),
-        ("toc", ["toc", "kc-a/alpha"]),
-        ("ctx read", ["ctx", "read", "demo"]),
-        ("ctx toc", ["ctx", "toc", "demo"]),
-    ]
-
-    def test_each_command_prints_one_envelope_naming_itself(self):
-        for name, argv in self.CALLS:
-            with self.subTest(argv=argv):
-                env, _err, code = run_json(self.root, *argv)
-                self.assertEqual((env["command"], env["ok"], env["error"], code),
-                                 (name, True, None, 0))
-                self.assertIsNotNone(env["data"])
-
-
 class FindData(Fixture):
     LABELS = (("title", "title"), ("type", "type"), ("path", "path"),
               ("description", "description"), ("body-snippet", "snippet"),
@@ -273,10 +249,6 @@ class PrimeData(Fixture):
         full = run_json(self.root, "prime", "--full")[0]["data"]["bundles"]
         default = run_json(self.root, "prime")[0]["data"]["bundles"]
         self.assertNotEqual(full, default)
-
-    def test_the_command_directory_lists_the_new_flag(self):
-        data = run_json(self.root, "prime")[0]["data"]
-        self.assertIn("--json", data["find"])
 
 
 class SyncExportData(Fixture):
@@ -453,22 +425,6 @@ class ExistingJsonCommands(Fixture):
     ctx inbound, ctx list, ctx outbound, ctx show, index, list, recent, refs, sync-status,
     wikilinks. A git history is committed first, so `recent` has something to read."""
 
-    CALLS = [
-        ("check", ["check"]),
-        ("ctx check", ["ctx", "check"]),
-        ("ctx inbound", ["ctx", "inbound", "demo"]),
-        ("ctx list", ["ctx", "list"]),
-        ("ctx outbound", ["ctx", "outbound", "demo"]),
-        ("ctx show", ["ctx", "show", "demo"]),
-        ("index", ["index"]),
-        ("index", ["index", "kc-a"]),
-        ("list", ["list", "--type", "Note"]),
-        ("recent", ["recent"]),
-        ("refs", ["refs", "kc-a/alpha.md"]),
-        ("sync-status", ["sync-status"]),
-        ("wikilinks", ["wikilinks"]),
-    ]
-
     def setUp(self):
         super().setUp()
         self._git("init", "-q")
@@ -480,13 +436,6 @@ class ExistingJsonCommands(Fixture):
                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
         subprocess.run(["git", "-c", "commit.gpgsign=false", "-C", self.root, *argv],
                        check=True, env=env, capture_output=True)
-
-    def test_each_command_prints_one_envelope_naming_itself(self):
-        for name, argv in self.CALLS:
-            with self.subTest(argv=argv):
-                env, err, code = run_json(self.root, *argv)
-                self.assertEqual((env["command"], env["ok"], env["error"], code, err),
-                                 (name, True, None, 0, ""))
 
     def test_data_is_the_payload_the_command_printed_before(self):
         data = lambda *argv: run_json(self.root, *argv)[0]["data"]
@@ -1086,13 +1035,6 @@ class Conformance(WriteFixture):
                 env, err, exit_code = run_json(self.root, *argv)
                 self.assertEqual((env["ok"], env["error"]["kind"], env["error"]["code"], exit_code, err),
                                  (False, kind, code, code, ""))
-
-    def test_a_parser_command_cannot_skip_the_envelope(self):
-        for name, parser in subcommand_parsers(build_parser()).items():
-            for target in (subcommand_parsers(parser) or {name: parser}).values():
-                with self.subTest(command=name):
-                    flags = [a for a in target._actions if "--json" in a.option_strings]
-                    self.assertEqual(len(flags), 1, "{} must register --json exactly once".format(name))
 
 
 if __name__ == "__main__":

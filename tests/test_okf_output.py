@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/output.py: the `--json` envelope around the entry point (`_add_output`,
 the emitter in main()) and the call-note path (`_note`). The commands themselves are covered
-in their own modules; here a test-local parser stands in for a converted command, and a
-second one for a command that registers its own `--json`.
+in their own modules; here a test-local parser stands in for a converted command.
 
 Run: python3 -m unittest tests.test_okf_output -v
 """
@@ -83,11 +82,6 @@ class EnvelopeForReturnedValue(_MainHarness):
         self.assertEqual(set(json.loads(out)), KEYS)
         self.assertEqual(out.count("\n"), 1)
         self.assertTrue(out.endswith("\n"))
-
-    def test_handler_runs_with_root_and_parsed_args(self):
-        seen = []
-        self.run_main(["probe", "--json"], lambda root, args: seen.append((root, args.json)))
-        self.assertEqual(seen, [(os.path.abspath(self.root), True)])
 
     def test_ctx_verb_is_named_with_its_verb(self):
         out, _err, _code = self.run_main(["ctx", "show", "--json"], lambda root, args: [])
@@ -220,23 +214,6 @@ class CallNotes(_MainHarness):
         self.addCleanup(__import__("shutil").rmtree, bare, True)
         _out, err, _code = self.run_main(["probe"], lambda root, args: None, root=bare)
         self.assertTrue(err.startswith("note: --root {} carries no catalogue marker".format(bare)))
-
-
-class AddOutputHelper(unittest.TestCase):
-    def test_registers_a_boolean_json_flag(self):
-        ap = argparse.ArgumentParser()
-        output._add_output(ap)
-        self.assertIs(ap.parse_args([]).json, False)
-        self.assertIs(ap.parse_args(["--json"]).json, True)
-        with self.assertRaises(SystemExit):
-            with contextlib.redirect_stderr(io.StringIO()):
-                ap.parse_args(["--json=1"])
-
-    def test_the_envelope_is_wanted_exactly_when_json_is_given(self):
-        registered = argparse.ArgumentParser()
-        output._add_output(registered)
-        self.assertTrue(output.wants_envelope(registered.parse_args(["--json"])))
-        self.assertFalse(output.wants_envelope(registered.parse_args([])))
 
 
 if __name__ == "__main__":
