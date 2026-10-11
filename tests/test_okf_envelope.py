@@ -985,6 +985,7 @@ class Conformance(WriteFixture):
         "remove-tags": ["remove-tags", "gamma"],
         "rename": ["rename", "kc-a/old.md", "kc-a/older.md"],
         "rewrite-path": ["rewrite-path", "old/place.md", "new/place.md", "--check"],
+        "migrate": ["migrate"],
         "sync-export": ["sync-export", "kc-gov/ownership", "ownership-rule"],
         "sync-insert": ["sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule"],
         "sync-status": ["sync-status"],
