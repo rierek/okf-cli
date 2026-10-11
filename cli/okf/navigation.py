@@ -127,7 +127,7 @@ def cmd_read(root, args):
     else:
         out, end = text, "\n"
     if getattr(args, "json", False):
-        return {"path": _concept_path(root, ap), "text": out}
+        return {"path": _concept_path(root, ap), "text": out + end}
     print(out, end=end)
 
 

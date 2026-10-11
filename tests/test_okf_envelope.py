@@ -212,9 +212,9 @@ class ReadData(Fixture):
                 env, _err, _code = run_json(self.root, "read", "kc-a/alpha", *flags)
                 text = self.text("read", "kc-a/alpha", *flags)
                 self.assertEqual(env["data"]["path"], "kc-a/alpha")
-                self.assertEqual(env["data"]["text"].rstrip("\n"), text.rstrip("\n"))
+                self.assertEqual(env["data"]["text"], text)
         self.assertEqual(run_json(self.root, "read", "kc-a/alpha", "--section", "One")[0]["data"]["text"],
-                         "## One\n\ntext one\n")
+                         "## One\n\ntext one\n\n")
 
     def test_a_directory_resolves_to_its_index_and_reports_that_path(self):
         self._w("kc-a/index.md", "---\ntype: Index\n---\n\n# A\n")
