@@ -184,6 +184,33 @@ class BodyCommitLookup(GitCatalogue):
         self.assertEqual(len(history.notes()), 1)
         self.assertIn("git binary", history.notes()[0])
 
+    def test_two_scopes_without_git_raise_one_note_not_two(self):
+        history = okf_history.History(self.tmp)
+        self.addCleanup(history.close)
+        with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
+            history.last_body_commit(os.path.join(self.tmp, "b", "x.md"))
+            history.last_body_commit(os.path.join(os.path.dirname(self.tmp), "elsewhere", "y.md"))
+        self.assertEqual(len(history.notes()), 1)
+
+    def test_a_path_that_is_reused_after_a_rename_is_not_followed_back_into_the_old_history(self):
+        self._doc("b/x.md", body="one\nline2\nline3\nline4\nline5\n")
+        self._commit("c1", T1, author="body@x.org")
+        self._git("mv", "b/x.md", "b/y.md")
+        self._commit("c2 rename", T2, author="mover@x.org")
+        self._doc("b/x.md", body="unrelated\n")
+        self._commit("c3 new file at the old path", T3, author="other@x.org")
+        self.assertEqual(self._lookup("b/y.md").email, "body@x.org")
+
+    def test_a_deletion_is_no_body_change_when_the_walk_passes_it(self):
+        self._doc(body="one\n")
+        self._commit("c1", T1, author="add@x.org")
+        self._git("rm", "-q", "b/x.md")
+        self._commit("c2 delete", T2, author="deleter@x.org")
+        self._doc(body="one\n", front=GENERATED.format(at="2026-01-01T00:00:00Z"))
+        self._commit("c3 re-add", T3, author="readd@x.org")
+        self.assertEqual(self._lookup().email, "readd@x.org")
+        self.assertEqual(self._lookup(keep_generated=True).email, "add@x.org")
+
     # --- the regeneration variant (D45) ---
 
     def test_keep_generated_skips_a_commit_that_changes_body_and_generated_at_together(self):
