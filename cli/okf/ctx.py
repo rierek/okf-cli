@@ -187,7 +187,7 @@ def cmd_ctx_toc(root, args):
             hs = []
             if m["path"].endswith(".md"):
                 body = split_frontmatter(read_file(m["abspath"]))[1]
-                hs = ["{} {}".format("#" * min(lv + 1, 6), t) for lv, t in iter_headings(body)
+                hs = ["{} {}".format("#" * min(lv + 1, 6), t) for lv, t, _line in iter_headings(body)
                       if not args.depth or lv <= args.depth]
             lines += hs or ["(no headings)"]
         blocks.append("\n".join(lines))

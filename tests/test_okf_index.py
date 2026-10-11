@@ -34,6 +34,16 @@ def _reindex_args(*argv):
 class ConvertFlatIndex(unittest.TestCase):
     """T01 — smart --init: wrap a flat hand-curated list, skip bespoke curation."""
 
+    def test_fenced_h2_is_not_a_section(self):
+        text = "# T\n\n```\n## Fake\n```\n\n## Real\n\n* [A](a.md) - a\n"
+        new, status = okf_index.convert_flat_index(text)
+        self.assertEqual(status, "converted")
+        self.assertIn("```\n## Fake\n```", new)
+
+    def test_fenced_h2_does_not_make_a_second_section(self):
+        text = "# T\n\n## Real\n\n```\n## Fake\n```\n\n* [A](a.md) - a\n"
+        self.assertEqual(okf_index.convert_flat_index(text)[1], "skip-trailing-content")
+
     def test_flat_single_section_gets_converted(self):
         text = (
             "# Architekturmethodik\n\n"

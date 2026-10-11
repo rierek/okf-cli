@@ -665,5 +665,71 @@ class McpBuildSemanticIndexSurface(unittest.TestCase):
             argvs, [["--root", "/root", "build-semantic-index"]])
 
 
+class McpReadTargeted(McpBoundaryTestBase):
+    """OKFT-0kcz (R-08 part 1) — okf_read passes section, frontmatter_only and
+    body_only to the CLI's read; the two booleans exist for read alone."""
+
+    def _read_argv(self, **kw):
+        argvs = []
+        real = mcp.run_okf
+
+        def spy(root, command, params):
+            argvs.append(mcp.build_argv(root, command, params))
+            return ""
+        mcp.run_okf = spy
+        try:
+            mcp._register(_ToolCollector()).tools["okf_read"]("/root", path="b/one", **kw)
+        finally:
+            mcp.run_okf = real
+        return argvs[0]
+
+    def test_section_builds_the_section_option(self):
+        self.assertEqual(self._read_argv(section="Alpha > Deep"),
+                         ["--root", "/root", "read", "b/one", "--section", "Alpha > Deep"])
+
+    def test_frontmatter_only_builds_the_flag(self):
+        self.assertEqual(self._read_argv(frontmatter_only=True),
+                         ["--root", "/root", "read", "b/one", "--frontmatter-only"])
+
+    def test_body_only_builds_the_flag(self):
+        self.assertEqual(self._read_argv(body_only=True),
+                         ["--root", "/root", "read", "b/one", "--body-only"])
+
+    def test_none_set_builds_the_plain_argv(self):
+        self.assertEqual(self._read_argv(), ["--root", "/root", "read", "b/one"])
+
+    def test_no_other_command_emits_either_boolean_flag(self):
+        others = sorted(set(mcp._COMMANDS) - {"read"})
+        self.assertTrue(others)
+        for command in others:
+            argv = mcp.build_argv("/root", command,
+                                  {"frontmatter_only": True, "body_only": True})
+            for flag in ("--frontmatter-only", "--body-only"):
+                self.assertNotIn(flag, argv, "command {!r} must never emit {}".format(command, flag))
+
+    def test_path_stays_the_only_required_parameter(self):
+        params = inspect.signature(mcp._register(_ToolCollector()).tools["okf_read"]).parameters
+        for name, default in (("section", ""), ("frontmatter_only", False), ("body_only", False)):
+            self.assertEqual(params[name].default, default, name)
+
+    def test_the_registered_tool_returns_only_the_selected_section(self):
+        _w(self.root, ".okf.toml", "")
+        _w(self.root, "b/two-sections.md",
+           "---\ntype: Runbook\ntitle: S\n---\n# S\n## Alpha\nalpha text\n## Beta\nbeta text\n")
+        out = mcp._register(_ToolCollector()).tools["okf_read"](
+            self.root, path="b/two-sections", section="Alpha")
+        self.assertEqual(out, "## Alpha\nalpha text\n")
+
+    def test_the_registered_tool_returns_frontmatter_or_body_alone(self):
+        _w(self.root, ".okf.toml", "")
+        _w(self.root, "b/two-sections.md",
+           "---\ntype: Runbook\ntitle: S\n---\n# S\n## Alpha\nalpha text\n")
+        read = mcp._register(_ToolCollector()).tools["okf_read"]
+        self.assertEqual(read(self.root, path="b/two-sections", frontmatter_only=True),
+                         "---\ntype: Runbook\ntitle: S\n---\n")
+        self.assertEqual(read(self.root, path="b/two-sections", body_only=True),
+                         "# S\n## Alpha\nalpha text\n\n")
+
+
 if __name__ == "__main__":
     unittest.main()

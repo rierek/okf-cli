@@ -39,11 +39,12 @@ _COMMANDS = {
 # optional value-flag params: tool-key -> okf-cli flag
 _FLAGS = {"scan_root": "--scan-root", "type": "--type", "tag": "--tag", "limit": "--limit",
           "scope": "--scope", "source": "--source", "block": "--block",
-          "for_path": "--for"}
+          "for_path": "--for", "section": "--section"}
 # optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
                "compact": "--compact", "include_archive": "--include-archive",
-               "full": "--full"}
+               "full": "--full", "frontmatter_only": "--frontmatter-only",
+               "body_only": "--body-only"}
 # _BOOL_FLAGS is shared across every command's params dict, but okf-cli's own
 # argparse only defines --include-archive on the find/list subparsers (R-14,
 # okf-cli-9e2b) — any OTHER command handed that flag would fail at the
@@ -53,8 +54,9 @@ _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolv
 # unresolved/compact are untouched, out of this task's scope). `full` gets
 # the same treatment (okf-cli-t2w8, SC-002): argparse only defines --full on
 # index/prime, and okf_prime never populates the key, so scoping to index
-# alone is enough.
-_BOOL_FLAG_COMMANDS = {"include_archive": {"find", "list"}, "full": {"index"}}
+# alone is enough. frontmatter_only and body_only exist on read alone (OKFT-0kcz).
+_BOOL_FLAG_COMMANDS = {"include_archive": {"find", "list"}, "full": {"index"},
+                       "frontmatter_only": {"read"}, "body_only": {"read"}}
 
 
 def build_argv(root, command, params):
@@ -174,9 +176,19 @@ def _register(server):
         })
 
     @server.tool()
-    def okf_read(root: str = "", *, path: str) -> str:
-        """Print one concept page (bundle/concept-id)."""
-        return run_okf(root, "read", {"path": path})
+    def okf_read(root: str = "", *, path: str, section: str = "",
+                 frontmatter_only: bool = False, body_only: bool = False) -> str:
+        """Print one concept page (bundle/concept-id). At most one of the three
+        optional parameters: `section` prints only that section — the heading
+        text, case-insensitive and exact, up to the next heading of equal or
+        higher level, sub-sections included; "A > B" resolves B inside A, an
+        ambiguous or unknown heading is an error. `frontmatter_only=True` prints
+        only the frontmatter block (delimiters included), `body_only=True`
+        everything after it."""
+        return run_okf(root, "read", {
+            "path": path, "section": section,
+            "frontmatter_only": frontmatter_only, "body_only": body_only,
+        })
 
     @server.tool()
     def okf_toc(root: str = "", *, path: str) -> str:

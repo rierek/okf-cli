@@ -650,6 +650,11 @@ class CtxNavigate(CtxFixtureMixin, unittest.TestCase):
         self.assertEqual(r.stdout, "# b/two.md\n## Two\n### Part\n\n# b/one.md\n## One\n### A\n#### B\n\n"
                                    "# b/three.md [DEAD]\n")
 
+    def test_toc_hides_headings_in_tilde_and_long_fences(self):
+        self._w("b/one.md", "# One\n~~~\n## no\n~~~\n````\n```\n## no\n```\n````\n## A\n")
+        self._set("b/one.md")
+        self.assertEqual(self._cli("ctx", "toc", "demo").stdout, "# b/one.md\n## One\n### A\n")
+
     def test_toc_depth_and_no_headings(self):
         self._w("b/four.md", "x\n")
         self._set("b/two.md", "b/four.md")

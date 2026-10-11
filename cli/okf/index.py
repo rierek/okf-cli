@@ -9,7 +9,7 @@ import sys
 
 from okf.errors import OkfError
 from okf.catalogue import (
-    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, extract_tags, index_h1_and_desc,
+    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, extract_tags, index_h1_and_desc, iter_headings,
     iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_of, read_file,
     replace_managed_block, require_bundle_dir, write_file,
 )
@@ -163,7 +163,7 @@ def convert_flat_index(text, force=False):
     if MARK_START in text:
         return text, "already-managed"
     lines = text.splitlines()
-    h2_idxs = [i for i, ln in enumerate(lines) if re.match(r"^##\s", ln)]
+    h2_idxs = [line for level, _text, line in iter_headings(text) if level == 2]
     if len(h2_idxs) == 0:
         return text, "skip-no-list"
     multi = len(h2_idxs) >= 2
@@ -171,9 +171,9 @@ def convert_flat_index(text, force=False):
         return text, "skip-multi-section"
     h2 = h2_idxs[0]
     saw_bullet = saw_prose = False
-    for ln in lines[h2 + 1:]:
+    for i, ln in enumerate(lines[h2 + 1:], h2 + 1):
         s = ln.strip()
-        if not s or re.match(r"^##\s", s):   # blank / sub-section heading: allowed
+        if not s or i in h2_idxs:            # blank / sub-section heading: allowed
             continue
         if re.match(r"^[*\-+]\s", s):
             saw_bullet = True
