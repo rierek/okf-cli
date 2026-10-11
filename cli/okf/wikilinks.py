@@ -53,7 +53,7 @@ def parse_wikilinks(text, source=None):
     accepted and nothing else."""
     out = []
     fm_end = wikilink_regions(text)[0][2]
-    for m in WIKILINK_RE.finditer(wikilink_scan_text(text)):
+    for m in WIKILINK_RE.finditer(wikilink_scan_text(text, fm_end)):
         # Cut from the ORIGINAL, not the masked copy: a dead zone nested inside
         # the brackets would otherwise put NUL bytes into `raw` and break the
         # contract that `text[span] == raw`.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/wikilinks.py — the `[[…]]` parser, the basename index and
-resolver, and the wikilinks command. Stdlib unittest, no deps.
-Run: python3 -m unittest tests.test_okf_wikilinks -v
+resolver, and the wikilinks command. unittest.
+Run: just test tests.test_okf_wikilinks -v
 """
 import json
 import os
@@ -17,7 +17,6 @@ _ROOT = os.path.dirname(_HERE)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from okf import catalogue as okf_catalogue
 from okf import linkscan as okf_linkscan
 from okf import wikilinks as okf_wikilinks
 from tests.okf_testkit import _cli
@@ -128,10 +127,9 @@ class WikilinkExtraction(unittest.TestCase):
         self.assertEqual(recs, [])
 
     def test_leading_thematic_rule_does_not_expose_a_fence(self):
-        """A body whose first line is `---` is classified as frontmatter by
-        split_frontmatter's arithmetic, which _frontmatter_end mirrors. That
-        region must be masked too, or a fenced example inside it becomes a
-        rewritable link."""
+        """A body whose first line is `---` opens a head that does not parse as a YAML
+        mapping. That region must be masked as body too, or a fenced example inside it
+        becomes a rewritable link."""
         recs = okf_wikilinks.parse_wikilinks(
             "---\n\nIntro\n\n```\nexample: [[a]]\n```\n\n---\n\nreal body\n")
         self.assertEqual(recs, [])
@@ -235,43 +233,16 @@ class WikilinkExtraction(unittest.TestCase):
         recs = okf_wikilinks.parse_wikilinks("---\n---\nBody [[a]]\n")
         self.assertEqual([(r["region"], r["page"]) for r in recs], [("body", "a")])
 
-    def test_empty_frontmatter_block_still_bounds_the_region(self):
-        """`---\\n---` is an empty head, not a thematic rule. The region label of
-        what follows is `body` either way, so only the BOUNDARY shows the
-        difference — and the boundary is what decides which mask the bytes
-        before it get. Asserting the label alone left this unpinned."""
-        self.assertTrue(okf_linkscan.is_yaml_frontmatter_block(""))
-        self.assertEqual(okf_linkscan.wikilink_regions("---\n---\n\n[[A]]\n")[0],
-                         ("frontmatter", 0, 7))
-
-    def test_indented_fence_in_a_block_scalar_keeps_the_block_yaml(self):
-        """An indented fence may be the content of a YAML block scalar.
-        Rejecting the whole block for it hid every link property in the file.
-
-        The indent has to be one FENCE_START_RE can see (up to three spaces): a
-        four-space fence never matches the pattern at all, so a fixture built
-        that way passes without the guard existing."""
-        recs = okf_wikilinks.parse_wikilinks(
-            '---\nexample: |\n  ```\n  code\n  ```\nrelated: "[[b]]"\n---\n# X\n')
-        self.assertEqual([(r["region"], r["page"]) for r in recs],
-                         [("frontmatter", "b")])
-        recs = okf_wikilinks.parse_wikilinks(
-            '---\nexample: |\n    ```\n    code\n    ```\nrelated:\n\n'
-            '    - "[[b]]"\n---\n# X\n')
-        self.assertEqual([(r["region"], r["page"]) for r in recs],
-                         [("frontmatter", "b")])
-
-    def test_unindented_continuation_line_keeps_the_block_yaml(self):
-        """A plain scalar continued on an unindented line is sloppy YAML but
-        common here — 432 qm-wiki files carry a multi-line German description
-        that way. Requiring EVERY line to read as YAML reclassified them as body
-        and shifted 555 links between regions; the FIRST line decides."""
+    def test_a_block_that_fails_to_parse_is_body_text(self):
+        """The YAML parse decides, not a first-line heuristic: a plain scalar continued on an
+        unindented line is invalid YAML, so its head is body text and the link property in it is
+        reported in the body (the loss of sloppy-YAML metadata is the accepted cost of R-11)."""
         recs = okf_wikilinks.parse_wikilinks(
             '---\ndescription: Eine Beschreibung,\n'
             'die hier unindentiert weitergeht\ntags:\n  - x\n'
             'related:\n  - "[[X]]"\n---\nBody [[B]].\n')
         self.assertEqual([(r["region"], r["page"]) for r in recs],
-                         [("frontmatter", "X"), ("body", "B")])
+                         [("body", "X"), ("body", "B")])
 
     def test_indented_first_line_of_a_file_is_not_code(self):
         """An indented run opens a code block only after a blank line. Reading
@@ -389,20 +360,23 @@ class WikilinkExtraction(unittest.TestCase):
             '---\ntype: Concept\nnote: "see `[[X]]` for details"\n---\nBody [[B]].\n')
         self.assertEqual([(r["region"], r["page"]) for r in recs], [("body", "B")])
 
-    def test_frontmatter_end_agrees_with_split_frontmatter(self):
-        """The region split is derived arithmetic; if it drifts from
-        split_frontmatter by even one byte the two halves of a rename disagree
-        about where frontmatter stops."""
+    def test_a_head_counts_as_frontmatter_only_when_it_parses_as_a_mapping(self):
+        for text, head in (
+            ("---\ntype: Concept\n---\nbody\n", "---\ntype: Concept\n---"),
+            ("---\n---\nbody\n", "---\n---"),
+            ("---\ntype: Concept\nnote: |\n  ```\n  [[a]]\n  ```\n---\nbody\n",
+             "---\ntype: Concept\nnote: |\n  ```\n  [[a]]\n  ```\n---"),
+        ):
+            self.assertEqual(okf_linkscan.wikilink_regions(text)[0], ("frontmatter", 0, len(head)), repr(text))
         for text in (
-            "---\ntype: Concept\n---\nbody\n",
             "no frontmatter at all\n",
             "---\ntype: Concept\nbody never closes\n",
-            "---\ntype: Concept\n---\nbody with a --- rule\n",
-            "﻿---\ntype: Concept\n---\nbom first\n",
-            "---\r\ntype: Concept\r\n---\r\ncrlf body\r\n",
+            "---\njust a thematic rule and prose\n---\nbody\n",
+            "---\n- a\n- b\n---\nbody\n",
+            "---\ntype: [unclosed\n---\nbody\n",
         ):
-            self.assertEqual(text[okf_linkscan._frontmatter_end(text):],
-                             okf_catalogue.split_frontmatter(text)[1], repr(text))
+            self.assertEqual(okf_linkscan.wikilink_regions(text), [
+                ("frontmatter", 0, 0), ("body", 0, len(text))], repr(text))
 
 
 class WikilinkResolve(WikilinkFixtureMixin, unittest.TestCase):

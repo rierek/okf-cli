@@ -1,9 +1,18 @@
-#!/usr/bin/env python3
-"""okf-cli.py — dependency-free navigation/search for an OKF Knowledge Catalogue.
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "argcomplete>=3",
+#     "ruamel.yaml>=0.19.1,<0.20",
+# ]
+# ///
+"""okf-cli.py — navigation, search and maintenance for an OKF Knowledge Catalogue.
 
 Catalogue-aware fork inspired by Cole Medin's single-bundle okf-cli.py.
 A *catalogue* is a directory whose immediate subdirectories (not starting with
-'.' or '_') are OKF *bundles*. Standard library only — no install required.
+'.' or '_') are OKF *bundles*. The runtime dependencies are declared as PEP 723
+metadata in the header of this file; `uv run --script okf-cli.py` installs them
+on first use.
 
 Run `okf-cli.py --help` for the command directory (flat + grouped by purpose),
 and `okf-cli.py <command> --help` for one command's options. Both are generated

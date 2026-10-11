@@ -10,8 +10,8 @@ import re
 from okf import semantic
 from okf.output import _add_output, _note
 from okf.catalogue import (
-    _dequote, all_tags, iter_concepts, list_search_bundles, load_okf_config, read_file,
-    resolve_scopes, split_frontmatter,
+    all_tags, fm_meta, fm_text, iter_concepts, list_search_bundles, load_okf_config, read_file,
+    read_frontmatter, resolve_scopes, tags_of,
 )
 from okf.find_filters import compile_where
 from okf.fts import _fts_index_includes_topics, _fts_ranking, tokenize
@@ -52,17 +52,19 @@ def _hydrate_hit(root, path, terms, score, provenance, cosine=None):
     ap = os.path.join(root, path + ".md")
     if not os.path.isfile(ap):
         return None
-    fm, body = split_frontmatter(read_file(ap))
+    parsed = read_frontmatter(read_file(ap))
+    fm, body = parsed.data, parsed.body
+    typ, title, desc = fm_meta(fm, path.rsplit("/", 1)[-1])
     hit = {
         "score": score,
         "path": path,
-        "title": _dequote(fm.get("title", "")) or path.rsplit("/", 1)[-1],
-        "type": fm.get("type", ""),
-        "desc": _dequote(fm.get("description", "")),
+        "title": title,
+        "type": typ,
+        "desc": desc,
         "snip": make_snippet(body, terms),
         "provenance": provenance,
     }
-    sb = _dequote(fm.get("superseded_by", ""))
+    sb = fm_text(fm, "superseded_by").strip()
     if sb:
         hit["superseded_by"] = sb
     if cosine is not None:
@@ -96,14 +98,14 @@ def _substring_ranking(root, query, terms, limit, filters):
         prefix = os.path.relpath(bp, root).replace(os.sep, "/")
         for cid, ap in iter_concepts(bp):
             text = read_file(ap)
-            fm, body = split_frontmatter(text)
-            t = fm.get("type", "")
+            parsed = read_frontmatter(text)
+            fm, body = parsed.data, parsed.body
+            t = fm_text(fm, "type")
             if not filters.matches_loaded("{}/{}".format(prefix, cid), fm, text):
                 continue
-            title = fm.get("title", cid)
-            tags = fm.get("tags", "")
+            title = fm_text(fm, "title", cid)
             hay_title = title.lower()
-            hay_tags = tags.lower()
+            hay_tags = " ".join(tags_of(fm)).lower()
             hay_body = body.lower()
             score = 0
             contrib = {"title": [], "tags": [], "body": []}
@@ -121,11 +123,11 @@ def _substring_ranking(root, query, terms, limit, filters):
                 hit = {
                     "score": score, "path": "{}/{}".format(prefix, cid),
                     "title": title, "type": t,
-                    "desc": _dequote(fm.get("description", "")),
+                    "desc": fm_text(fm, "description"),
                     "snip": make_snippet(body, terms), "contrib": contrib,
                     "provenance": "lexical",
                 }
-                sb = _dequote(fm.get("superseded_by", ""))
+                sb = fm_text(fm, "superseded_by").strip()
                 if sb:
                     hit["superseded_by"] = sb
                 hits.append(hit)

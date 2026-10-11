@@ -8,9 +8,9 @@ import sys
 
 from okf.errors import OkfError
 from okf.catalogue import (
-    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, extract_tags, index_h1_and_desc, iter_headings,
+    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, fm_text, index_h1_and_desc, iter_headings,
     iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_of, read_file,
-    replace_managed_block, require_bundle_dir, write_file,
+    read_frontmatter, replace_managed_block, require_bundle_dir, tags_of, write_file,
 )
 from okf.output import _add_output
 from okf.parser_support import _complete_bundles, _complete_scopes, _sub
@@ -38,10 +38,11 @@ def bundle_types_and_tags(bp):
     """Return (sorted types, sorted tags) used across a bundle's concepts."""
     types, tags = set(), set()
     for _cid, ap in iter_concepts(bp):
-        t, _title, _desc = meta_of(ap)
+        data = read_frontmatter(read_file(ap)).data
+        t = fm_text(data, "type")
         if t:
             types.add(t)
-        tags.update(extract_tags(read_file(ap)))
+        tags.update(tags_of(data))
     return sorted(types), sorted(tags)
 
 

@@ -4,7 +4,6 @@ frontmatter rewriters merge-tags, remove-tags and normalize-tags."""
 
 import difflib
 import os
-import re
 import subprocess
 import sys
 from okf.errors import OkfError
@@ -12,115 +11,97 @@ from okf.output import _add_output
 
 from okf import catalogue
 from okf.catalogue import (
-    FM_DELIM, TAG_DESC_MAX, all_tags, extract_tags, iter_concepts, load_tags, parse_tag_list,
-    read_file, register_tags, resolve_scopes, split_frontmatter, write_file,
+    TAG_DESC_MAX, all_tags, flow_tags, iter_concepts, load_tags, read_file, read_frontmatter, register_tags,
+    render_frontmatter, resolve_scopes, scalar_text, tags_of, write_file,
 )
 from okf.find_filters import compile_where
 from okf.parser_support import _add_filters, _complete_tags, _sub
 
 
-TAGS_INLINE_RE = re.compile(r"^tags:[ \t]*\[.*\]\s*$", re.M)
-TAGS_INLINE_CONTENT_RE = re.compile(r"^tags:[ \t]*\[(.*)\]\s*$", re.M)
-TAGS_BLOCK_RE = re.compile(r"^tags:[ \t]*\n((?:[ \t]*-[ \t]*.+\n?)*)", re.M)
+_NOT_A_LIST = "tags field not in inline/block form"
 
 
-def rewrite_tags_in_frontmatter(text, new_tags):
-    """Rewrite the `tags:` field inside a concept's frontmatter, preserving
-    whichever style the file used — inline (`tags: [a, b]`) or YAML block-list
-    (`tags:\\n  - a\\n  - b`). Returns the new file text, or None if there is
-    no frontmatter / no parseable `tags` field (caller should skip + flag)."""
-    if not text.startswith(FM_DELIM):
+def _selected_concepts(root, filters):
+    """(path, relative path, Frontmatter) of every concept the --where expression selects; without an
+    expression every concept is selected. prune_staging=False (OKFT-oe8t Review D02): the write verbs
+    must reach staging content too, or a tag change silently leaves the old tag behind there."""
+    for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
+        for _cid, ap in iter_concepts(bp, prune_staging=False):
+            text = read_file(ap)
+            fm = read_frontmatter(text)
+            rel = os.path.relpath(ap, root).replace(os.sep, "/")
+            if filters and not filters.matches_loaded(rel[:-3] if rel.endswith(".md") else rel,
+                                                      fm.data, text):
+                continue
+            yield ap, rel, fm
+
+
+def _unparseable_reason(fm):
+    """Why a write verb leaves the file alone when its frontmatter does not parse, else None."""
+    if fm.head and fm.data is None:
+        return "frontmatter does not parse: {}".format(fm.error)
+
+
+def _retag(data, rename):
+    """Apply `rename` (tag -> new tag, or None to drop it) to the tag list of `data` in place, one item
+    at a time, so the comment and quoting of every other item stay. Returns whether the list changed,
+    or None when `tags` is not a YAML list."""
+    tags = data.get("tags")
+    if not isinstance(tags, list):
         return None
-    end = text.find("\n" + FM_DELIM, len(FM_DELIM))
-    if end == -1:
-        return None
-    fm, rest = text[:end], text[end:]
-
-    m = TAGS_INLINE_RE.search(fm)
-    if m:
-        new_field = "tags: [{}]".format(", ".join(new_tags))
-        return fm[:m.start()] + new_field + fm[m.end():] + rest
-
-    m = TAGS_BLOCK_RE.search(fm)
-    if m:
-        new_field = "tags:\n" + "".join("  - {}\n".format(t) for t in new_tags)
-        return fm[:m.start()] + new_field + fm[m.end():] + rest
-
-    return None
+    edits = []
+    for i, item in enumerate(tags):
+        old = scalar_text(item)
+        new = rename(old)
+        if new != old:
+            edits.append((i, new))
+    for i, new in reversed(edits):
+        if new is None:
+            del tags[i]
+        else:
+            tags[i] = new
+    return bool(edits)
 
 
-def remove_tags_field(text):
-    """Strip the entire `tags:` field (inline or block) from frontmatter — used
-    when a removal empties the tag list, so no dangling `tags:` key is left.
-    Returns the new text, or None if there's no frontmatter / no tags field."""
-    if not text.startswith(FM_DELIM):
-        return None
-    end = text.find("\n" + FM_DELIM, len(FM_DELIM))
-    if end == -1:
-        return None
-    fm, rest = text[:end], text[end:]
-
-    m = TAGS_INLINE_RE.search(fm)
-    if m:
-        e = m.end() + 1 if m.end() < len(fm) and fm[m.end()] == "\n" else m.end()
-        return fm[:m.start()] + fm[e:] + rest
-
-    m = TAGS_BLOCK_RE.search(fm)
-    if m:
-        return fm[:m.start()] + fm[m.end():] + rest
-
-    return None
-
-
-def _selected(filters, root, ap, text):
-    """Whether the --where expression selects the concept at `ap`; without an expression every
-    concept is selected. Staging content is judged like any other, as the verbs always reached it."""
-    if not filters:
-        return True
-    rel = os.path.relpath(ap, root).replace(os.sep, "/")
-    return filters.matches_loaded(rel[:-3] if rel.endswith(".md") else rel,
-                                  split_frontmatter(text)[0], text)
+def _print_write_result(verb, touched, unparseable):
+    for rel in touched:
+        print("{:<14} {}".format(verb, rel))
+    for rel, reason in unparseable.items():
+        print("unparseable    {}  ({} — skipped)".format(rel, reason))
 
 
 def cmd_merge_tags(root, args):
     filters = compile_where(args.where)
     sources = set(args.tags)
-    touched, unparseable = [], []
-    for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
-        # prune_staging=False (OKFT-oe8t Review D02): a tag rename must reach
-        # staging content too, or it silently leaves the old tag behind there.
-        for _cid, ap in iter_concepts(bp, prune_staging=False):
-            text = read_file(ap)
-            if not _selected(filters, root, ap, text):
-                continue
-            tags = extract_tags(text)
-            if not any(t in sources for t in tags):
-                continue
-            new_tags, seen = [], set()
-            for t in tags:
-                nt = args.into if t in sources else t
-                if nt not in seen:
-                    seen.add(nt)
-                    new_tags.append(nt)
-            if new_tags == tags:
-                continue
-            new_text = rewrite_tags_in_frontmatter(text, new_tags)
-            rel = os.path.relpath(ap, root).replace(os.sep, "/")
-            if new_text is None:
-                unparseable.append(rel)
-                continue
+    touched, unparseable = [], {}
+    for ap, rel, fm in _selected_concepts(root, filters):
+        reason = _unparseable_reason(fm)
+        if reason:
+            unparseable[rel] = reason
+            continue
+        if not any(t in sources for t in tags_of(fm.data)):
+            continue
+        seen = set()
+
+        def merged(tag):
+            new = args.into if tag in sources else tag
+            if new in seen:
+                return None
+            seen.add(new)
+            return new
+        changed = _retag(fm.data, merged)
+        if changed is None:
+            unparseable[rel] = _NOT_A_LIST
+        elif changed:
             touched.append(rel)
             if args.apply:
-                write_file(ap, new_text)
-    result = {"applied": bool(args.apply), "files": touched, "unparseable": unparseable,
+                write_file(ap, render_frontmatter(fm))
+    result = {"applied": bool(args.apply), "files": touched, "unparseable": list(unparseable),
               "from": sorted(sources), "into": args.into}
     if getattr(args, "json", False):
         return result
     verb = "rewrote" if args.apply else "would rewrite"
-    for rel in touched:
-        print("{:<14} {}".format(verb, rel))
-    for rel in unparseable:
-        print("unparseable    {}  (tags field not in inline/block form — skipped)".format(rel))
+    _print_write_result(verb, touched, unparseable)
     print("merge-tags: {} file(s) {}, {} unparseable — {} -> {}".format(
         len(touched), verb, len(unparseable), ", ".join(sorted(sources)), args.into))
 
@@ -131,90 +112,58 @@ def cmd_remove_tags(root, args):
     Emptying the tag list strips the whole `tags:` field (no dangling key)."""
     filters = compile_where(args.where)
     targets = set(args.tags)
-    touched, emptied, unparseable = [], [], []
-    for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
-        # prune_staging=False (OKFT-oe8t Review D02): same reasoning as
-        # cmd_merge_tags — a tag removal must reach staging content too.
-        for _cid, ap in iter_concepts(bp, prune_staging=False):
-            text = read_file(ap)
-            if not _selected(filters, root, ap, text):
-                continue
-            tags = extract_tags(text)
-            if not any(t in targets for t in tags):
-                continue
-            new_tags = [t for t in tags if t not in targets]
-            rel = os.path.relpath(ap, root).replace(os.sep, "/")
-            if new_tags:
-                new_text = rewrite_tags_in_frontmatter(text, new_tags)
-            else:
-                new_text = remove_tags_field(text)
-                if new_text is not None:
-                    emptied.append(rel)
-            if new_text is None:
-                unparseable.append(rel)
-                continue
-            touched.append(rel)
-            if args.apply:
-                write_file(ap, new_text)
+    touched, emptied, unparseable = [], [], {}
+    for ap, rel, fm in _selected_concepts(root, filters):
+        reason = _unparseable_reason(fm)
+        if reason:
+            unparseable[rel] = reason
+            continue
+        if not any(t in targets for t in tags_of(fm.data)):
+            continue
+        changed = _retag(fm.data, lambda tag: None if tag in targets else tag)
+        if changed is None:
+            unparseable[rel] = _NOT_A_LIST
+            continue
+        if not fm.data["tags"]:
+            del fm.data["tags"]
+            emptied.append(rel)
+        touched.append(rel)
+        if args.apply:
+            write_file(ap, render_frontmatter(fm))
     result = {"applied": bool(args.apply), "files": touched, "emptied": emptied,
-              "unparseable": unparseable, "removed": sorted(targets)}
+              "unparseable": list(unparseable), "removed": sorted(targets)}
     if getattr(args, "json", False):
         return result
     verb = "rewrote" if args.apply else "would rewrite"
-    for rel in touched:
-        print("{:<14} {}".format(verb, rel))
-    for rel in unparseable:
-        print("unparseable    {}  (tags field not in inline/block form — skipped)".format(rel))
+    _print_write_result(verb, touched, unparseable)
     print("remove-tags: {} file(s) {}, {} emptied, {} unparseable — removed {}".format(
         len(touched), verb, len(emptied), len(unparseable), ", ".join(sorted(targets))))
 
 
-def normalize_tags_in_file(text):
-    """Convert a non-empty inline `tags: [a, b]` field to YAML block-list form.
-    Local convention (this catalogue), not an OKF spec requirement — both forms
-    stay valid OKF, this just harmonizes the one file that drifts. Returns the
-    new text, or None if there's no frontmatter, no tags field, it's already
-    block-list, or the inline list is empty (`[]`)."""
-    if not text.startswith(FM_DELIM):
-        return None
-    end = text.find("\n" + FM_DELIM, len(FM_DELIM))
-    if end == -1:
-        return None
-    fm, rest = text[:end], text[end:]
-    m = TAGS_INLINE_CONTENT_RE.search(fm)
-    if not m:
-        return None
-    tags = parse_tag_list(m.group(1))
-    if not tags:
-        return None
-    new_field = "tags:\n" + "\n".join("  - {}".format(t) for t in tags)
-    return fm[:m.start()] + new_field + fm[m.end():] + rest
-
-
 def cmd_normalize_tags(root, args):
+    """Turn every non-empty flow-style `tags: [a, b]` list into a block list. Local convention (this
+    catalogue), not an OKF spec requirement: both forms stay valid OKF. A file whose frontmatter does
+    not parse is never written."""
     filters = compile_where(args.where)
-    touched = []
-    for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
-        # prune_staging=False (OKFT-oe8t Review D02): same reasoning as
-        # cmd_merge_tags — normalization must reach staging content too.
-        for _cid, ap in iter_concepts(bp, prune_staging=False):
-            text = read_file(ap)
-            if not _selected(filters, root, ap, text):
-                continue
-            new_text = normalize_tags_in_file(text)
-            if new_text is None:
-                continue
-            rel = os.path.relpath(ap, root).replace(os.sep, "/")
-            touched.append(rel)
-            if args.apply:
-                write_file(ap, new_text)
-    result = {"applied": bool(args.apply), "files": touched}
+    touched, unparseable = [], {}
+    for ap, rel, fm in _selected_concepts(root, filters):
+        reason = _unparseable_reason(fm)
+        if reason:
+            unparseable[rel] = reason
+            continue
+        tags = flow_tags(fm.data)
+        if tags is None:
+            continue
+        tags.fa.set_block_style()
+        touched.append(rel)
+        if args.apply:
+            write_file(ap, render_frontmatter(fm))
+    result = {"applied": bool(args.apply), "files": touched, "unparseable": list(unparseable)}
     if getattr(args, "json", False):
         return result
     verb = "rewrote" if args.apply else "would rewrite"
-    for rel in touched:
-        print("{:<14} {}".format(verb, rel))
-    print("normalize-tags: {} file(s) {}".format(len(touched), verb))
+    _print_write_result(verb, touched, unparseable)
+    print("normalize-tags: {} file(s) {}, {} unparseable".format(len(touched), verb, len(unparseable)))
 
 
 def fuzzy_matches(query, candidates, limit=8):

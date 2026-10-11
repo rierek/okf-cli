@@ -9,9 +9,10 @@ catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
 default:
     @just --list
 
-# Testsuite (unittest discovery ueber tests/test_*.py)
+# Testsuite (unittest discovery ueber tests/test_*.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
+# PEP-723-Header von cli/okf-cli.py; mcp ist ein reines Test-Extra. UV_PYTHON waehlt den Interpreter.
 test *ARGS:
-    python3 -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
+    uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py --with mcp python -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
 
 # Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
 build:
@@ -20,12 +21,12 @@ build:
 
 # okf-cli bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf-cli.py install --help`)
 setup *ARGS:
-    python3 {{cli_dir}}/okf-cli.py install {{ARGS}}
+    uv run --script {{cli_dir}}/okf-cli.py install {{ARGS}}
 
 # Konformitaets-Scan des Catalogue (§9 + lokale Invarianten)
 check root=catalogue:
-    python3 {{cli_dir}}/okf-cli.py --root {{root}} check
+    uv run --script {{cli_dir}}/okf-cli.py --root {{root}} check
 
 # Agent-Onboarding gegen den echten Catalogue ausgeben
 prime root=catalogue:
-    python3 {{cli_dir}}/okf-cli.py --root {{root}} prime
+    uv run --script {{cli_dir}}/okf-cli.py --root {{root}} prime

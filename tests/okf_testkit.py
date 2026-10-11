@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -58,6 +59,38 @@ def run_json(root, *argv, **kw):
     assert isinstance(envelope, dict), "stdout is not a JSON object: {!r}".format(out)
     assert set(envelope) == {"command", "ok", "data", "warnings", "error"}, sorted(envelope)
     return envelope, err, code
+
+
+def uv_dirs():
+    """UV_CACHE_DIR and UV_PYTHON_INSTALL_DIR of the real home, for a test that swaps HOME and must
+    still find the uv cache and the managed Pythons."""
+    return {var: subprocess.run(["uv", kind, "dir"], capture_output=True, text=True, check=True).stdout.strip()
+            for var, kind in (("UV_CACHE_DIR", "cache"), ("UV_PYTHON_INSTALL_DIR", "python"))}
+
+
+def uv_start_log(case):
+    """Put a `uv` shim first on PATH for the test `case`. The shim appends its arguments, one call
+    per line, to a log and then runs the real uv. Returns a function that gives the logged calls,
+    so a test sees how a caller starts okf-cli across the process boundary, not which Python runs."""
+    real = shutil.which("uv")
+    case.assertIsNotNone(real, "uv is not on PATH")
+    tmp = tempfile.mkdtemp()
+    case.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+    log = os.path.join(tmp, "uv.log")
+    shim = os.path.join(tmp, "uv")
+    with open(shim, "w", encoding="utf-8") as f:
+        f.write("#!/bin/sh\nprintf '%s\\n' \"$*\" >> {}\nexec {} \"$@\"\n".format(shlex.quote(log), shlex.quote(real)))
+    os.chmod(shim, 0o755)
+    patcher = mock.patch.dict(os.environ, {"PATH": tmp + os.pathsep + os.environ["PATH"]})
+    patcher.start()
+    case.addCleanup(patcher.stop)
+
+    def calls():
+        if not os.path.exists(log):
+            return []
+        with open(log, encoding="utf-8") as f:
+            return f.read().splitlines()
+    return calls
 
 
 def _scan(root, target, **kw):
@@ -133,7 +166,7 @@ class SyncFixtureMixin:
         return self._run(okf_sync.cmd_sync_update, **kw)
 
     def _payload_of(self, rel):
-        _, body = okf_catalogue.split_frontmatter(self._r(rel))
+        body = okf_catalogue.read_frontmatter(self._r(rel)).body
         return okf_sync.parse_sync_blocks(body)[0]["payload"]
 
 

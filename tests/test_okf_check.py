@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/check.py — the conformance scan: its rules, the check
-engine, and the fix-crosslinks and fix-xml-tags repairs. Stdlib unittest, no deps.
+engine, and the fix-crosslinks and fix-xml-tags repairs. unittest.
 
-Run: python3 -m unittest tests.test_okf_check -v
+Run: just test tests.test_okf_check -v
 """
 import argparse
 import contextlib
@@ -61,6 +61,29 @@ class CheckCommand(unittest.TestCase):
         errors, warnings = _scan(self.tmp, "b")
         self.assertIn("okf/frontmatter/parseable", self._names(errors))
         self.assertNotIn("okf/frontmatter/type-nonempty", self._names(errors))  # not double-flagged
+
+    def test_invalid_yaml_is_one_parseable_error_with_the_parser_reason_and_no_other_finding(self):
+        self._w("b/bad.md", "---\ntype: Note\ndescription: Stack-Umzug: Vergleich\ntitel: x\n"
+                            "tags: [a]\n---\n# Bad\n")
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertEqual([e for e in errors + warnings if e[1] == "b/bad.md"], [(
+            "okf/frontmatter/parseable", "b/bad.md",
+            "no parseable frontmatter: mapping values are not allowed here (line 3, column 25)")])
+
+    def test_a_block_that_is_not_a_mapping_is_a_parseable_error_too(self):
+        self._w("b/list.md", "---\n- a\n- b\n---\n# L\n")
+        errors, _warnings = _scan(self.tmp, "b")
+        self.assertEqual([e for e in errors if e[1] == "b/list.md"], [(
+            "okf/frontmatter/parseable", "b/list.md", "no parseable frontmatter: block is not a mapping")])
+
+    def test_typed_yaml_values_are_checked_without_error(self):
+        self._w("b/typed.md", "---\ntype: 7\ntitle: 2026-08-07\ntags: 5\nsuperseded_by: true\n"
+                              "nested:\n  a:\n    - 1\n---\n# T\n")
+        errors, warnings = _scan(self.tmp, "b")
+        self.assertEqual([e for e in errors + warnings if e[1] == "b/typed.md"], [
+            ("kc/supersede/resolves", "b/typed.md", "superseded_by target does not resolve: true"),
+            ("kc/supersede/scope", "b/typed.md",
+             "superseded_by used on non-Decision concept (type=7)")])
 
     def test_empty_type_is_error(self):
         self._w("b/x.md", "---\ntype: \ntitle: X\n---\n# X\n")
@@ -1070,12 +1093,12 @@ class SyncProtectedFromRewriters(SyncFixtureMixin, unittest.TestCase):
         self.assertEqual(okf_check.check_xml_like_tags(ctx), [])
 
     def test_wikilink_in_a_synced_payload_is_not_scanned(self):
-        _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup.md"))
+        body = okf_catalogue.read_frontmatter(self._r("kc-proj/setup.md")).body
         self.assertEqual(okf_wikilinks.parse_wikilinks(body), [])
 
     def test_rename_leaves_the_payload_intact_and_rewrites_the_source(self):
         expected = okf_sync.parse_sync_blocks(
-            okf_catalogue.split_frontmatter(self.consumer_before)[1])[0]["payload"]
+            okf_catalogue.read_frontmatter(self.consumer_before).body)[0]["payload"]
         okf_rename.perform_rename(self.tmp,
                                   os.path.join(self.tmp, "kc-proj/setup.md"),
                                   os.path.join(self.tmp, "kc-proj/setup2.md"),
@@ -1087,7 +1110,7 @@ class SyncProtectedFromRewriters(SyncFixtureMixin, unittest.TestCase):
                                   os.path.join(self.tmp, "kc-gov/ownership.md"),
                                   os.path.join(self.tmp, "kc-gov/canon/ownership.md"),
                                   apply=True, force=True)
-        _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup2.md"))
+        body = okf_catalogue.read_frontmatter(self._r("kc-proj/setup2.md")).body
         self.assertEqual(okf_sync.parse_sync_blocks(body)[0]["source"],
                          "/kc-gov/canon/ownership.md")
 

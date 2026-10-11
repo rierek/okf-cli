@@ -19,9 +19,10 @@ which bundle a fixture landed in — teardown() walks every real bundle and
 removes anything it owns, so it stays idempotent even after a partial seed
 or if bundle selection drifts between runs.
 
-Usage:
-    python3 fixtures.py --root <catalogue> --seed
-    python3 fixtures.py --root <catalogue> --teardown
+Usage (the script imports the okf package, so uv starts it with the dependencies of the
+PEP 723 header of cli/okf-cli.py; there is no second dependency list):
+    uv run --no-project --with-requirements cli/okf-cli.py python cli/eval/fixtures.py --root <catalogue> --seed
+    uv run --no-project --with-requirements cli/okf-cli.py python cli/eval/fixtures.py --root <catalogue> --teardown
 """
 import argparse
 import collections

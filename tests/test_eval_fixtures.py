@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Tests for cli/eval/fixtures.py — stdlib unittest, no deps.
+"""Tests for cli/eval/fixtures.py — unittest.
 
 Runs against a throwaway catalogue in a tmpdir, never the live vault.
 teardown() runs in setUp/tearDown so a failed assertion leaves no residue.
 
-Run: python3 -m unittest tests.test_eval_fixtures -v
+Run: just test tests.test_eval_fixtures -v
 """
 import importlib.util
 import io

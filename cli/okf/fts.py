@@ -6,7 +6,7 @@ import os
 import re
 import sqlite3
 from okf.catalogue import (
-    _dequote, extract_tags, iter_concepts, list_search_bundles, read_file, split_frontmatter,
+    fm_text, iter_concepts, list_search_bundles, read_file, read_frontmatter, tags_of,
 )
 from okf.find_filters import FTS_FILTER_COLUMNS
 from okf.output import _add_output, _note
@@ -99,14 +99,13 @@ def build_fts_index(root, db_path=None, include_topics=False):
             nonlocal newest
             count = 0
             for cid, ap in iter_concepts(bp):
-                raw = read_file(ap)
-                fm, body = split_frontmatter(raw)
-                title = _dequote(fm.get("title", "")) or cid
+                parsed = read_frontmatter(read_file(ap))
+                fm = parsed.data
                 conn.execute(
                     "INSERT INTO docs(path, ctype, title, tags, body)"
                     " VALUES (?, ?, ?, ?, ?)",
-                    ("{}{}/{}".format(path_prefix, b, cid), _dequote(fm.get("type", "")),
-                     title, " ".join(extract_tags(raw)), body))
+                    ("{}{}/{}".format(path_prefix, b, cid), fm_text(fm, "type"),
+                     fm_text(fm, "title") or cid, " ".join(tags_of(fm)), parsed.body))
                 count += 1
                 mt = os.path.getmtime(ap)
                 if mt > newest:

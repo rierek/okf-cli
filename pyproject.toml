@@ -10,9 +10,8 @@ readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Erik Riedel", email = "mail@erikriedel.de" }]
-# tomllib (okf-cli.py) needs 3.11
-requires-python = ">=3.11"
-dependencies = []
+# dependencies and requires-python come from the PEP 723 header of cli/okf-cli.py (hatch_build.py)
+dynamic = ["dependencies", "requires-python"]
 keywords = ["open-knowledge-format", "okf", "knowledge-base", "markdown", "mcp", "cli"]
 classifiers = [
     "Environment :: Console",
@@ -28,8 +27,6 @@ classifiers = [
 # the MCP server (`okf-cli install` registers it through `uv run --with "mcp<2"`,
 # so this extra is only for running mcp/okf_mcp.py with a plain python3)
 mcp = ["mcp<2"]
-# shell TAB completion
-completion = ["argcomplete>=3"]
 
 [project.urls]
 Homepage = "https://github.com/xRiErOS/okf-cli"
@@ -37,6 +34,9 @@ Issues = "https://github.com/xRiErOS/okf-cli/issues"
 
 [project.scripts]
 okf-cli = "okf_cli:main"
+
+[tool.hatch.metadata.hooks.custom]
+path = "hatch_build.py"
 
 # Single source of truth: nothing below is a copy. The repo keeps cli/, mcp/ and
 # skills/ as they are; the wheel maps them into the okf_cli package with the SAME
@@ -55,4 +55,4 @@ packages = ["okf_cli"]
 "skills/okf" = "okf_cli/skills/okf"
 
 [tool.hatch.build.targets.sdist]
-include = ["/okf_cli", "/cli", "/mcp", "/skills", "/tests", "/README.md", "/LICENSE", "/pyproject.toml"]
+include = ["/okf_cli", "/cli", "/mcp", "/skills", "/tests", "/hatch_build.py", "/README.md", "/LICENSE", "/pyproject.toml"]

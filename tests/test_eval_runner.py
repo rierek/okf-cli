@@ -13,7 +13,7 @@ Three tiers:
   * Fixture-Tests (PickBundles, GoldenBundleConsistency,
     FixtureSpecGoldenAlignment) — isolierte tmpdirs, kein Live-Catalogue.
 
-Run: python3 -m unittest tests.test_eval_runner -v
+Run: just test tests.test_eval_runner -v
 """
 import importlib.util
 import json
@@ -28,6 +28,7 @@ if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf.find_filters import And, Not, Or, parse_where
+from tests.okf_testkit import uv_start_log
 
 _fx_spec = importlib.util.spec_from_file_location(
     "eval_fixtures", os.path.join(_HERE, "eval", "fixtures.py")
@@ -391,3 +392,11 @@ class RunnerAgainstTmpCatalogueTest(unittest.TestCase):
             runner._run_cli(self.root, ["index", "no-such-bundle"])
         self.assertIn("(exit 3)", str(cm.exception))
         self.assertIn("not a directory: no-such-bundle", str(cm.exception))
+
+    def test_every_cli_call_including_build_index_starts_through_uv_run_script(self):
+        calls = uv_start_log(self)
+        runner.run(self.root, GOLDEN_PATH)
+        self.assertGreater(len(calls()), 1)
+        prefix = "run --script {} --root {} ".format(runner.CLI_PATH, os.path.abspath(self.root))
+        self.assertEqual([c for c in calls() if not c.startswith(prefix)], [])
+        self.assertIn(prefix + "build-index", calls())

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/rename.py — the rename, archive and rewrite-path commands:
 the reference rewrite plan and its writers, the git move, the archive guards and
-the literal path-string rewrite. Stdlib unittest, no deps.
+the literal path-string rewrite. unittest.
 
-Run: python3 -m unittest tests.test_okf_rename -v
+Run: just test tests.test_okf_rename -v
 """
 import contextlib
 import io
@@ -237,11 +237,11 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
 
     def test_frontmatter_property_is_rewritten_and_stays_parseable(self):
         self._w("a/src.md", '---\ntype: Concept\nrelated:\n  - "[[old]]"\n---\n# Src\n')
-        before = set(okf_catalogue.split_frontmatter(self._r("a/src.md"))[0])
+        before = set(okf_catalogue.read_frontmatter(self._r("a/src.md")).data)
         self._rename("a/old.md", "a/new.md", apply=True)
         after_text = self._r("a/src.md")
         self.assertIn('- "[[new]]"', after_text)
-        self.assertEqual(set(okf_catalogue.split_frontmatter(after_text)[0]), before)
+        self.assertEqual(set(okf_catalogue.read_frontmatter(after_text).data), before)
 
     def test_directory_only_move_rewrites_nothing(self):
         """A wikilink carries no path, so only a basename change can break one."""

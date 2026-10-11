@@ -46,10 +46,10 @@ FIND_LIMIT = 50
 
 
 def _run_cli(root, argv):
-    """Invoke okf-cli.py via subprocess (real process boundary — SC-003).
+    """Invoke okf-cli.py through `uv run --script` (real process boundary — SC-003).
     Returns stdout text; raises on nonzero exit."""
     proc = subprocess.run(
-        ["python3", CLI_PATH, "--root", root] + argv,
+        ["uv", "run", "--script", CLI_PATH, "--root", root] + argv,
         capture_output=True, text=True,
     )
     if proc.returncode != 0:
@@ -207,7 +207,7 @@ def run(catalogue_root, golden_path):
     # runner would score the substring fallback and report it as the shipped
     # behaviour. Local, no network, ~ms on a fixture catalogue.
     subprocess.run(
-        ["python3", CLI_PATH, "--root", root, "build-index"],
+        ["uv", "run", "--script", CLI_PATH, "--root", root, "build-index"],
         check=True, capture_output=True, text=True)
     with open(golden_path, encoding="utf-8") as f:
         golden = json.load(f)

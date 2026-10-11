@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Tests for `okf-cli install` (okf_install.py) — stdlib unittest, no deps.
+"""Tests for `okf-cli install` (okf_install.py) — unittest.
 
 Every test runs in a tmp HOME with a PATH that holds only stub binaries: nothing
 touches the real home, the real PATH or a real harness. Stub CLIs (claude,
 codex, openclaw) behave like the real ones for the one thing install reads
 back — the config file their `mcp add/set` writes.
 
-Run: python3 -m unittest tests.test_okf_install -v
+Run: just test tests.test_okf_install -v
 """
 import contextlib
 import importlib.util
@@ -30,6 +30,7 @@ from okf import errors as okf_errors
 from okf import install as okf_install_cmd
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
+from tests.okf_testkit import uv_start_log
 
 
 def _load(name, filename):
@@ -40,7 +41,6 @@ def _load(name, filename):
 
 
 inst = _load("okf_install", "okf_install.py")
-HAS_ARGCOMPLETE = importlib.util.find_spec("argcomplete") is not None
 
 _STUB_HEAD = ('#!%s\nimport json, os, re, sys, time\n'
               'open(os.environ["OKF_STUB_LOG"], "a").write('
@@ -172,7 +172,6 @@ class Machine(unittest.TestCase):
     # -- running
     def ctx(self, env=None, **kw):
         kw.setdefault("platform", "linux")
-        kw.setdefault("argcomplete", False)
         return inst.Ctx(env=env or self.env, home=self.home, pkg_root=kw.pop("pkg", self.pkg), **kw)
 
     def install(self, only=None, un=False, apply=False, as_json=False, **kw):
@@ -306,7 +305,7 @@ class ApplyAndIdempotence(Machine):
     def test_source_tree_links_skills_and_copy_dirs_stay_copies(self):
         self.use_source_tree()
         self.harness_dirs("claude", "hermes", "codex")
-        self.apply(argcomplete=True)
+        self.apply()
         src = os.path.join(self.pkg, "skills", "okf")
         for d in (".claude/skills/okf", ".agents/skills/okf"):
             self.assertTrue(os.path.islink(self.h(d)))
@@ -379,7 +378,7 @@ class ForeignContentSurvives(Machine):
         original = "export A=1\nalias ll='ls -l'\n"
         target = self.put(os.path.join(self.tmp, "dotfiles", "zshrc"), original)
         os.symlink(target, self.h(".zshrc"))
-        self.assertEqual(self.apply(only="zsh", argcomplete=True)[0], 0)
+        self.assertEqual(self.apply(only="zsh")[0], 0)
         self.assertTrue(os.path.islink(self.h(".zshrc")), "the symlink is written through, not replaced")
         self.assertTrue(self.get(target).startswith(original + "\n" + inst.BEGIN))
         self.assertEqual(self.install(only="zsh", un=True, apply=True)[0], 0)
@@ -488,7 +487,7 @@ class Refusals(Machine):
                    ".config/fish/completions/okf-cli.fish": "complete -c okf-cli\n"}
         for rel, text in foreign.items():
             self.put(self.h(rel), text, 0o755)
-        code, out = self.apply(argcomplete=True)
+        code, out = self.apply()
         self.assertEqual(code, 1)
         self.assertEqual(out.count("BLOCKED"), 4, out)
         self.assertEqual({rel: self.get(self.h(rel)) for rel in foreign}, foreign)
@@ -508,9 +507,9 @@ class Uninstall(Machine):
         self.put(self.h(".config/opencode/opencode.json"), '{\n  "theme": "x"\n}\n')
         self.put(self.h(".codex/config.toml"), "# mine\n")
         before = snap(self.home)
-        self.assertEqual(self.apply(argcomplete=True)[0], 0)
+        self.assertEqual(self.apply()[0], 0)
         self.assertNotEqual(snap(self.home), before)
-        code, out = self.install(un=True, apply=True, argcomplete=True)
+        code, out = self.install(un=True, apply=True)
         self.assertEqual(code, 0, out)
         left = {k: v for k, v in snap(self.home).items() if not k.endswith(".okf-cli.bak")}
         # the CLI stubs leave a rewritten (empty-server) JSON behind, like the real CLIs
@@ -654,15 +653,8 @@ class Detection(Machine):
         self.assertEqual(cm.exception.kind, "internal")
         self.assertIn("macOS and Linux", cm.exception.message)
 
-    def test_python_before_3_11_is_refused_with_a_way_out(self):
-        with mock.patch.object(inst, "tomllib", None), self.assertRaises(okf_errors.OkfError) as cm:
-            self.install()
-        self.assertEqual(cm.exception.kind, "internal")
-        self.assertIn("needs Python 3.11", cm.exception.message)
-        self.assertIn("uv tool install", cm.exception.message)
 
-
-class UvAndArgcomplete(Machine):
+class Uv(Machine):
     def test_missing_uv_blocks_mcp_only(self):
         os.remove(os.path.join(self.bin, "uv"))
         self.harness_dirs("omp", "claude")
@@ -673,27 +665,12 @@ class UvAndArgcomplete(Machine):
         self.assertTrue(os.path.isfile(self.h(".agents/skills/okf/SKILL.md")), "skills proceed")
         self.assertTrue(os.path.isfile(self.h(".claude/skills/okf/SKILL.md")))
 
-    def test_missing_argcomplete_skips_completion_and_names_the_install_command(self):
-        self.put(self.h(".zshrc"), "")
-        code, out = self.apply()
-        self.assertEqual(code, 0, "an optional dependency is a hint, not a failure")
-        has_pip = importlib.util.find_spec("pip") is not None  # a `uv venv` has none: the hint is `uv pip`
-        self.assertIn('-m pip install "argcomplete>=3"' if has_pip else 'uv pip install --python', out)
-        self.assertIn(sys.executable, out)
-        for prefix, hint in (("/x/pipx/venvs/okf-cli", "pipx inject okf-cli argcomplete"),
-                             ("/x/uv/tools/okf-cli", "uv tool install --force --with argcomplete")):
-            with mock.patch.object(inst.sys, "prefix", prefix):
-                self.assertIn(hint, self.install()[1])
-        self.assertFalse(os.path.exists(self.h(".zsh/completions/_okf-cli")))
-        self.assertEqual(self.get(self.h(".zshrc")), "", "nothing is needed, so nothing is written")
-
-    @unittest.skipUnless(HAS_ARGCOMPLETE, "argcomplete not installed")
     def test_bash_and_fish_completion_are_argcomplete_shellcode(self):
         from argcomplete.shell_integration import shellcode
         self.use_source_tree()
         self.put(self.h(".bashrc"), "")
         self.mk("home", ".config", "fish")
-        code, out = self.apply(argcomplete=True)
+        code, out = self.apply()
         self.assertEqual(code, 0, out)
         for sh, rel in (("bash", ".local/share/bash-completion/completions/okf-cli"),
                         ("fish", ".config/fish/completions/okf-cli.fish")):
@@ -710,7 +687,7 @@ class ShellBlocks(Machine):
 
     def zsh(self, rc):
         self.put(self.h(".zshrc"), rc)
-        self.assertEqual(self.apply(only="zsh", argcomplete=True)[0], 0)
+        self.assertEqual(self.apply(only="zsh")[0], 0)
         return self.get(self.h(".zshrc"))[len(rc):]
 
     def test_zsh_without_compinit_gets_fpath_and_compinit(self):
@@ -738,24 +715,23 @@ class ShellBlocks(Machine):
 
     def test_path_is_left_alone_when_okf_cli_is_already_on_it(self):
         self.stub("okf-cli")
-        code, out = self.apply(only="zsh", argcomplete=True)
+        code, out = self.apply(only="zsh")
         self.assertIn("okf-cli is already on PATH", out)
         self.assertFalse(os.path.exists(self.h(".local/bin/okf-cli")))
         self.assertNotIn(".local/bin", self.get(self.h(".zshrc")))
 
-    def test_wrapper_runs_the_checkout_and_passes_arguments(self):
-        self.apply(only="zsh", argcomplete=True)
+    def test_wrapper_starts_the_checkout_through_uv_run_script_and_passes_arguments(self):
+        self.apply(only="zsh")
         wrapper = self.h(".local/bin/okf-cli")
         self.assertTrue(os.access(wrapper, os.X_OK))
-        path = os.path.dirname(sys.executable) + os.pathsep + "/usr/bin" + os.pathsep + "/bin"
-        if not shutil.which("python3", path=path):
-            self.skipTest("no python3 next to the test interpreter")
-        done = subprocess.run([wrapper, "a", "b c"], capture_output=True, text=True, env={"PATH": path})
+        calls = uv_start_log(self)
+        done = subprocess.run([wrapper, "a", "b c"], capture_output=True, text=True)
         self.assertEqual(done.stdout.strip(), "['a', 'b c']")
+        self.assertEqual(calls(), ["run --script {} a b c".format(os.path.join(self.pkg, "cli", "okf-cli.py"))])
 
     def test_an_installed_wheel_gets_no_wrapper_but_a_hint(self):
         os.remove(os.path.join(self.pkg, "pyproject.toml"))
-        code, out = self.apply(only="zsh", argcomplete=True)
+        code, out = self.apply(only="zsh")
         self.assertIn("pipx ensurepath", out)
         self.assertFalse(os.path.exists(self.h(".local/bin/okf-cli")))
         glue = self.h(".zsh/completions/_okf-cli")
@@ -799,7 +775,7 @@ class ShellBlocks(Machine):
         self.apply(only="fish")
         conf = self.h(".config/fish/conf.d/okf-cli.fish")
         self.assertIn("set -gx PATH $HOME/.local/bin $PATH", self.get(conf))
-        self.install(only="fish", un=True, apply=True, argcomplete=True)
+        self.install(only="fish", un=True, apply=True)
         self.assertFalse(os.path.exists(conf))
 
     def test_block_helpers_roundtrip_odd_files(self):
@@ -823,7 +799,7 @@ class ShellBlocks(Machine):
     @unittest.skipUnless(shutil.which("zsh"), "no zsh")
     def test_generated_zsh_block_registers_the_completion_in_a_real_zsh(self):
         self.put(self.h(".zshrc"), "")
-        self.apply(only="zsh", argcomplete=True)
+        self.apply(only="zsh")
         done = subprocess.run(["zsh", "-f", "-c", "source ~/.zshrc; print -r -- ${_comps[okf-cli]}"],
                               capture_output=True, text=True, env={"HOME": self.home, "PATH": "/usr/bin:/bin"})
         self.assertEqual(done.stdout.strip(), "_okf-cli", done.stderr)
@@ -869,7 +845,7 @@ class Packaging(unittest.TestCase):
         entry = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(entry)
         self.assertTrue(callable(getattr(entry, func)))
-        self.assertEqual(sorted(self.cfg["project"]["optional-dependencies"]), ["completion", "mcp"])
+        self.assertEqual(sorted(self.cfg["project"]["optional-dependencies"]), ["mcp"])
 
     def test_a_tree_laid_out_as_the_wheel_runs_cli_install_and_finds_its_siblings(self):
         """pyproject's mapping applied by plain copies (hatch itself is covered by the
