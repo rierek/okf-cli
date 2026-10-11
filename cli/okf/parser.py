@@ -4,8 +4,8 @@ and COMMAND_DISPATCH, build_parser and the command overview prime renders."""
 import argparse
 
 from okf import (
-    check, ctx, find, fts, index, install, navigation, prime, recent, rename, semantic, sync, tags,
-    verify, wikilinks,
+    check, ctx, find, fts, index, install, migrate, navigation, prime, recent, rename, semantic, sync,
+    tags, verify, wikilinks,
 )
 from okf.parser_support import (
     _complete_dirs, merge_commands, render_command_overview, subcommand_parsers,
@@ -16,8 +16,8 @@ from okf.parser_support import (
 # the same {name: (handler, add_parser)} form; moving a command means moving its
 # COMMANDS entry into its module and listing the module here.
 COMMAND_MODULES = (
-    check, ctx, find, fts, index, install, navigation, prime, recent, rename, semantic, sync, tags,
-    verify, wikilinks,
+    check, ctx, find, fts, index, install, migrate, navigation, prime, recent, rename, semantic, sync,
+    tags, verify, wikilinks,
 )
 
 COMMAND_TABLE = merge_commands(*(module.COMMANDS for module in COMMAND_MODULES))
