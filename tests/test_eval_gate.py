@@ -100,6 +100,14 @@ class VerdictTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(len(reasons), 2, reasons)
 
+    def test_literal_only_ignores_paraphrase_but_still_fails_s1_regression(self):
+        ok, reasons = gate.verdict(_blob(1.0, 1), _blob(1.0, 1), check_paraphrase=False)
+        self.assertTrue(ok, reasons)
+        ok, reasons = gate.verdict(_blob(1.0, 1), _blob(1.0, 2), check_paraphrase=False)
+        self.assertFalse(ok)
+        self.assertEqual(len(reasons), 1, reasons)
+        self.assertIn("s1-literal", reasons[0])
+
 
 class GateCliTest(unittest.TestCase):
     """CLI boundary: exit 0 on PASS, non-zero on FAIL, delta table on
