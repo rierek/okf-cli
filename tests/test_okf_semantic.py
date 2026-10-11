@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/semantic.py — the semantic arm: query embedding, cosine ranking, tag expansion and coverage. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_semantic -v
+Run: just test tests.test_okf_semantic -v
 """
 import json
 import os
@@ -161,7 +161,7 @@ class SemanticCoverageSharesTheProducersDetector(unittest.TestCase):
     is the OKF concept detector-and-autofixer-must-share-the-same-scan: the
     checker and the producer must run the same scan, not two.
 
-    Each test builds its embedded row through split_frontmatter/read_file/
+    Each test builds its embedded row through read_frontmatter/read_file/
     concept_text()/concept_cache_key() -- the exact sequence
     plan_concept_delta() runs per concept -- never a hand-rolled sha1, so a
     passing test proves the shared detector, not a re-implementation of it."""
@@ -182,8 +182,9 @@ class SemanticCoverageSharesTheProducersDetector(unittest.TestCase):
             f.write("---\ntype: Runbook\ntitle: One\n---\n{}\n".format(body))
 
     def _embed_current_content(self):
-        fm, body = okf_catalogue.split_frontmatter(okf_catalogue.read_file(self.ap))
-        title = okf_catalogue._dequote(fm.get("title", "")) or "one"
+        parsed = okf_catalogue.read_frontmatter(okf_catalogue.read_file(self.ap))
+        body = parsed.body
+        title = okf_catalogue.fm_meta(parsed.data, os.path.basename(self.ap)[:-3])[1]
         text = self.bt.concept_text(title, body)
         key = self.bt.concept_cache_key(okf_semantic.SEMANTIC_MODEL, "b/one", text)
         self.bt.write_concept_rows(

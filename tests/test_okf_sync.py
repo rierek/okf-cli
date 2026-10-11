@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/sync.py — canon and sync block parsing, classification and
 the sync-insert, sync-status and sync-update commands. Stdlib unittest, no deps.
-Run: python3 -m unittest tests.test_okf_sync -v
+Run: just test tests.test_okf_sync -v
 """
 import os
 import sys
@@ -133,7 +133,7 @@ class SyncInsertCommand(SyncFixtureMixin, unittest.TestCase):
     def test_apply_records_the_owner_payload_hash(self):
         _, code = self._insert()
         self.assertEqual(code, 0)
-        _, body = okf_catalogue.split_frontmatter(self._r("kc-proj/setup.md"))
+        body = okf_catalogue.read_frontmatter(self._r("kc-proj/setup.md")).body
         rec = okf_sync.parse_sync_blocks(body)[0]
         self.assertEqual(rec["source"], "/kc-gov/ownership.md")
         self.assertEqual(rec["hash"], okf_sync.sync_hash(self.OWNER_PAYLOAD))

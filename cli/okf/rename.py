@@ -11,8 +11,8 @@ from okf.output import _add_output, _note
 from okf import catalogue, check, linkscan, wikilinks
 from okf.catalogue import (
     CROSSLINK_RE, RESERVED, SYNC_OPEN_LIT, SYNC_OPEN_RE, _prune_walk_dirs, ctx_memberships,
-    iter_all_md, load_ctx, read_file, read_file_verbatim, reindex_tree, resolve_scopes, save_ctx,
-    split_frontmatter, write_file_verbatim,
+    iter_all_md, load_ctx, read_file, read_file_verbatim, read_frontmatter, reindex_tree,
+    resolve_scopes, save_ctx, write_file_verbatim,
 )
 from okf.linkscan import iter_rename_scan_md, wikilink_scan_text
 from okf.parser_support import _complete_concept_files, _complete_concepts, _complete_dirs, _sub
@@ -321,7 +321,7 @@ def find_sync_source_refs(root, source_value):
     out = []
     for _, bp in resolve_scopes(root, None, include_archive=True):
         for ap in iter_all_md(bp, prune_staging=False):
-            _, body = split_frontmatter(read_file(ap))
+            body = read_frontmatter(read_file(ap)).body
             if SYNC_OPEN_LIT not in body:
                 continue
             n = sum(1 for r in parse_sync_blocks(body)

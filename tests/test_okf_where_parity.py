@@ -4,7 +4,7 @@ flags (OKFT-zpom). PINNED holds the concept set each old-flag invocation returne
 fixture, captured on the pre-removal tree (milestone/0.2 at b87f1e7); the test asserts the
 `--where` equivalent returns the same set. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_where_parity -v
+Run: just test tests.test_okf_where_parity -v
 """
 import contextlib
 import io

@@ -6,7 +6,7 @@ import os
 import re
 
 from okf.catalogue import (
-    FM_DELIM, SYNC_SPAN_RE, _prune_walk_dirs, fence_line_spans, list_bundles, read_file,
+    SYNC_SPAN_RE, _prune_walk_dirs, fence_line_spans, list_bundles, read_file, read_frontmatter,
 )
 
 
@@ -84,18 +84,6 @@ def _refs_display(scan_root, p):
     return p
 
 
-def _frontmatter_end(text):
-    """Offset where split_frontmatter's `body` begins (0 when the file carries
-    no frontmatter block). Same arithmetic as split_frontmatter, exposed so a
-    scan can tag which region an occurrence sits in — Obsidian treats a
-    frontmatter link property as a real link, so both regions count."""
-    if text.startswith(FM_DELIM):
-        end = text.find("\n" + FM_DELIM, len(FM_DELIM))
-        if end != -1:
-            return end + len(FM_DELIM) + 1
-    return 0
-
-
 # Spans Obsidian does not index as links. Fences are found line-based, not by
 # regex: a regex pairs backtick runs left to right with no notion of line start
 # or fence length, so one prose ``` mention or a 4-backtick fence shifts every
@@ -104,12 +92,6 @@ def _frontmatter_end(text):
 COMMENT_RE = re.compile(r"%%[\s\S]*?%%|<!--[\s\S]*?-->")
 INLINE_CODE_RE = re.compile(r"(`+)(?:(?!\1).)+?\1")
 LIST_ITEM_RE = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]")
-# A YAML-looking line: a comment, a block-list item, an indented continuation,
-# or a `key:` — where the key may hold spaces, umlauts and even a colon
-# (`Übersicht … ISO 9001:2015:` is a real key in this catalogue), so the match
-# runs to the LAST colon before whitespace or end of line.
-YAML_LINE_RE = re.compile(r"^(?:[ \t]*#|[ \t]*-[ \t]|[ \t]+\S|[^\s:#][^\n]*:(?:[ \t]|$))")
-FENCE_START_RE = re.compile(r"^ {0,3}(?:`{3,}|~{3,})")
 
 
 def _split_lines_with_offsets(text):
@@ -211,47 +193,21 @@ def _dead_zone_mask(text, yaml=False):
     return _blank(masked, _indented_code_spans(lines, offs))
 
 
-def is_yaml_frontmatter_block(block):
-    """True when every non-blank line of a `---`-delimited block reads as YAML.
-
-    This is what separates real frontmatter from a `---` thematic rule opening
-    the body. Both look identical to split_frontmatter, and getting it wrong
-    costs bytes in both directions: body rules applied to YAML swallow a link
-    property, YAML rules applied to prose expose a fenced example to the
-    rewriter."""
-    lines = [ln for ln in block.splitlines() if ln.strip()]
-    if not lines:
-        return True         # `---\n---` is an empty frontmatter block, not prose
-    # An UNINDENTED fence is never YAML, however key-like its neighbours. An
-    # indented one may be the content of a block scalar (`example: |`), and
-    # rejecting the whole block for it hid every link property in the file.
-    if any(FENCE_START_RE.match(ln) and not ln[:1].isspace() for ln in lines):
-        return False
-    # The FIRST line decides, not every line: a plain scalar continued on an
-    # unindented line is sloppy YAML but common here (432 qm-wiki files carry a
-    # multi-line German description that way), while a `---` thematic rule
-    # opening a body starts with prose that carries no `key:` at all.
-    return bool(YAML_LINE_RE.match(lines[0]))
-
-
 def wikilink_regions(text):
     """[(label, start, end)] — the frontmatter region, then the body.
 
-    `_frontmatter_end` mirrors split_frontmatter, which cannot tell a YAML block
-    from a thematic rule; this can, and a head that is not YAML is body text
-    reported as such."""
-    fm_end = _frontmatter_end(text)
-    # The block BETWEEN the delimiters — _frontmatter_end points past the
-    # closing one, and a `---` line is not itself YAML.
-    if fm_end and not is_yaml_frontmatter_block(
-            text[len(FM_DELIM):fm_end - len(FM_DELIM) - 1]):
-        fm_end = 0
+    Only a head whose block parses as a YAML mapping is frontmatter; any other head, such as a `---`
+    thematic rule opening the body, is body text and reported as such."""
+    parsed = read_frontmatter(text)
+    fm_end = len(parsed.head) if parsed.data is not None else 0
     return [("frontmatter", 0, fm_end), ("body", fm_end, len(text))]
 
 
-def wikilink_scan_text(text):
-    """The masked copy a wikilink scan reads, aligned byte-for-byte with `text`."""
-    fm_end = wikilink_regions(text)[0][2]
+def wikilink_scan_text(text, fm_end=None):
+    """The masked copy a wikilink scan reads, aligned byte-for-byte with `text`. A caller that
+    already holds the frontmatter end passes it, which saves a second parse."""
+    if fm_end is None:
+        fm_end = wikilink_regions(text)[0][2]
     return (_dead_zone_mask(text[:fm_end], yaml=True)
             + _dead_zone_mask(text[fm_end:]))
 

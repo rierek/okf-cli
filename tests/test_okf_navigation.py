@@ -2,10 +2,12 @@
 """Tests for cli/okf/navigation.py — the list, read, info, toc, visualize and refs
 commands. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_navigation -v
+Run: just test tests.test_okf_navigation -v
 """
+import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -23,7 +25,7 @@ from okf import navigation as okf_navigation
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
 from okf.errors import OkfError
-from tests.okf_testkit import _cli, run_find
+from tests.okf_testkit import _cli, run_cli, run_find
 
 
 class VisualizeDefaultOutputPath(unittest.TestCase):
@@ -663,6 +665,68 @@ class ReadTargeted(unittest.TestCase):
                 r = self._read("b/c", *flags)
                 self.assertEqual((r.returncode, r.stdout), (2, ""))
                 self.assertIn("not allowed with", r.stderr)
+
+
+class ReadCommandsOnYamlFrontmatter(unittest.TestCase):
+    """R-11 — a concept whose frontmatter fails to parse reads as one without frontmatter values,
+    and typed YAML values (number, boolean, date, list, mapping) never break a command."""
+
+    BAD = "---\ntype: Note\ndescription: Stack-Umzug: Vergleich\n---\n# Bad\n\nneedle in the body\n"
+    TYPED = ("---\ntype: 7\ntitle: 2026-08-07\ndescription: true\ntags: [5, true]\n"
+             "nested:\n  inner:\n    - 1\n---\n# Typed\n\nneedle too\n")
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        for rel, text in (("b/good.md", "---\ntype: Note\ntitle: Good\ntags:\n  - x\n---\n# Good\n\nneedle\n"),
+                          ("b/bad.md", self.BAD), ("b/typed.md", self.TYPED)):
+            ap = os.path.join(self.root, rel)
+            os.makedirs(os.path.dirname(ap), exist_ok=True)
+            with open(ap, "w", encoding="utf-8") as f:
+                f.write(text)
+        # `recent` reads the commit history, so the fixture catalogue is a repository.
+        for step in (("init", "-q"), ("add", "."), ("commit", "-qm", "fixture")):
+            subprocess.run(["git", "-C", self.root, "-c", "user.name=t", "-c", "user.email=t@t",
+                            "-c", "commit.gpgsign=false", *step], check=True, capture_output=True)
+
+    def _run(self, *argv):
+        out, err, code = run_cli(self.root, *argv)
+        self.assertNotIn("Traceback", err)
+        return out, code
+
+    def _data(self, *argv):
+        return json.loads(self._run(*argv, "--json")[0])["data"]
+
+    def test_every_read_command_completes_on_a_concept_that_fails_to_parse(self):
+        for argv in (("read", "b/bad"), ("toc", "b/bad"), ("index", "b"), ("list", "--where", "path ~ b"),
+                     ("find", "needle"), ("recent",), ("tags",)):
+            with self.subTest(argv=argv):
+                self.assertEqual(self._run(*argv)[1], 0)
+
+    def test_the_concept_that_fails_to_parse_has_no_frontmatter_values(self):
+        listed = self._data("list", "--where", "path ~ b")
+        self.assertIn({"title": "bad", "type": "", "path": "b/bad", "description": ""}, listed)
+        toc = self._data("toc", "b/bad")
+        self.assertEqual((toc["title"], toc["type"]), ("bad", ""))
+
+    def test_typed_values_come_back_as_the_text_written_in_every_json_output(self):
+        listed = self._data("list", "--where", "path ~ b")
+        self.assertIn({"title": "2026-08-07", "type": "7", "path": "b/typed", "description": "true"}, listed)
+        hit = next(h for h in self._data("find", "needle")["hits"] if h["path"] == "b/typed")
+        self.assertEqual((hit["title"], hit["type"], hit["description"]), ("2026-08-07", "7", "true"))
+        self.assertEqual(sorted(t["tag"] for t in self._data("tags")["tags"]), ["5", "true", "x"])
+        for argv in (("build-index",), ("index", "b", "--json")):
+            with self.subTest(argv=argv):
+                self.assertEqual(self._run(*argv)[1], 0)
+
+    def test_check_reports_the_parse_failure_and_reads_the_flow_style_of_tags_from_the_mapping(self):
+        out, code = self._run("check", "--json")
+        findings = json.loads(out)["data"]["findings"]
+        self.assertEqual(code, 4)
+        self.assertEqual(sorted((f["rule"], f["severity"], f["path"]) for f in findings
+                                if f["path"].startswith("b/")),
+                         [("kc/frontmatter/tags-block-form", "warning", "b/typed.md"),
+                          ("okf/frontmatter/parseable", "error", "b/bad.md")])
 
 
 if __name__ == "__main__":

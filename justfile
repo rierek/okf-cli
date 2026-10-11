@@ -9,9 +9,10 @@ catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
 default:
     @just --list
 
-# Testsuite (unittest discovery ueber tests/test_*.py)
+# Testsuite (unittest discovery ueber tests/test_*.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
+# PEP-723-Header von cli/okf-cli.py; argcomplete und mcp sind reine Test-Extras. UV_PYTHON waehlt den Interpreter.
 test *ARGS:
-    python3 -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
+    uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py --with argcomplete --with mcp python -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
 
 # Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
 build:

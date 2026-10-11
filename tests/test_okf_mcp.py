@@ -7,7 +7,7 @@ marshalling across the process boundary (build_argv -> subprocess.run ->
 json.loads). These tests instead drive okf_mcp.run_okf, which shells out to
 the REAL cli/okf-cli.py, exactly as the MCP server does.
 
-Run: python3 -m unittest tests.test_okf_mcp -v
+Run: just test tests.test_okf_mcp -v
 """
 import importlib.util
 import inspect
@@ -437,10 +437,10 @@ class McpOptionalRoot(unittest.TestCase):
 class McpToolSignatureContract(unittest.TestCase):
     """FastMCP translates a keyword-only parameter without a default into
     JSON-Schema `required`, and a parameter with a default into optional
-    (verified once against the real library — okf-cli-z69p). Runs under
-    plain python3, unlike a FastMCP-backed check: `mcp` is not on the
-    system interpreter `just test` uses, only inside the `uv run --with
-    'mcp<2'` sandbox the server itself launches in."""
+    (verified once against the real library — okf-cli-z69p). Runs against a
+    stand-in tool collector, unlike a FastMCP-backed check, so it passes
+    without `mcp` installed; `just test` adds `mcp` only for the tests that
+    need the real library."""
 
     REQUIRED_KEYWORD_ONLY = {
         "okf_find": {"query"},

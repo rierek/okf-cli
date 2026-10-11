@@ -2,7 +2,7 @@
 """Tests for the ctx command module cli/okf/ctx.py (OKFT-t0lj). The ctx storage layer
 they sit on is tested in test_okf_catalogue.py.
 
-Run: python3 -m unittest tests.test_okf_ctx -v
+Run: just test tests.test_okf_ctx -v
 """
 import contextlib
 import io
@@ -582,7 +582,7 @@ class CtxMaintain(CtxFixtureMixin, unittest.TestCase):
         self.assertFalse(os.path.exists(okf_catalogue.ctx_file(self.root, "demo")))
         with open(os.path.join(self.root, "b", "ref.md"), encoding="utf-8") as f:
             self.assertIn("(/_ctx/demo2.md)", f.read())
-        _, body = okf_catalogue.split_frontmatter(self._bytes("demo2").decode())
+        body = okf_catalogue.read_frontmatter(self._bytes("demo2").decode()).body
         self.assertTrue(body.lstrip().startswith("# demo2\n"), body)
         self.assertEqual(self._rows("demo2")[1], (2, "pflicht", "b/two.md", "c|two"))
         with open(os.path.join(self.root, "_ctx", "index.md"), encoding="utf-8") as f:

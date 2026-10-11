@@ -4,11 +4,17 @@ frontmatter and tags, configuration and registries, scopes, ctx storage, the
 managed index block and the loader of the embedding producer."""
 
 import importlib.util
+import io
 import os
 import re
 import subprocess
 import sys
+import tomllib
+import typing
 from collections import Counter
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.error import YAMLError
 from okf.errors import OkfError
 
 
@@ -146,8 +152,8 @@ def _ctx_cells(line):
 
 
 def parse_ctx(text):
-    fm, body = split_frontmatter(text)
-    desc = _dequote(fm.get("description", "")).replace('\\"', '"')
+    fm = read_frontmatter(text)
+    body, desc = fm.body, fm_text(fm.data, "description")
     lines = body.splitlines()
     start = next((i for i, ln in enumerate(lines) if ln.startswith("|")
                   and [c.lower() for c in _ctx_cells(ln)] == _CTX_COLS), None)
@@ -205,10 +211,10 @@ def ctx_findings(root, ap, stale=False):
     """[(rule_id, message)] for one _ctx/<slug>.md: one `kc/ctx/*` sub-rule per
     problem kind. Severity is the check registry's, not decided here."""
     text = read_file(ap)
-    fm, _body = split_frontmatter(text)
+    fm = read_frontmatter(text).data
     desc, entries, problems = parse_ctx(text)
     out = []
-    typ = fm.get("type", "").strip()
+    typ = fm_text(fm, "type").strip()
     if typ != CTX_TYPE:
         out.append(("kc/ctx/type", 'type is "{}", expected "{}"'.format(typ, CTX_TYPE)))
     stem = os.path.basename(ap)[:-3]
@@ -423,19 +429,51 @@ def iter_concepts(bundle_path, prune_staging=True):
             yield cid.replace(os.sep, "/"), ap
 
 
-def split_frontmatter(text):
-    """Return (fm_dict, body). Minimal top-level YAML key parse — no deps."""
-    fm, body = {}, text
-    if text.startswith(FM_DELIM):
-        end = text.find("\n" + FM_DELIM, len(FM_DELIM))
-        if end != -1:
-            block = text[len(FM_DELIM):end]
-            body = text[end + len(FM_DELIM) + 1:]
-            for line in block.splitlines():
-                m = re.match(r"^([A-Za-z0-9_\-]+):\s?(.*)$", line)
-                if m:
-                    fm[m.group(1)] = m.group(2).strip()
-    return fm, body
+class Frontmatter(typing.NamedTuple):
+    """A file text cut at its frontmatter block: `head + body` is the text.
+
+    `head` runs from the opening `---` through the `---` of the first later `\\n---`, and is empty
+    when there is no such block. For a non-empty head exactly one of `data` (the round-trip
+    mapping) and `error` (a one-line reason) is set; for an empty head both are None."""
+    head: str
+    data: "CommentedMap | None"
+    error: "str | None"
+    body: str
+
+
+# The one YAML instance. The reader loads with it and the writer dumps with it, so a block is
+# written in the style it is read in. The width never folds a long scalar onto a second line.
+YAML_RT = YAML(typ="rt")
+YAML_RT.preserve_quotes = True
+YAML_RT.indent(mapping=2, sequence=4, offset=2)
+YAML_RT.width = 2 ** 30
+
+
+def _yaml_reason(error):
+    problem, mark = getattr(error, "problem", None), getattr(error, "problem_mark", None)
+    if problem and mark:
+        reason = "{} (line {}, column {})".format(problem, mark.line + 1, mark.column + 1)
+    else:
+        reason = str(error)
+    return " ".join(reason.split()) or type(error).__name__
+
+
+def read_frontmatter(text):
+    """Split `text` at its frontmatter block and parse the block once."""
+    end = text.find("\n" + FM_DELIM, len(FM_DELIM)) if text.startswith(FM_DELIM) else -1
+    if end == -1:
+        return Frontmatter("", None, None, text)
+    cut = end + len(FM_DELIM) + 1
+    head, body = text[:cut], text[cut:]
+    try:
+        data = YAML_RT.load(text[len(FM_DELIM):end])
+    except (YAMLError, ValueError) as error:
+        return Frontmatter(head, None, _yaml_reason(error), body)
+    if data is None:
+        data = CommentedMap()
+    if not isinstance(data, CommentedMap):
+        return Frontmatter(head, None, "block is not a mapping", body)
+    return Frontmatter(head, data, None, body)
 
 
 def read_file(ap):
@@ -443,54 +481,41 @@ def read_file(ap):
         return f.read()
 
 
-def _dequote(s):
-    s = (s or "").strip()
-    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
-        return s[1:-1]
-    return s
+def scalar_text(value):
+    """A scalar as the text the author wrote: a string as is, nothing as empty, a typed scalar
+    (bool, number, date, timestamp) in its YAML form, so `true` stays `true`, not `True`."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return str(value)
+    out = io.StringIO()
+    YAML_RT.dump(value, out)
+    return out.getvalue().split("\n", 1)[0]
+
+
+def fm_text(data, key, default=""):
+    """The text of `data[key]`; `default` when `data` is None or lacks the key. A key with no
+    value gives ''."""
+    return scalar_text(data[key]) if data and key in data else default
+
+
+def tags_of(data):
+    """The tags of a frontmatter mapping, in order. A list gives its items; a lone scalar, which
+    is not a list but reads as one as before the switch (`tags: a, b`), is split at its commas.
+    An absent or empty `tags` gives []."""
+    tags = data.get("tags") if data else None
+    items = tags if isinstance(tags, list) else scalar_text(tags).split(",")
+    return [text for text in (scalar_text(item).strip() for item in items) if text]
+
+
+def fm_meta(data, stem):
+    """(type, title, description) of a frontmatter mapping as strings. The title falls back to
+    `stem`, the description to ''."""
+    return fm_text(data, "type"), fm_text(data, "title") or stem, fm_text(data, "description")
 
 
 def meta_of(ap):
-    fm, _ = split_frontmatter(read_file(ap))
-    title = _dequote(fm.get("title", "")) or os.path.basename(ap)[:-3]
-    return fm.get("type", ""), title, _dequote(fm.get("description", ""))
-
-
-def parse_tag_list(raw):
-    """Parse a frontmatter `tags` value like `[a, b, "c d"]` into a list."""
-    raw = (raw or "").strip()
-    if raw.startswith("[") and raw.endswith("]"):
-        raw = raw[1:-1]
-    if not raw.strip():
-        return []
-    return [_dequote(p) for p in raw.split(",") if p.strip()]
-
-
-def extract_tags(text):
-    """Read the `tags` frontmatter field, inline (`tags: [a, b]`) or as a
-    YAML block list (`tags:\\n  - a\\n  - b`). split_frontmatter() only keeps
-    single-line values, so this walks the raw frontmatter block itself."""
-    if not text.startswith(FM_DELIM):
-        return []
-    end = text.find("\n" + FM_DELIM, len(FM_DELIM))
-    if end == -1:
-        return []
-    lines = text[len(FM_DELIM):end].splitlines()
-    for i, line in enumerate(lines):
-        m = re.match(r"^tags:\s*(.*)$", line)
-        if not m:
-            continue
-        rest = m.group(1).strip()
-        if rest:
-            return parse_tag_list(rest)
-        tags = []
-        for cont in lines[i + 1:]:
-            lm = re.match(r"^\s*-\s*(.+)$", cont)
-            if not lm:
-                break
-            tags.append(_dequote(lm.group(1).strip()))
-        return tags
-    return []
+    return fm_meta(read_frontmatter(read_file(ap)).data, os.path.basename(ap)[:-3])
 
 
 def all_tags(root):
@@ -499,7 +524,7 @@ def all_tags(root):
     for b in list_bundles(root):
         bp = os.path.join(root, b)
         for _cid, ap in iter_concepts(bp):
-            for t in extract_tags(read_file(ap)):
+            for t in tags_of(read_frontmatter(read_file(ap)).data):
                 counts[t] += 1
     return counts
 
@@ -633,7 +658,7 @@ def index_h1_and_desc(ap):
     The intro is the first non-empty line after the H1 *only if* it is a real
     paragraph; if the body leads with a heading/list/comment there is no intro.
     """
-    _, body = split_frontmatter(read_file(ap))
+    body = read_frontmatter(read_file(ap)).body
     lines = body.splitlines()
     heads = list(iter_headings(body))
     h1 = next((text for level, text, _line in heads if level == 1), None)
@@ -866,97 +891,20 @@ def register_tags(root, entries):
     return list(new), already
 
 
-def _strip_toml_comment(line):
-    """Drop an unquoted trailing `# comment`, respecting quoted strings
-    so a `#` inside a value (rare, but legal TOML) is not mistaken for one."""
-    out = []
-    quote = None
-    for ch in line:
-        if quote:
-            out.append(ch)
-            if ch == quote:
-                quote = None
-            continue
-        if ch in "\"'":
-            quote = ch
-            out.append(ch)
-            continue
-        if ch == "#":
-            break
-        out.append(ch)
-    return "".join(out)
-
-
-def _parse_toml_scalar(value):
-    """Decode one TOML scalar: a quoted string, a flat array of quoted
-    strings, an integer, or true/false. Raises ValueError otherwise."""
-    if value.startswith("[") and value.endswith("]"):
-        inner = value[1:-1].strip()
-        if not inner:
-            return []
-        return [_parse_toml_scalar(item.strip()) for item in inner.split(",") if item.strip()]
-    if value in ("true", "false"):
-        return value == "true"
-    if re.match(r"^-?\d+$", value):
-        return int(value)
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
-    raise ValueError("unsupported value {!r}".format(value))
-
-
-def _parse_minimal_toml(text):
-    """Dependency-free fallback for Python <3.11 (no stdlib `tomllib`):
-    a flat-TOML subset — comments, blank lines, and `key = value` where
-    value is a quoted string, a bracketed array of those, an integer, or
-    true/false. No table headers, no multi-line values: this covers the
-    `.okf.toml` keys okf-cli actually reads, nothing more. Raises
-    ValueError with a line-numbered message on anything else."""
-    data = {}
-    for lineno, raw in enumerate(text.splitlines(), 1):
-        line = _strip_toml_comment(raw).strip()
-        if not line:
-            continue
-        if "=" not in line:
-            raise ValueError("line {}: expected 'key = value': {!r}".format(lineno, raw))
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip()
-        if not re.match(r"^[A-Za-z0-9_-]+$", key):
-            raise ValueError("line {}: invalid key {!r}".format(lineno, key))
-        try:
-            data[key] = _parse_toml_scalar(value)
-        except ValueError as e:
-            raise ValueError("line {}: {}".format(lineno, e))
-    return data
-
-
 def load_okf_config(root):
     """Parse <root>/.okf.toml if present. Returns a dict ({} if absent).
-    Leading-~ path values are expanduser-expanded. Uses the stdlib `tomllib`
-    on Python 3.11+; below that (no `tomllib`), falls back to
-    `_parse_minimal_toml`, a flat-TOML subset, so the CLI stays
-    dependency-free instead of requiring a backport package."""
+    Leading-~ path values are expanduser-expanded."""
     p = os.path.join(root, ".okf.toml")
     if not os.path.isfile(p):
         return {}
-    try:
-        import tomllib
-    except ModuleNotFoundError:
-        with open(p, "r", encoding="utf-8") as f:
-            try:
-                data = _parse_minimal_toml(f.read())
-            except ValueError as e:
-                raise OkfError("invalid_input",
-                               "ERROR: {} is not valid TOML: {}".format(p, e))
-    else:
-        with open(p, "rb") as f:
-            try:
-                data = tomllib.load(f)
-            except tomllib.TOMLDecodeError as e:
-                # Every caller now reaches this on every run, so a parse failure has
-                # to name the file and the reason instead of printing a traceback.
-                raise OkfError("invalid_input",
-                               "ERROR: {} is not valid TOML: {}".format(p, e))
+    with open(p, "rb") as f:
+        try:
+            data = tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            # Every caller now reaches this on every run, so a parse failure has
+            # to name the file and the reason instead of printing a traceback.
+            raise OkfError("invalid_input",
+                           "ERROR: {} is not valid TOML: {}".format(p, e))
     for k in ("kc_root", "types_source"):
         if isinstance(data.get(k), str):
             data[k] = os.path.expanduser(data[k])

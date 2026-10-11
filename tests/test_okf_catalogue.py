@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/catalogue.py — the shared catalogue layer. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_catalogue -v
+Run: just test tests.test_okf_catalogue -v
 """
 import contextlib
 import io
@@ -21,6 +21,7 @@ if _ROOT not in sys.path:
 
 from okf import catalogue as okf_catalogue
 from okf import check as okf_check
+from ruamel.yaml.comments import CommentedMap
 from okf.errors import EXIT_CODES, OkfError
 from tests.okf_testkit import CtxFixtureMixin, E, _scan
 
@@ -55,34 +56,6 @@ class OkfConfig(unittest.TestCase):
         self.assertEqual(cfg["bundle"], "demo-okf")
         self.assertFalse(cfg["types_source"].startswith("~"))  # expanduser ran
         self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
-
-    def test_parses_keys_without_tomllib(self):
-        """okf-cli.py is `#!/usr/bin/env python3` with no declared minimum
-        version; on Python <3.11 (no stdlib `tomllib`) load_okf_config must
-        still parse the same file via its dependency-free fallback, not
-        crash with ModuleNotFoundError."""
-        import sys
-        from unittest import mock
-        self._w(".okf.toml", 'kc_root = "~/Obsidian/Knowledge-Catalogue"\n'
-                             'types_source = "~/Obsidian/Knowledge-Catalogue/TYPES.md"\n'
-                             'bundle = "demo-okf"  # trailing comment\n'
-                             'wikilink_checked_bundles = ["demo-okf"]\n')
-        with mock.patch.dict(sys.modules, {"tomllib": None}):
-            cfg = okf_catalogue.load_okf_config(self.tmp)
-        self.assertEqual(cfg["bundle"], "demo-okf")
-        self.assertEqual(cfg["wikilink_checked_bundles"], ["demo-okf"])
-        self.assertFalse(cfg["types_source"].startswith("~"))  # expanduser ran
-        self.assertTrue(cfg["types_source"].endswith("Knowledge-Catalogue/TYPES.md"))
-
-    def test_malformed_config_without_tomllib_fails_with_a_message(self):
-        import sys
-        from unittest import mock
-        self._w(".okf.toml", "this is not = = toml\n")
-        with mock.patch.dict(sys.modules, {"tomllib": None}):
-            with self.assertRaises(OkfError) as cm:
-                okf_catalogue.load_okf_config(self.tmp)
-        self.assertEqual(cm.exception.kind, "invalid_input")
-        self.assertIn(".okf.toml is not valid TOML", cm.exception.message)
 
 
 class ListIndexableBundles(unittest.TestCase):
@@ -857,6 +830,131 @@ class CtxFindings(CtxFixtureMixin, unittest.TestCase):
         errs, warns = _scan(self.root, "_ctx")
         self.assertEqual({n for n, _, _ in errs + warns if n.startswith("kc/ctx/")},
                          registered - {"kc/ctx/stale-entry"})
+
+
+class ReadFrontmatter(unittest.TestCase):
+    """read_frontmatter: the one reader every frontmatter value, tag list and head/body split
+    goes through (R-11). Texts are literal; the production function is called on them."""
+
+    def test_head_and_body_rejoin_to_the_text_at_the_pre_switch_split(self):
+        # (text, head): the head ends right after the `---` of the first later `\n---`.
+        cases = [
+            ("", ""),
+            ("# only a body\n", ""),
+            ("---\ntitle: T\n---\nbody\n", "---\ntitle: T\n---"),
+            ("---\ntitle: T\n---", "---\ntitle: T\n---"),
+            ("---\n---\nbody", "---\n---"),
+            ("---\ntitle: T\n---\n---\nmore\n", "---\ntitle: T\n---"),
+            ("---\ntitle: T\nbody without a closing delimiter\n", ""),
+            ("--- title\n---\nx", "--- title\n---"),
+            (" ---\ntitle: T\n---\n", ""),
+        ]
+        for text, head in cases:
+            with self.subTest(text=text):
+                fm = okf_catalogue.read_frontmatter(text)
+                self.assertEqual(fm.head, head)
+                self.assertEqual(fm.head + fm.body, text)
+
+    def test_a_mapping_block_comes_back_as_the_round_trip_mapping(self):
+        fm = okf_catalogue.read_frontmatter(
+            "---\ntype: Note\ntitle: \"Quoted\"\nnested:\n  inner: x\n  deeper:\n    leaf: 1\n---\nbody")
+        self.assertIsNone(fm.error)
+        self.assertIsInstance(fm.data, CommentedMap)
+        self.assertEqual(fm.data["type"], "Note")
+        self.assertEqual(fm.data["nested"]["deeper"]["leaf"], 1)
+        self.assertEqual(fm.body, "\nbody")
+
+    def test_scalars_keep_their_yaml_type(self):
+        fm = okf_catalogue.read_frontmatter(
+            "---\nflag: true\ncount: 5\nday: 2026-08-07\nat: 2026-10-09T00:00:00Z\nname: \"true\"\n---\n")
+        self.assertIs(fm.data["flag"], True)
+        self.assertEqual(fm.data["count"], 5)
+        self.assertEqual(str(fm.data["day"]), "2026-08-07")
+        self.assertEqual(fm.data["at"].year, 2026)
+        self.assertEqual(fm.data["name"], "true")
+
+    def test_a_block_without_yaml_content_is_an_empty_mapping(self):
+        for text in ("---\n---\nbody", "---\n\n---\n", "---\n# only a comment\n---\n"):
+            with self.subTest(text=text):
+                fm = okf_catalogue.read_frontmatter(text)
+                self.assertEqual((fm.data, fm.error), (CommentedMap(), None))
+
+    def test_invalid_yaml_gives_no_data_and_a_one_line_reason_with_the_file_line(self):
+        text = "---\ntype: Note\ndescription: Stack-Umzug: Vergleich\n---\nbody"
+        fm = okf_catalogue.read_frontmatter(text)
+        self.assertIsNone(fm.data)
+        self.assertEqual(fm.error, "mapping values are not allowed here (line 3, column 25)")
+        self.assertEqual(fm.head + fm.body, text)
+
+    def test_a_block_that_is_not_a_mapping_gives_no_data_and_a_reason(self):
+        for block in ("- a\n- b\n", "just prose\n", "42\n"):
+            with self.subTest(block=block):
+                fm = okf_catalogue.read_frontmatter("---\n" + block + "---\nbody")
+                self.assertIsNone(fm.data)
+                self.assertEqual(fm.error, "block is not a mapping")
+
+    def test_a_duplicate_key_is_a_parse_failure_not_a_silent_last_wins(self):
+        fm = okf_catalogue.read_frontmatter("---\ntype: A\ntype: B\n---\n")
+        self.assertIsNone(fm.data)
+        self.assertIn("duplicate", fm.error.lower())
+        self.assertNotIn("\n", fm.error)
+
+    def test_no_block_means_no_data_and_no_error(self):
+        for text in ("", "plain\n", "---\nnever closed\n"):
+            with self.subTest(text=text):
+                fm = okf_catalogue.read_frontmatter(text)
+                self.assertEqual((fm.head, fm.data, fm.error, fm.body), ("", None, None, text))
+
+
+class FrontmatterAccessors(unittest.TestCase):
+    """tags_of, fm_text and meta_of turn the round-trip mapping into the strings consumers need."""
+
+    def _data(self, block):
+        return okf_catalogue.read_frontmatter("---\n" + block + "---\n").data
+
+    def test_tags_of_reads_flow_block_and_quoted_lists_alike(self):
+        self.assertEqual(okf_catalogue.tags_of(self._data("tags: [a, b]\n")), ["a", "b"])
+        self.assertEqual(okf_catalogue.tags_of(self._data("tags:\n  - a\n  - \"b c\"\n")), ["a", "b c"])
+        self.assertEqual(okf_catalogue.tags_of(self._data("tags:\n- a\n- b\n")), ["a", "b"])
+        self.assertEqual(okf_catalogue.tags_of(self._data("tags: []\n")), [])
+        self.assertEqual(okf_catalogue.tags_of(self._data("title: T\n")), [])
+        self.assertEqual(okf_catalogue.tags_of(None), [])
+
+    def test_tags_of_reads_a_lone_scalar_as_comma_separated_tags(self):
+        self.assertEqual(okf_catalogue.tags_of(self._data("tags: alpha, beta\n")), ["alpha", "beta"])
+        self.assertEqual(okf_catalogue.tags_of(self._data("tags: solo\n")), ["solo"])
+        self.assertEqual(okf_catalogue.tags_of(self._data("tags:\n")), [])
+
+    def test_tags_of_gives_a_number_or_boolean_tag_as_its_yaml_text(self):
+        self.assertEqual(okf_catalogue.tags_of(self._data("tags: [2026, true, x]\n")), ["2026", "true", "x"])
+
+    def test_fm_text_gives_every_scalar_as_the_text_the_author_wrote(self):
+        data = self._data("a: true\nb: 5.50\nc: 2026-08-07\nd: 2026-10-09T00:00:00Z\n"
+                          "e: \"quoted\"\nf:\ng: [x, y]\n")
+        self.assertEqual([okf_catalogue.fm_text(data, k) for k in "abcdef"],
+                         ["true", "5.50", "2026-08-07", "2026-10-09T00:00:00Z", "quoted", ""])
+        self.assertEqual(okf_catalogue.fm_text(data, "g"), "[x, y]")
+        self.assertEqual(okf_catalogue.fm_text(data, "missing"), "")
+        self.assertEqual(okf_catalogue.fm_text(data, "missing", "fallback"), "fallback")
+        self.assertEqual(okf_catalogue.fm_text(None, "a", "fallback"), "fallback")
+
+    def test_meta_of_returns_strings_with_the_stem_and_empty_fallbacks(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        for name, text in {
+                "typed.md": "---\ntype: 7\ntitle: 2026-08-07\ndescription: true\n---\n",
+                "bare.md": "---\ntype: Note\n---\n",
+                "broken.md": "---\ntype: [unclosed\n---\n",
+                "none.md": "no frontmatter\n"}.items():
+            with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                f.write(text)
+
+        def meta(name):
+            return okf_catalogue.meta_of(os.path.join(tmp, name))
+        self.assertEqual(meta("typed.md"), ("7", "2026-08-07", "true"))
+        self.assertEqual(meta("bare.md"), ("Note", "bare", ""))
+        self.assertEqual(meta("broken.md"), ("", "broken", ""))
+        self.assertEqual(meta("none.md"), ("", "none", ""))
 
 
 if __name__ == "__main__":

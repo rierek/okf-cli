@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/linkscan.py — link scanning. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_linkscan -v
+Run: just test tests.test_okf_linkscan -v
 """
 import os
 import shutil

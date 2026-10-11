@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/find_filters.py — the filters every search arm shares. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_find_filters -v
+Run: just test tests.test_okf_find_filters -v
 """
 import os
 import shutil
@@ -16,7 +16,7 @@ if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
 from okf import find_filters as okf_find_filters
-from okf.catalogue import iter_concepts, resolve_scopes, split_frontmatter
+from okf.catalogue import iter_concepts, read_frontmatter, resolve_scopes
 from okf.errors import OkfError
 from okf.find_filters import (
     EMB_FILTER_COLUMNS, FTS_FILTER_COLUMNS, And, Compare, Compare as C, In, Not, Or,
@@ -188,7 +188,7 @@ def concept(path, front=(), tags=None):
     if tags is not None:
         lines.append("tags: [{}]".format(", ".join(tags)))
     text = "\n".join(lines + ["---", "# body", ""])
-    return path, split_frontmatter(text)[0], text
+    return path, read_frontmatter(text).data, text
 
 
 # path -> concept; sets below name concepts by their path
@@ -349,6 +349,44 @@ class CompileWhereSemantics(unittest.TestCase):
                 self.assertFalse(compile_where("path ~ x/ or path ~ y/ or type = Runbook").matches(root, "b/missing"))
             finally:
                 shutil.rmtree(root, ignore_errors=True)
+
+
+class WhereOnYamlValues(unittest.TestCase):
+    """R-11 — the field registry reads the round-trip mapping: dotted names walk nested mappings, and a
+    boolean, number, date or timestamp selects what its text selected before the switch."""
+
+    TEXT = {
+        "n/nested": "---\ntype: Note\na:\n  b: x\n  c:\n    d: 1\n---\n",
+        "n/flat": "---\ntype: Note\na: x\n---\n",
+        "n/typed": ("---\ntype: Note\ndraft: true\nscore: 5.50\ncount: 12\nday: 2026-08-07\n"
+                    "at: 2026-10-09T00:00:00Z\nnote: \"true\"\n---\n"),
+    }
+
+    def _selected(self, expression):
+        filters = compile_where(expression)
+        return sorted(path for path, text in self.TEXT.items()
+                      if filters.matches_loaded(path, read_frontmatter(text).data, text))
+
+    def test_a_dotted_name_walks_nested_mappings(self):
+        self.assertEqual(self._selected("a.b = x"), ["n/nested"])
+        self.assertEqual(self._selected("a.c.d = 1"), ["n/nested"])
+        self.assertEqual(self._selected("a.c.d > 0 and a.b in (x, y)"), ["n/nested"])
+        self.assertEqual(self._selected("a.missing = x"), [])
+
+    def test_a_mapping_valued_key_is_absent_for_a_comparison_and_a_scalar_has_no_children(self):
+        self.assertEqual(self._selected("a = x"), ["n/flat"])
+        self.assertEqual(self._selected("a.b != x"), ["n/flat", "n/typed"])
+
+    def test_typed_scalars_select_by_their_yaml_text(self):
+        self.assertEqual(self._selected("draft = true"), ["n/typed"])
+        self.assertEqual(self._selected("note = true"), ["n/typed"])
+        self.assertEqual(self._selected("score = 5.50"), ["n/typed"])
+        self.assertEqual(self._selected("score > 5 and count >= 12"), ["n/typed"])
+        self.assertEqual(self._selected("count < 9"), [])
+        self.assertEqual(self._selected("day = 2026-08-07"), ["n/typed"])
+        self.assertEqual(self._selected("day < 2026-09-01"), ["n/typed"])
+        self.assertEqual(self._selected("at = 2026-10-09T00:00:00Z"), ["n/typed"])
+
 
 
 class SqlWherePushDown(unittest.TestCase):

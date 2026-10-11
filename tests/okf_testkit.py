@@ -133,7 +133,7 @@ class SyncFixtureMixin:
         return self._run(okf_sync.cmd_sync_update, **kw)
 
     def _payload_of(self, rel):
-        _, body = okf_catalogue.split_frontmatter(self._r(rel))
+        body = okf_catalogue.read_frontmatter(self._r(rel)).body
         return okf_sync.parse_sync_blocks(body)[0]["payload"]
 
 

@@ -13,7 +13,7 @@ Three tiers:
   * Fixture-Tests (PickBundles, GoldenBundleConsistency,
     FixtureSpecGoldenAlignment) — isolierte tmpdirs, kein Live-Catalogue.
 
-Run: python3 -m unittest tests.test_eval_runner -v
+Run: just test tests.test_eval_runner -v
 """
 import importlib.util
 import json

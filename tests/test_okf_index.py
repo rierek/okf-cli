@@ -2,7 +2,7 @@
 """Tests for cli/okf/index.py — the index and reindex commands, the bundle
 summary renderers and the flat-index migration. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_index -v
+Run: just test tests.test_okf_index -v
 """
 import argparse
 import os

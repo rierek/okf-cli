@@ -10,7 +10,7 @@ from okf.output import _add_output, _note
 
 from okf import catalogue
 from okf.catalogue import (
-    _dequote, iter_concepts, meta_of, read_file, resolve_scopes, split_frontmatter,
+    fm_meta, iter_concepts, meta_of, read_file, read_frontmatter, resolve_scopes,
 )
 from okf.find_filters import compile_where
 from okf.parser_support import _add_filters, _sub
@@ -221,11 +221,10 @@ def cmd_recent(root, args):
             if filters:
                 # One read feeding the whole predicate and the frontmatter meta.
                 text = read_file(ap)
-                fm, _body = split_frontmatter(text)
+                fm = read_frontmatter(text).data
                 if not filters.matches_loaded(path, fm, text):
                     continue
-                meta[path] = (_dequote(fm.get("type", "")), _dequote(fm.get("title", "")) or cid,
-                              _dequote(fm.get("description", "")))
+                meta[path] = fm_meta(fm, cid)
             ts = events.get(concept_git_key(prefix, cid)) if events else None
             dated_repo[path] = events is not None
             entries.append((path, ts))

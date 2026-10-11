@@ -12,8 +12,8 @@ from okf.output import _add_output
 
 from okf import catalogue
 from okf.catalogue import (
-    FM_DELIM, TAG_DESC_MAX, all_tags, extract_tags, iter_concepts, load_tags, parse_tag_list,
-    read_file, register_tags, resolve_scopes, split_frontmatter, write_file,
+    FM_DELIM, TAG_DESC_MAX, all_tags, iter_concepts, load_tags, read_file, read_frontmatter,
+    register_tags, resolve_scopes, tags_of, write_file,
 )
 from okf.find_filters import compile_where
 from okf.parser_support import _add_filters, _complete_tags, _sub
@@ -22,6 +22,23 @@ from okf.parser_support import _add_filters, _complete_tags, _sub
 TAGS_INLINE_RE = re.compile(r"^tags:[ \t]*\[.*\]\s*$", re.M)
 TAGS_INLINE_CONTENT_RE = re.compile(r"^tags:[ \t]*\[(.*)\]\s*$", re.M)
 TAGS_BLOCK_RE = re.compile(r"^tags:[ \t]*\n((?:[ \t]*-[ \t]*.+\n?)*)", re.M)
+
+
+def _dequote(s):
+    s = (s or "").strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        return s[1:-1]
+    return s
+
+
+def parse_tag_list(raw):
+    """Parse a frontmatter `tags` value like `[a, b, "c d"]` into a list."""
+    raw = (raw or "").strip()
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    if not raw.strip():
+        return []
+    return [_dequote(p) for p in raw.split(",") if p.strip()]
 
 
 def rewrite_tags_in_frontmatter(text, new_tags):
@@ -79,7 +96,7 @@ def _selected(filters, root, ap, text):
         return True
     rel = os.path.relpath(ap, root).replace(os.sep, "/")
     return filters.matches_loaded(rel[:-3] if rel.endswith(".md") else rel,
-                                  split_frontmatter(text)[0], text)
+                                  read_frontmatter(text).data, text)
 
 
 def cmd_merge_tags(root, args):
@@ -93,7 +110,7 @@ def cmd_merge_tags(root, args):
             text = read_file(ap)
             if not _selected(filters, root, ap, text):
                 continue
-            tags = extract_tags(text)
+            tags = tags_of(read_frontmatter(text).data)
             if not any(t in sources for t in tags):
                 continue
             new_tags, seen = [], set()
@@ -139,7 +156,7 @@ def cmd_remove_tags(root, args):
             text = read_file(ap)
             if not _selected(filters, root, ap, text):
                 continue
-            tags = extract_tags(text)
+            tags = tags_of(read_frontmatter(text).data)
             if not any(t in targets for t in tags):
                 continue
             new_tags = [t for t in tags if t not in targets]

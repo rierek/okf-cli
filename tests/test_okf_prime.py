@@ -2,7 +2,7 @@
 """Tests for cli/okf/prime.py — the prime command: onboarding guide, live catalogue
 state and bundle listing. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_prime -v
+Run: just test tests.test_okf_prime -v
 """
 import os
 import sys
@@ -155,7 +155,7 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
     def _make_tagvec(self, paths):
         """A .tagvec carrying one CURRENT-content vector per given path.
         The key is computed with the production concept_cache_key() (via
-        split_frontmatter/read_file/concept_text(), the same functions
+        read_frontmatter/read_file/concept_text(), the same functions
         plan_concept_delta() uses per concept) so 'covered' here means
         exactly what it means to the real detector, not a stand-in key."""
         bt = okf_catalogue._load_build_tagvec()
@@ -164,8 +164,9 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         for p in paths:
             b, cid = p.split("/", 1)
             ap = os.path.join(self.tmp, b, cid + ".md")
-            fm, body = okf_catalogue.split_frontmatter(okf_catalogue.read_file(ap))
-            title = okf_catalogue._dequote(fm.get("title", "")) or cid
+            parsed = okf_catalogue.read_frontmatter(okf_catalogue.read_file(ap))
+            body = parsed.body
+            title = okf_catalogue.fm_meta(parsed.data, os.path.basename(ap)[:-3])[1]
             text = bt.concept_text(title, body)
             key = bt.concept_cache_key(okf_semantic.SEMANTIC_MODEL, p, text)
             rows.append((key, p, okf_semantic.SEMANTIC_MODEL, 2, bt.pack_vec([1.0, 0.0])))

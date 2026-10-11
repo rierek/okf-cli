@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/tags.py — the tag verbs and the auto-embedding of newly
 registered tags. Stdlib unittest, no deps.
-Run: python3 -m unittest tests.test_okf_tags -v
+Run: just test tests.test_okf_tags -v
 """
 import os
 import shutil

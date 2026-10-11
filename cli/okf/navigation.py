@@ -9,8 +9,8 @@ from okf.output import _add_output
 
 from okf import linkscan
 from okf.catalogue import (
-    iter_concepts, iter_headings, meta_of, read_file, require_bundle_dir, resolve_concept,
-    resolve_scopes, split_frontmatter,
+    fm_meta, fm_text, iter_concepts, iter_headings, read_file, read_frontmatter, require_bundle_dir,
+    resolve_concept, resolve_scopes,
 )
 from okf.find_filters import compile_where
 from okf.linkscan import _refs_display
@@ -30,9 +30,10 @@ def cmd_list(root, args):
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
             path = rel[:-3] if rel.endswith(".md") else rel
             text = read_file(ap)
-            if not filters.matches_loaded(path, split_frontmatter(text)[0], text):
+            fm = read_frontmatter(text).data
+            if not filters.matches_loaded(path, fm, text):
                 continue
-            t, title, desc = meta_of(ap)
+            t, title, desc = fm_meta(fm, os.path.basename(ap)[:-3])
             hits.append((title, t, path, desc))
     hits.sort(key=lambda x: x[0].casefold())
     if getattr(args, "json", False):
@@ -98,11 +99,11 @@ def _read_section(body, section, first_file_line):
 
 
 def _split_head_body(text):
-    """(frontmatter block, rest) at the point split_frontmatter splits. The block
-    keeps both delimiter lines and the last newline (split_frontmatter leaves
+    """(frontmatter block, rest) at the point read_frontmatter splits. The block
+    keeps both delimiter lines and the last newline (read_frontmatter leaves
     that newline on the body side); without frontmatter it is "" and rest is text."""
-    body = split_frontmatter(text)[1]
-    head = text[:len(text) - len(body)]
+    split = read_frontmatter(text)
+    head, body = split.head, split.body
     if head and body.startswith("\n"):
         return head + "\n", body[1:]
     return head, body
@@ -148,15 +149,16 @@ def cmd_info(root, args):
 
 def cmd_toc(root, args):
     ap = resolve_concept(root, args.path)
-    fm, body = split_frontmatter(read_file(ap))
-    title = fm.get("title") or os.path.basename(ap)[:-3]
+    parsed = read_frontmatter(read_file(ap))
+    body = parsed.body
+    typ, title, _desc = fm_meta(parsed.data, os.path.basename(ap)[:-3])
     # --level 0: the full tree; otherwise only the headings of that level (default h2)
     heads = [(lvl, text) for lvl, text, _line in iter_headings(body)
              if args.level == 0 or lvl == args.level]
     if getattr(args, "json", False):
-        return {"path": _concept_path(root, ap), "title": title, "type": fm.get("type", ""),
+        return {"path": _concept_path(root, ap), "title": title, "type": typ,
                 "headings": [{"level": lvl, "text": text} for lvl, text in heads]}
-    print("# {}  [{}]".format(title, fm.get("type", "")))
+    print("# {}  [{}]".format(title, typ))
     for lvl, text in heads:
         print("  " * (lvl - 1) + "- " + text if args.level == 0 else "- " + text)
     if not heads:
@@ -170,9 +172,10 @@ def bundle_graph(root, bundle):
     nodes, edges = [], []
     link_re = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     for cid, ap in sorted(concepts.items()):
-        fm, body = split_frontmatter(read_file(ap))
-        nodes.append({"id": cid, "title": fm.get("title") or cid,
-                      "type": fm.get("type", ""), "body": body})
+        parsed = read_frontmatter(read_file(ap))
+        body = parsed.body
+        nodes.append({"id": cid, "title": fm_text(parsed.data, "title") or cid,
+                      "type": fm_text(parsed.data, "type"), "body": body})
         cdir = os.path.dirname(cid)
         for m in link_re.finditer(re.sub(r"```.*?```", "", body, flags=re.S)):
             tgt = m.group(1).split("#")[0].strip()

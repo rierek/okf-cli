@@ -3,7 +3,7 @@
 the emitter in main()) and the call-note path (`_note`). The commands themselves are covered
 in their own modules; here a test-local parser stands in for a converted command.
 
-Run: python3 -m unittest tests.test_okf_output -v
+Run: just test tests.test_okf_output -v
 """
 import argparse
 import contextlib

@@ -2,7 +2,7 @@
 """Tests for the entry file cli/okf-cli.py itself: main(), the root safety it enforces and the
 BrokenPipe handling of its __main__ guard. The commands live in cli/okf/, one test module each.
 
-Run: python3 -m unittest tests.test_okf_cli -v
+Run: just test tests.test_okf_cli -v
 """
 import importlib.util
 import io

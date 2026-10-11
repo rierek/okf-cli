@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from okf.catalogue import _dequote, extract_tags, read_file, split_frontmatter
+from okf.catalogue import read_file, read_frontmatter, scalar_text, tags_of
 from okf.errors import OkfError
 
 
@@ -221,13 +221,13 @@ _COMPARE = {"=": operator.eq, "~": lambda value, wanted: wanted in value, "<": _
             "<=": _ordered(operator.le), ">": _ordered(operator.gt), ">=": _ordered(operator.ge)}
 
 # The one field registry: field name -> resolver(path, load), the list of values the concept holds
-# for the field. load() returns (frontmatter dict, text) and reads the file only when called. A
-# name not listed here is a frontmatter key, dotted for nested mappings. tier, stale and the v0.2
-# keys register here later.
+# for the field. load() returns (frontmatter mapping or None, text) and reads the file only when
+# called. A name not listed here is a frontmatter key, dotted for nested mappings. tier, stale and
+# the v0.2 keys register here later.
 FIELDS = {
     "path": lambda path, load: [path],
     "archived": lambda path, load: ["true" if path.startswith(FindFilters._ARCHIVE_PREFIX) else "false"],
-    "tag": lambda path, load: extract_tags(load()[1]),
+    "tag": lambda path, load: tags_of(load()[0]),
 }
 
 
@@ -240,9 +240,9 @@ def _values(field, path, load):
         if not isinstance(value, dict) or part not in value:
             return []  # absent
         value = value[part]
-    if isinstance(value, (list, tuple)):
-        return [str(v) for v in value]
-    return [] if isinstance(value, dict) else [_dequote(str(value))]
+    if isinstance(value, list):
+        return [scalar_text(v) for v in value]
+    return [] if isinstance(value, dict) else [scalar_text(value)]
 
 
 def _evaluate(node, path, load):
@@ -438,7 +438,7 @@ class FindFilters:
         @functools.cache
         def load():
             text = read_file(os.path.join(root, path + ".md"))  # raises when the file is gone
-            return split_frontmatter(text)[0], text
+            return read_frontmatter(text).data, text
 
         try:
             return _evaluate(self.tree, path, load)

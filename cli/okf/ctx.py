@@ -14,7 +14,7 @@ from okf import check, linkscan, rename
 from okf.catalogue import (
     CTX_DIR, CTX_MODES, CTX_VERBS, _ctx_die, ctx_dir, ctx_entry_abspath, ctx_file, ctx_findings,
     ctx_memberships, ctx_normalize_path, ctx_slug_problem, ctx_slugs, iter_headings, load_ctx,
-    meta_of, read_file, reindex_tree, save_ctx, split_frontmatter,
+    meta_of, read_file, read_frontmatter, reindex_tree, save_ctx,
 )
 from okf.linkscan import _refs_display, iter_md_links
 from okf.parser_support import _complete_concepts, _complete_files, _completion_root, _sub
@@ -188,7 +188,7 @@ def cmd_ctx_toc(root, args):
     for m in _ctx_members(root, args.slug)[1]:
         heads = []
         if m["alive"] and m["path"].endswith(".md"):
-            body = split_frontmatter(read_file(m["abspath"]))[1]
+            body = read_frontmatter(read_file(m["abspath"])).body
             heads = [{"level": lv, "text": t} for lv, t, _line in iter_headings(body)
                      if not args.depth or lv <= args.depth]
         entries.append({"path": m["path"], "alive": m["alive"], "headings": heads})

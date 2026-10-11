@@ -6,7 +6,7 @@ touches the real home, the real PATH or a real harness. Stub CLIs (claude,
 codex, openclaw) behave like the real ones for the one thing install reads
 back — the config file their `mcp add/set` writes.
 
-Run: python3 -m unittest tests.test_okf_install -v
+Run: just test tests.test_okf_install -v
 """
 import contextlib
 import importlib.util

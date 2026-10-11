@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for cli/okf/fts.py — the FTS5 index, its BM25 ranking and the query tokenizer. Stdlib unittest, no deps.
 
-Run: python3 -m unittest tests.test_okf_fts -v
+Run: just test tests.test_okf_fts -v
 """
 import os
 import shutil

@@ -32,7 +32,7 @@ Usage:
         [--target {tags,concepts,both}]
         [--concept-path-prefix PREFIX] [--concept-limit N] [--produce]
 
-Run: python3 -m unittest tests.test_embeddings_tagvec -v
+Run: just test tests.test_embeddings_tagvec -v
 """
 import argparse
 import hashlib
@@ -189,8 +189,9 @@ def plan_concept_delta(root, model, db_path, path_prefix=None, limit=None):
     for path, ap in sorted(_iter_all_concepts(catalogue, root)):
         if path_prefix and not path.startswith(path_prefix):
             continue
-        fm, body = catalogue.split_frontmatter(catalogue.read_file(ap))
-        title = catalogue._dequote(fm.get("title", "")) or os.path.basename(ap)[:-3]
+        parsed = catalogue.read_frontmatter(catalogue.read_file(ap))
+        body = parsed.body
+        title = catalogue.fm_meta(parsed.data, os.path.basename(ap)[:-3])[1]
         text = concept_text(title, body)
         key = concept_cache_key(model, path, text)
         if key not in have:

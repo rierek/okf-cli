@@ -9,7 +9,7 @@ from okf.errors import OkfError
 
 from okf.catalogue import (
     CANON_END, CANON_OPEN_RE, SYNC_BODY, SYNC_END, SYNC_OPEN_LIT, SYNC_OPEN_RE, iter_all_md,
-    read_file, read_file_verbatim, resolve_concept, resolve_scopes, split_frontmatter,
+    read_file, read_file_verbatim, read_frontmatter, resolve_concept, resolve_scopes,
     write_file_verbatim,
 )
 from okf.output import _add_output, _note
@@ -130,7 +130,7 @@ def build_canon_block_index(root):
     # exists — every consumer then misreported `source-missing`.
     for _, bp in resolve_scopes(root, None, include_archive=True):
         for ap in iter_all_md(bp, prune_staging=False):
-            _, body = split_frontmatter(read_file(ap))
+            body = read_frontmatter(read_file(ap)).body
             if "okf:canon" not in body:
                 continue
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
@@ -169,7 +169,7 @@ def _canon_payload(root, concept, block_id):
     missing. Shared by sync-export and sync-insert so both refuse identically."""
     ap = resolve_concept(root, concept)
     rel = os.path.relpath(ap, root).replace(os.sep, "/")
-    _, body = split_frontmatter(read_file(ap))
+    body = read_frontmatter(read_file(ap)).body
     for blk in parse_canon_blocks(body):
         if blk["id"] != block_id:
             continue
@@ -192,7 +192,7 @@ def scan_sync_blocks(root, target, source=None, block_id=None):
     out = []
     for _, bp in resolve_scopes(root, target):
         for ap in iter_all_md(bp):
-            _, body = split_frontmatter(read_file(ap))
+            body = read_frontmatter(read_file(ap)).body
             if SYNC_OPEN_LIT not in body:
                 continue
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
@@ -236,8 +236,8 @@ def cmd_sync_insert(root, args):
     text = read_file_verbatim(cap)
     if text is None:
         raise OkfError("non_conformant", "not valid UTF-8: {}".format(consumer_rel))
-    _, body = split_frontmatter(text)
-    head = text[:len(text) - len(body)]
+    split = read_frontmatter(text)
+    head, body = split.head, split.body
     for rec in parse_sync_blocks(body):
         if rec["id"] != args.block_id:
             continue
@@ -323,8 +323,8 @@ def cmd_sync_update(root, args):
         if text is None:
             _note("skipping {} — not valid UTF-8".format(ap))
             continue
-        _, body = split_frontmatter(text)
-        head = text[:len(text) - len(body)]
+        split = read_frontmatter(text)
+        head, body = split.head, split.body
         out, last = [], 0
         for rel, rec in sorted(recs, key=lambda t: t[1]["span"][0]):
             a, b = rec["span"]
@@ -366,7 +366,7 @@ def _complete_block_ids(parsed_args, **_):
     concept = getattr(parsed_args, "concept", None)
     if root is None or not concept:
         return []
-    _fm, body = split_frontmatter(read_file(resolve_concept(root, concept)))
+    body = read_frontmatter(read_file(resolve_concept(root, concept))).body
     return [blk["id"] for blk in parse_canon_blocks(body)]
 
 

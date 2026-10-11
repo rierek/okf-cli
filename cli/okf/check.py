@@ -5,15 +5,16 @@ the check, fix-crosslinks and fix-xml-tags commands."""
 from collections import namedtuple
 import os
 import re
+from ruamel.yaml.comments import CommentedSeq
 
 from okf.errors import OkfError
 from okf import sync, wikilinks
 from okf.output import _add_output, _note
 from okf.catalogue import (
-    CANON_END, CROSSLINK_RE, CTX_DIR, FM_DELIM, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE, _dequote,
-    _mask_managed_block, _split_managed_block, ctx_findings, extract_tags, index_h1_and_desc,
-    iter_all_md, load_okf_config, load_tags, load_types, read_file, resolve_scopes,
-    split_frontmatter, write_file,
+    CANON_END, CROSSLINK_RE, CTX_DIR, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE,
+    _mask_managed_block, _split_managed_block, ctx_findings, fm_text, index_h1_and_desc,
+    iter_all_md, load_okf_config, load_tags, load_types, read_file, read_frontmatter, resolve_scopes,
+    tags_of, write_file,
 )
 from okf.parser_support import _complete_files, _complete_scopes, _sub
 from okf.sync import classify_sync_block, parse_canon_blocks, parse_sync_blocks
@@ -27,33 +28,32 @@ GERMAN_FM_KEYS = {"titel", "beschreibung", "typ", "stichworte", "datum", "zusamm
 
 def gather_file_context(root, bundle, ap):
     text = read_file(ap)
-    fm, body = split_frontmatter(text)
-    has_fm = text.startswith(FM_DELIM) and text.find("\n" + FM_DELIM, len(FM_DELIM)) != -1
+    parsed = read_frontmatter(text)
     fn = os.path.basename(ap)
     return {
         "root": root, "bundle": bundle, "ap": ap,
         "rel": os.path.relpath(ap, root).replace(os.sep, "/"),
-        "fn": fn, "text": text, "fm": fm, "body": body,
-        "has_fm": has_fm, "is_reserved": fn.lower() in RESERVED,
+        "fn": fn, "text": text, "fm": parsed.data, "fm_error": parsed.error, "body": parsed.body,
+        "has_fm": parsed.data is not None, "is_reserved": fn.lower() in RESERVED,
     }
 
 
 def check_fm_parseable(ctx):
-    if ctx["is_reserved"]:
+    if ctx["is_reserved"] or ctx["has_fm"]:
         return []
-    return [] if ctx["has_fm"] else ["no parseable frontmatter"]
+    return ["no parseable frontmatter" + (": " + ctx["fm_error"] if ctx["fm_error"] else "")]
 
 
 def check_type_nonempty(ctx):
     if ctx["is_reserved"] or not ctx["has_fm"]:
         return []
-    return [] if ctx["fm"].get("type", "").strip() else ["missing/empty `type`"]
+    return [] if fm_text(ctx["fm"], "type").strip() else ["missing/empty `type`"]
 
 
 def check_reserved_no_type(ctx):
     if not ctx["is_reserved"] or not ctx["has_fm"]:
         return []
-    return ["reserved file must not carry `type`"] if ctx["fm"].get("type", "").strip() else []
+    return ["reserved file must not carry `type`"] if fm_text(ctx["fm"], "type").strip() else []
 
 
 def check_filename_chars(ctx):
@@ -66,7 +66,7 @@ def check_filename_chars(ctx):
 def check_type_registered(ctx, types_set):
     if ctx["is_reserved"] or not ctx["has_fm"] or types_set is None:
         return []
-    t = ctx["fm"].get("type", "").strip()
+    t = fm_text(ctx["fm"], "type").strip()
     return ["type `{}` not registered in TYPES.md".format(t)] if t and t not in types_set else []
 
 
@@ -80,7 +80,7 @@ def check_tag_registered(ctx, tags_set):
     if ctx["is_reserved"] or not ctx["has_fm"] or tags_set is None:
         return []
     return ["tag `{}` not registered in TAGS.md".format(t)
-            for t in extract_tags(ctx["text"]) if t not in tags_set]
+            for t in tags_of(ctx["fm"]) if t not in tags_set]
 
 
 def check_english_keys(ctx):
@@ -95,8 +95,8 @@ def check_tags_block_form(ctx):
     block-list, not inline `[a, b]`. Empty `[]` is fine (nothing to convert)."""
     if ctx["is_reserved"] or not ctx["has_fm"]:
         return []
-    raw = ctx["fm"].get("tags", "").strip()
-    if raw.startswith("[") and raw.endswith("]") and raw[1:-1].strip():
+    tags = ctx["fm"].get("tags")
+    if isinstance(tags, CommentedSeq) and tags and tags.fa.flow_style():
         return ["tags field uses inline form — local convention requires YAML block-list"]
     return []
 
@@ -145,7 +145,7 @@ def check_superseded_by_resolves(ctx):
     check_crosslink_format uses (leading `/` = catalogue root)."""
     if ctx["is_reserved"] or not ctx["has_fm"]:
         return []
-    sb = _dequote(ctx["fm"].get("superseded_by", "").strip())
+    sb = fm_text(ctx["fm"], "superseded_by").strip()
     if not sb:
         return []
     if os.path.isfile(os.path.join(ctx["root"], sb.lstrip("/"))):
@@ -160,10 +160,10 @@ def check_superseded_by_scope(ctx):
     typo an author can fix at leisure) — WARNING, not ERROR."""
     if ctx["is_reserved"] or not ctx["has_fm"]:
         return []
-    sb = _dequote(ctx["fm"].get("superseded_by", "").strip())
+    sb = fm_text(ctx["fm"], "superseded_by").strip()
     if not sb:
         return []
-    t = ctx["fm"].get("type", "").strip()
+    t = fm_text(ctx["fm"], "type").strip()
     if t == "Decision":
         return []
     return ["superseded_by used on non-Decision concept (type={})".format(
@@ -230,7 +230,7 @@ def check_canon_blocks(ctx):
 def _mask_code_spans(body):
     """Stash materialised canon blocks, fenced code blocks and inline code so
     a pattern scan skips them.
-    Frontmatter is already split off by the caller (ctx["body"]/split_frontmatter),
+    Frontmatter is already split off by the caller (ctx["body"]/read_frontmatter),
     so only sync blocks/fences/inline-code need masking here. Mirrors the
     Vault-side wrap-hex-tags.js mask/unmask convention for the same class of
     problem.
@@ -290,8 +290,8 @@ def fix_xml_like_tags(root, target, dry_run=False):
             if os.path.basename(ap).lower() in RESERVED:
                 continue
             text = read_file(ap)
-            _, body = split_frontmatter(text)
-            head = text[:len(text) - len(body)]
+            split = read_frontmatter(text)
+            head, body = split.head, split.body
             masked, tokens = _mask_code_spans(body)
             count = 0
 
@@ -446,8 +446,8 @@ def fix_crosslinks(root, target, dry_run=False, include_reserved=False):
             if is_reserved and not include_reserved:
                 continue
             text = read_file(ap)
-            _, body = split_frontmatter(text)
-            head = text[:len(text) - len(body)]
+            split = read_frontmatter(text)
+            head, body = split.head, split.body
             cdir = os.path.dirname(os.path.relpath(ap, bp))
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
             if is_reserved:

@@ -6,7 +6,7 @@ sync-status, wikilinks). One five-key document per call, `data` carrying
 what the text output prints, classified failures in `error`. Every call runs the real entry
 file against a throwaway catalogue; no call reaches an embedding backend.
 
-Run: python3 -m unittest tests.test_okf_envelope -v
+Run: just test tests.test_okf_envelope -v
 """
 import contextlib
 import io
