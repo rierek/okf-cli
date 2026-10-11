@@ -202,50 +202,54 @@ def render_ctx(slug, description, entries):
 
 
 def ctx_findings(root, ap, stale=False):
-    """(errors, warnings) message lists for one _ctx/<slug>.md."""
+    """[(rule_id, message)] for one _ctx/<slug>.md: one `kc/ctx/*` sub-rule per
+    problem kind. Severity is the check registry's, not decided here."""
     text = read_file(ap)
     fm, _body = split_frontmatter(text)
     desc, entries, problems = parse_ctx(text)
-    errors, warnings = [], []
+    out = []
     typ = fm.get("type", "").strip()
     if typ != CTX_TYPE:
-        errors.append('type is "{}", expected "{}"'.format(typ, CTX_TYPE))
+        out.append(("kc/ctx/type", 'type is "{}", expected "{}"'.format(typ, CTX_TYPE)))
     stem = os.path.basename(ap)[:-3]
     bad = ctx_slug_problem(stem)
     if bad:
-        errors.append('slug "{}" invalid: {}'.format(stem, bad))
-    errors += problems
+        out.append(("kc/ctx/slug", 'slug "{}" invalid: {}'.format(stem, bad)))
+    out += [("kc/ctx/row-format", p) for p in problems]
 
     def pos_s(e):
         return "-" if e["pos"] is None else str(e["pos"])
 
     for e in entries:
         if e["mode"] not in CTX_MODES:
-            errors.append('pos {}: mode "{}" is not pflicht or nachschlag'.format(pos_s(e), e["mode"]))
+            out.append(("kc/ctx/mode", 'pos {}: mode "{}" is not pflicht or nachschlag'.format(
+                pos_s(e), e["mode"])))
     req = [e for e in entries if e["mode"] == "pflicht"]
     if [e["pos"] for e in req] != list(range(1, len(req) + 1)):
-        errors.append("required positions are not 1..{} in table order: {}".format(
-            len(req), ", ".join(pos_s(e) for e in req)))
+        out.append(("kc/ctx/required-positions",
+                    "required positions are not 1..{} in table order: {}".format(
+                        len(req), ", ".join(pos_s(e) for e in req))))
     for e in entries:
         if e["mode"] == "nachschlag" and e["pos"] is not None:
-            errors.append("reference entry carries pos {} (use -)".format(e["pos"]))
+            out.append(("kc/ctx/reference-position",
+                        "reference entry carries pos {} (use -)".format(e["pos"])))
     seen, late = set(), []
     for e in entries:
         p = e["path"]
         if p in seen:
-            errors.append("duplicate entry: " + p)
+            out.append(("kc/ctx/duplicate-entry", "duplicate entry: " + p))
         seen.add(p)
         mp = ctx_entry_abspath(root, p)
         if not os.path.isfile(mp):
-            errors.append("dead entry: " + p)
+            out.append(("kc/ctx/dead-entry", "dead entry: " + p))
         elif stale and os.path.getmtime(mp) > os.path.getmtime(ap):
             # ponytail: mtime comparison; switch to git dates if checkouts reset mtimes
-            late.append("stale: {} changed after this ctx file".format(p))
+            late.append(("kc/ctx/stale-entry", "stale: {} changed after this ctx file".format(p)))
     if not desc.strip():
-        warnings.append("empty description")
-    warnings += ["entry under _archive/: " + e["path"] for e in entries
-                 if e["path"].startswith("_archive/")]
-    return errors, warnings + late
+        out.append(("kc/ctx/empty-description", "empty description"))
+    out += [("kc/ctx/archived-entry", "entry under _archive/: " + e["path"]) for e in entries
+            if e["path"].startswith("_archive/")]
+    return out + late
 
 
 def load_ctx(root, slug):
@@ -780,7 +784,7 @@ def load_tags(root, tags_source=None):
 
 TAGS_HEADER = (
     "# TAGS.md — Registered Tag Vocabulary\n\n"
-    "Closed vocabulary for concept `tags:`. The `tag-registered` conformance check\n"
+    "Closed vocabulary for concept `tags:`. The `kc/tag/registered` conformance check\n"
     "(warning; `check --strict` escalates to error) flags any tag not listed here.\n"
     "Add a new tag only via `okf-cli.py tags --register <tag> <description>` — reuse an existing\n"
     "tag over minting a near-duplicate. A tag earns its place by aggregating content.\n\n"

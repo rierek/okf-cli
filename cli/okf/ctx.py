@@ -353,10 +353,9 @@ def cmd_ctx_move(root, args):
 def _ctx_report(root, slugs, stale, as_json):
     errors, warnings = [], []
     for s in slugs:
-        es, ws = ctx_findings(root, ctx_file(root, s), stale)
         rel = "{}/{}.md".format(CTX_DIR, s)
-        errors += [("ctx", rel, m) for m in es]
-        warnings += [("ctx", rel, m) for m in ws]
+        for rule, m in ctx_findings(root, ctx_file(root, s), stale):
+            (errors if check.rule_severity(rule) == "error" else warnings).append((rule, rel, m))
     check._print_findings(errors, warnings, as_json)
     if errors:
         raise OkfError("non_conformant", "")

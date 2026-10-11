@@ -3,6 +3,7 @@ engine that runs them (`run_checks`), the crosslink and XML-like-tag repairs, an
 the check, fix-crosslinks and fix-xml-tags commands."""
 
 import json
+from collections import namedtuple
 import os
 import re
 import sys
@@ -483,20 +484,78 @@ def cmd_fix_crosslinks(root, args):
         len(touched), verb, len(unresolved)))
 
 
-def _ctx_check_of(c, i):
-    if c["bundle"] != CTX_DIR or c["is_reserved"]:
-        return []
-    return ctx_findings(c["root"], c["ap"])[i]
+# One registry of every rule `check` runs: its stable ID (`okf/` = OKF spec rule,
+# `kc/` = local catalogue invariant), its severity, and the callable.
+# scope "file":   check(ctx) -> [message]            one concept file per call
+# scope "bundle": check({"bundle", "bp"}) -> [(path, message)]   one bundle per call
+Rule = namedtuple("Rule", "id severity scope check")
+
+
+def _ctx_rule(rule_id, severity):
+    """One ctx sub-rule: ctx_findings reports every ctx problem under its ID, and
+    this rule keeps the ones that carry its own."""
+    def check(ctx):
+        if ctx["bundle"] != CTX_DIR or ctx["is_reserved"]:
+            return []
+        if "ctx_findings" not in ctx:
+            ctx["ctx_findings"] = ctx_findings(ctx["root"], ctx["ap"])
+        return [m for r, m in ctx["ctx_findings"] if r == rule_id]
+    return Rule(rule_id, severity, "file", check)
+
+
+RULES = [
+    Rule("okf/frontmatter/parseable", "error", "file", check_fm_parseable),
+    Rule("okf/frontmatter/type-nonempty", "error", "file", check_type_nonempty),
+    Rule("okf/type/reserved-no-type", "error", "file", check_reserved_no_type),
+    Rule("kc/name/filename-chars", "error", "file", check_filename_chars),
+    Rule("kc/type/registered", "warning", "file",
+         lambda c: check_type_registered(c, c["types_set"])),
+    Rule("kc/tag/registered", "warning", "file",
+         lambda c: check_tag_registered(c, c["tags_set"])),
+    Rule("kc/frontmatter/english-keys", "warning", "file", check_english_keys),
+    Rule("kc/link/crosslink-format", "warning", "file", check_crosslink_format),
+    Rule("kc/supersede/resolves", "error", "file", check_superseded_by_resolves),
+    Rule("kc/supersede/scope", "warning", "file", check_superseded_by_scope),
+    Rule("kc/frontmatter/tags-block-form", "warning", "file", check_tags_block_form),
+    Rule("kc/markup/xml-like-tags", "warning", "file", check_xml_like_tags),
+    Rule("kc/link/wikilink-resolvable", "warning", "file",
+         lambda c: wikilinks.check_wikilink_resolvable(c, c["wl_checked"], c["wl_index"])),
+    Rule("kc/sync/block", "error", "file", lambda c: check_sync_integrity(c, c["canon_index"])),
+    Rule("kc/sync/stale", "warning", "file", lambda c: check_sync_stale(c, c["canon_index"])),
+    Rule("kc/sync/canon-block", "error", "file", check_canon_blocks),
+    _ctx_rule("kc/ctx/type", "error"),
+    _ctx_rule("kc/ctx/slug", "error"),
+    _ctx_rule("kc/ctx/row-format", "error"),
+    _ctx_rule("kc/ctx/mode", "error"),
+    _ctx_rule("kc/ctx/required-positions", "error"),
+    _ctx_rule("kc/ctx/reference-position", "error"),
+    _ctx_rule("kc/ctx/duplicate-entry", "error"),
+    _ctx_rule("kc/ctx/dead-entry", "error"),
+    _ctx_rule("kc/ctx/empty-description", "warning"),
+    _ctx_rule("kc/ctx/archived-entry", "warning"),
+    _ctx_rule("kc/ctx/stale-entry", "warning"),
+    Rule("kc/asset/placement", "error", "bundle",
+         lambda b: [("{}/{}".format(b["bundle"], rel), "non-md file outside assets/")
+                    for rel in check_asset_placement(b["bp"])]),
+    Rule("kc/asset/entry-file-description", "warning", "bundle",
+         lambda b: [(b["bundle"], msg) for msg in check_entry_file_description(b["bp"])]),
+]
+
+
+def rule_severity(rule_id):
+    """The registry severity of `rule_id`; KeyError for an ID no rule registers."""
+    return {r.id: r.severity for r in RULES}[rule_id]
 
 
 def run_checks(root, target, types_source=None):
-    """Run the full pluggable conformance scan over `target` (bundle or
+    """Run every RULES entry over `target` (bundle or
     bundle/subdir), or the whole catalogue when target is None.
 
     types_source overrides <root>/TYPES.md; absent, falls back to the
     .okf.toml `types_source` config key, then to <root>/TYPES.md.
 
-    Returns (errors, warnings), each a list of (check_name, rel_path, message).
+    Returns (errors, warnings), each a list of (rule_id, rel_path, message),
+    partitioned by the rule's registry severity.
     """
     scopes = resolve_scopes(root, target)
     config = load_okf_config(root)
@@ -521,39 +580,26 @@ def run_checks(root, target, types_source=None):
             canon["loaded"] = True
         return canon["idx"]
 
-    per_file_checks = [
-        ("frontmatter-parseable", "error", check_fm_parseable),
-        ("type-nonempty", "error", check_type_nonempty),
-        ("reserved-no-type", "error", check_reserved_no_type),
-        ("filename-chars", "error", check_filename_chars),
-        ("type-registered", "warning", lambda c: check_type_registered(c, types_set)),
-        ("tag-registered", "warning", lambda c: check_tag_registered(c, tags_set)),
-        ("english-keys", "warning", check_english_keys),
-        ("crosslink-format", "warning", check_crosslink_format),
-        ("superseded-by-resolves", "error", check_superseded_by_resolves),
-        ("superseded-by-scope", "warning", check_superseded_by_scope),
-        ("tags-block-form", "warning", check_tags_block_form),
-        ("xml-like-tags", "warning", check_xml_like_tags),
-        ("wikilink-resolvable", "warning",
-         lambda c: wikilinks.check_wikilink_resolvable(c, wl_checked, wl_index)),
-        ("sync-block", "error", lambda c: check_sync_integrity(c, canon_index)),
-        ("sync-stale", "warning", lambda c: check_sync_stale(c, canon_index)),
-        ("canon-block", "error", check_canon_blocks),
-        ("ctx", "error", lambda c: _ctx_check_of(c, 0)),
-        ("ctx", "warning", lambda c: _ctx_check_of(c, 1)),
-    ]
+    run = {"types_set": types_set, "tags_set": tags_set, "wl_checked": wl_checked,
+           "wl_index": wl_index, "canon_index": canon_index}
+    file_rules = [r for r in RULES if r.scope == "file"]
+    bundle_rules = [r for r in RULES if r.scope == "bundle"]
 
     errors, warnings = [], []
+
+    def add(rule, path, msg):
+        (errors if rule.severity == "error" else warnings).append((rule.id, path, msg))
+
     for bundle, bp in scopes:
         for ap in iter_all_md(bp):
             ctx = gather_file_context(root, bundle, ap)
-            for name, sev, fn in per_file_checks:
-                for msg in fn(ctx):
-                    (errors if sev == "error" else warnings).append((name, ctx["rel"], msg))
-        for rel in check_asset_placement(bp):
-            errors.append(("asset-placement", "{}/{}".format(bundle, rel), "non-md file outside assets/"))
-        for msg in check_entry_file_description(bp):
-            warnings.append(("entry-file-description", bundle, msg))
+            ctx.update(run)
+            for rule in file_rules:
+                for msg in rule.check(ctx):
+                    add(rule, ctx["rel"], msg)
+        for rule in bundle_rules:
+            for path, msg in rule.check({"bundle": bundle, "bp": bp}):
+                add(rule, path, msg)
     return errors, warnings
 
 
