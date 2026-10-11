@@ -826,6 +826,7 @@ class SyncWrites(WriteFixture):
     def test_insert_preview_then_apply(self):
         argv = ("sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule")
         preview = self.ok(*argv)["data"]
+        self.assertEqual([(f["path"], f["old_path"]) for f in preview.pop("files")], [("kc-a/beta.md", None)])
         self.assertEqual(preview, {"applied": False, "consumer": "kc-a/beta.md",
                                    "source": "/kc-gov/ownership.md", "id": "ownership-rule"})
         self.assertNotIn("okf:canon", self.read("kc-a/beta.md"))
@@ -846,6 +847,7 @@ class SyncWrites(WriteFixture):
         self._outdate()
         preview = self.ok("sync-update")["data"]
         row = {"consumer": "kc-a/beta.md", "source": "/kc-gov/ownership.md", "id": "ownership-rule"}
+        self.assertEqual([f["path"] for f in preview.pop("files")], ["kc-a/beta.md"])
         self.assertEqual(preview, {"applied": False, "updated": [row], "refused": [], "unresolvable": []})
         self.assertIn("Every statement", self.read("kc-a/beta.md"))
         self.assertIn("would update   kc-a/beta.md", self.text("sync-update"))
@@ -857,7 +859,8 @@ class SyncWrites(WriteFixture):
         self._w("kc-a/beta.md", self.read("kc-a/beta.md").replace("Every statement has one owner.", "Local edit."))
         env = self.fails("drift", 5, "sync-update", "--apply")
         row = {"consumer": "kc-a/beta.md", "source": "/kc-gov/ownership.md", "id": "ownership-rule"}
-        self.assertEqual(env["data"], {"applied": True, "updated": [], "refused": [row], "unresolvable": []})
+        self.assertEqual(env["data"], {"applied": True, "files": [], "updated": [], "refused": [row],
+                                       "unresolvable": []})
         self.assertIn("Local edit.", self.read("kc-a/beta.md"))
         forced = self.ok("sync-update", "--apply", "--force")["data"]
         self.assertEqual(forced["updated"], [row])
