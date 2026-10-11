@@ -32,13 +32,12 @@ KEYS = {"command", "ok", "data", "warnings", "error"}
 
 
 def _probe_parser(description=None):
-    """`probe` is registered through _add_output; `plain` brings its own `--json`; `ctx show`
-    mirrors the real ctx subparser, whose verb lands in `ctx_verb`."""
+    """`probe` is registered through _add_output; `ctx show` mirrors the real ctx subparser,
+    whose verb lands in `ctx_verb`."""
     ap = argparse.ArgumentParser(prog="okf-cli.py")
     ap.add_argument("--root")
     sub = ap.add_subparsers(dest="cmd", required=True)
     output._add_output(sub.add_parser("probe"))
-    sub.add_parser("plain").add_argument("--json", action="store_true")
     verbs = sub.add_parser("ctx").add_subparsers(dest="ctx_verb", required=True)
     output._add_output(verbs.add_parser("show"))
     return ap
@@ -58,7 +57,7 @@ class _MainHarness(unittest.TestCase):
         behind both probe commands."""
         argv = ["okf-cli.py", "--root", root or self.root] + argv
         out, err = io.StringIO(), io.StringIO()
-        dispatch = {"probe": handler, "plain": handler, "ctx": handler}
+        dispatch = {"probe": handler, "ctx": handler}
         with mock.patch.object(okf, "build_parser", _probe_parser), \
                 mock.patch.object(okf, "COMMAND_DISPATCH", dispatch), \
                 mock.patch.object(sys, "argv", argv), \
@@ -223,24 +222,6 @@ class CallNotes(_MainHarness):
         self.assertTrue(err.startswith("note: --root {} carries no catalogue marker".format(bare)))
 
 
-class UnconvertedCommandIsLeftAlone(_MainHarness):
-    """A command that registers its own `--json` (not through _add_output) prints its own
-    document; the emitter must not wrap it, or the call would print two."""
-
-    def test_own_json_is_not_wrapped(self):
-        def handler(root, args):
-            print(json.dumps({"own": "shape"}))
-            return {"ignored": True}
-        out, err, code = self.run_main(["plain", "--json"], handler)
-        self.assertEqual((json.loads(out), err, code), ({"own": "shape"}, "", 0))
-        self.assertEqual(out.count("\n"), 1)
-
-    def test_own_failure_keeps_text_error_handling(self):
-        def handler(root, args):
-            raise OkfError("drift", "report first")
-        self.assertEqual(self.run_main(["plain", "--json"], handler), ("", "report first\n", 5))
-
-
 class AddOutputHelper(unittest.TestCase):
     def test_registers_a_boolean_json_flag(self):
         ap = argparse.ArgumentParser()
@@ -251,14 +232,11 @@ class AddOutputHelper(unittest.TestCase):
             with contextlib.redirect_stderr(io.StringIO()):
                 ap.parse_args(["--json=1"])
 
-    def test_envelope_is_wanted_exactly_for_a_registered_parser_run_with_json(self):
+    def test_the_envelope_is_wanted_exactly_when_json_is_given(self):
         registered = argparse.ArgumentParser()
         output._add_output(registered)
-        own = argparse.ArgumentParser()
-        own.add_argument("--json", action="store_true")
         self.assertTrue(output.wants_envelope(registered.parse_args(["--json"])))
         self.assertFalse(output.wants_envelope(registered.parse_args([])))
-        self.assertFalse(output.wants_envelope(own.parse_args(["--json"])))
 
 
 if __name__ == "__main__":

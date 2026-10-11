@@ -26,6 +26,7 @@ _HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli
 if _HERE not in sys.path:  # cli/ holds the okf package
     sys.path.insert(0, _HERE)
 
+from okf import errors as okf_errors
 from okf import install as okf_install_cmd
 from okf import parser as okf_parser
 from okf import parser_support as okf_parser_support
@@ -178,7 +179,7 @@ class Machine(unittest.TestCase):
         args = types.SimpleNamespace(apply=apply, uninstall=un, only=only, json=as_json)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = inst.run(args, self.ctx(**kw))
+            code, _report = inst.run(args, self.ctx(**kw))
         return code, out.getvalue()
 
     def apply(self, **kw):
@@ -632,12 +633,11 @@ class Detection(Machine):
         self.assertFalse(os.path.exists(self.h(".claude")), "not named, not touched")
 
     def test_unknown_only_name_is_a_usage_error(self):
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(okf_errors.OkfError) as cm:
             self.install(only="claude,nope")
-        self.assertEqual(cm.exception.code, 2)
-        self.assertIn("nope", err.getvalue())
-        self.assertIn("hermes", err.getvalue())
+        self.assertEqual((cm.exception.kind, cm.exception.code), ("invalid_input", 2))
+        self.assertIn("nope", cm.exception.message)
+        self.assertIn("hermes", cm.exception.message)
 
     def test_shells_are_detected_by_rc_file_config_dir_or_login_shell(self):
         self.put(self.h(".bashrc"), "")
@@ -649,15 +649,17 @@ class Detection(Machine):
         self.assertNotRegex(self.install()[1], r"skip\s+zsh\s+not detected", "SHELL=zsh makes zsh the login shell")
 
     def test_windows_is_refused(self):
-        with self.assertRaises(SystemExit) as cm:
+        with self.assertRaises(okf_errors.OkfError) as cm:
             self.install(platform="win32")
-        self.assertIn("macOS and Linux", str(cm.exception.code))
+        self.assertEqual(cm.exception.kind, "internal")
+        self.assertIn("macOS and Linux", cm.exception.message)
 
     def test_python_before_3_11_is_refused_with_a_way_out(self):
-        with mock.patch.object(inst, "tomllib", None), self.assertRaises(SystemExit) as cm:
+        with mock.patch.object(inst, "tomllib", None), self.assertRaises(okf_errors.OkfError) as cm:
             self.install()
-        self.assertIn("needs Python 3.11", str(cm.exception.code))
-        self.assertIn("uv tool install", str(cm.exception.code))
+        self.assertEqual(cm.exception.kind, "internal")
+        self.assertIn("needs Python 3.11", cm.exception.message)
+        self.assertIn("uv tool install", cm.exception.message)
 
 
 class UvAndArgcomplete(Machine):
@@ -965,18 +967,22 @@ class CommandLine(unittest.TestCase):
 
     def test_json_output_is_one_parseable_dict_and_keeps_the_exit_code(self):
         plan = self.cli("install", "--json", "--only", "claude")
-        doc = json.loads(plan.stdout)
-        self.assertEqual((plan.returncode, doc["apply"], doc["uninstall"], doc["source_tree"]), (0, False, False, True))
+        env = json.loads(plan.stdout)
+        self.assertEqual((env["command"], env["ok"], env["error"], plan.returncode), ("install", True, None, 0))
+        doc = env["data"]
+        self.assertEqual((doc["apply"], doc["uninstall"], doc["source_tree"]), (False, False, True))
         self.assertEqual([(s["group"], s["subject"], s["status"], s["done"]) for s in doc["steps"]
                           if s["group"] == "skills"], [("skills", "claude", "create", False)])
         self.assertFalse(os.path.lexists(os.path.join(self.home, ".claude")), "a plan changes nothing")
-        applied = json.loads(self.cli("install", "--json", "--apply", "--only", "claude").stdout)
+        applied = json.loads(self.cli("install", "--json", "--apply", "--only", "claude").stdout)["data"]
         self.assertTrue(all(s["done"] for s in applied["steps"] if s["status"] in ("create", "update")))
         os.makedirs(os.path.join(self.home, ".agents", "skills", "okf"))  # not ours: a blocked step
         os.makedirs(os.path.join(self.home, ".codex"))
         blocked = self.cli("install", "--json", "--only", "codex")
         self.assertEqual(blocked.returncode, 1)
-        self.assertIn("blocked", [s["status"] for s in json.loads(blocked.stdout)["steps"]])
+        env = json.loads(blocked.stdout)
+        self.assertEqual((env["ok"], env["error"]["kind"], env["error"]["code"]), (False, "internal", 1))
+        self.assertIn("blocked", [s["status"] for s in env["data"]["steps"]])
 
     def test_okf_cli_py_copied_out_of_its_clone_says_what_is_missing(self):
         alone = os.path.join(self.tmp, "alone")

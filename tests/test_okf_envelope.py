@@ -32,6 +32,8 @@ if _ROOT not in sys.path:
 from okf import find as okf_find
 from okf import semantic as okf_semantic
 from okf import tags as okf_tags
+from okf.parser import build_parser
+from okf.parser_support import subcommand_parsers
 from tests.okf_testkit import run_cli, run_json
 
 ALPHA = ("---\ntype: Note\ntitle: Alpha Note\ndescription: the alpha note about pineapples\n"
@@ -601,6 +603,496 @@ class SyncStatusDrift(Fixture):
         self.assertEqual((block["consumer"], block["id"], block["status"]),
                          ("kc-a/beta.md", "ownership-rule", "source-changed"))
         self.assertEqual(env["data"]["totals"]["source-changed"], 1)
+
+
+class WriteFixture(Fixture):
+    """The catalogue as a git repository, plus the content the write commands act on."""
+
+    def setUp(self):
+        super().setUp()
+        self._w("kc-a/inline.md", "---\ntype: Note\ntitle: Inline\ndescription: d\ntags: [alpha, zeta]\n---\n\n# Inline\n\nSee [beta](beta.md) and <tag> here.\n")
+        self._w("kc-a/index.md", "# A\n\nIntro paragraph.\n\n<!-- okf:index -->\n<!-- /okf:index -->\n")
+        self._git("init", "-q")
+        self._git("add", "-A")
+        self._git("commit", "-qm", "fixture")
+
+    def _git(self, *argv):
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        subprocess.run(["git", "-c", "commit.gpgsign=false", "-C", self.root, *argv],
+                       check=True, env=env, capture_output=True)
+
+    def read(self, rel):
+        with open(os.path.join(self.root, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def exists(self, rel):
+        return os.path.exists(os.path.join(self.root, rel))
+
+    def ok(self, *argv, **kw):
+        """The envelope of a call that must succeed with no stderr."""
+        env, err, code = run_json(self.root, *argv, **kw)
+        self.assertEqual((env["ok"], env["error"], code, err), (True, None, 0, ""), env)
+        return env
+
+    def fails(self, kind, code, *argv, **kw):
+        env, err, exit_code = run_json(self.root, *argv, **kw)
+        self.assertEqual((env["ok"], env["error"]["kind"], env["error"]["code"], exit_code, err),
+                         (False, kind, code, code, ""), env)
+        return env
+
+
+class TagWrites(WriteFixture):
+    def test_merge_preview_then_apply(self):
+        preview = self.ok("merge-tags", "alpha", "--into", "omega")["data"]
+        self.assertEqual(preview, {"applied": False, "files": ["kc-a/alpha.md", "kc-a/inline.md"],
+                                   "unparseable": [], "from": ["alpha"], "into": "omega"})
+        self.assertIn("alpha", self.read("kc-a/alpha.md"))
+        text = self.text("merge-tags", "alpha", "--into", "omega")
+        self.assertEqual(re.findall(r"^would rewrite\s+(\S+)$", text, re.M), preview["files"])
+        applied = self.ok("merge-tags", "alpha", "--into", "omega", "--apply")["data"]
+        self.assertEqual((applied["applied"], applied["files"]), (True, preview["files"]))
+        self.assertIn("omega", self.read("kc-a/alpha.md"))
+        self.assertIn("tags:\n  - omega\n", self.read("kc-a/alpha.md"))
+        self.assertNotIn("  - alpha", self.read("kc-a/alpha.md"))
+
+    def test_merge_reports_a_tags_field_it_cannot_rewrite(self):
+        self._w("kc-a/odd.md", "---\ntype: Note\ntitle: Odd\ndescription: d\ntags: alpha, beta\n---\n\n# Odd\n")
+        data = self.ok("merge-tags", "alpha", "--into", "omega")["data"]
+        self.assertEqual((data["files"], data["unparseable"]), (["kc-a/alpha.md", "kc-a/inline.md"], ["kc-a/odd.md"]))
+        self.assertIn("unparseable    kc-a/odd.md", self.text("merge-tags", "alpha", "--into", "omega"))
+
+    def test_remove_preview_then_apply_names_the_emptied_files(self):
+        preview = self.ok("remove-tags", "beta", "gamma")["data"]
+        self.assertEqual(preview, {"applied": False, "files": ["kc-a/beta.md"], "emptied": ["kc-a/beta.md"],
+                                   "unparseable": [], "removed": ["beta", "gamma"]})
+        self.assertIn("tags:", self.read("kc-a/beta.md"))
+        applied = self.ok("remove-tags", "beta", "gamma", "--apply")["data"]
+        self.assertEqual((applied["applied"], applied["emptied"]), (True, ["kc-a/beta.md"]))
+        self.assertNotIn("tags:", self.read("kc-a/beta.md"))
+        partial = self.ok("remove-tags", "alpha")["data"]
+        self.assertEqual((partial["files"], partial["emptied"]),
+                         (["kc-a/alpha.md", "kc-a/inline.md"], ["kc-a/alpha.md"]))
+
+    def test_normalize_rewrites_an_inline_list(self):
+        preview = self.ok("normalize-tags")["data"]
+        self.assertEqual(preview, {"applied": False, "files": ["kc-a/inline.md"]})
+        self.assertIn("tags: [alpha, zeta]", self.read("kc-a/inline.md"))
+        self.assertEqual(self.ok("normalize-tags", "--apply")["data"], {"applied": True, "files": ["kc-a/inline.md"]})
+        self.assertIn("tags:\n  - alpha\n  - zeta", self.read("kc-a/inline.md"))
+
+    def test_scope_limits_the_rewrite(self):
+        self.assertEqual(self.ok("merge-tags", "alpha", "--into", "omega", "--scope", "kc-gov")["data"]["files"], [])
+
+
+class IndexBuilds(WriteFixture):
+    def test_build_index_reports_what_it_built_and_skips_a_current_index(self):
+        data = self.ok("build-index")["data"]
+        self.assertEqual((data["applied"], data["concepts"]), (True, 6))
+        self.assertTrue(self.exists(".fts/fts.sqlite"))
+        self.assertTrue(data["path"].endswith(os.path.join(".fts", "fts.sqlite")))
+        again = self.ok("build-index", "--if-stale")["data"]
+        self.assertEqual((again["applied"], again["concepts"]), (False, None))
+        self.assertIn("index is current, skipping rebuild", self.text("build-index", "--if-stale"))
+
+    def test_build_semantic_index_without_a_key_degrades_with_a_warning(self):
+        env = self.ok("build-semantic-index")
+        self.assertEqual((env["data"]["applied"], env["data"]["embedded"]), (False, 0))
+        self.assertEqual(len(env["warnings"]), 1)
+        self.assertIn("VOYAGE_API_KEY not set", env["warnings"][0])
+        self.assertFalse(self.exists(".tagvec"))
+        _out, text_err, code = run_cli(self.root, "build-semantic-index")
+        self.assertEqual(code, 0)
+        self.assertIn("note: semantic index build skipped (VOYAGE_API_KEY not set)", text_err)
+
+    def test_reindex_check_names_the_stale_bundle_as_drift(self):
+        self._w("kc-a/index.md", self.read("kc-a/index.md").replace("<!-- /okf:index -->", "stale line\n<!-- /okf:index -->"))
+        env = self.fails("drift", 5, "reindex", "kc-a", "--check")
+        self.assertEqual((env["data"]["applied"], env["data"]["stale"]), (False, ["kc-a/index.md"]))
+        out, _err, code = run_cli(self.root, "reindex", "kc-a", "--check")
+        self.assertIn("STALE        kc-a/index.md", out)
+        self.assertEqual(code, 5)
+        self.assertIn("stale line", self.read("kc-a/index.md"))
+
+    def test_reindex_apply_rewrites_the_listing(self):
+        data = self.ok("reindex", "kc-a")["data"]
+        self.assertEqual((data["applied"], data["updated"], data["stale"]), (True, ["kc-a/index.md"], []))
+        self.assertIn("alpha", self.read("kc-a/index.md"))
+        self.assertEqual(self.ok("reindex", "kc-a", "--check")["data"]["stale"], [])
+
+    def test_reindex_init_lists_conversions_and_skips(self):
+        self._w("kc-gov/index.md", "# Gov\n\nCovers the rules.\n\n## Concepts\n\n* [Ownership](ownership.md) - rule\n")
+        preview = self.ok("reindex", "kc-gov", "--init", "--check")["data"]
+        self.assertEqual((preview["applied"], preview["init"]["converted"]), (False, ["kc-gov/index.md"]))
+        self.assertNotIn("okf:index", self.read("kc-gov/index.md"))
+        applied = self.ok("reindex", "kc-gov", "--init")["data"]
+        self.assertEqual((applied["applied"], applied["init"]["converted"]), (True, ["kc-gov/index.md"]))
+        self.assertIn("okf:index", self.read("kc-gov/index.md"))
+
+    def test_reindex_of_a_missing_bundle_is_not_found(self):
+        self.assertEqual(self.fails("not_found", 3, "reindex", "nosuch")["data"], None)
+
+
+class LinkFixes(WriteFixture):
+    def test_fix_crosslinks_preview_then_apply(self):
+        preview = self.ok("fix-crosslinks", "--check")["data"]
+        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/inline.md", "links": 1}],
+                                   "unresolved": []})
+        self.assertIn("](beta.md)", self.read("kc-a/inline.md"))
+        text = self.text("fix-crosslinks", "--check")
+        self.assertIn("would rewrite  kc-a/inline.md  (1 link(s))", text)
+        applied = self.ok("fix-crosslinks")["data"]
+        self.assertEqual((applied["applied"], applied["files"]), (True, preview["files"]))
+        self.assertIn("](/kc-a/beta.md)", self.read("kc-a/inline.md"))
+
+    def test_fix_crosslinks_lists_an_unresolved_link(self):
+        self._w("kc-a/dead.md", "---\ntype: Note\ntitle: Dead\ndescription: d\n---\n\n# Dead\n\n[gone](/kc-a/gone.md)\n")
+        data = self.ok("fix-crosslinks", "--check")["data"]
+        self.assertEqual(data["unresolved"], [{"path": "kc-a/dead.md", "target": "/kc-a/gone.md"}])
+
+    def test_fix_xml_tags_preview_then_apply(self):
+        preview = self.ok("fix-xml-tags", "--check")["data"]
+        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/inline.md", "chains": 1}]})
+        self.assertIn(" <tag> ", self.read("kc-a/inline.md"))
+        self.assertEqual(self.ok("fix-xml-tags")["data"]["applied"], True)
+        self.assertIn("`<tag>`", self.read("kc-a/inline.md"))
+
+    def test_fix_commands_refuse_a_missing_target(self):
+        for command in ("fix-crosslinks", "fix-xml-tags"):
+            with self.subTest(command=command):
+                self.fails("not_found", 3, command, "nosuch")
+
+    def test_rewrite_path_preview_then_apply(self):
+        self._w("kc-a/refs.md", "---\ntype: Note\ntitle: R\ndescription: d\n---\n\n# R\n\nsee old/place.md twice: old/place.md\n")
+        preview = self.ok("rewrite-path", "old/place.md", "new/place.md", "--check")["data"]
+        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/refs.md", "count": 2}]})
+        self.assertIn("old/place.md", self.read("kc-a/refs.md"))
+        self.assertEqual(self.ok("rewrite-path", "old/place.md", "new/place.md")["data"]["applied"], True)
+        self.assertNotIn("old/place.md", self.read("kc-a/refs.md"))
+
+
+class MovesAndArchive(WriteFixture):
+    def test_rename_preview_carries_the_plan_and_apply_the_outcome(self):
+        self._w("kc-a/pointer.md", "---\ntype: Note\ntitle: P\ndescription: d\n---\n\n# P\n\n[o](/kc-a/old.md)\n")
+        preview = self.ok("rename", "kc-a/old.md", "kc-a/older.md")["data"]
+        self.assertEqual((preview["applied"], preview["old"], preview["new"]), (False, "kc-a/old.md", "kc-a/older.md"))
+        self.assertEqual(preview["inbound"], [{"source": "kc-a/pointer.md", "old": "/kc-a/old.md", "new": "/kc-a/older.md"}])
+        self.assertEqual(preview["reindex_bundles"], ["kc-a"])
+        self.assertTrue(self.exists("kc-a/old.md"))
+        text = self.text("rename", "kc-a/old.md", "kc-a/older.md")
+        self.assertIn("would move   kc-a/old.md  ->  kc-a/older.md", text)
+        self.assertIn("  inbound    kc-a/pointer.md   /kc-a/old.md  ->  /kc-a/older.md", text)
+        applied = self.ok("rename", "kc-a/old.md", "kc-a/older.md", "--apply")["data"]
+        self.assertEqual((applied["applied"], applied["moved_with"]), (True, "git mv"))
+        self.assertEqual(applied["rewritten"]["inbound_links"], 1)
+        self.assertFalse(self.exists("kc-a/old.md"))
+        self.assertIn("/kc-a/older.md", self.read("kc-a/pointer.md"))
+
+    def test_rename_plan_lists_wikilinks_sync_sources_and_ctx_memberships(self):
+        self.ok("sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule", "--apply")
+        self._w("kc-a/pointer.md", "---\ntype: Note\ntitle: P\ndescription: d\n---\n\n# P\n\nsee [[ownership]]\n")
+        self.ok("ctx", "add", "demo", "kc-gov/ownership")
+        argv = ("rename", "kc-gov/ownership.md", "kc-gov/rule.md")
+        preview = self.ok(*argv)["data"]
+        self.assertEqual(preview["wikilinks"], [{"source": "kc-a/pointer.md", "region": "body",
+                                                 "raw": "[[ownership]]", "new_raw": "[[rule]]"}])
+        self.assertEqual(preview["sync_sources"], [{"consumer": "kc-a/beta.md", "blocks": 1}])
+        self.assertEqual(preview["ctx"], ["demo (pos 3)"])
+        self.assertEqual([r["source"] for r in preview["inbound"]], ["_ctx/demo.md"])
+        text = self.text(*argv)
+        self.assertIn("  wikilink   kc-a/pointer.md [body]   [[ownership]]  ->  [[rule]]", text)
+        self.assertIn("  sync-source  kc-a/beta.md   1 block(s)", text)
+        self.assertIn("  ctx        demo (pos 3)", text)
+        applied = self.ok(*argv, "--apply")["data"]
+        self.assertEqual(applied["rewritten"], {"inbound_links": 1, "inbound_files": 1, "outbound_links": 0,
+                                                "wikilinks": 1, "wikilink_files": 1, "sync_sources": 1,
+                                                "sync_files": 1})
+        self.assertIn("[[rule]]", self.read("kc-a/pointer.md"))
+        self.assertIn("source=/kc-gov/rule.md ", self.read("kc-a/beta.md"))
+
+    def test_rename_across_bundles_plans_the_outbound_links(self):
+        argv = ("rename", "kc-a/inline.md", "kc-gov/inline.md")
+        preview = self.ok(*argv)["data"]
+        self.assertEqual(preview["outbound"], [{"old": "beta.md", "new": "/kc-a/beta.md"}])
+        self.assertEqual(preview["reindex_bundles"], ["kc-a", "kc-gov"])
+        self.assertIn("  outbound   beta.md  ->  /kc-a/beta.md", self.text(*argv))
+        self.assertEqual(self.ok(*argv, "--apply")["data"]["rewritten"]["outbound_links"], 1)
+        self.assertIn("](/kc-a/beta.md)", self.read("kc-gov/inline.md"))
+
+    def test_rename_force_reports_the_overwritten_destination(self):
+        data = self.ok("rename", "kc-a/alpha.md", "kc-a/beta.md", "--apply", "--force")["data"]
+        self.assertEqual((data["applied"], data["overwrote_inbound"]), (True, 2))
+        self.assertNotIn("overwrote_inbound", self.ok("rename", "kc-a/old.md", "kc-a/older.md")["data"])
+
+    def test_rename_refusals_are_invalid_input(self):
+        for argv in (["rename", "kc-a/alpha.md", "kc-a/alpha.txt"],
+                     ["rename", "kc-a/alpha.md", "kc-a/alpha.md"],
+                     ["rename", "kc-a/alpha.md", "kc-a/beta.md", "--apply"]):
+            with self.subTest(argv=argv):
+                env = self.fails("invalid_input", 2, *argv)
+                self.assertEqual(env["data"], None)
+                self.assertTrue(env["error"]["message"].startswith("rename: "))
+        self.assertTrue(self.exists("kc-a/alpha.md"))
+
+    def test_rename_of_a_missing_source_is_not_found(self):
+        self.fails("not_found", 3, "rename", "kc-a/nosuch.md", "kc-a/other.md")
+
+    def test_a_source_under_archive_is_pointed_at_restore(self):
+        self.assertEqual(self.ok("archive", "kc-a/old", "--apply")["data"]["applied"], True)
+        env = self.fails("invalid_input", 2, "rename", "_archive/kc-a/old.md", "kc-a/back.md")
+        self.assertIn("use archive --restore", env["error"]["message"])
+
+    def test_archive_preview_apply_and_restore(self):
+        preview = self.ok("archive", "kc-a/old")["data"]
+        self.assertEqual((preview["applied"], preview["old"], preview["new"], preview["restore"],
+                          preview["active_inbound_concepts"]),
+                         (False, "kc-a/old.md", "_archive/kc-a/old.md", False, 0))
+        self.assertTrue(self.exists("kc-a/old.md"))
+        self.assertIn("0 active concept(s) still link to this concept", self.text("archive", "kc-a/old"))
+        applied = self.ok("archive", "kc-a/old", "--apply")["data"]
+        self.assertEqual((applied["applied"], self.exists("kc-a/old.md"), self.exists("_archive/kc-a/old.md")),
+                         (True, False, True))
+        restored = self.ok("archive", "_archive/kc-a/old", "--restore", "--apply")["data"]
+        self.assertEqual((restored["restore"], restored["new"], self.exists("kc-a/old.md")),
+                         (True, "kc-a/old.md", True))
+
+    def test_archive_counts_the_concepts_that_still_link(self):
+        self._w("kc-a/pointer.md", "---\ntype: Note\ntitle: P\ndescription: d\n---\n\n# P\n\n[o](/kc-a/old.md)\n")
+        self.assertEqual(self.ok("archive", "kc-a/old")["data"]["active_inbound_concepts"], 1)
+
+    def test_archive_refusals(self):
+        env = self.fails("invalid_input", 2, "archive", "kc-a/alpha", "--restore")
+        self.assertIn("--restore source must lie under _archive/", env["error"]["message"])
+        self.fails("not_found", 3, "archive", "kc-a/nosuch")
+
+
+class SyncWrites(WriteFixture):
+    def test_insert_preview_then_apply(self):
+        argv = ("sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule")
+        preview = self.ok(*argv)["data"]
+        self.assertEqual(preview, {"applied": False, "consumer": "kc-a/beta.md",
+                                   "source": "/kc-gov/ownership.md", "id": "ownership-rule"})
+        self.assertNotIn("okf:canon", self.read("kc-a/beta.md"))
+        self.assertIn("would insert    kc-a/beta.md   /kc-gov/ownership.md#ownership-rule", self.text(*argv))
+        self.assertEqual(self.ok(*argv, "--apply")["data"]["applied"], True)
+        self.assertIn("Every statement has one owner.", self.read("kc-a/beta.md"))
+
+    def test_insert_refusals_are_invalid_input(self):
+        self.ok("sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule", "--apply")
+        self.fails("invalid_input", 2, "sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule")
+        self.fails("invalid_input", 2, "sync-insert", "kc-gov/ownership", "kc-gov/ownership", "ownership-rule")
+
+    def _outdate(self):
+        self.ok("sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule", "--apply")
+        self._w("kc-gov/ownership.md", OWNERSHIP.replace("Every statement has one owner.", "Neuer Kanon."))
+
+    def test_update_preview_then_apply(self):
+        self._outdate()
+        preview = self.ok("sync-update")["data"]
+        row = {"consumer": "kc-a/beta.md", "source": "/kc-gov/ownership.md", "id": "ownership-rule"}
+        self.assertEqual(preview, {"applied": False, "updated": [row], "refused": [], "unresolvable": []})
+        self.assertIn("Every statement", self.read("kc-a/beta.md"))
+        self.assertIn("would update   kc-a/beta.md", self.text("sync-update"))
+        self.assertEqual(self.ok("sync-update", "--apply")["data"]["updated"], [row])
+        self.assertIn("Neuer Kanon.", self.read("kc-a/beta.md"))
+
+    def test_update_refuses_a_modified_consumer_as_drift_with_the_per_block_outcome(self):
+        self._outdate()
+        self._w("kc-a/beta.md", self.read("kc-a/beta.md").replace("Every statement has one owner.", "Local edit."))
+        env = self.fails("drift", 5, "sync-update", "--apply")
+        row = {"consumer": "kc-a/beta.md", "source": "/kc-gov/ownership.md", "id": "ownership-rule"}
+        self.assertEqual(env["data"], {"applied": True, "updated": [], "refused": [row], "unresolvable": []})
+        self.assertIn("Local edit.", self.read("kc-a/beta.md"))
+        forced = self.ok("sync-update", "--apply", "--force")["data"]
+        self.assertEqual(forced["updated"], [row])
+        self.assertIn("Neuer Kanon.", self.read("kc-a/beta.md"))
+
+    def test_update_reports_an_unresolvable_block_with_its_status(self):
+        self.ok("sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule", "--apply")
+        os.remove(os.path.join(self.root, "kc-gov/ownership.md"))
+        env = self.fails("drift", 5, "sync-update")
+        (row,) = env["data"]["unresolvable"]
+        self.assertEqual((row["consumer"], row["id"], row["status"]), ("kc-a/beta.md", "ownership-rule", "source-missing"))
+
+    def test_update_of_a_missing_target_is_not_found(self):
+        self.fails("not_found", 3, "sync-update", "nosuch")
+
+
+class VisualizeAndCtx(WriteFixture):
+    EDITOR = {"VISUAL": "true", "EDITOR": "true"}  # VISUAL wins over EDITOR, so set both
+
+    def test_visualize_reports_what_it_wrote(self):
+        data = self.ok("visualize", "kc-a")["data"]
+        self.assertEqual((data["applied"], data["nodes"], data["edges"]), (True, 4, 1))
+        self.assertEqual(data["path"], os.path.join(self.root, "kc-a", "assets", "viz.html"))
+        self.assertTrue(os.path.isfile(data["path"]))
+        self.assertIn("(4 nodes, 1 edges)", self.text("visualize", "kc-a"))
+        out = os.path.join(self.root, "elsewhere", "g.html")
+        self.assertEqual(self.ok("visualize", "kc-a", "--out", out)["data"]["path"], out)
+
+    def test_visualize_of_a_missing_bundle_fails(self):
+        self.assertEqual(self.fails("not_found", 3, "visualize", "nosuch")["data"], None)
+
+    def test_ctx_create_add_move_drop(self):
+        data = self.ok("ctx", "create", "fresh", "kc-a/alpha", "--description", "d")["data"]
+        self.assertEqual(data, {"applied": True, "slug": "fresh", "path": "_ctx/fresh.md", "entries": 1})
+        self.assertTrue(self.exists("_ctx/fresh.md"))
+        added = self.ok("ctx", "add", "fresh", "kc-gov/ownership", "--mode", "nachschlag")["data"]
+        self.assertEqual(added, {"applied": True, "slug": "fresh", "path": "kc-gov/ownership.md", "where": "reference"})
+        moved = self.ok("ctx", "move", "fresh", "kc-gov/ownership", "--mode", "pflicht", "--pos", "1")["data"]
+        self.assertEqual(moved["where"], "pos 1")
+        self.assertIn("moved kc-gov/ownership.md in fresh to pos 2",
+                      self.text("ctx", "move", "fresh", "kc-gov/ownership", "--pos", "2"))
+        dropped = self.ok("ctx", "drop", "fresh", "kc-gov/ownership")["data"]
+        self.assertEqual(dropped, {"applied": True, "slug": "fresh", "path": "kc-gov/ownership.md"})
+        self.assertNotIn("ownership", self.read("_ctx/fresh.md"))
+
+    def test_ctx_write_refusals_keep_their_class(self):
+        for argv, kind, code in ((["ctx", "create", "BadSlug", "kc-a/alpha"], "invalid_input", 2),
+                                 (["ctx", "create", "demo", "kc-a/alpha"], "invalid_input", 2),
+                                 (["ctx", "create", "fresh", "kc-a/nosuch"], "not_found", 3),
+                                 (["ctx", "add", "demo", "kc-a/alpha"], "invalid_input", 2),
+                                 (["ctx", "add", "demo", "kc-a/nosuch"], "not_found", 3),
+                                 (["ctx", "drop", "demo", "kc-gov/ownership"], "not_found", 3),
+                                 (["ctx", "move", "demo", "kc-a/alpha"], "invalid_input", 2),
+                                 (["ctx", "remove", "nosuch"], "not_found", 3),
+                                 (["ctx", "rename", "demo", "Bad Slug"], "invalid_input", 2),
+                                 (["ctx", "rename", "nosuch", "other"], "not_found", 3)):
+            with self.subTest(argv=argv):
+                self.fails(kind, code, *argv)
+
+    def test_ctx_rename_carries_the_move_and_the_new_slug(self):
+        data = self.ok("ctx", "rename", "demo", "renamed")["data"]
+        self.assertEqual((data["old_slug"], data["new_slug"], data["old"], data["new"], data["applied"]),
+                         ("demo", "renamed", "_ctx/demo.md", "_ctx/renamed.md", True))
+        self.assertTrue(self.exists("_ctx/renamed.md"))
+        self.assertFalse(self.exists("_ctx/demo.md"))
+        self.assertIn("renamed", self.read("_ctx/renamed.md"))
+
+    def test_ctx_remove_lists_the_files_that_still_link_in_data_and_not_in_warnings(self):
+        self._w("kc-a/pointer.md", "---\ntype: Note\ntitle: P\ndescription: d\n---\n\n# P\n\n[c](/_ctx/demo.md)\n")
+        env = self.ok("ctx", "remove", "demo")
+        self.assertEqual(env["data"], {"applied": True, "slug": "demo", "path": "_ctx/demo.md",
+                                       "entries": 2, "linked_from": ["kc-a/pointer.md"]})
+        self.assertEqual(env["warnings"], [])
+        self.assertFalse(self.exists("_ctx/demo.md"))
+        run_cli(self.root, "ctx", "create", "demo", "kc-a/alpha")
+        text = self.text("ctx", "remove", "demo")
+        self.assertIn("warning: 1 file(s) still link to _ctx/demo.md:\n  kc-a/pointer.md\n", text)
+
+    def test_ctx_edit_reports_the_findings_of_the_file_it_validated(self):
+        env = self.ok("ctx", "edit", "demo", env=self.EDITOR)
+        self.assertEqual([(f["rule"], f["severity"]) for f in env["data"]["findings"]],
+                         [("kc/ctx/empty-description", "warning")])
+        os.remove(os.path.join(self.root, "kc-a/beta.md"))
+        failed = self.fails("non_conformant", 4, "ctx", "edit", "demo", env=self.EDITOR)
+        self.assertIn(("kc/ctx/dead-entry", "error", "_ctx/demo.md"),
+                      [(f["rule"], f["severity"], f["path"]) for f in failed["data"]["findings"]])
+
+    def test_ctx_edit_fails_when_the_editor_does(self):
+        env = self.fails("invalid_input", 2, "ctx", "edit", "demo", env={"VISUAL": "false", "EDITOR": "false"})
+        self.assertIn("editor exited 1", env["error"]["message"])
+
+
+class Conformance(WriteFixture):
+    """R-04: every subparser of the built parser, each ctx verb included, answers `--json`
+    with one five-key envelope. The command list comes from the parser; the table only says how
+    to invoke each, and a command it does not name fails the test."""
+
+    TABLE = {
+        "archive": ["archive", "kc-a/old"],
+        "build-index": ["build-index"],
+        "build-semantic-index": ["build-semantic-index"],
+        "check": ["check"],
+        "ctx add": ["ctx", "add", "demo", "kc-gov/ownership"],
+        "ctx check": ["ctx", "check"],
+        "ctx create": ["ctx", "create", "fresh", "kc-a/alpha"],
+        "ctx drop": ["ctx", "drop", "demo", "kc-a/beta"],
+        "ctx edit": ["ctx", "edit", "demo"],
+        "ctx inbound": ["ctx", "inbound", "demo"],
+        "ctx list": ["ctx", "list"],
+        "ctx move": ["ctx", "move", "demo", "kc-a/beta", "--mode", "nachschlag"],
+        "ctx outbound": ["ctx", "outbound", "demo"],
+        "ctx read": ["ctx", "read", "demo"],
+        "ctx remove": ["ctx", "remove", "demo"],
+        "ctx rename": ["ctx", "rename", "demo", "renamed"],
+        "ctx show": ["ctx", "show", "demo"],
+        "ctx toc": ["ctx", "toc", "demo"],
+        "find": ["find", "pineapples"],
+        "fix-crosslinks": ["fix-crosslinks", "--check"],
+        "fix-xml-tags": ["fix-xml-tags", "--check"],
+        "index": ["index"],
+        "info": ["info"],
+        "install": ["install", "--only", "claude"],
+        "list": ["list", "--type", "Note"],
+        "merge-tags": ["merge-tags", "alpha", "--into", "omega"],
+        "normalize-tags": ["normalize-tags"],
+        "prime": ["prime", "--compact"],
+        "read": ["read", "kc-a/alpha"],
+        "recent": ["recent"],
+        "refs": ["refs", "kc-a/alpha.md"],
+        "reindex": ["reindex", "kc-a"],
+        "remove-tags": ["remove-tags", "gamma"],
+        "rename": ["rename", "kc-a/old.md", "kc-a/older.md"],
+        "rewrite-path": ["rewrite-path", "old/place.md", "new/place.md", "--check"],
+        "sync-export": ["sync-export", "kc-gov/ownership", "ownership-rule"],
+        "sync-insert": ["sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule"],
+        "sync-status": ["sync-status"],
+        "sync-update": ["sync-update"],
+        "tags": ["tags"],
+        "toc": ["toc", "kc-a/alpha"],
+        "visualize": ["visualize", "kc-a"],
+        "wikilinks": ["wikilinks"],
+    }
+
+    @staticmethod
+    def registered():
+        """Every command of the built parser, a ctx verb as `ctx <verb>`."""
+        names = set()
+        for name, parser in subcommand_parsers(build_parser()).items():
+            verbs = subcommand_parsers(parser)
+            names.update("{} {}".format(name, verb) for verb in verbs) if verbs else names.add(name)
+        return names
+
+    def test_the_table_names_exactly_the_registered_commands(self):
+        registered = self.registered()
+        self.assertEqual(sorted(registered - set(self.TABLE)), [], "no conformance entry for these commands")
+        self.assertEqual(sorted(set(self.TABLE) - registered), [], "conformance entry for a command that is not registered")
+
+    def test_every_command_answers_json_with_one_envelope_naming_itself(self):
+        for name in sorted(self.registered()):
+            with self.subTest(command=name):
+                self.assertIn(name, self.TABLE, "no conformance entry for {}".format(name))
+                fresh = tempfile.mkdtemp()
+                self.addCleanup(shutil.rmtree, fresh, True)
+                shutil.copytree(self.root, fresh, dirs_exist_ok=True)
+                home = tempfile.mkdtemp()
+                self.addCleanup(shutil.rmtree, home, True)
+                env, err, code = run_json(fresh, *self.TABLE[name], home=home,
+                                          env={"VISUAL": "true", "EDITOR": "true"})
+                self.assertEqual((env["command"], env["ok"], env["error"], code, err), (name, True, None, 0, ""), env)
+
+    def test_an_envelope_error_carries_the_exit_code_of_the_process(self):
+        for kind, code, argv in (("invalid_input", 2, ["rename", "kc-a/alpha.md", "kc-a/alpha.txt"]),
+                                 ("not_found", 3, ["reindex", "nosuch"]),
+                                 ("non_conformant", 4, ["ctx", "read", "demo"]),
+                                 ("drift", 5, ["reindex", "kc-a", "--check"])):
+            with self.subTest(kind=kind):
+                if kind == "non_conformant":
+                    os.remove(os.path.join(self.root, "kc-a/beta.md"))
+                if kind == "drift":
+                    self._w("kc-a/index.md", self.read("kc-a/index.md").replace(
+                        "<!-- /okf:index -->", "stale line\n<!-- /okf:index -->"))
+                env, err, exit_code = run_json(self.root, *argv)
+                self.assertEqual((env["ok"], env["error"]["kind"], env["error"]["code"], exit_code, err),
+                                 (False, kind, code, code, ""))
+
+    def test_a_parser_command_cannot_skip_the_envelope(self):
+        for name, parser in subcommand_parsers(build_parser()).items():
+            for target in (subcommand_parsers(parser) or {name: parser}).values():
+                with self.subTest(command=name):
+                    flags = [a for a in target._actions if "--json" in a.option_strings]
+                    self.assertEqual(len(flags), 1, "{} must register --json exactly once".format(name))
 
 
 if __name__ == "__main__":

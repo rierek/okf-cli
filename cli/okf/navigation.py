@@ -206,6 +206,8 @@ def cmd_visualize(root, args):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)
+    if getattr(args, "json", False):
+        return {"applied": True, "path": out, "nodes": len(nodes), "edges": len(edges)}
     print("wrote {} ({} nodes, {} edges)".format(out, len(nodes), len(edges)))
 
 
@@ -346,6 +348,7 @@ def add_visualize_parser(sub):
               "(embeds every concept body; needs network for cytoscape/marked)")
     pv.add_argument("bundle", help="bundle to render the graph for").completer = _complete_bundles
     pv.add_argument("--out", help="output path (default: <bundle>/assets/viz.html)").completer = _complete_files
+    _add_output(pv)
 
 
 COMMANDS = {

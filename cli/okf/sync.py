@@ -211,6 +211,10 @@ def _sync_addr(rec):
     return "{}#{}".format(rec["source"] or "?", rec["id"] or "?")
 
 
+def _block_row(rel, rec):
+    return {"consumer": rel, "source": rec["source"], "id": rec["id"]}
+
+
 def cmd_sync_export(root, args):
     _, _, payload = _canon_payload(root, args.concept, args.block_id)
     payload = payload.strip("\n")
@@ -248,14 +252,19 @@ def cmd_sync_insert(root, args):
         raise OkfError("invalid_input", message)
     block = render_sync_block(args.block_id, source, payload)
     new_body = body.rstrip("\n") + "\n\n" + block + "\n"
+    result = {"applied": bool(args.apply), "consumer": consumer_rel, "source": source,
+              "id": args.block_id}
     if not args.apply:
-        print("would insert    {}   {}#{}".format(
-            consumer_rel, source, args.block_id))
-        print("sync-insert (dry-run): re-run with --apply.")
-        return
+        if not getattr(args, "json", False):
+            print("would insert    {}   {}#{}".format(
+                consumer_rel, source, args.block_id))
+            print("sync-insert (dry-run): re-run with --apply.")
+        return result
     write_file_verbatim(cap, head + new_body)
-    print("inserted        {}   {}#{}".format(
-        consumer_rel, source, args.block_id))
+    if not getattr(args, "json", False):
+        print("inserted        {}   {}#{}".format(
+            consumer_rel, source, args.block_id))
+    return result
 
 
 def cmd_sync_status(root, args):
@@ -327,19 +336,26 @@ def cmd_sync_update(root, args):
         out.append(body[last:])
         if args.apply:
             write_file_verbatim(ap, head + "".join(out))
-    for rel, rec in updated:
-        print("{:<14} {}   {}".format(verb, rel, _sync_addr(rec)))
-    for rel, rec, _status in refused:
-        print("refused        {}   {}  (consumer copy modified — reconcile "
-              "into the canon owner first, or --force to discard)".format(
-                  rel, _sync_addr(rec)))
-    for rel, rec, status in unresolvable:
-        print("{:<14} {}   {}".format(status, rel, _sync_addr(rec)))
-    print("sync-update: {} {}, {} refused, {} unresolvable.{}".format(
-        len(updated), verb, len(refused), len(unresolvable),
-        "" if args.apply else " Re-run with --apply."))
+    result = {"applied": bool(args.apply),
+              "updated": [_block_row(rel, rec) for rel, rec in updated],
+              "refused": [_block_row(rel, rec) for rel, rec, _status in refused],
+              "unresolvable": [dict(_block_row(rel, rec), status=status)
+                               for rel, rec, status in unresolvable]}
+    if not getattr(args, "json", False):
+        for rel, rec in updated:
+            print("{:<14} {}   {}".format(verb, rel, _sync_addr(rec)))
+        for rel, rec, _status in refused:
+            print("refused        {}   {}  (consumer copy modified — reconcile "
+                  "into the canon owner first, or --force to discard)".format(
+                      rel, _sync_addr(rec)))
+        for rel, rec, status in unresolvable:
+            print("{:<14} {}   {}".format(status, rel, _sync_addr(rec)))
+        print("sync-update: {} {}, {} refused, {} unresolvable.{}".format(
+            len(updated), verb, len(refused), len(unresolvable),
+            "" if args.apply else " Re-run with --apply."))
     if refused or unresolvable:
-        raise OkfError("drift", "")
+        raise OkfError("drift", "", result)
+    return result
 
 
 def _complete_block_ids(parsed_args, **_):
@@ -388,6 +404,7 @@ def add_sync_insert_parser(sub):
     psi.add_argument("block_id", metavar="block-id", help="canon block id to materialise").completer = _complete_block_ids
     psi.add_argument("--apply", action="store_true",
                      help="write the block (default: dry-run preview only)")
+    _add_output(psi)
 
 
 def add_sync_status_parser(sub):
@@ -413,6 +430,7 @@ def add_sync_update_parser(sub):
                      help="write changes (default: dry-run preview only)")
     psu.add_argument("--force", action="store_true",
                      help="also overwrite a consumer copy that was modified locally (discards it)")
+    _add_output(psu)
 
 
 COMMANDS = {

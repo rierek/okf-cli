@@ -40,23 +40,26 @@ def run_find(root, query, **kw):
 CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli", "okf-cli.py")
 
 
-def run_cli(root, *argv, home=None):
+def run_cli(root, *argv, home=None, env=None):
     """(stdout, stderr, exit code) of one real okf-cli.py call against the catalogue at
-    `root`. VOYAGE_API_KEY is dropped, so no call reaches the embedding backend."""
-    env = {k: v for k, v in os.environ.items() if k != "VOYAGE_API_KEY"}
+    `root`. VOYAGE_API_KEY is dropped, so no call reaches the embedding backend; `env`
+    adds or overrides variables."""
+    full_env = {k: v for k, v in os.environ.items() if k != "VOYAGE_API_KEY"}
     if home is not None:
-        env["HOME"] = home
+        full_env["HOME"] = home
+    full_env.update(env or {})
     proc = subprocess.run([sys.executable, CLI, "--root", root, *argv],
-                          capture_output=True, text=True, env=env, cwd=root)
+                          capture_output=True, text=True, env=full_env, cwd=root)
     return proc.stdout, proc.stderr, proc.returncode
 
 
-def run_json(root, *argv):
+def run_json(root, *argv, **kw):
     """(envelope, stderr, exit code) of `okf-cli.py --root <root> <argv> --json`. Fails
-    unless stdout is exactly one JSON line carrying the five envelope keys."""
-    out, err, code = run_cli(root, *argv, "--json")
+    unless stdout is exactly one JSON object on one line carrying the five envelope keys."""
+    out, err, code = run_cli(root, *argv, "--json", **kw)
     assert out.count("\n") == 1 and out.endswith("\n"), "stdout is not one line: {!r}".format(out)
     envelope = json.loads(out)
+    assert isinstance(envelope, dict), "stdout is not a JSON object: {!r}".format(out)
     assert set(envelope) == {"command", "ok", "data", "warnings", "error"}, sorted(envelope)
     return envelope, err, code
 

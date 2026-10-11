@@ -1,7 +1,7 @@
 """One output path for every command: the `--json` flag, the one-envelope emitter around
 the entry point, and the call note.
 
-A command registered through `_add_output` answers `--json` with exactly one envelope
+Every command registers `--json` through `_add_output` and answers it with exactly one envelope
 {command, ok, data, warnings, error} on stdout. Its handler returns `data` and prints
 nothing in that mode; a classified failure is an OkfError, whose optional result becomes
 `data`. Every note a call raises goes through `_note`: a stderr line in text mode, an entry
@@ -18,11 +18,10 @@ _warnings = None  # the notes of the running envelope call; None in text mode
 
 
 def _add_output(parser):
-    """Register `--json` and mark the parser as envelope-emitting. The one place that
-    registers `--json` for a converted command."""
+    """Register `--json`: the one place any command registers it, and the one flag that
+    makes a call answer with the envelope."""
     parser.add_argument("--json", action="store_true",
                         help="print one JSON envelope {command, ok, data, warnings, error}")
-    parser.set_defaults(envelope=True)
 
 
 def _note(message):
@@ -34,7 +33,7 @@ def _note(message):
 
 
 def wants_envelope(args):
-    return bool(getattr(args, "envelope", False) and getattr(args, "json", False))
+    return bool(getattr(args, "json", False))
 
 
 def command_name(args):

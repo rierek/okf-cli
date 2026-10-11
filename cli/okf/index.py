@@ -248,21 +248,29 @@ def cmd_reindex(root, args):
     tp = os.path.join(root, target)
     if not os.path.isdir(tp):
         raise OkfError("not_found", "not a directory: {}".format(target))
+    as_json = getattr(args, "json", False)
+    result = {"applied": not args.check, "init": None, "updated": [], "skipped": [],
+              "stale": [], "uncovered": []}
     if args.init:
         if not args.check:
             ensure_markers(tp)                    # create-only, named target
         conv = init_indexes(root, tp, dry_run=args.check, force=getattr(args, "force", False))
         verb = "would convert" if args.check else "converted"
-        for rel, status in conv:
-            if status == "converted":
-                print("{:<14} {}".format(verb, rel))
-            elif status != "already-managed":
-                print("{:<14} {}  ({})".format("skipped", rel, status))
         n_conv = sum(1 for _, s in conv if s == "converted")
         n_skip = sum(1 for _, s in conv if s not in ("converted", "already-managed"))
-        print("init: {} {}, {} skipped".format(n_conv, verb, n_skip))
+        result["init"] = {
+            "converted": [rel for rel, status in conv if status == "converted"],
+            "skipped": [{"path": rel, "reason": status} for rel, status in conv
+                        if status not in ("converted", "already-managed")]}
+        if not as_json:
+            for rel, status in conv:
+                if status == "converted":
+                    print("{:<14} {}".format(verb, rel))
+                elif status != "already-managed":
+                    print("{:<14} {}  ({})".format("skipped", rel, status))
+            print("init: {} {}, {} skipped".format(n_conv, verb, n_skip))
         if args.check:
-            return                              # --init --check = conversion preview only
+            return result                       # --init --check = conversion preview only
     dirs = []
     for dp, dn, fn in os.walk(tp):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
@@ -287,16 +295,21 @@ def cmd_reindex(root, args):
         else:
             write_file(idx, new_text)
             changed.append(rel)
+    result.update(updated=changed, skipped=skipped, stale=stale)
     if args.check:
         un = uncovered_index_dirs(root, tp)
-        for p in stale:
-            print("STALE        {}".format(p))
-        for p in un:
-            print("UNCOVERED    {}".format(p))
-        print("reindex --check: {} stale, {} uncovered, {} without markers".format(
-            len(stale), len(un), len(skipped)))
+        result["uncovered"] = un
+        if not as_json:
+            for p in stale:
+                print("STALE        {}".format(p))
+            for p in un:
+                print("UNCOVERED    {}".format(p))
+            print("reindex --check: {} stale, {} uncovered, {} without markers".format(
+                len(stale), len(un), len(skipped)))
         if stale or un:
-            raise OkfError("drift", "")
+            raise OkfError("drift", "", result)
+    if as_json:
+        return result
     for p in changed:
         print("updated       {}".format(p))
     for p in skipped:
@@ -331,6 +344,7 @@ def add_reindex_parser(sub):
                     help="dry-run: with --init preview conversions; else report stale + uncovered. No writes")
     px.add_argument("--force", action="store_true",
                     help="with --init, also flatten a pure multi-section listing (prose/tables still refuse)")
+    _add_output(px)
 
 
 COMMANDS = {

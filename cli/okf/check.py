@@ -321,6 +321,9 @@ def cmd_fix_xml_tags(root, args):
             raise OkfError("not_found", "not a directory: {}".format(target))
     touched = fix_xml_like_tags(root, target, dry_run=args.check)
     verb = "would wrap" if args.check else "wrapped"
+    if getattr(args, "json", False):
+        return {"applied": not args.check,
+                "files": [{"path": rel, "chains": n} for rel, n in touched]}
     for rel, n in touched:
         print("{:<12} {}  ({} chain(s))".format(verb, rel, n))
     print("fix-xml-tags: {} file(s) {}, {} chain(s) total".format(
@@ -476,6 +479,10 @@ def cmd_fix_crosslinks(root, args):
     touched, unresolved = fix_crosslinks(root, target, dry_run=args.check,
                                           include_reserved=args.include_reserved)
     verb = "would rewrite" if args.check else "rewrote"
+    if getattr(args, "json", False):
+        return {"applied": not args.check,
+                "files": [{"path": rel, "links": n} for rel, n in touched],
+                "unresolved": [{"path": rel, "target": tgt} for rel, tgt in unresolved]}
     for rel, n in touched:
         print("{:<14} {}  ({} link(s))".format(verb, rel, n))
     for rel, tgt in unresolved:
@@ -687,6 +694,7 @@ def add_fix_crosslinks_parser(sub):
                            "outside the managed <!-- okf:index --> block, "
                            "which stays byte-identical (D-fxcr-01, off by "
                            "default)")
+    _add_output(pfx)
 
 
 def add_fix_xml_tags_parser(sub):
@@ -694,6 +702,7 @@ def add_fix_xml_tags_parser(sub):
                 "wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code")
     pfxt.add_argument("target", nargs="?", help="<bundle> or <bundle>/<subdir> (default: whole catalogue)").completer = _complete_scopes
     pfxt.add_argument("--check", action="store_true", help="dry-run: report without writing")
+    _add_output(pfxt)
 
 
 COMMANDS = {

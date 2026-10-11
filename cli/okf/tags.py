@@ -98,6 +98,10 @@ def cmd_merge_tags(root, args):
             touched.append(rel)
             if args.apply:
                 write_file(ap, new_text)
+    result = {"applied": bool(args.apply), "files": touched, "unparseable": unparseable,
+              "from": sorted(sources), "into": args.into}
+    if getattr(args, "json", False):
+        return result
     verb = "rewrote" if args.apply else "would rewrite"
     for rel in touched:
         print("{:<14} {}".format(verb, rel))
@@ -135,6 +139,10 @@ def cmd_remove_tags(root, args):
             touched.append(rel)
             if args.apply:
                 write_file(ap, new_text)
+    result = {"applied": bool(args.apply), "files": touched, "emptied": emptied,
+              "unparseable": unparseable, "removed": sorted(targets)}
+    if getattr(args, "json", False):
+        return result
     verb = "rewrote" if args.apply else "would rewrite"
     for rel in touched:
         print("{:<14} {}".format(verb, rel))
@@ -180,6 +188,9 @@ def cmd_normalize_tags(root, args):
             touched.append(rel)
             if args.apply:
                 write_file(ap, new_text)
+    result = {"applied": bool(args.apply), "files": touched}
+    if getattr(args, "json", False):
+        return result
     verb = "rewrote" if args.apply else "would rewrite"
     for rel in touched:
         print("{:<14} {}".format(verb, rel))
@@ -322,6 +333,7 @@ def add_merge_tags_parser(sub):
     pmt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     pmt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    _add_output(pmt)
 
 
 def add_normalize_tags_parser(sub):
@@ -330,6 +342,7 @@ def add_normalize_tags_parser(sub):
     pnt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     pnt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    _add_output(pnt)
 
 
 def add_remove_tags_parser(sub):
@@ -339,6 +352,7 @@ def add_remove_tags_parser(sub):
     prt.add_argument("--scope", metavar="TARGET",
                      help="<bundle> or <bundle>/<subdir> to limit the rewrite (default: whole catalogue)").completer = _complete_scopes
     prt.add_argument("--apply", action="store_true", help="write changes (default: dry-run preview only)")
+    _add_output(prt)
 
 
 def add_tags_parser(sub):

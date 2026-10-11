@@ -81,6 +81,9 @@ def cmd_ctx_create(root, args):
     entries.sort(key=lambda e: e["path"].casefold())
     save_ctx(root, {"slug": args.slug, "description": args.description or "",
                     "entries": entries})
+    if getattr(args, "json", False):
+        return {"applied": True, "slug": args.slug, "path": "{}/{}.md".format(CTX_DIR, args.slug),
+                "entries": len(entries)}
     print("created {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(entries)))
 
 
@@ -326,6 +329,8 @@ def cmd_ctx_add(root, args):
         _ctx_die("{} is already in {} ({})".format(norm, args.slug, _ctx_where(pf, old)))
     where = _ctx_put(root, c, pf, rest, {"pos": None, "path": norm, "comment": args.comment},
                      args.mode, args.pos)
+    if getattr(args, "json", False):
+        return {"applied": True, "slug": args.slug, "path": norm, "where": where}
     print("added {} to {} ({})".format(norm, args.slug, where))
 
 
@@ -336,6 +341,8 @@ def cmd_ctx_drop(root, args):
         _ctx_die("{} is not in {}".format(norm, args.slug), "not_found")
     c["entries"] = [x for x in pf + rest if x is not e]
     save_ctx(root, c)
+    if getattr(args, "json", False):
+        return {"applied": True, "slug": args.slug, "path": norm}
     print("dropped {} from {}".format(norm, args.slug))
 
 
@@ -352,6 +359,8 @@ def cmd_ctx_move(root, args):
     pf = [x for x in pf if x is not e]
     rest = [x for x in rest if x is not e]
     where = _ctx_put(root, c, pf, rest, e, mode, args.pos)
+    if getattr(args, "json", False):
+        return {"applied": True, "slug": args.slug, "path": norm, "where": where}
     print("moved {} in {} to {}".format(norm, args.slug, where))
 
 
@@ -377,7 +386,7 @@ def cmd_ctx_edit(root, args):
     if rc:
         _ctx_die("editor exited {}".format(rc))
     reindex_tree(root, ctx_dir(root))
-    _ctx_report(root, [args.slug], False, False)
+    return _ctx_report(root, [args.slug], False, getattr(args, "json", False))
 
 
 def cmd_ctx_rename(root, args):
@@ -387,9 +396,11 @@ def cmd_ctx_rename(root, args):
         _ctx_die('invalid slug "{}": {}'.format(args.new, problem))
     if os.path.exists(ctx_file(root, args.new)):
         _ctx_die("{} already exists".format(args.new))
-    rename.perform_rename(root, ctx_file(root, args.old), ctx_file(root, args.new), True, False)
+    result = rename.perform_rename(root, ctx_file(root, args.old), ctx_file(root, args.new), True,
+                                   False, quiet=getattr(args, "json", False))
     if not c["problems"]:
         save_ctx(root, load_ctx(root, args.new))  # refreshes the H1 (D-pzho-16)
+    return dict(result, old_slug=args.old, new_slug=args.new)
 
 
 def cmd_ctx_remove(root, args):
@@ -400,6 +411,10 @@ def cmd_ctx_remove(root, args):
                               if s.replace(os.sep, "/") != CTX_DIR + "/index.md"))
     os.remove(f)
     reindex_tree(root, ctx_dir(root))
+    result = {"applied": True, "slug": args.slug, "path": "{}/{}.md".format(CTX_DIR, args.slug),
+              "entries": len(c["entries"]), "linked_from": srcs}
+    if getattr(args, "json", False):
+        return result
     print("removed {}/{}.md ({} entries)".format(CTX_DIR, args.slug, len(c["entries"])))
     if srcs:
         print("warning: {} file(s) still link to {}/{}.md:".format(len(srcs), CTX_DIR, args.slug))
@@ -458,6 +473,7 @@ def add_ctx_parser(sub):
     pcxa.add_argument("--pos", type=int, help="required position (clamped to 1..n+1)")
     pcxa.add_argument("--mode", choices=CTX_MODES, default="pflicht", help="entry mode")
     pcxa.add_argument("--comment", default="", help="entry comment")
+    _add_output(pcxa)
     pcxk = ctx_verbs.add_parser(
         "check", help="validate ctx bundles",
         description="report ctx errors and warnings in the `check` line format; exit 1 on any error")
@@ -478,17 +494,20 @@ def add_ctx_parser(sub):
                       help="read one path per line (blank and # lines skipped, "
                            "text after a TAB is the entry comment)").completer = _complete_files
     pcxc.add_argument("--description", help="one-line description of the bundle")
+    _add_output(pcxc)
     pcxd = ctx_verbs.add_parser(
         "drop", help="remove one entry from a ctx bundle",
         description="remove an entry (also when its file is gone); required positions are "
                     "renumbered 1..n")
     pcxd.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
     pcxd.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
+    _add_output(pcxd)
     pcxe = ctx_verbs.add_parser(
         "edit", help="open a ctx bundle in $VISUAL/$EDITOR/vi and validate it",
         description="open _ctx/<slug>.md in $VISUAL, else $EDITOR, else vi; afterwards refresh "
                     "the _ctx index and run `ctx check` on the file; exit 1 on errors")
     pcxe.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    _add_output(pcxe)
     pcxl = ctx_verbs.add_parser(
         "list", help="list ctx bundles with entry and required counts",
         description="list ctx bundles: slug, description, entry and required counts")
@@ -504,6 +523,7 @@ def add_ctx_parser(sub):
     pcxm.add_argument("path", metavar="PATH", help="entry path").completer = _complete_files
     pcxm.add_argument("--pos", type=int, help="required position (clamped to 1..n)")
     pcxm.add_argument("--mode", choices=CTX_MODES, help="new mode")
+    _add_output(pcxm)
     pcxo = ctx_verbs.add_parser(
         "outbound", help="list the links each entry points to",
         description="per entry, markdown link targets; missing targets are marked [missing], "
@@ -531,11 +551,13 @@ def add_ctx_parser(sub):
         description="delete _ctx/<slug>.md, refresh the _ctx index and list every file "
                     "that still links to the removed ctx")
     pcxrm.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    _add_output(pcxrm)
     pcxrn = ctx_verbs.add_parser(
         "rename", help="rename a ctx bundle and rewrite inbound links",
         description="move _ctx/<old>.md to _ctx/<new>.md; inbound links and the _ctx index follow")
     pcxrn.add_argument("old", help="current ctx slug").completer = _complete_ctx_slugs
     pcxrn.add_argument("new", help="new ctx slug: lowercase letters, digits, hyphens")
+    _add_output(pcxrn)
     pcxs = ctx_verbs.add_parser(
         "show", help="list a ctx in reading order with live metadata and token estimates",
         description="list the required entries in reading order, then the reference entries; "

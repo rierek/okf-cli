@@ -5,12 +5,11 @@ build-index command."""
 import os
 import re
 import sqlite3
-
 from okf.catalogue import (
     _dequote, extract_tags, iter_concepts, list_search_bundles, read_file, split_frontmatter,
 )
 from okf.find_filters import FTS_FILTER_COLUMNS
-from okf.output import _note
+from okf.output import _add_output, _note
 from okf.parser_support import _sub
 
 
@@ -200,9 +199,13 @@ def cmd_build_index(root, args):
             finally:
                 conn.close()
             if not stale:
+                if getattr(args, "json", False):
+                    return {"applied": False, "concepts": None, "path": db_path}
                 print("index is current, skipping rebuild -> {}".format(db_path))
                 return
     n, db = build_fts_index(root, include_topics=getattr(args, "include_topics", False))
+    if getattr(args, "json", False):
+        return {"applied": True, "concepts": n, "path": db}
     print("indexed {} concept(s) -> {}".format(n, db))
 
 
@@ -305,6 +308,7 @@ def add_build_index_parser(sub):
     pbi.add_argument("--if-stale", action="store_true",
                       help="skip the rebuild when the existing index is "
                            "already current (default: always rebuild)")
+    _add_output(pbi)
 
 
 COMMANDS = {"build-index": (cmd_build_index, add_build_index_parser)}

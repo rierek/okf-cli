@@ -12,7 +12,7 @@ import urllib.request
 from okf import catalogue
 from okf.catalogue import iter_concepts, list_indexable_bundles
 from okf.find_filters import EMB_FILTER_COLUMNS, FindFilters
-from okf.output import _note
+from okf.output import _add_output, _note
 from okf.parser_support import _sub
 
 
@@ -277,19 +277,22 @@ def cmd_build_semantic_index(root, args):
     (`find`) is untouched by any of this -- it never calls this producer
     itself (D13/D16)."""
     db_path = _tagvec_db_path(root)
+    as_json = getattr(args, "json", False)
+    result = {"applied": False, "embedded": 0, "path": db_path}
     if getattr(args, "if_stale", False):
         bundles = list_indexable_bundles(root)
         paths = ["{}/{}".format(b, cid) for b in bundles
                  for cid, _ap in iter_concepts(os.path.join(root, b))]
         cov = semantic_coverage(root, paths)
         if cov is not None and cov[0] >= cov[1]:
-            print("semantic index is current, skipping rebuild -> {}".format(db_path))
-            return
+            if not as_json:
+                print("semantic index is current, skipping rebuild -> {}".format(db_path))
+            return result
     if not os.environ.get("VOYAGE_API_KEY"):
         _note("semantic index build skipped (VOYAGE_API_KEY not set) "
               "-- run again once it is set, or set it before the next "
               "SessionStart hook run")
-        return
+        return result
     bt = catalogue._load_build_tagvec()
     try:
         delta = bt.plan_concept_delta(root, SEMANTIC_MODEL, db_path)
@@ -310,7 +313,9 @@ def cmd_build_semantic_index(root, args):
             ]
             bt.write_concept_rows(db_path, rows)
             written += len(rows)
-        print("embedded {} concept(s) -> {}".format(written, db_path))
+        result.update(applied=written > 0, embedded=written)
+        if not as_json:
+            print("embedded {} concept(s) -> {}".format(written, db_path))
         if incomplete:
             _note("semantic index build incomplete -- {} concept(s) "
                   "left unembedded after retries; rerun to pick up the "
@@ -318,6 +323,7 @@ def cmd_build_semantic_index(root, args):
     except Exception as exc:
         _note("semantic index build failed ({}: {}) -- lexical arm "
               "unaffected".format(type(exc).__name__, exc))
+    return result
 
 
 def add_build_semantic_index_parser(sub):
@@ -329,6 +335,7 @@ def add_build_semantic_index_parser(sub):
                       help="skip the run when semantic_coverage() already "
                            "reports every on-disk concept embedded "
                            "(default: always fill the delta)")
+    _add_output(pbs)
 
 
 COMMANDS = {"build-semantic-index": (cmd_build_semantic_index, add_build_semantic_index_parser)}
