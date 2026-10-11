@@ -11,6 +11,7 @@ Run: python3 -m unittest tests.test_okf_mcp -v
 """
 import importlib.util
 import inspect
+import json
 import os
 import shutil
 import subprocess
@@ -78,21 +79,21 @@ class McpIndexListBoundary(McpBoundaryTestBase):
     returns parsed JSON without raising — the exact B01 failure, now guarded."""
 
     def test_list_json_over_subprocess(self):
-        out = mcp.run_okf(self.root, "list", {"type": "Runbook"})
+        out = mcp.run_okf(self.root, "list", {"type": "Runbook"})["data"]
         self.assertIsInstance(out, list)
         self.assertEqual(len(out), 2)
 
     def test_list_json_filters_by_type(self):
-        out = mcp.run_okf(self.root, "list", {"type": "Nope"})
+        out = mcp.run_okf(self.root, "list", {"type": "Nope"})["data"]
         self.assertEqual(out, [])
 
     def test_index_json_over_subprocess_no_bundle(self):
         out = mcp.run_okf(self.root, "index", {"bundle": ""})
-        self.assertIsInstance(out, dict)
-        self.assertIn("bundles", out)
+        self.assertEqual(list(out), ["data", "warnings"])
+        self.assertIn("bundles", out["data"])
 
     def test_index_json_over_subprocess_with_bundle(self):
-        out = mcp.run_okf(self.root, "index", {"bundle": "b"})
+        out = mcp.run_okf(self.root, "index", {"bundle": "b"})["data"]
         self.assertIsInstance(out, dict)
         self.assertEqual(out["bundle"], "b")
         self.assertEqual(len(out["concepts"]), 2)
@@ -101,31 +102,30 @@ class McpIndexListBoundary(McpBoundaryTestBase):
         """okf-cli-t2w8 SC-002 — the MCP surface offers the same
         compact/full split `index` does: bundle+description by default,
         no concepts/directories keys without full=True."""
-        out = mcp.run_okf(self.root, "index", {"bundle": ""})
+        out = mcp.run_okf(self.root, "index", {"bundle": ""})["data"]
         entry = out["bundles"][0]
         self.assertNotIn("concepts", entry)
         self.assertNotIn("directories", entry)
 
     def test_index_json_over_subprocess_no_bundle_full_includes_concepts(self):
-        out = mcp.run_okf(self.root, "index", {"bundle": "", "full": True})
+        out = mcp.run_okf(self.root, "index", {"bundle": "", "full": True})["data"]
         entry = out["bundles"][0]
         self.assertEqual(entry["concepts"], 2)
         self.assertIn("directories", entry)
 
 
 class McpCheckRefsBoundary(McpBoundaryTestBase):
-    """SC-002: check + refs (already --json-valid pre-P1) locked at the
-    subprocess boundary too, so the whole supports_json=True surface
-    (index, list, check, refs) is guarded end-to-end."""
+    """SC-002: check + refs locked at the subprocess boundary too, so every
+    structured tool (index, list, check, refs) is guarded end-to-end."""
 
     def test_check_json_over_subprocess(self):
         out = mcp.run_okf(self.root, "check", {"target": ""})
-        self.assertIsInstance(out, dict)
-        self.assertEqual(list(out), ["findings"])
+        self.assertEqual(list(out), ["data", "warnings"])
+        self.assertEqual(list(out["data"]), ["findings"])
 
     def test_refs_json_over_subprocess(self):
         out = mcp.run_okf(
-            self.root, "refs", {"path": "b/one.md", "scan_root": self.root})
+            self.root, "refs", {"path": "b/one.md", "scan_root": self.root})["data"]
         self.assertIsInstance(out, dict)
         self.assertEqual(out["target"], "b/one.md")
         self.assertEqual([h["source"] for h in out["inbound"]], ["b/index.md"])
@@ -171,19 +171,21 @@ class McpFindFilterBoundary(McpBoundaryTestBase):
            "---\n# Dupe\n\nalpha shared token.\n")
 
     def test_find_scope_reaches_cli_over_subprocess(self):
-        out = mcp.run_okf(self.root, "find", {"query": "alpha", "scope": "b"})
-        self.assertIn("path: b/one", out)
-        self.assertNotIn("path: other/dupe", out)
+        out = mcp.run_okf(self.root, "find", {"query": "alpha", "scope": "b"})["data"]
+        paths = [h["path"] for h in out["hits"]]
+        self.assertIn("b/one", paths)
+        self.assertNotIn("other/dupe", paths)
 
     def test_find_type_and_tag_reach_cli_over_subprocess(self):
         out = mcp.run_okf(
-            self.root, "find", {"query": "one two", "type": "Runbook", "tag": "alpha"})
-        self.assertIn("path: b/one", out)
-        self.assertNotIn("path: b/two", out)
+            self.root, "find", {"query": "one two", "type": "Runbook", "tag": "alpha"})["data"]
+        paths = [h["path"] for h in out["hits"]]
+        self.assertIn("b/one", paths)
+        self.assertNotIn("b/two", paths)
 
     def test_index_with_bundle_still_works_after_flags_change(self):
         # Regression guard for the positional-collision fix above.
-        out = mcp.run_okf(self.root, "index", {"bundle": "b"})
+        out = mcp.run_okf(self.root, "index", {"bundle": "b"})["data"]
         self.assertEqual(out["bundle"], "b")
 
 
@@ -192,14 +194,13 @@ class McpTagsBoundary(McpBoundaryTestBase):
     both full audit-dump mode (empty query) and fuzzy candidate-search mode."""
 
     def test_tags_full_dump_over_subprocess(self):
-        out = mcp.run_okf(self.root, "tags", {"query": ""})
-        self.assertIn("alpha", out)
-        self.assertIn("beta", out)
+        out = mcp.run_okf(self.root, "tags", {"query": ""})["data"]
+        self.assertEqual([t["tag"] for t in out["tags"]], ["alpha", "beta"])
 
     def test_tags_query_over_subprocess(self):
-        out = mcp.run_okf(self.root, "tags", {"query": "alph"})
-        self.assertIn("== searched: alph ==", out)
-        self.assertIn("alpha", out)
+        out = mcp.run_okf(self.root, "tags", {"query": "alph"})["data"]
+        self.assertEqual(out["searches"][0]["query"], "alph")
+        self.assertIn("alpha", [m["tag"] for m in out["searches"][0]["matches"]])
 
 
 class McpAgentRemedyBoundary(McpBoundaryTestBase):
@@ -208,15 +209,16 @@ class McpAgentRemedyBoundary(McpBoundaryTestBase):
 
     def test_build_index_reaches_the_cli_and_writes_the_index(self):
         out = mcp.run_okf(self.root, "build-index", {})
-        self.assertTrue(os.path.exists(
-            os.path.join(self.root, ".fts", "fts.sqlite")))
-        self.assertIn("indexed", out)
+        db = os.path.join(self.root, ".fts", "fts.sqlite")
+        self.assertTrue(os.path.exists(db))
+        self.assertEqual((out["data"]["applied"], out["data"]["path"]), (True, db))
 
     def test_prime_reaches_the_cli(self):
-        self.assertTrue(mcp.run_okf(self.root, "prime", {}).strip())
+        self.assertTrue(mcp.run_okf(self.root, "prime", {})["data"]["guide"].strip())
 
     def test_info_reaches_the_cli(self):
-        self.assertTrue(mcp.run_okf(self.root, "info", {}).strip())
+        files = mcp.run_okf(self.root, "info", {})["data"]["files"]
+        self.assertEqual([f["name"] for f in files], ["TYPES.md", "PROPERTIES.md"])
 
     def test_build_semantic_index_reaches_the_cli_and_degrades_without_key(self):
         """OKFT-wsne. Real subprocess -> real CLI, same as
@@ -231,33 +233,27 @@ class McpAgentRemedyBoundary(McpBoundaryTestBase):
         finally:
             if saved is not None:
                 os.environ["VOYAGE_API_KEY"] = saved
-        self.assertIn("note: semantic index build skipped", out)
-        self.assertIn("VOYAGE_API_KEY", out)
+        self.assertEqual(out["data"], {"applied": False, "embedded": 0, "path": os.path.join(
+            self.root, ".tagvec", "tag_vectors.sqlite")})
+        (warning,) = [w for w in out["warnings"] if "semantic index build skipped" in w]
+        self.assertIn("VOYAGE_API_KEY", warning)
 
 
 class McpFindDegradationNoteBoundary(McpBoundaryTestBase):
-    """SC-01 (okf-cli-2o39, D01): a degradation note the CLI writes to stderr
-    on a non-JSON command must reach the MCP caller, prepended to stdout.
-    The fresh catalogue from setUp has no .fts/fts.sqlite yet, so `find`
-    degrades to the substring scan and prints the "absent" note."""
+    """SC-01 (okf-cli-2o39, D01): a degradation note of the CLI reaches the MCP caller as an entry
+    of `warnings`, next to the hits in `data`. The fresh catalogue from setUp has no
+    .fts/fts.sqlite yet, so `find` degrades to the substring scan and notes the missing index."""
 
-    def test_find_returns_absent_note_ahead_of_stdout(self):
+    def test_find_returns_the_absent_note_as_a_warning(self):
         out = mcp.run_okf(self.root, "find", {"query": "one"})
-        self.assertIn("note: lexical index absent", out)
-        self.assertIn("path: b/one", out)
-        self.assertLess(out.index("note:"), out.index("path: b/one"))
+        self.assertTrue(any("lexical index absent" in w for w in out["warnings"]), out["warnings"])
+        self.assertIn("b/one", [h["path"] for h in out["data"]["hits"]])
 
 
-class McpJsonCommandParsesDespiteStderrNote(unittest.TestCase):
-    """SC-02 (okf-cli-2o39, AC-03): a JSON-supporting command's return value
-    must stay byte-identical (still json.loads-able, nothing from stderr
-    mixed in) even when the CLI writes a note to stderr during that same
-    call. No JSON-supporting command in the current CLI both exits 0 and
-    writes to stderr (checked: cmd_check/cmd_list/cmd_index/cmd_refs emit
-    nothing to stderr on a clean exit), so this pins the wrapper's own
-    contract directly via a stubbed subprocess.run rather than relying on a
-    real CLI code path that does not exist today — the guarantee must hold
-    regardless of whether the CLI ever grows one."""
+class McpJsonCommandIgnoresStderr(unittest.TestCase):
+    """SC-02 (okf-cli-2o39, AC-03): the return value is built from the envelope alone. A note
+    on stderr during the same call, which the CLI no longer writes in envelope mode, never mixes
+    in. This pins the wrapper's own contract through a stubbed subprocess.run."""
 
     def test_json_command_return_value_ignores_stderr_note(self):
         stub = subprocess.CompletedProcess(
@@ -272,7 +268,7 @@ class McpJsonCommandParsesDespiteStderrNote(unittest.TestCase):
         fake_subprocess.run.return_value = stub
         with mock.patch.object(mcp, "subprocess", fake_subprocess):
             out = mcp.run_okf("/root", "list", {"type": "Runbook"})
-        self.assertEqual(out, [{"title": "One"}])
+        self.assertEqual(out, {"data": [{"title": "One"}], "warnings": []})
 
 
 class McpSurfaceParity(unittest.TestCase):
@@ -310,7 +306,7 @@ class McpOutputCeiling(McpBoundaryTestBase):
     def test_result_within_budget_passes_through(self):
         mcp.MAX_OUTPUT_CHARS = 10_000_000
         out = mcp.run_okf(self.root, "index", {})
-        self.assertIn("bundles", out)
+        self.assertIn("bundles", out["data"])
 
 
 class McpDefaultCliPath(unittest.TestCase):
@@ -354,8 +350,8 @@ class McpWikilinksSurface(unittest.TestCase):
     from _COMMANDS is invisible to MCP no matter how well the CLI implements
     it, and a boolean flag absent from _BOOL_FLAGS is silently dropped."""
 
-    def test_command_is_whitelisted_with_target_and_json(self):
-        self.assertEqual(mcp._COMMANDS["wikilinks"], (["target"], True))
+    def test_command_is_whitelisted_with_target(self):
+        self.assertEqual(mcp._COMMANDS["wikilinks"], ["target"])
 
     def test_unresolved_flag_is_marshalled(self):
         with_flag = mcp.build_argv("/root", "wikilinks",
@@ -376,7 +372,7 @@ class McpPrimeIsCompact(unittest.TestCase):
 
     def test_compact_is_marshalled_onto_the_prime_call(self):
         self.assertEqual(mcp.build_argv("/root", "prime", {"compact": True}),
-                         ["--root", "/root", "prime", "--compact"])
+                         ["--root", "/root", "prime", "--compact", "--json"])
 
     def test_the_registered_tool_asks_for_compact(self):
         argvs = []
@@ -390,7 +386,7 @@ class McpPrimeIsCompact(unittest.TestCase):
             mcp._register(_ToolCollector()).tools["okf_prime"]("/root")
         finally:
             mcp.run_okf = real
-        self.assertEqual(argvs, [["--root", "/root", "prime", "--compact"]])
+        self.assertEqual(argvs, [["--root", "/root", "prime", "--compact", "--json"]])
 
 
 class McpOptionalRoot(unittest.TestCase):
@@ -403,11 +399,11 @@ class McpOptionalRoot(unittest.TestCase):
     def test_falsy_root_omits_the_root_flag(self):
         argv = mcp.build_argv("", "prime", {"compact": True})
         self.assertNotIn("--root", argv)
-        self.assertEqual(argv, ["prime", "--compact"])
+        self.assertEqual(argv, ["prime", "--compact", "--json"])
 
     def test_truthy_root_still_emits_the_root_flag(self):
         argv = mcp.build_argv("/x", "prime", {"compact": True})
-        self.assertEqual(argv, ["--root", "/x", "prime", "--compact"])
+        self.assertEqual(argv, ["--root", "/x", "prime", "--compact", "--json"])
 
     def test_registered_tool_called_with_no_args_omits_root(self):
         # build_argv alone does not guard the 15 tool SIGNATURES — if
@@ -511,7 +507,7 @@ class McpIncludeArchiveFlag(unittest.TestCase):
             mcp.run_okf = real
         self.assertEqual(
             argvs[0],
-            ["--root", "/root", "find", "q", "--limit", "10", "--include-archive"])
+            ["--root", "/root", "find", "q", "--limit", "10", "--include-archive", "--json"])
 
     def test_ac1_okf_list_tool_accepts_include_archive_and_reaches_build_argv(self):
         argvs = []
@@ -545,7 +541,7 @@ class McpWikilinksBoundary(McpBoundaryTestBase):
         return mcp._register(_ToolCollector()).tools[name]
 
     def test_okf_wikilinks_returns_links_and_by_bundle(self):
-        out = self._tool("okf_wikilinks")(root=self.root)
+        out = self._tool("okf_wikilinks")(root=self.root)["data"]
         self.assertIsInstance(out, dict)
         self.assertIn("links", out)
         self.assertIn("by_bundle", out)
@@ -554,12 +550,12 @@ class McpWikilinksBoundary(McpBoundaryTestBase):
             {("one", "resolved"), ("ghost", "unresolved")})
 
     def test_okf_wikilinks_unresolved_filter_reaches_the_cli(self):
-        out = self._tool("okf_wikilinks")(root=self.root, unresolved=True)
+        out = self._tool("okf_wikilinks")(root=self.root, unresolved=True)["data"]
         self.assertEqual([l["page"] for l in out["links"]], ["ghost"])
 
     def test_okf_wikilinks_target_scopes_the_scan(self):
         _w(self.root, "other/x.md", "---\ntype: Runbook\n---\nSee [[phantom]].\n")
-        out = self._tool("okf_wikilinks")(root=self.root, target="other")
+        out = self._tool("okf_wikilinks")(root=self.root, target="other")["data"]
         self.assertEqual(sorted(out["by_bundle"]), ["other"])
 
 
@@ -575,18 +571,20 @@ class McpCtxBoundary(McpBoundaryTestBase):
 
     def test_list_and_show_on_one_ctx(self):
         self._ctx_create("alpha", "b/one.md", "b/two.md")
-        listed = self._tool("okf_ctx_list")(root=self.root)
+        listed = self._tool("okf_ctx_list")(root=self.root)["data"]
         self.assertEqual([c["slug"] for c in listed], ["alpha"])
         self.assertIn("entries", listed[0])
         shown = self._tool("okf_ctx_show")(root=self.root, slug="alpha")
-        self.assertEqual([e["path"] for e in shown["entries"]],
+        self.assertNotIn("error", shown)
+        self.assertEqual([e["path"] for e in shown["data"]["entries"]],
                          ["b/one.md", "b/two.md"])
 
     def test_show_dead_entry_returns_object_with_dead_count(self):
         self._ctx_create("alpha", "b/one.md", "b/two.md")
         os.remove(os.path.join(self.root, "b/two.md"))
         shown = self._tool("okf_ctx_show")(root=self.root, slug="alpha")
-        self.assertGreater(shown["dead"], 0)
+        self.assertGreater(shown["data"]["dead"], 0)
+        self.assertEqual((shown["error"]["kind"], shown["error"]["code"]), ("non_conformant", 4))
 
     def test_show_unknown_slug_raises_with_cli_stderr(self):
         with self.assertRaises(RuntimeError) as cm:
@@ -596,24 +594,34 @@ class McpCtxBoundary(McpBoundaryTestBase):
     def test_list_for_path_limits_to_bundles_listing_the_file(self):
         self._ctx_create("alpha", "b/one.md")
         self._ctx_create("beta", "b/two.md")
-        out = self._tool("okf_ctx_list")(root=self.root, for_path="b/one.md")
+        out = self._tool("okf_ctx_list")(root=self.root, for_path="b/one.md")["data"]
         self.assertEqual([c["slug"] for c in out], ["alpha"])
 
-    def test_check_on_a_missing_target_raises_with_cli_stderr(self):
+    def test_check_on_a_missing_target_raises_with_the_envelope_error(self):
         with self.assertRaises(RuntimeError) as cm:
             mcp.run_okf(self.root, "check", {"target": "nonexist"})
+        self.assertIn("not_found", str(cm.exception))
         self.assertIn("not a directory: nonexist", str(cm.exception))
 
-    def test_check_with_violations_returns_the_report(self):
+    def test_check_with_violations_returns_the_findings_with_the_error(self):
         _w(self.root, "b/bad.md", "no frontmatter\n")
         out = mcp.run_okf(self.root, "check", {})
         self.assertIn(("okf/frontmatter/parseable", "b/bad.md"),
-                      [(f["rule"], f["path"]) for f in out["findings"]])
+                      [(f["rule"], f["path"]) for f in out["data"]["findings"]])
+        self.assertEqual((out["error"]["kind"], out["error"]["code"]), ("non_conformant", 4))
 
 
-class McpExitClassHandling(unittest.TestCase):
-    """Exit 4 (findings) and 5 (drift) of the report verbs are data; exit 1, 2
-    and 3 raise with the CLI's stderr, for the report verbs as for any other."""
+class McpEnvelopeHandling(unittest.TestCase):
+    """The wrapper decides from the CLI's one envelope, never from the exit code: `ok` returns
+    {data, warnings}; a failure that still carries a result returns it with `error`; a failure
+    without a result, or stdout that is no envelope, raises. Stubbed subprocess: the `mcp`
+    module's own binding is patched, as the other stub tests do."""
+
+    @staticmethod
+    def envelope(ok, data, kind="", code=0, message="", warnings=()):
+        error = None if ok else {"kind": kind, "code": code, "message": message}
+        return json.dumps({"command": "x", "ok": ok, "data": data, "warnings": list(warnings),
+                           "error": error}) + "\n"
 
     def _run(self, command, returncode, stdout="", stderr=""):
         stub = subprocess.CompletedProcess(
@@ -624,25 +632,44 @@ class McpExitClassHandling(unittest.TestCase):
         with mock.patch.object(mcp, "subprocess", fake_subprocess):
             return mcp.run_okf("/root", command, {})
 
-    def test_findings_and_drift_return_stdout_as_data(self):
-        gate = '{"command": "%s", "ok": false, "data": %s, "warnings": [], "error": ' \
-               '{"kind": "%s", "code": %d, "message": ""}}'
-        self.assertEqual(self._run("check", 4, stdout=gate % ("check", '{"findings": [1]}', "non_conformant", 4)),
-                         {"findings": [1]})
-        self.assertEqual(self._run("sync-status", 5, stdout=gate % ("sync-status", '{"blocks": []}', "drift", 5)),
-                         {"blocks": []})
-        self.assertEqual(self._run("sync-update", 5, stdout="report\n"), "report\n")
+    def test_success_returns_data_and_warnings_only(self):
+        out = self._run("list", 0, stdout=self.envelope(True, [1], warnings=["a note"]))
+        self.assertEqual(out, {"data": [1], "warnings": ["a note"]})
 
-    def test_internal_invalid_and_not_found_raise_with_stderr(self):
-        for command in ("check", "sync-status", "sync-update", "ctx", "find"):
-            for code in (1, 2, 3):
-                with self.assertRaises(RuntimeError, msg=(command, code)) as cm:
-                    self._run(command, code, stdout="partial", stderr="boom")
-                self.assertIn("boom", str(cm.exception))
+    def test_a_failure_with_a_result_returns_data_warnings_and_error(self):
+        for command, kind, code, data in (("check", "non_conformant", 4, {"findings": [1]}),
+                                          ("sync-status", "drift", 5, {"blocks": []}),
+                                          ("ctx", "non_conformant", 4, {"dead": 1})):
+            with self.subTest(command=command):
+                out = self._run(command, code, stdout=self.envelope(
+                    False, data, kind, code, "m", warnings=["w"]))
+                self.assertEqual(out, {"data": data, "warnings": ["w"],
+                                       "error": {"kind": kind, "code": code, "message": "m"}})
 
-    def test_drift_exit_is_an_error_for_a_non_report_verb(self):
-        with self.assertRaises(RuntimeError):
-            self._run("find", 5, stdout="x", stderr="boom")
+    def test_a_failure_without_a_result_raises_with_the_envelope_error(self):
+        for kind, code in (("internal", 1), ("invalid_input", 2), ("not_found", 3), ("drift", 5)):
+            with self.subTest(kind=kind):
+                with self.assertRaises(RuntimeError) as cm:
+                    self._run("find", code, stdout=self.envelope(False, None, kind, code, "the reason"),
+                              stderr="boom")
+                self.assertIn("the reason", str(cm.exception))
+                self.assertIn(kind, str(cm.exception))
+                self.assertNotIn("boom", str(cm.exception))
+
+    def test_the_exit_code_is_never_read(self):
+        self.assertEqual(self._run("check", 5, stdout=self.envelope(True, {"findings": []})),
+                         {"data": {"findings": []}, "warnings": []})
+        out = self._run("check", 0, stdout=self.envelope(False, {"findings": [1]}, "non_conformant", 4, ""))
+        self.assertEqual(out["error"]["kind"], "non_conformant")
+
+    def test_stdout_that_is_no_envelope_raises_with_exit_code_and_stderr(self):
+        for stdout in ("", "partial", "[1]", '{"ok": true}', "null"):
+            with self.subTest(stdout=stdout):
+                with self.assertRaises(RuntimeError) as cm:
+                    self._run("find", 2, stdout=stdout, stderr="usage: boom")
+                self.assertIn("did not print one JSON envelope", str(cm.exception))
+                self.assertIn("exit 2", str(cm.exception))
+                self.assertIn("usage: boom", str(cm.exception))
 
 
 class McpBuildSemanticIndexSurface(unittest.TestCase):
@@ -651,8 +678,8 @@ class McpBuildSemanticIndexSurface(unittest.TestCase):
     run_okf. No real subprocess here (that boundary is covered by
     McpAgentRemedyBoundary above); this class only pins the wiring."""
 
-    def test_command_is_whitelisted_with_no_positionals_and_no_json(self):
-        self.assertEqual(mcp._COMMANDS["build-semantic-index"], ([], False))
+    def test_command_is_whitelisted_with_no_positionals(self):
+        self.assertEqual(mcp._COMMANDS["build-semantic-index"], [])
 
     def test_the_registered_tool_reaches_run_okf_with_no_extra_params(self):
         argvs = []
@@ -667,7 +694,7 @@ class McpBuildSemanticIndexSurface(unittest.TestCase):
         finally:
             mcp.run_okf = real
         self.assertEqual(
-            argvs, [["--root", "/root", "build-semantic-index"]])
+            argvs, [["--root", "/root", "build-semantic-index", "--json"]])
 
 
 class McpReadTargeted(McpBoundaryTestBase):
@@ -690,18 +717,18 @@ class McpReadTargeted(McpBoundaryTestBase):
 
     def test_section_builds_the_section_option(self):
         self.assertEqual(self._read_argv(section="Alpha > Deep"),
-                         ["--root", "/root", "read", "b/one", "--section", "Alpha > Deep"])
+                         ["--root", "/root", "read", "b/one", "--section", "Alpha > Deep", "--json"])
 
     def test_frontmatter_only_builds_the_flag(self):
         self.assertEqual(self._read_argv(frontmatter_only=True),
-                         ["--root", "/root", "read", "b/one", "--frontmatter-only"])
+                         ["--root", "/root", "read", "b/one", "--frontmatter-only", "--json"])
 
     def test_body_only_builds_the_flag(self):
         self.assertEqual(self._read_argv(body_only=True),
-                         ["--root", "/root", "read", "b/one", "--body-only"])
+                         ["--root", "/root", "read", "b/one", "--body-only", "--json"])
 
     def test_none_set_builds_the_plain_argv(self):
-        self.assertEqual(self._read_argv(), ["--root", "/root", "read", "b/one"])
+        self.assertEqual(self._read_argv(), ["--root", "/root", "read", "b/one", "--json"])
 
     def test_no_other_command_emits_either_boolean_flag(self):
         others = sorted(set(mcp._COMMANDS) - {"read"})
@@ -723,16 +750,16 @@ class McpReadTargeted(McpBoundaryTestBase):
            "---\ntype: Runbook\ntitle: S\n---\n# S\n## Alpha\nalpha text\n## Beta\nbeta text\n")
         out = mcp._register(_ToolCollector()).tools["okf_read"](
             self.root, path="b/two-sections", section="Alpha")
-        self.assertEqual(out, "## Alpha\nalpha text\n")
+        self.assertEqual(out["data"], {"path": "b/two-sections", "text": "## Alpha\nalpha text\n"})
 
     def test_the_registered_tool_returns_frontmatter_or_body_alone(self):
         _w(self.root, ".okf.toml", "")
         _w(self.root, "b/two-sections.md",
            "---\ntype: Runbook\ntitle: S\n---\n# S\n## Alpha\nalpha text\n")
         read = mcp._register(_ToolCollector()).tools["okf_read"]
-        self.assertEqual(read(self.root, path="b/two-sections", frontmatter_only=True),
+        self.assertEqual(read(self.root, path="b/two-sections", frontmatter_only=True)["data"]["text"],
                          "---\ntype: Runbook\ntitle: S\n---\n")
-        self.assertEqual(read(self.root, path="b/two-sections", body_only=True),
+        self.assertEqual(read(self.root, path="b/two-sections", body_only=True)["data"]["text"],
                          "# S\n## Alpha\nalpha text\n\n")
 
 
