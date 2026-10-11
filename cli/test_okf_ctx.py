@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Tests for the ctx storage model in okf-cli.py (OKFT-t0lj).
+"""Tests for the ctx command module cli/okf/ctx.py (OKFT-t0lj). The ctx storage layer
+they sit on is tested in test_okf_catalogue.py.
 
 Run: python3 -m unittest test_okf_ctx -v
 """
 import contextlib
-import importlib.util
 import io
-import json
 import os
 import shutil
 import subprocess
@@ -20,60 +19,12 @@ if _HERE not in sys.path:  # cli/ holds the okf package; a repo-root run lacks i
     sys.path.insert(0, _HERE)
 
 from okf import catalogue as okf_catalogue
-from okf import check as okf_check
+from okf import ctx as okf_ctx
 from okf import linkscan as okf_linkscan
-
-_spec = importlib.util.spec_from_file_location("okf_cli", os.path.join(_HERE, "okf-cli.py"))
-okf = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(okf)
+from okf_testkit import CtxFixtureMixin, E
 
 
-class CtxCatalogue(unittest.TestCase):
-    """Shared fixture for every ctx test: tmp catalogue + external bundle + fake HOME."""
-
-    def setUp(self):
-        self.root = tempfile.mkdtemp()
-        self.ext = tempfile.mkdtemp()
-        self.home = os.path.realpath(tempfile.mkdtemp())  # cwd-derived paths are realpaths on macOS
-        self.addCleanup(shutil.rmtree, self.root, True)
-        self.addCleanup(shutil.rmtree, self.ext, True)
-        self.addCleanup(shutil.rmtree, self.home, True)
-        self._w(".okf.toml", "")
-        self._w("TYPES.md", "| Type | Meaning | Example |\n|---|---|---|\n"
-                            "| `Concept` | x | |\n| `Context` | x | |\n")
-        self._w("b/index.md", "# B\n\nIntro.\n\n## Contents\n\n"
-                              + okf_catalogue.MARK_START + "\n" + okf_catalogue.MARK_END + "\n")
-        self._w("b/one.md", "---\ntype: Concept\ntitle: One\ndescription: first\n---\n\n"
-                            "# One\n\nSee [Two](/b/two.md).\n")
-        self._w("b/two.md", "---\ntype: Concept\ntitle: Two\ndescription: second\n---\n\n"
-                            "# Two\n\n## Part\n")
-        with open(os.path.join(self.ext, "three.md"), "w", encoding="utf-8") as f:
-            f.write("---\ntype: Concept\ntitle: Three\n---\n\n# Three\n")
-        os.symlink(self.ext, os.path.join(self.root, "ext"))
-        os.makedirs(os.path.join(self.home, "notes"))
-        with open(os.path.join(self.home, "notes", "out.md"), "w", encoding="utf-8") as f:
-            f.write("# Out\n")
-
-    def _w(self, rel, text):
-        ap = os.path.join(self.root, rel)
-        os.makedirs(os.path.dirname(ap), exist_ok=True)
-        with open(ap, "w", encoding="utf-8") as f:
-            f.write(text)
-
-    def _cli(self, *argv):
-        return subprocess.run(
-            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", self.root, *argv],
-            capture_output=True, text=True, env={**os.environ, "HOME": self.home})
-
-    def _home(self):
-        return mock.patch.dict(os.environ, {"HOME": self.home})
-
-
-def E(pos, mode, path, comment=""):
-    return {"pos": pos, "mode": mode, "path": path, "comment": comment}
-
-
-class CtxRenameArchive(CtxCatalogue):
+class CtxRenameArchive(CtxFixtureMixin, unittest.TestCase):
     def _demo(self, text=None):
         if text is None:
             okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "d", "entries": [
@@ -138,7 +89,7 @@ class CtxRenameArchive(CtxCatalogue):
                          "problem(s) — run okf ctx check")
 
 
-class CtxBundleGate(CtxCatalogue):
+class CtxBundleGate(CtxFixtureMixin, unittest.TestCase):
     def test_ctx_dir_is_bundle_other_underscore_and_dot_are_not(self):
         self.assertTrue(okf_catalogue.is_bundle_dir("_ctx"))
         self.assertFalse(okf_catalogue.is_bundle_dir("_archive"))
@@ -152,234 +103,9 @@ class CtxBundleGate(CtxCatalogue):
         self.assertIn("_ctx", okf_catalogue.list_bundles(self.root))
 
 
-class CtxSlugs(CtxCatalogue):
-    def test_paths(self):
-        self.assertEqual(okf_catalogue.ctx_dir(self.root), os.path.join(self.root, "_ctx"))
-        self.assertEqual(okf_catalogue.ctx_file(self.root, "x"), os.path.join(self.root, "_ctx", "x.md"))
-
-    def test_slugs_missing_dir_is_empty(self):
-        self.assertEqual(okf_catalogue.ctx_slugs(self.root), [])
-
-    def test_slugs_sorted_and_reserved_filenames_excluded(self):
-        for n in ("zeta.md", "alpha.md", "index.md", "README.md", "log.md", "notes.txt"):
-            self._w("_ctx/" + n, "x")
-        self.assertEqual(okf_catalogue.ctx_slugs(self.root), ["alpha", "zeta"])
-
-    def test_slug_problem(self):
-        self.assertIsNone(okf_catalogue.ctx_slug_problem("a-b1"))
-        self.assertIsNone(okf_catalogue.ctx_slug_problem("1a"))
-        msg = "use lowercase letters, digits and hyphens"
-        for bad in ("A", "-a", "a_b", "a b", ""):
-            self.assertEqual(okf_catalogue.ctx_slug_problem(bad), msg, bad)
-        for res in ("add", "index", "index-map", "readme", "log", "toc"):
-            self.assertEqual(okf_catalogue.ctx_slug_problem(res), '"%s" is a reserved name' % res)
-
-
-class CtxParseRender(CtxCatalogue):
-    def test_render_exact(self):
-        out = okf_catalogue.render_ctx("my-ctx", 'say "hi"', [
-            E(1, "pflicht", "b/one.md", "a|b\nc"),
-            E(None, "nachschlag", "~/notes/out.md", "x"),
-            E(None, "nachschlag", "/abs/p.md", ""),
-        ])
-        self.assertEqual(out, (
-            '---\ntype: Context\ndescription: "say \\"hi\\""\n---\n\n# my-ctx\n\n'
-            "| pos | mode | path | comment |\n|---|---|---|---|\n"
-            "| 1 | pflicht | [one](/b/one.md) | a\\|b c |\n"
-            "| - | nachschlag | `~/notes/out.md` | x |\n"
-            "| - | nachschlag | `/abs/p.md` |  |\n"))
-
-    def test_roundtrip(self):
-        entries = [E(1, "pflicht", "b/one.md", "a|b c"),
-                   E(2, "pflicht", "b/notes (draft).md", ""),
-                   E(None, "nachschlag", "~/notes/out.md", "x")]
-        desc, got, problems = okf_catalogue.parse_ctx(okf_catalogue.render_ctx("s", 'q"q', entries))
-        self.assertEqual((desc, got, problems), ('q"q', entries, []))
-
-    def test_parse_problems(self):
-        base = "---\ntype: Context\ndescription: d\n---\n\n# s\n\n"
-        _, e, p = okf_catalogue.parse_ctx(base + "no table\n")
-        self.assertEqual((e, p), ([], ['no table with header "pos | mode | path | comment"']))
-        hdr = "| Pos | Mode | Path | Comment |\n|---|---|---|---|\n"
-        _, e, p = okf_catalogue.parse_ctx(base + hdr + "| 1 | pflicht | [a](/a.md) |\n")
-        self.assertEqual((e, p), ([], ["row 1: expected 4 cells, found 3"]))
-        _, e, p = okf_catalogue.parse_ctx(base + hdr + "| 1 | pflicht | [a](/a.md) | c |\n| x | pflicht | [a](/a.md) | c |\n")
-        self.assertEqual(p, ['row 2: pos "x" is neither an integer nor -'])
-        self.assertEqual(len(e), 1)
-        _, e, p = okf_catalogue.parse_ctx(base + hdr + "| 1 | pflicht | plain | c |\n")
-        self.assertEqual(p, ["row 1: path cell is neither a catalogue link nor a code span"])
-
-    def test_parse_rows_end_at_first_non_table_line_and_mode_lowercased(self):
-        text = ("---\ntype: Context\ndescription: d\n---\n\n# s\n\n"
-                "| pos | mode | path | comment |\n|---|---|---|---|\n"
-                "| 1 | PFLICHT | [a](/b/one.md) | c |\n\ntrailing | not | a | row |\n")
-        _, e, p = okf_catalogue.parse_ctx(text)
-        self.assertEqual(e, [E(1, "pflicht", "b/one.md", "c")])
-        self.assertEqual(p, [])
-
-    def test_parse_ignores_link_text(self):
-        text = ("---\ntype: Context\ndescription: d\n---\n\n"
-                "| pos | mode | path | comment |\n|---|---|---|---|\n"
-                "| 1 | pflicht | [whatever](/b/one.md) |  |\n")
-        self.assertEqual(okf_catalogue.parse_ctx(text)[1][0]["path"], "b/one.md")
-
-
-class CtxLoadSave(CtxCatalogue):
-    def test_save_renumbers_stable_partition_and_roundtrips(self):
-        ctx = {"slug": "s", "description": "d", "entries": [
-            E(None, "nachschlag", "b/two.md", "n1"),
-            E(7, "pflicht", "b/one.md", "p1"),
-            E(None, "bogus", "ext/three.md", "n2"),
-            E(3, "pflicht", "~/notes/out.md", "p2")]}
-        okf_catalogue.save_ctx(self.root, ctx)
-        got = okf_catalogue.load_ctx(self.root, "s")
-        self.assertEqual(got["slug"], "s")
-        self.assertEqual(got["description"], "d")
-        self.assertEqual(got["problems"], [])
-        self.assertEqual(got["entries"], [
-            E(1, "pflicht", "b/one.md", "p1"), E(2, "pflicht", "~/notes/out.md", "p2"),
-            E(None, "nachschlag", "b/two.md", "n1"), E(None, "bogus", "ext/three.md", "n2")])
-
-    def test_save_ignores_problems_key(self):
-        ctx = {"slug": "s", "description": "d", "entries": [E(1, "pflicht", "b/one.md")],
-               "problems": ["row 9: junk"]}
-        okf_catalogue.save_ctx(self.root, ctx)
-        self.assertNotIn("junk", okf_catalogue.read_file(okf_catalogue.ctx_file(self.root, "s")))
-
-    def test_save_creates_index_skeleton_and_refreshes_index(self):
-        okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "my desc", "entries": []})
-        idx = okf_catalogue.read_file(os.path.join(self.root, "_ctx", "index.md"))
-        self.assertTrue(idx.startswith(
-            "# Context bundles\n\nCurated, ordered reading lists per topic — one file per ctx slug, "
-            "managed by `okf ctx`.\n\n## Contents\n\n" + okf_catalogue.MARK_START + "\n"))
-        self.assertIn("my desc", idx)
-        self.assertIn("(/_ctx/s.md)", idx)
-
-    def test_save_keeps_existing_index_text(self):
-        self._w("_ctx/index.md", "# Mine\n\nHand written.\n\n" + okf_catalogue.MARK_START + "\n" + okf_catalogue.MARK_END + "\n")
-        okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "d", "entries": []})
-        idx = okf_catalogue.read_file(os.path.join(self.root, "_ctx", "index.md"))
-        self.assertTrue(idx.startswith("# Mine\n\nHand written.\n"))
-        self.assertIn("(/_ctx/s.md)", idx)
-
-    def test_load_missing_slug_exits_2_with_message(self):
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
-            okf_catalogue.load_ctx(self.root, "nope")
-        self.assertEqual(cm.exception.code, 2)
-        self.assertEqual(err.getvalue(), "ctx: unknown slug: nope\n")
-
-    def test_load_reports_parse_problems(self):
-        self._w("_ctx/s.md", "---\ntype: Context\ndescription: d\n---\n\n# s\n")
-        self.assertEqual(okf_catalogue.load_ctx(self.root, "s")["problems"],
-                         ['no table with header "pos | mode | path | comment"'])
-
-    def test_sc02_list_type_context_shows_saved_ctx(self):
-        okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "d", "entries": []})
-        r = self._cli("list", "--type", "Context")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("_ctx/s", r.stdout)
-
-
-class CtxNormalize(CtxCatalogue):
-    def n(self, raw, must_exist=True):
-        with self._home():
-            return okf_catalogue.ctx_normalize_path(self.root, raw, must_exist)
-
-    def test_catalogue_forms(self):
-        for raw in ("b/one.md", "b/one", "/b/one.md", "/b/one", "  b/../b/one  ", "./b/one"):
-            self.assertEqual(self.n(raw), "b/one.md", raw)
-
-    def test_leading_slash_falls_back_to_filesystem(self):
-        p = os.path.join(self.home, "notes", "out.md")
-        self.assertEqual(self.n(p), "~/notes/out.md")
-
-    def test_absolute_inside_root_becomes_relative(self):
-        self.assertEqual(self.n(os.path.join(self.root, "b", "one.md")), "b/one.md")
-
-    def test_symlinked_bundle_realpath_maps_back(self):
-        self.assertEqual(self.n(os.path.join(self.ext, "three.md")), "ext/three.md")
-        self.assertEqual(self.n("ext/three.md"), "ext/three.md")
-
-    def test_home_forms(self):
-        self.assertEqual(self.n("~/notes/out.md"), "~/notes/out.md")
-
-    def test_outside_home_stays_absolute(self):
-        other = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, other, True)
-        p = os.path.join(other, "x.md")
-        open(p, "w").close()
-        self.assertEqual(self.n(p), os.path.abspath(p))
-
-    def test_relative_existing_cwd_file_is_filesystem_path(self):
-        cwd = os.getcwd()
-        os.chdir(os.path.join(self.home, "notes"))
-        self.addCleanup(os.chdir, cwd)
-        self.assertEqual(self.n("out.md"), "~/notes/out.md")
-
-    def test_dotdot_escape_is_filesystem(self):
-        rel = os.path.relpath(os.path.join(self.ext, "three.md"), self.root)
-        self.assertTrue(rel.startswith(".."))
-        self.assertEqual(self.n(rel), "ext/three.md")
-
-    def test_missing_file_none_unless_must_exist_false(self):
-        self.assertIsNone(self.n("b/nope.md"))
-        self.assertIsNone(self.n("~/nope.md"))
-        self.assertEqual(self.n("b/nope.md", must_exist=False), "b/nope.md")
-        self.assertEqual(self.n("~/nope.md", must_exist=False), "~/nope.md")
-
-
-class CtxEntryAbspathMemberships(CtxCatalogue):
-    def test_entry_abspath(self):
-        with self._home():
-            self.assertEqual(okf_catalogue.ctx_entry_abspath(self.root, "~/notes/out.md"),
-                             os.path.join(self.home, "notes", "out.md"))
-        self.assertEqual(okf_catalogue.ctx_entry_abspath(self.root, "/abs/p.md"), "/abs/p.md")
-        self.assertEqual(okf_catalogue.ctx_entry_abspath(self.root, "b/one.md"),
-                         os.path.join(self.root, "b", "one.md"))
-
-    def test_memberships(self):
-        okf_catalogue.save_ctx(self.root, {"slug": "a", "description": "d", "entries": [E(1, "pflicht", "b/one.md", "ca")]})
-        okf_catalogue.save_ctx(self.root, {"slug": "b-ctx", "description": "d", "entries": [
-            E(None, "nachschlag", "b/one.md", "cb"), E(None, "nachschlag", "b/two.md", "x")]})
-        with self._home():
-            got = okf_catalogue.ctx_memberships(self.root, "/b/one")
-            self.assertEqual(got, [("a", E(1, "pflicht", "b/one.md", "ca")),
-                                   ("b-ctx", E(None, "nachschlag", "b/one.md", "cb"))])
-            self.assertEqual(okf_catalogue.ctx_memberships(self.root, "b/gone.md"), [])
-
-
-class CtxSaveEffects(CtxCatalogue):
-    def _save_full(self):
-        okf_catalogue.save_ctx(self.root, {"slug": "s", "description": "d", "entries": [
-            E(1, "pflicht", "b/one.md", "c1"), E(2, "pflicht", "ext/three.md", "c2"),
-            E(None, "nachschlag", "~/notes/out.md", "c3")]})
-
-    def test_saved_file_has_link_and_code_span_forms(self):
-        self._save_full()
-        text = okf_catalogue.read_file(okf_catalogue.ctx_file(self.root, "s"))
-        self.assertIn("| 1 | pflicht | [one](/b/one.md) | c1 |", text)
-        self.assertIn("| 2 | pflicht | [three](/ext/three.md) | c2 |", text)
-        self.assertIn("| - | nachschlag | `~/notes/out.md` | c3 |", text)
-
-    def test_check_reports_nothing_for_ctx(self):
-        self._save_full()
-        errors, warnings = okf_check.run_checks(self.root, None)
-        names = ("entry-file-description", "asset-placement", "type-registered")
-        bad = [x for x in errors + warnings if x[0] in names and "_ctx" in repr(x)]
-        self.assertEqual(bad, [])
-
-    def test_save_leaves_members_byte_identical(self):
-        paths = [os.path.join(self.root, "b", "one.md"), os.path.join(self.ext, "three.md"),
-                 os.path.join(self.home, "notes", "out.md")]
-        before = [okf_catalogue.read_file(p) for p in paths]
-        self._save_full()
-        self.assertEqual([okf_catalogue.read_file(p) for p in paths], before)
-
-
 class CtxShorthand(unittest.TestCase):
     def test_rewrites(self):
-        S = okf._ctx_shorthand
+        S = okf_ctx._ctx_shorthand
         self.assertEqual(S(["ctx"]), ["ctx", "list"])
         self.assertEqual(S(["--root", "r", "ctx"]), ["--root", "r", "ctx", "list"])
         self.assertEqual(S(["--root=r", "ctx", "--list"]), ["--root=r", "ctx", "list"])
@@ -390,10 +116,10 @@ class CtxShorthand(unittest.TestCase):
     def test_other_commands_untouched(self):
         for argv in (["list", "ctx"], ["find", "ctx", "x"], ["--root", "ctx", "read", "a"],
                      ["read", "b/ctx"], []):
-            self.assertEqual(okf._ctx_shorthand(argv), argv)
+            self.assertEqual(okf_ctx._ctx_shorthand(argv), argv)
 
 
-class CtxListCreate(CtxCatalogue):
+class CtxListCreate(CtxFixtureMixin, unittest.TestCase):
     def _create(self, *argv):
         return self._cli("ctx", "create", *argv)
 
@@ -499,7 +225,7 @@ class CtxListCreate(CtxCatalogue):
         self.assertEqual(okf_catalogue.ctx_slugs(self.root), [])
 
 
-class CtxShowRead(CtxCatalogue):
+class CtxShowRead(CtxFixtureMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.one = os.path.join(self.root, "b/one.md")
@@ -626,12 +352,14 @@ class CtxShowRead(CtxCatalogue):
     def test_prime_ctx_bundles_line(self):
         okf_catalogue.save_ctx(self.root, {"slug": "alpha", "description": "", "entries": [
             {"mode": "pflicht", "path": "b/two.md", "comment": ""}]})
-        out = okf.render_catalogue_state(self.root)
+        out = self._cli("prime").stdout
         self.assertIn("ctx bundles: 2 — alpha · demo — `ctx show <slug>` lists one", out)
 
     def test_prime_no_line_without_ctx(self):
         shutil.rmtree(os.path.join(self.root, "_ctx"))
-        self.assertNotIn("ctx bundles", okf.render_catalogue_state(self.root))
+        r = self._cli("prime")
+        self.assertEqual(r.returncode, 0)
+        self.assertNotIn("ctx bundles", r.stdout)
 
     def test_show_dead_reference_counts(self):
         import json
@@ -666,7 +394,7 @@ class CtxShowRead(CtxCatalogue):
                          ("", "a.txt", "", 30, 8))
 
 
-class CtxMaintain(CtxCatalogue):
+class CtxMaintain(CtxFixtureMixin, unittest.TestCase):
     """add / drop / move / rename / remove (OKFT-jetz)."""
 
     def setUp(self):
@@ -887,7 +615,7 @@ class CtxMaintain(CtxCatalogue):
         self.assertEqual((r.returncode, r.stderr), (2, "ctx: unknown slug: nope\n"))
 
 
-class CtxNavigate(CtxCatalogue):
+class CtxNavigate(CtxFixtureMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self._w("b/three.md", "# Three\n\n[x](/b/two.md) [dead](nope.md)\n")
@@ -972,8 +700,8 @@ class CtxNavigate(CtxCatalogue):
         with mock.patch.object(okf_linkscan, "outbound_links", side_effect=AssertionError):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
-                okf.cmd_ctx_outbound(self.root, mock.Mock(slug="demo", file=None,
-                                                          include_internal=False, json=False))
+                okf_ctx.cmd_ctx_outbound(self.root, mock.Mock(slug="demo", file=None,
+                                                              include_internal=False, json=False))
         self.assertEqual(out.getvalue().split("\n", 1)[1], "b/gone.md [DEAD]\nb/a.txt\n  (none)\n")
         r = self._cli("ctx", "outbound", "demo")
         self.assertEqual(r.returncode, 0)
@@ -1044,146 +772,7 @@ class CtxNavigate(CtxCatalogue):
                          (2, "", 'ctx: --file "two" matches several entries: b/two.md, c/two.md\n'))
 
 
-class CtxFindings(CtxCatalogue):
-    """ctx_findings, the `ctx` entries of run_checks and `ctx check`."""
-
-    def _ctx(self, slug="demo", entries=None, desc="Demo", typ="Context"):
-        if entries is None:
-            entries = [E(1, "pflicht", "b/one.md"), E(2, "pflicht", "b/two.md")]
-        text = okf_catalogue.render_ctx(slug, desc, entries).replace("type: Context", "type: " + typ, 1)
-        self._w("_ctx/{}.md".format(slug), text)
-        return os.path.join(self.root, "_ctx", slug + ".md")
-
-    def _f(self, ap, **kw):
-        return okf_catalogue.ctx_findings(self.root, ap, **kw)
-
-    def _run_checks_ctx(self):
-        errs, warns = okf_check.run_checks(self.root, None)
-        return ([m for n, _, m in errs if n == "ctx"], [m for n, _, m in warns if n == "ctx"])
-
-    def _sc01(self):
-        return self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(3, "pflicht", "b/two.md"),
-                                  E(None, "nachschlag", "b/one.md"),
-                                  E(None, "nachschlag", "b/gone.md")])
-
-    SC01 = ["required positions are not 1..2 in table order: 1, 3",
-            "duplicate entry: b/one.md", "dead entry: b/gone.md"]
-
-    def test_sc01_check_and_ctx_check_three_errors(self):
-        ap = self._sc01()
-        self.assertEqual(self._f(ap), (self.SC01, []))
-        self.assertEqual(self._run_checks_ctx(), (self.SC01, []))
-        r = self._cli("ctx", "check")
-        self.assertEqual((r.returncode, r.stderr), (1, ""))
-        self.assertEqual(r.stdout.splitlines(), [
-            "ERROR    ctx                  _ctx/demo.md  ({})".format(m) for m in self.SC01]
-            + ["3 VIOLATIONS"])
-
-    def test_sc02_clean_ctx(self):
-        ap = self._ctx()
-        self.assertEqual(self._f(ap), ([], []))
-        self.assertEqual(self._run_checks_ctx(), ([], []))
-        for argv in (("ctx", "check"), ("ctx", "check", "demo")):
-            r = self._cli(*argv)
-            self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "OK — 0 violations\n", ""))
-
-    def test_wrong_type(self):
-        self.assertEqual(self._f(self._ctx(typ="Concept"))[0],
-                         ['type is "Concept", expected "Context"'])
-
-    def test_invalid_slug(self):
-        ap = self._ctx(slug="Bad_Slug")
-        self.assertEqual(self._f(ap)[0],
-                         ['slug "Bad_Slug" invalid: use lowercase letters, digits and hyphens'])
-
-    def test_parse_problems_unchanged(self):
-        self._w("_ctx/demo.md", "---\ntype: Context\ndescription: \"d\"\n---\n\n# demo\n\nno table\n")
-        self.assertEqual(self._f(os.path.join(self.root, "_ctx", "demo.md"))[0],
-                         ['no table with header "pos | mode | path | comment"'])
-
-    def test_unknown_mode_with_and_without_pos(self):
-        ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(2, "maybe", "b/two.md"),
-                                E(None, "wat", "ext/three.md")])
-        self.assertEqual(self._f(ap)[0], ['pos 2: mode "maybe" is not pflicht or nachschlag',
-                                          'pos -: mode "wat" is not pflicht or nachschlag'])
-
-    def test_required_positions_not_1_to_n(self):
-        ap = self._ctx(entries=[E(2, "pflicht", "b/one.md"), E(1, "pflicht", "b/two.md")])
-        self.assertEqual(self._f(ap)[0],
-                         ["required positions are not 1..2 in table order: 2, 1"])
-        ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(None, "pflicht", "b/two.md")])
-        self.assertEqual(self._f(ap)[0],
-                         ["required positions are not 1..2 in table order: 1, -"])
-
-    def test_reference_entry_with_pos(self):
-        ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(5, "nachschlag", "b/two.md")])
-        self.assertEqual(self._f(ap)[0], ["reference entry carries pos 5 (use -)"])
-
-    def test_dead_entry_only(self):
-        ap = self._ctx(entries=[E(1, "pflicht", "b/gone.md")])
-        self.assertEqual(self._f(ap)[0], ["dead entry: b/gone.md"])
-
-    def test_duplicate_entry_only(self):
-        ap = self._ctx(entries=[E(1, "pflicht", "b/one.md"), E(None, "nachschlag", "b/one.md")])
-        self.assertEqual(self._f(ap)[0], ["duplicate entry: b/one.md"])
-
-    def test_empty_description_is_warning_only(self):
-        ap = self._ctx(desc="")
-        self.assertEqual(self._f(ap), ([], ["empty description"]))
-        self.assertEqual(self._run_checks_ctx(), ([], ["empty description"]))
-
-    def test_archive_entry_is_warning_only(self):
-        self._w("_archive/b/old.md", "---\ntype: Concept\n---\n\n# Old\n")
-        ap = self._ctx(entries=[E(1, "pflicht", "_archive/b/old.md")])
-        self.assertEqual(self._f(ap), ([], ["entry under _archive/: _archive/b/old.md"]))
-
-    def test_stale_member_warns_only_with_flag(self):
-        ap = self._ctx()
-        os.utime(ap, (1000, 1000))
-        os.utime(os.path.join(self.root, "b", "one.md"), (2000, 2000))
-        os.utime(os.path.join(self.root, "b", "two.md"), (500, 500))
-        self.assertEqual(self._f(ap), ([], []))
-        self.assertEqual(self._f(ap, stale=True),
-                         ([], ["stale: b/one.md changed after this ctx file"]))
-
-    def test_stale_skips_dead_members(self):
-        ap = self._ctx(entries=[E(1, "pflicht", "b/gone.md")])
-        self.assertEqual(self._f(ap, stale=True), (["dead entry: b/gone.md"], []))
-
-    def test_reserved_index_of_ctx_bundle_is_skipped(self):
-        okf_catalogue.save_ctx(self.root, {"slug": "demo", "description": "D", "entries": []})
-        self.assertTrue(os.path.isfile(os.path.join(self.root, "_ctx", "index.md")))
-        self.assertEqual(self._run_checks_ctx(), ([], []))
-
-    def test_only_ctx_bundle_files_are_checked(self):
-        # a Concept file elsewhere with a ctx-looking table is not a ctx
-        self._w("b/three.md", "---\ntype: Concept\n---\n\n| pos | mode | path | comment |\n"
-                              "|---|---|---|---|\n| 1 | pflicht | [x](/b/nope.md) | |\n")
-        self.assertEqual(self._run_checks_ctx(), ([], []))
-
-    def test_ctx_check_one_slug_unknown_json_stale_warning_exit(self):
-        self._ctx(slug="bad", entries=[E(1, "pflicht", "b/gone.md")])
-        self._ctx(slug="good", desc="")
-        r = self._cli("ctx", "check", "good")
-        self.assertEqual((r.returncode, r.stdout),
-                         (0, "WARNING  ctx                  _ctx/good.md  (empty description)\n"
-                             "OK — 0 violations\n"))
-        r = self._cli("ctx", "check", "nope")
-        self.assertEqual((r.returncode, r.stdout, r.stderr), (2, "", "ctx: unknown slug: nope\n"))
-        r = self._cli("ctx", "check", "--json")
-        self.assertEqual((r.returncode, json.loads(r.stdout)), (1, {
-            "errors": [{"check": "ctx", "path": "_ctx/bad.md", "message": "dead entry: b/gone.md"}],
-            "warnings": [{"check": "ctx", "path": "_ctx/good.md", "message": "empty description"}]}))
-        ap = os.path.join(self.root, "_ctx", "good.md")
-        os.utime(ap, (1000, 1000))
-        os.utime(os.path.join(self.root, "b", "two.md"), (500, 500))
-        r = self._cli("ctx", "check", "good", "--stale")
-        self.assertEqual((r.returncode, r.stdout.splitlines()[:2]), (0, [
-            "WARNING  ctx                  _ctx/good.md  (empty description)",
-            "WARNING  ctx                  _ctx/good.md  (stale: b/one.md changed after this ctx file)"]))
-
-
-class CtxEdit(CtxCatalogue):
+class CtxEdit(CtxFixtureMixin, unittest.TestCase):
     """`ctx edit`: editor chain, validation after exit. Editor = script in tmp dir."""
 
     def setUp(self):

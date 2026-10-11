@@ -5,8 +5,11 @@ import contextlib
 import io
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from okf import catalogue as okf_catalogue
 from okf import find as okf_find
@@ -14,8 +17,8 @@ from okf import sync as okf_sync
 
 
 def run_find(root, query, **kw):
-    """Module-level twin of the per-class _run() helper at
-    cli/test_okf_cli.py:1381 — same in-process convention (SimpleNamespace
+    """Module-level twin of the per-class _run() helpers in
+    cli/test_okf_find.py — same in-process convention (SimpleNamespace
     args, cmd_find, redirected streams), but parameterised by root so the new
     suites can each use their own temp catalogue. Returns stdout."""
     import io
@@ -122,3 +125,51 @@ def _cli(root, *argv):
     return subprocess.run(
         [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", root] + list(argv),
         capture_output=True, text=True)
+
+
+# --- the ctx fixture shared by the ctx command and catalogue (ctx storage) suites ---
+
+
+class CtxFixtureMixin:
+    """Shared fixture for every ctx test: tmp catalogue + external bundle + fake HOME."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.ext = tempfile.mkdtemp()
+        self.home = os.path.realpath(tempfile.mkdtemp())  # cwd-derived paths are realpaths on macOS
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.addCleanup(shutil.rmtree, self.ext, True)
+        self.addCleanup(shutil.rmtree, self.home, True)
+        self._w(".okf.toml", "")
+        self._w("TYPES.md", "| Type | Meaning | Example |\n|---|---|---|\n"
+                            "| `Concept` | x | |\n| `Context` | x | |\n")
+        self._w("b/index.md", "# B\n\nIntro.\n\n## Contents\n\n"
+                              + okf_catalogue.MARK_START + "\n" + okf_catalogue.MARK_END + "\n")
+        self._w("b/one.md", "---\ntype: Concept\ntitle: One\ndescription: first\n---\n\n"
+                            "# One\n\nSee [Two](/b/two.md).\n")
+        self._w("b/two.md", "---\ntype: Concept\ntitle: Two\ndescription: second\n---\n\n"
+                            "# Two\n\n## Part\n")
+        with open(os.path.join(self.ext, "three.md"), "w", encoding="utf-8") as f:
+            f.write("---\ntype: Concept\ntitle: Three\n---\n\n# Three\n")
+        os.symlink(self.ext, os.path.join(self.root, "ext"))
+        os.makedirs(os.path.join(self.home, "notes"))
+        with open(os.path.join(self.home, "notes", "out.md"), "w", encoding="utf-8") as f:
+            f.write("# Out\n")
+
+    def _w(self, rel, text):
+        ap = os.path.join(self.root, rel)
+        os.makedirs(os.path.dirname(ap), exist_ok=True)
+        with open(ap, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _cli(self, *argv):
+        return subprocess.run(
+            [sys.executable, os.path.join(_HERE, "okf-cli.py"), "--root", self.root, *argv],
+            capture_output=True, text=True, env={**os.environ, "HOME": self.home})
+
+    def _home(self):
+        return mock.patch.dict(os.environ, {"HOME": self.home})
+
+
+def E(pos, mode, path, comment=""):
+    return {"pos": pos, "mode": mode, "path": path, "comment": comment}
