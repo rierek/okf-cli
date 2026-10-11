@@ -4,11 +4,7 @@ read (OKFT-0hte), against a throwaway catalogue that is a git repository (recent
 
 Run: just test tests.test_okf_trust_output -v
 """
-import builtins
-import collections
-import contextlib
 import datetime
-import io
 import os
 import sys
 import unittest
@@ -23,8 +19,7 @@ if _ROOT not in sys.path:
 
 from okf import fts as okf_fts
 from okf import spec as okf_spec
-from okf.parser import COMMAND_DISPATCH, build_parser
-from tests.okf_testkit import GitCatalogue, run_cli, run_json
+from tests.okf_testkit import GitCatalogue, call_command, count_md_reads, run_cli, run_json
 
 UTC = datetime.timezone.utc
 HUMAN = ("title: Human\nverified: {by: 'human:erik', at: 2026-10-01T00:00:00Z}\n"
@@ -36,13 +31,6 @@ PLAIN = "title: Plain"
 EXPECTED = {"b/human": ("human-reviewed", True), "b/machine": ("machine-confirmed", False),
             "b/plain": ("unverified", False), "v1/legacy": ("human-reviewed", True)}
 FIXED_NOW = datetime.datetime(2026, 9, 23, 12, 0, 0, tzinfo=UTC)
-
-
-def _call(root, *argv):
-    """The data a command returns in-process, as its `--json` envelope would carry it."""
-    args = build_parser().parse_args(["--root", root, *argv, "--json"])
-    with contextlib.redirect_stderr(io.StringIO()):  # the notes of a call go to stderr here
-        return COMMAND_DISPATCH[args.cmd](root, args)
 
 
 class TrustOutputCase(GitCatalogue):
@@ -146,7 +134,7 @@ class OneInstantPerCall(TrustOutputCase):
         okf_fts.build_fts_index(self.tmp)
         for name, argv in self.COMMANDS.items():
             with self.subTest(name), mock.patch.object(okf_spec, "utcnow", return_value=FIXED_NOW) as clock:
-                _call(self.tmp, *argv)
+                call_command(self.tmp, *argv)
                 self.assertEqual(clock.call_count, 1)
 
     def test_the_instant_of_the_call_decides_staleness_at_the_boundary(self):
@@ -155,37 +143,25 @@ class OneInstantPerCall(TrustOutputCase):
         before = FIXED_NOW - datetime.timedelta(seconds=1)
         for now, want in ((before, False), (FIXED_NOW, True)):
             with self.subTest(now=now), mock.patch.object(okf_spec, "utcnow", return_value=now):
-                got = {r["path"]: r.get("stale") for r in _call(self.tmp, "list", "--where", "path ~ b/edge")}
+                got = {r["path"]: r.get("stale") for r in call_command(self.tmp, "list", "--where", "path ~ b/edge")}
                 self.assertEqual(got, {"b/edge": want})
-                self.assertEqual(_call(self.tmp, "read", "b/edge").get("stale"), want)
+                self.assertEqual(call_command(self.tmp, "read", "b/edge").get("stale"), want)
 
 
 class NoSecondRead(TrustOutputCase):
     """Deriving the keys reads no concept file a second time."""
-
-    def _reads(self, *argv):
-        real, seen = builtins.open, collections.Counter()
-
-        def spy(file, *a, **k):
-            if isinstance(file, str) and file.startswith(self.tmp) and file.endswith(".md"):
-                seen[file] += 1
-            return real(file, *a, **k)
-
-        with mock.patch("builtins.open", spy):
-            _call(self.tmp, *argv)
-        return seen
 
     def test_each_concept_file_is_read_at_most_once_per_call(self):
         okf_fts.build_fts_index(self.tmp)
         for argv in (("list", "--where", "type = Note"), ("find", "needle"), ("recent",),
                      ("recent", "--where", "type = Note"), ("index", "b"), ("read", "b/human")):
             with self.subTest(argv):
-                seen = self._reads(*argv)
+                seen = count_md_reads(self.tmp, *argv)
                 self.assertTrue(seen)
                 self.assertEqual(max(seen.values()), 1, dict(seen))
 
     def test_the_full_scan_arm_of_find_reads_each_file_once_too(self):
-        seen = self._reads("find", "needle")
+        seen = count_md_reads(self.tmp, "find", "needle")
         self.assertEqual((len(seen), max(seen.values())), (4, 1))
 
 

@@ -1,6 +1,8 @@
 """Helpers shared by several test modules. Not a test module: the name has no
 test_ prefix, so unittest discovery never collects it."""
 import argparse
+import builtins
+import collections
 import contextlib
 import io
 import json
@@ -19,6 +21,7 @@ from okf import check as okf_check
 from okf import find as okf_find
 from okf.errors import OkfError
 from okf import sync as okf_sync
+from okf.parser import COMMAND_DISPATCH, build_parser
 
 
 def run_find(root, query, **kw):
@@ -334,3 +337,25 @@ class GitCatalogue(SpecCase):
         self.addCleanup(patch.stop)
         return started
 
+
+
+def call_command(root, *argv):
+    """The data a command returns in-process, as its `--json` envelope would carry it; the notes
+    of the call go to a discarded stderr."""
+    args = build_parser().parse_args(["--root", root, *argv, "--json"])
+    with contextlib.redirect_stderr(io.StringIO()):
+        return COMMAND_DISPATCH[args.cmd](root, args)
+
+
+def count_md_reads(root, *argv):
+    """Counter of how often each .md file under `root` is opened during one in-process call."""
+    real, seen = builtins.open, collections.Counter()
+
+    def spy(file, *a, **k):
+        if isinstance(file, str) and file.startswith(root) and file.endswith(".md"):
+            seen[file] += 1
+        return real(file, *a, **k)
+
+    with mock.patch("builtins.open", spy):
+        call_command(root, *argv)
+    return seen

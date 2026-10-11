@@ -4,8 +4,6 @@ through `verified` and `sources`, the `status` default and the instant compariso
 
 Run: just test tests.test_okf_where_spec -v
 """
-import builtins
-import collections
 import contextlib
 import datetime
 import io
@@ -28,7 +26,7 @@ from okf.errors import OkfError
 from okf.find_filters import compile_where
 from okf.parser import COMMAND_DISPATCH, build_parser
 from okf.parser_support import subcommand_parsers
-from tests.okf_testkit import GitCatalogue, run_json
+from tests.okf_testkit import GitCatalogue, count_md_reads, run_json
 
 UTC = datetime.timezone.utc
 NOW = datetime.datetime(2026, 9, 23, 12, 0, 0, tzinfo=UTC)
@@ -299,16 +297,7 @@ class EndToEnd(GitCatalogue):
                      ("find", "needle", "--where", "tier = human-reviewed"),
                      ("recent", "--where", "stale = false")):
             with self.subTest(argv):
-                real, seen = builtins.open, collections.Counter()
-
-                def spy(file, *a, **k):
-                    if isinstance(file, str) and file.startswith(self.tmp) and file.endswith(".md"):
-                        seen[file] += 1
-                    return real(file, *a, **k)
-
-                args = build_parser().parse_args(["--root", self.tmp, *argv, "--json"])
-                with mock.patch("builtins.open", spy), contextlib.redirect_stderr(io.StringIO()):
-                    COMMAND_DISPATCH[args.cmd](self.tmp, args)
+                seen = count_md_reads(self.tmp, *argv)
                 self.assertTrue(seen)
                 self.assertEqual(max(seen.values()), 1, dict(seen))
 
