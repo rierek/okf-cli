@@ -3,6 +3,7 @@ test_ prefix, so unittest discovery never collects it."""
 import argparse
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -34,6 +35,30 @@ def run_find(root, query, **kw):
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
         okf_find.cmd_find(root, args)
     return buf.getvalue()
+
+
+CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "cli", "okf-cli.py")
+
+
+def run_cli(root, *argv, home=None):
+    """(stdout, stderr, exit code) of one real okf-cli.py call against the catalogue at
+    `root`. VOYAGE_API_KEY is dropped, so no call reaches the embedding backend."""
+    env = {k: v for k, v in os.environ.items() if k != "VOYAGE_API_KEY"}
+    if home is not None:
+        env["HOME"] = home
+    proc = subprocess.run([sys.executable, CLI, "--root", root, *argv],
+                          capture_output=True, text=True, env=env, cwd=root)
+    return proc.stdout, proc.stderr, proc.returncode
+
+
+def run_json(root, *argv):
+    """(envelope, stderr, exit code) of `okf-cli.py --root <root> <argv> --json`. Fails
+    unless stdout is exactly one JSON line carrying the five envelope keys."""
+    out, err, code = run_cli(root, *argv, "--json")
+    assert out.count("\n") == 1 and out.endswith("\n"), "stdout is not one line: {!r}".format(out)
+    envelope = json.loads(out)
+    assert set(envelope) == {"command", "ok", "data", "warnings", "error"}, sorted(envelope)
+    return envelope, err, code
 
 
 def _scan(root, target, **kw):

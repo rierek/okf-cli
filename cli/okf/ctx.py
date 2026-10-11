@@ -9,6 +9,7 @@ import shlex
 import subprocess
 import sys
 from okf.errors import OkfError
+from okf.output import _add_output
 
 from okf import check, linkscan, rename
 from okf.catalogue import (
@@ -163,33 +164,42 @@ def cmd_ctx_read(root, args):
     _c, ms = _ctx_members(root, args.slug)
     req = [m for m in ms if m["mode"] == "pflicht"]
     r = len(ms) - len(req)
-    dead = False
-    for i, m in enumerate(req, 1):
-        if not m["alive"]:
-            dead = True
-            print("===== {}/{} [DEAD] {} =====".format(i, len(req), m["abspath"]))
-            continue
-        print("===== {}/{} {} =====".format(i, len(req), m["abspath"]))
-        text = read_file(m["abspath"])
-        print(text, end="" if text.endswith("\n") else "\n")
-    if r:
-        print("===== {} reference entr{} not printed — ctx show {} =====".format(
-            r, "y" if r == 1 else "ies", args.slug))
-    if dead:
-        raise OkfError("non_conformant", "")
+    entries = [{"position": i, "path": m["path"], "abspath": m["abspath"], "alive": m["alive"],
+                "text": read_file(m["abspath"]) if m["alive"] else None}
+               for i, m in enumerate(req, 1)]
+    result = {"slug": args.slug, "entries": entries, "references_not_printed": r}
+    if not getattr(args, "json", False):
+        for e in entries:
+            if not e["alive"]:
+                print("===== {}/{} [DEAD] {} =====".format(e["position"], len(req), e["abspath"]))
+                continue
+            print("===== {}/{} {} =====".format(e["position"], len(req), e["abspath"]))
+            print(e["text"], end="" if e["text"].endswith("\n") else "\n")
+        if r:
+            print("===== {} reference entr{} not printed — ctx show {} =====".format(
+                r, "y" if r == 1 else "ies", args.slug))
+    if not all(e["alive"] for e in entries):
+        raise OkfError("non_conformant", "", result)
+    return result
 
 
 def cmd_ctx_toc(root, args):
-    blocks = []
+    entries = []
     for m in _ctx_members(root, args.slug)[1]:
-        lines = ["# {}{}".format(m["path"], "" if m["alive"] else " [DEAD]")]
-        if m["alive"]:
-            hs = []
-            if m["path"].endswith(".md"):
-                body = split_frontmatter(read_file(m["abspath"]))[1]
-                hs = ["{} {}".format("#" * min(lv + 1, 6), t) for lv, t, _line in iter_headings(body)
-                      if not args.depth or lv <= args.depth]
-            lines += hs or ["(no headings)"]
+        heads = []
+        if m["alive"] and m["path"].endswith(".md"):
+            body = split_frontmatter(read_file(m["abspath"]))[1]
+            heads = [{"level": lv, "text": t} for lv, t, _line in iter_headings(body)
+                     if not args.depth or lv <= args.depth]
+        entries.append({"path": m["path"], "alive": m["alive"], "headings": heads})
+    if getattr(args, "json", False):
+        return {"slug": args.slug, "entries": entries}
+    blocks = []
+    for e in entries:
+        lines = ["# {}{}".format(e["path"], "" if e["alive"] else " [DEAD]")]
+        if e["alive"]:
+            lines += ["{} {}".format("#" * min(h["level"] + 1, 6), h["text"])
+                      for h in e["headings"]] or ["(no headings)"]
         blocks.append("\n".join(lines))
     print("\n\n".join(blocks))
 
@@ -520,6 +530,7 @@ def add_ctx_parser(sub):
                     "`===== i/p <abspath> =====` separator; reference entries are not printed; "
                     "exit 1 when a required entry is dead")
     pcxr.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
+    _add_output(pcxr)
     pcxrm = ctx_verbs.add_parser(
         "remove", help="delete a ctx bundle and list files that still link to it",
         description="delete _ctx/<slug>.md, refresh the _ctx index and list every file "
@@ -544,6 +555,7 @@ def add_ctx_parser(sub):
     pcxt.add_argument("slug", help="ctx slug").completer = _complete_ctx_slugs
     pcxt.add_argument("--depth", type=int, default=0, metavar="N",
                       help="only headings of original level <= N (default 0 = all)")
+    _add_output(pcxt)
 
 
 COMMANDS = {"ctx": (cmd_ctx, add_ctx_parser)}

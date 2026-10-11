@@ -6,6 +6,7 @@ import os
 import re
 import sys
 from okf.errors import OkfError
+from okf.output import _add_output
 
 from okf import linkscan
 from okf.catalogue import (
@@ -89,10 +90,12 @@ def _read_section(body, section, first_file_line):
     if not hits:
         raise OkfError("not_found", "section not found: {}".format(section))
     if len(hits) > 1:
+        candidates = [{"heading": _heading_path(heads, k), "line": first_file_line + heads[k][2]}
+                      for k in hits]
         raise OkfError("invalid_input", "ambiguous section: {} matches {} headings\n{}".format(
             section, len(hits), "\n".join(
-                "  line {}: {}".format(first_file_line + heads[k][2], _heading_path(heads, k))
-                for k in hits)))
+                "  line {}: {}".format(c["line"], c["heading"]) for c in candidates)),
+            {"candidates": candidates})
     k = hits[0]
     after = max(_inside(heads, k), default=k) + 1       # first heading of equal or higher level
     return lines[heads[k][2]:heads[after][2] if after < len(heads) else None]
@@ -109,29 +112,41 @@ def _split_head_body(text):
     return head, body
 
 
+def _concept_path(root, ap):
+    """The concept's `<bundle>/<concept-id>` path, as find and list print it."""
+    rel = os.path.relpath(ap, root).replace(os.sep, "/")
+    return rel[:-3] if rel.endswith(".md") else rel
+
+
 def cmd_read(root, args):
-    text = read_file(resolve_concept(root, args.path))
+    ap = resolve_concept(root, args.path)
+    text = read_file(ap)
     head, body = _split_head_body(text)
     if args.section is not None:
-        print("\n".join(_read_section(body, args.section, head.count("\n") + 1)))
+        out, end = "\n".join(_read_section(body, args.section, head.count("\n") + 1)), "\n"
     elif args.frontmatter_only:
-        print(head, end="")
+        out, end = head, ""
     elif args.body_only:
-        print(body)
+        out, end = body, "\n"
     else:
-        print(text)
+        out, end = text, "\n"
+    if getattr(args, "json", False):
+        return {"path": _concept_path(root, ap), "text": out}
+    print(out, end=end)
 
 
-def cmd_info(root, _args):
+def cmd_info(root, args):
     """Print the catalogue's schema docs (TYPES.md + PROPERTIES.md) so an
     agent can load the type vocabulary and property spec in one call."""
+    files = []
     for fn in ("TYPES.md", "PROPERTIES.md"):
-        print("------")
         p = os.path.join(root, fn)
-        if os.path.isfile(p):
-            print(read_file(p))
-        else:
-            print("(missing: {})".format(fn))
+        files.append({"name": fn, "text": read_file(p) if os.path.isfile(p) else None})
+    if getattr(args, "json", False):
+        return {"files": files}
+    for f in files:
+        print("------")
+        print(f["text"] if f["text"] is not None else "(missing: {})".format(f["name"]))
     print("------")
 
 
@@ -139,16 +154,16 @@ def cmd_toc(root, args):
     ap = resolve_concept(root, args.path)
     fm, body = split_frontmatter(read_file(ap))
     title = fm.get("title") or os.path.basename(ap)[:-3]
+    # --level 0: the full tree; otherwise only the headings of that level (default h2)
+    heads = [(lvl, text) for lvl, text, _line in iter_headings(body)
+             if args.level == 0 or lvl == args.level]
+    if getattr(args, "json", False):
+        return {"path": _concept_path(root, ap), "title": title, "type": fm.get("type", ""),
+                "headings": [{"level": lvl, "text": text} for lvl, text in heads]}
     print("# {}  [{}]".format(title, fm.get("type", "")))
-    found = False
-    for lvl, text, _line in iter_headings(body):
-        if args.level == 0:                       # --level 0 → full tree, indented
-            print("  " * (lvl - 1) + "- " + text)
-            found = True
-        elif lvl == args.level:                   # default: only this level (h2)
-            print("- " + text)
-            found = True
-    if not found:
+    for lvl, text in heads:
+        print("  " * (lvl - 1) + "- " + text if args.level == 0 else "- " + text)
+    if not heads:
         print("(no h{} headings)".format(args.level) if args.level else "(no headings)")
 
 
@@ -277,8 +292,9 @@ document.getElementById('s').addEventListener('input',ev=>{const q=ev.target.val
 
 
 def add_info_parser(sub):
-    _sub(sub, "info", "navigation",
-         "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
+    pi = _sub(sub, "info", "navigation",
+              "print catalogue schema docs (TYPES.md + PROPERTIES.md)")
+    _add_output(pi)
 
 
 def add_list_parser(sub):
@@ -307,6 +323,7 @@ def add_read_parser(sub):
                       help="print only the frontmatter block, delimiters included")
     only.add_argument("--body-only", action="store_true",
                       help="print everything after the frontmatter block")
+    _add_output(pr)
 
 
 def add_refs_parser(sub):
@@ -327,6 +344,7 @@ def add_toc_parser(sub):
     pt.add_argument("path", help="<bundle>/<concept-id> to list headings for").completer = _complete_concepts
     pt.add_argument("--level", type=int, default=2,
                     help="heading level to list (default 2 = h2); 0 = full indented tree")
+    _add_output(pt)
 
 
 def add_visualize_parser(sub):

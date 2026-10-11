@@ -13,7 +13,7 @@ from okf.catalogue import (
     read_file, read_file_verbatim, resolve_concept, resolve_scopes, split_frontmatter,
     write_file_verbatim,
 )
-from okf.output import _note
+from okf.output import _add_output, _note
 from okf.parser_support import _complete_concepts, _complete_scopes, _completion_root, _sub
 
 
@@ -214,8 +214,11 @@ def _sync_addr(rec):
 
 def cmd_sync_export(root, args):
     _, _, payload = _canon_payload(root, args.concept, args.block_id)
+    payload = payload.strip("\n")
+    if getattr(args, "json", False):
+        return {"payload": payload}
     # Payload only, nothing else, so the output pipes.
-    sys.stdout.write(payload.strip("\n") + "\n")
+    sys.stdout.write(payload + "\n")
 
 
 def cmd_sync_insert(root, args):
@@ -372,6 +375,7 @@ def add_sync_export_parser(sub):
     pse.add_argument("concept", help="canonical concept (<bundle>/<concept-id>)").completer = _complete_concepts
     pse.add_argument("block_id", metavar="block-id",
                      help="canon block id declared in that concept").completer = _complete_block_ids
+    _add_output(pse)
 
 
 def add_sync_insert_parser(sub):
