@@ -1,0 +1,38 @@
+$ okf rename recipes/salad.md recipes/drafts/pasta.md
+exit: 0
+--- stdout
+rename from recipes/salad.md
+rename to recipes/drafts/pasta.md
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,11 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Bread](/recipes/bread.md) - Bread with a long rise
+ * [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+-* [Salad](/recipes/salad.md) - A salad that was replaced
+ * [Soup](/recipes/soup.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -7,4 +7,4 @@
+ 
+ # Overview
+ 
+-See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].
++See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[pasta]].
+would move   recipes/salad.md  ->  recipes/drafts/pasta.md
+  inbound    recipes/index.md   /recipes/salad.md  ->  /recipes/drafts/pasta.md
+  wikilink   recipes/overview.md [body]   [[salad]]  ->  [[pasta]]
+  wikilink-collision  new basename already taken by /recipes/pasta.md
+  turns-ambiguous  recipes/overview.md [body]  [[salad]]  candidates after the move: /recipes/salad.md
+  reindex    recipes
+rename (dry-run): 1 inbound, 0 outbound link(s), 1 wikilink(s) (0 skipped-ambiguous), 1 bundle(s), 0 sync source(s). Re-run with --apply.
+--- stderr
+--- files

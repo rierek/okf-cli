@@ -1,0 +1,8 @@
+$ okf ctx list
+exit: 0
+--- stdout
+  cooking     Cooking basics  (3 entries, 3 required)
+  legacy        (5 entries, 3 required)
+  onboarding  Read this first on day one  (4 entries, 3 required)
+--- stderr
+--- files

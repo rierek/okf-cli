@@ -1,0 +1,8 @@
+$ okf sync-status --source /kc-gov/ownership.md
+exit: 5
+--- stdout
+synced             handbook/ops/setup.md            /kc-gov/ownership.md#ownership-rule
+source-changed     kc-gov/naming.md                 /kc-gov/ownership.md#naming-rule
+sync-status: 1 synced, 1 source-changed, 0 consumer-modified, 0 both-changed, 0 source-missing, 0 malformed
+--- stderr
+--- files

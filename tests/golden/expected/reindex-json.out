@@ -1,0 +1,23 @@
+$ okf reindex recipes --json
+exit: 0
+--- stdout
+{"command": "reindex", "ok": true, "data": {"applied": true, "init": null, "updated": ["recipes/index.md"], "skipped": ["recipes/drafts/index.md", "recipes/seasonal/index.md"], "stale": [], "uncovered": [], "unreadable": [], "files": [{"path": "recipes/index.md", "old_path": null, "diff": "--- a/recipes/index.md\n+++ b/recipes/index.md\n@@ -7,10 +7,12 @@\n ## Contents\n \n <!-- okf:index -->\n-* [Drafts](/recipes/drafts/index.md)\n+* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.\n+* [Seasonal](/recipes/seasonal/index.md)\n * [Bread](/recipes/bread.md) - Bread with a long rise\n * [Pasta](/recipes/pasta.md) - Spaghetti, simple\n * [Recipes overview](/recipes/overview.md) - Overview of the recipes\n * [Salad](/recipes/salad.md) - A salad that was replaced\n * [Soup](/recipes/soup.md) - Tomatensuppe\n+* [stew](/recipes/stew.md)\n <!-- /okf:index -->\n"}]}, "warnings": [], "error": null}
+--- stderr
+--- files
+M recipes/index.md
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,12 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Bread](/recipes/bread.md) - Bread with a long rise
+ * [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+ * [Salad](/recipes/salad.md) - A salad that was replaced
+ * [Soup](/recipes/soup.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->

@@ -1,0 +1,6 @@
+$ okf refs handbook/ops/deploy.md --in --out
+exit: 2
+--- stdout
+--- stderr
+<usage error>
+--- files

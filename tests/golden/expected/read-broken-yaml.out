@@ -1,0 +1,15 @@
+$ okf read handbook/broken-yaml
+exit: 0
+--- stdout
+---
+type: Note
+title: [unclosed
+description: this frontmatter is not valid YAML
+---
+
+# Broken
+
+Body of a page with broken frontmatter.
+
+--- stderr
+--- files

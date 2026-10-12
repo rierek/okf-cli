@@ -1,0 +1,6 @@
+$ okf ctx list --for handbook/ops/deploy
+exit: 0
+--- stdout
+  onboarding  Read this first on day one  (4 entries, 3 required)
+--- stderr
+--- files

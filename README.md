@@ -458,6 +458,7 @@ Catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`. Relate
 
 ```bash
 just test     # unittest discovery over tests/test_*.py
+just golden   # golden-output comparison; --update rewrites the goldens, --cmd <binary> checks another implementation
 just build    # wheel and sdist into dist/ (uv build)
 just check    # conformance scan against a real catalogue
 just prime
@@ -465,6 +466,8 @@ just setup    # the okf install plan; add --apply to perform it
 ```
 
 `just test` must be green before anything in `cli/`, `tests/` or `mcp/` is committed. Tests never write into a real catalogue. `just check` and `just prime` take a catalogue root as argument; their default is a personal catalogue path set at the top of the `justfile`.
+
+The golden suite (`tests/okf_golden.py`, driven by `tests/test_golden.py` inside `just test`) runs every line of `tests/golden/cases.txt` against a fresh git copy of the fixture catalogue `tests/golden/catalogue/` and compares stdout, stderr, exit code and the changed files with `tests/golden/expected/<case>.out`. It treats the CLI as a black box, so a port of the CLI passes when `just golden --cmd <binary>` is green. After an intended output change, run `just golden --update` and review the diff of `tests/golden/expected/`.
 
 `cli/okf-cli.py` is only the entry point: it carries the PEP 723 header, builds the parser, resolves the catalogue root and dispatches. The commands live in the `cli/okf/` package; tests live in `tests/`, and `tests/test_okf_cli.py` covers the entry itself. The `cli/_okf` file is the zsh completion glue installed by `okf install`; it stays beside the entry payload because packaging and installer tests verify that path.
 

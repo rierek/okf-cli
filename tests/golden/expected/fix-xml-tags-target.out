@@ -1,0 +1,6 @@
+$ okf fix-xml-tags handbook
+exit: 0
+--- stdout
+fix-xml-tags: 0 file(s) wrapped, 0 chain(s) total
+--- stderr
+--- files

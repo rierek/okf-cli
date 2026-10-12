@@ -1,0 +1,6 @@
+$ okf rewrite-path old-host.example.org new-host.example.org --check --json
+exit: 0
+--- stdout
+{"command": "rewrite-path", "ok": true, "data": {"applied": false, "files": [{"path": "handbook/ops/setup.md", "old_path": null, "diff": "--- a/handbook/ops/setup.md\n+++ b/handbook/ops/setup.md\n@@ -9,7 +9,7 @@\n \n # Setup\n \n-Install the tools. Plain `old-host.example.org` is the old status host.\n+Install the tools. Plain `new-host.example.org` is the old status host.\n \n <!-- okf:sync id=ownership-rule source=/kc-gov/ownership.md hash=594970cbf139 -->\n > [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.\n"}], "skipped": []}, "warnings": [], "error": null}
+--- stderr
+--- files

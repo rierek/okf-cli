@@ -1,0 +1,17 @@
+$ okf list --where 'tier = unverified and path ~ kc-gov'
+exit: 0
+--- stdout
+------
+title: naming
+type: Rule
+path: kc-gov/naming
+description: Naming conventions
+------
+title: Ownership
+type: Rule
+path: kc-gov/ownership
+description: Every normative statement has exactly one owner
+------
+list: 2 concept(s)
+--- stderr
+--- files

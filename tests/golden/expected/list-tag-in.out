@@ -1,0 +1,22 @@
+$ okf list --where 'tag in (soup, bread)'
+exit: 0
+--- stdout
+------
+title: Bread
+type: Recipe
+path: recipes/bread
+description: Bread with a long rise
+------
+title: Gazpacho
+type: Recipe
+path: recipes/seasonal/gazpacho
+description: Cold tomato soup
+------
+title: Soup
+type: Recipe
+path: recipes/soup
+description: Tomatensuppe
+------
+list: 3 concept(s)
+--- stderr
+--- files

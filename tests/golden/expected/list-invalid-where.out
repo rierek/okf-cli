@@ -1,0 +1,6 @@
+$ okf list --where 'type =='
+exit: 2
+--- stdout
+--- stderr
+--where: unknown operator '==' at position 6
+--- files

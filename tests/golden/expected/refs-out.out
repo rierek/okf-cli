@@ -1,0 +1,9 @@
+$ okf refs handbook/ops/deploy.md --out
+exit: 0
+--- stdout
+outbound (3):
+  ../getting-started.md  ->  handbook/getting-started.md
+  setup.md  ->  handbook/ops/setup.md
+  /kc-gov/ownership.md  ->  kc-gov/ownership.md
+--- stderr
+--- files

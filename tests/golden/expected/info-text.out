@@ -1,0 +1,37 @@
+$ okf info
+exit: 0
+--- stdout
+------
+# TYPES.md
+
+Registered concept types.
+
+| Type | Meaning |
+|---|---|
+| `Concept` | An explained idea |
+| `Context` | A curated reading list |
+| `Guide` | Step-by-step instructions |
+| `Runbook` | Operational procedure |
+| `Rule` | A binding statement |
+| `Recipe` | Food preparation |
+| `Note` | Loose observation |
+
+------
+# PROPERTIES.md
+
+Frontmatter properties.
+
+| Property | Meaning |
+|---|---|
+| `type` | Registered type (required) |
+| `description` | One-line summary |
+| `title` | Display title |
+| `tags` | Registered tags |
+| `status` | draft, stable or deprecated |
+| `generated` | Provenance: `by`, `at` |
+| `verified` | Review entries: `by`, `at` |
+| `stale_after` | Datetime after which the page is stale |
+
+------
+--- stderr
+--- files

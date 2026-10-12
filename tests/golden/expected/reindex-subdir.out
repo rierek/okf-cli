@@ -1,0 +1,6 @@
+$ okf reindex handbook/ops
+exit: 0
+--- stdout
+reindex: 0 updated, 0 skipped
+--- stderr
+--- files

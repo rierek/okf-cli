@@ -1,0 +1,6 @@
+$ okf rename handbook/nope.md handbook/other.md
+exit: 3
+--- stdout
+--- stderr
+rename: source not found: <ROOT>/handbook/nope.md
+--- files

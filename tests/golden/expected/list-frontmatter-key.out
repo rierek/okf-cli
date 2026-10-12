@@ -1,0 +1,12 @@
+$ okf list --where 'superseded_by ~ recipes'
+exit: 0
+--- stdout
+------
+title: Salad
+type: Recipe
+path: recipes/salad
+description: A salad that was replaced
+------
+list: 1 concept(s)
+--- stderr
+--- files

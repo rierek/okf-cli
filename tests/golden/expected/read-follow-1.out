@@ -1,0 +1,114 @@
+$ okf read handbook/getting-started --follow 1
+exit: 0
+--- stdout
+===== depth 0 handbook/getting-started =====
+---
+type: Guide
+title: "Getting started"
+description: "First steps: accounts, tools, and where to find things"
+tags:
+  - onboarding
+  - ops
+---
+
+# Getting started
+
+## Accounts
+
+Ask for an account. See the [glossary](/handbook/glossary.md) for terms.
+
+## Tools
+
+Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
+The old tool is described in [retired tool](ops/retired-tool.md).
+Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+
+### Wikilinks
+
+Also see [[glossary]], [[deploy|the deploy page]] and [[does-not-exist]].
+
+## Next
+
+Continue with [[overview]].
+
+===== depth 1 handbook/glossary =====
+---
+type: Concept
+title: Glossary
+description: 'Terms used here: "bundle" and "concept"'
+tags: [glossary, ops]   # flow form on purpose
+---
+
+# Glossary
+
+## Bundle
+
+A top-level directory of concepts.
+
+## Concept
+
+One Markdown file with frontmatter.
+===== depth 1 handbook/ops/deploy =====
+---
+type: Runbook
+title: Deploy
+description: "How to deploy: build, ship, verify"
+tags:
+  - ops
+  - deploy
+generated:
+  by: human:golden
+  at: 2026-01-02T10:00:00Z
+verified:
+  - by: human:golden
+    at: 2026-01-03T10:00:00Z
+sources:
+  - resource: https://example.org/deploy-docs
+stale_after: 2099-01-01T00:00:00Z
+---
+
+# Deploy
+
+## Steps
+
+1. Run `deploy <env>` with the target.
+2. Wait for the `<env>.<region>` health check.
+3. Fetch `https://old-host.example.org/status`.
+
+## Links
+
+Back to [getting started](../getting-started.md).
+Compare [setup](setup.md) and the [rule](/kc-gov/ownership.md).
+===== depth 1 handbook/security =====
+---
+type: Gadget
+title: Security basics
+tags:
+  - security
+  - x-experimental
+---
+
+# Security basics
+
+## Passwords
+
+Use a password manager.
+
+## Reporting
+
+Report issues to the security team. Details in [[wiki-notes]].
+===== depth 1 handbook/ops/retired-tool =====
+---
+type: Concept
+title: Retired tool
+description: A tool nobody uses any more
+tags:
+  - ops
+status: deprecated
+---
+
+# Retired tool
+
+Replaced by [deploy](deploy.md). See [[deploy]].
+--- stderr
+--- files

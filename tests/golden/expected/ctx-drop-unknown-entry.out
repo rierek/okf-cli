@@ -1,0 +1,6 @@
+$ okf ctx drop cooking recipes/stew
+exit: 3
+--- stdout
+--- stderr
+ctx: recipes/stew.md is not in cooking
+--- files

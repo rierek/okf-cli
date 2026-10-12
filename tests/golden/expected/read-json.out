@@ -1,0 +1,6 @@
+$ okf read handbook/getting-started --json
+exit: 0
+--- stdout
+{"command": "read", "ok": true, "data": {"path": "handbook/getting-started", "text": "---\ntype: Guide\ntitle: \"Getting started\"\ndescription: \"First steps: accounts, tools, and where to find things\"\ntags:\n  - onboarding\n  - ops\n---\n\n# Getting started\n\n## Accounts\n\nAsk for an account. See the [glossary](/handbook/glossary.md) for terms.\n\n## Tools\n\nRead the [deploy runbook](ops/deploy.md) and the [security page](security.md).\nThe old tool is described in [retired tool](ops/retired-tool.md).\nDownload the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.\n\n### Wikilinks\n\nAlso see [[glossary]], [[deploy|the deploy page]] and [[does-not-exist]].\n\n## Next\n\nContinue with [[overview]].\n\n", "tier": "unverified", "stale": false}, "warnings": [], "error": null}
+--- stderr
+--- files

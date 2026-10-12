@@ -1,0 +1,6 @@
+$ okf ctx move cooking recipes/stew --pos 1
+exit: 3
+--- stdout
+--- stderr
+ctx: recipes/stew.md is not in cooking
+--- files

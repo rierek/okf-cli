@@ -1,0 +1,48 @@
+$ okf find handbook --include-topics
+exit: 0
+--- stdout
+------
+rank: 1
+title: Handbook overview
+type: Concept
+path: handbook/overview
+description: Overview of the handbook
+body-snippet: # Overview The handbook explains the [getting started guide](getting-started.md).…
+provenance: lexical
+------
+rank: 2
+title: legacy
+type: Context
+path: _ctx/legacy
+description: 
+body-snippet: …|---|---|---| | 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) | | | 2 | pflicht | [setup](/handbook/ops/setup.md) | | | 3 |…
+provenance: lexical
+------
+rank: 3
+title: onboarding
+type: Context
+path: _ctx/onboarding
+description: Read this first on day one
+body-snippet: …-|---|---| | 1 | pflicht | [getting-started](/handbook/getting-started.md) | | | 2 | pflicht | [glossary](/handbook/glossary.md) | | | 3 |…
+provenance: lexical
+------
+rank: 4
+title: Getting started
+type: Guide
+path: handbook/getting-started
+description: First steps: accounts, tools, and where to find things
+body-snippet: …unts Ask for an account. See the [glossary](/handbook/glossary.md) for terms. ## Tools Read the [deploy runbook](ops/deploy.md) and the […
+provenance: lexical
+------
+rank: 5
+title: wiki-notes
+type: Note
+path: handbook/wiki-notes
+description: Loose notes with many wikilinks
+body-snippet: …notes ## Links - [[glossary]] resolves. - [[handbook/ops/deploy]] resolves by path. - [[retired-tool|old tool]] resolves with an alias. -…
+provenance: lexical
+------
+--- stderr
+note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking
+note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only
+--- files

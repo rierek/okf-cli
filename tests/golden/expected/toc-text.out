@@ -1,0 +1,9 @@
+$ okf toc handbook/getting-started
+exit: 0
+--- stdout
+# Getting started  [Guide]
+- Accounts
+- Tools
+- Next
+--- stderr
+--- files

@@ -1,0 +1,12 @@
+$ okf index handbook --full
+exit: 0
+--- stdout
+bundle: handbook
+description: Welcome to the handbook.
+concepts: 10
+directories:
+- ops
+types: Concept, Gadget, Guide, Note, Runbook
+tags: deploy, glossary, incident, onboarding, ops, security, x-experimental
+--- stderr
+--- files

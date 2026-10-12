@@ -1,0 +1,10 @@
+$ okf refs handbook/ops/deploy.md --in
+exit: 0
+--- stdout
+inbound (4):
+  _ctx/onboarding.md  ->  /handbook/ops/deploy.md
+  handbook/getting-started.md  ->  ops/deploy.md
+  handbook/ops/index.md  ->  /handbook/ops/deploy.md
+  handbook/ops/retired-tool.md  ->  deploy.md
+--- stderr
+--- files

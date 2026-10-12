@@ -1,0 +1,18 @@
+$ okf tags
+exit: 0
+--- stdout
+  food            9
+  ops             5
+  glossary        2
+  governance      2
+  onboarding      2
+  soup            2
+  bread           1
+  deploy          1
+  incident        1
+  misc            1
+  pasta           1
+  security        1
+  x-experimental  1
+--- stderr
+--- files

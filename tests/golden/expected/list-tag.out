@@ -1,0 +1,32 @@
+$ okf list --where 'tag = ops'
+exit: 0
+--- stdout
+------
+title: Deploy
+type: Runbook
+path: handbook/ops/deploy
+description: How to deploy: build, ship, verify
+------
+title: Getting started
+type: Guide
+path: handbook/getting-started
+description: First steps: accounts, tools, and where to find things
+------
+title: Glossary
+type: Concept
+path: handbook/glossary
+description: Terms used here: "bundle" and "concept"
+------
+title: Retired tool
+type: Concept
+path: handbook/ops/retired-tool
+description: A tool nobody uses any more
+------
+title: Setup
+type: Runbook
+path: handbook/ops/setup
+description: Local setup
+------
+list: 5 concept(s)
+--- stderr
+--- files

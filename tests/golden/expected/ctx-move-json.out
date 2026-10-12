@@ -1,0 +1,19 @@
+$ okf ctx move cooking recipes/soup --pos 1 --json
+exit: 0
+--- stdout
+{"command": "ctx move", "ok": true, "data": {"applied": true, "slug": "cooking", "path": "recipes/soup.md", "where": "pos 1"}, "warnings": [], "error": null}
+--- stderr
+--- files
+M _ctx/cooking.md
+--- a/_ctx/cooking.md
++++ b/_ctx/cooking.md
+@@ -7,6 +7,6 @@
+ 
+ | pos | mode | path | comment |
+ |---|---|---|---|
+-| 1 | pflicht | [bread](/recipes/bread.md) |  |
+-| 2 | pflicht | [pasta](/recipes/pasta.md) |  |
+-| 3 | pflicht | [soup](/recipes/soup.md) |  |
++| 1 | pflicht | [soup](/recipes/soup.md) |  |
++| 2 | pflicht | [bread](/recipes/bread.md) |  |
++| 3 | pflicht | [pasta](/recipes/pasta.md) |  |

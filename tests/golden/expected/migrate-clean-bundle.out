@@ -1,0 +1,6 @@
+$ okf migrate kc-gov
+exit: 0
+--- stdout
+migrate: would migrate 0 file(s), 0 unresolved; dry-run: re-run with --apply
+--- stderr
+--- files

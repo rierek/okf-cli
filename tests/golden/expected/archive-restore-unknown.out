@@ -1,0 +1,6 @@
+$ okf archive --restore _archive/handbook/nope
+exit: 3
+--- stdout
+--- stderr
+archive: source not found: <ROOT>/_archive/handbook/nope.md
+--- files

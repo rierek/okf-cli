@@ -1,0 +1,33 @@
+$ okf find soup --where 'type = Recipe'
+exit: 0
+--- stdout
+------
+rank: 1
+title: Soup
+type: Recipe
+path: recipes/soup
+description: Tomatensuppe
+body-snippet: # Suppe ## Zutaten Tomaten, Zwiebeln. ## Hinweis Use a pot <size>. Compare with [bread](/recipes/bread.md).…
+provenance: lexical
+------
+rank: 2
+title: Gazpacho
+type: Recipe
+path: recipes/seasonal/gazpacho
+description: Cold tomato soup
+body-snippet: # Gazpacho Blend tomatoes, cucumber and peppers.…
+provenance: lexical
+------
+rank: 3
+title: Salad
+type: Recipe
+superseded_by: recipes/soup
+path: recipes/salad
+description: A salad that was replaced
+body-snippet: # Salad Superseded by [soup](soup.md).…
+provenance: lexical
+------
+--- stderr
+note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking
+note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only
+--- files

@@ -1,0 +1,9 @@
+$ okf refs handbook/assets/diagram.svg
+exit: 0
+--- stdout
+inbound (1):
+  handbook/getting-started.md  ->  assets/diagram.svg
+outbound (0):
+  (none)
+--- stderr
+--- files

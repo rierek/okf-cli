@@ -1,0 +1,6 @@
+$ okf ctx add cooking recipes/nope
+exit: 3
+--- stdout
+--- stderr
+ctx: not found: recipes/nope
+--- files

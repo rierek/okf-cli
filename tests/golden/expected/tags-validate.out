@@ -1,0 +1,7 @@
+$ okf tags --validate food bogus
+exit: 4
+--- stdout
+UNKNOWN  bogus
+1 UNKNOWN — register with: okf tags --register <tag> "<description, max 150 chars>"
+--- stderr
+--- files

@@ -1,0 +1,6 @@
+$ okf archive --restore handbook/glossary
+exit: 2
+--- stdout
+--- stderr
+archive: --restore source must lie under _archive/, not: handbook/glossary.md
+--- files

@@ -1,0 +1,6 @@
+$ okf ctx toc onboarding --json
+exit: 0
+--- stdout
+{"command": "ctx toc", "ok": true, "data": {"slug": "onboarding", "entries": [{"path": "handbook/getting-started.md", "alive": true, "headings": [{"level": 1, "text": "Getting started"}, {"level": 2, "text": "Accounts"}, {"level": 2, "text": "Tools"}, {"level": 3, "text": "Wikilinks"}, {"level": 2, "text": "Next"}]}, {"path": "handbook/glossary.md", "alive": true, "headings": [{"level": 1, "text": "Glossary"}, {"level": 2, "text": "Bundle"}, {"level": 2, "text": "Concept"}]}, {"path": "handbook/ops/deploy.md", "alive": true, "headings": [{"level": 1, "text": "Deploy"}, {"level": 2, "text": "Steps"}, {"level": 2, "text": "Links"}]}, {"path": "handbook/security.md", "alive": true, "headings": [{"level": 1, "text": "Security basics"}, {"level": 2, "text": "Passwords"}, {"level": 2, "text": "Reporting"}]}]}, "warnings": [], "error": null}
+--- stderr
+--- files

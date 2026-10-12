@@ -1,0 +1,6 @@
+$ okf read handbook/glossary --section Bundle --body-only
+exit: 2
+--- stdout
+--- stderr
+<usage error>
+--- files

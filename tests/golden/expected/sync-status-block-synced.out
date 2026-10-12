@@ -1,0 +1,7 @@
+$ okf sync-status --block ownership-rule
+exit: 0
+--- stdout
+synced             handbook/ops/setup.md            /kc-gov/ownership.md#ownership-rule
+sync-status: 1 synced, 0 source-changed, 0 consumer-modified, 0 both-changed, 0 source-missing, 0 malformed
+--- stderr
+--- files

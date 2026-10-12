@@ -1,0 +1,40 @@
+$ okf rename recipes/salad.md recipes/drafts/pasta.md --apply --force
+exit: 0
+--- stdout
+moved (git mv)  recipes/salad.md  ->  recipes/drafts/pasta.md
+rewrote 1 inbound link(s) in 1 file(s), 0 outbound link(s)
+rewrote 1 wikilink(s) in 1 file(s)
+rewrote 0 sync source(s) in 0 file(s)
+  wikilink-collision  new basename already taken by /recipes/pasta.md
+  turns-ambiguous  recipes/overview.md [body]  [[salad]]  candidates after the move: /recipes/salad.md
+reindexed 1 index file(s) across: recipes
+staged for commit — run `okf check` before committing.
+--- stderr
+--- files
+R recipes/salad.md -> recipes/drafts/pasta.md
+M recipes/index.md
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,11 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Bread](/recipes/bread.md) - Bread with a long rise
+ * [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+-* [Salad](/recipes/salad.md) - A salad that was replaced
+ * [Soup](/recipes/soup.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->
+M recipes/overview.md
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -7,4 +7,4 @@
+ 
+ # Overview
+ 
+-See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].
++See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[pasta]].

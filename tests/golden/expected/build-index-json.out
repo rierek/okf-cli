@@ -1,0 +1,8 @@
+$ okf build-index --json
+exit: 0
+--- stdout
+{"command": "build-index", "ok": true, "data": {"applied": true, "concepts": 25, "path": "<ROOT>/.fts/fts.sqlite"}, "warnings": [], "error": null}
+--- stderr
+--- files
+A .fts/fts.sqlite
+  (binary)

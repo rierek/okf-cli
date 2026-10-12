@@ -1,0 +1,6 @@
+$ okf toc handbook/getting-started --json
+exit: 0
+--- stdout
+{"command": "toc", "ok": true, "data": {"path": "handbook/getting-started", "title": "Getting started", "type": "Guide", "headings": [{"level": 2, "text": "Accounts"}, {"level": 2, "text": "Tools"}, {"level": 2, "text": "Next"}]}, "warnings": [], "error": null}
+--- stderr
+--- files

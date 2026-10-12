@@ -1,0 +1,9 @@
+$ okf ctx outbound onboarding --file handbook/ops/deploy.md
+exit: 0
+--- stdout
+outbound — ctx onboarding, 1 member(s), external targets only:
+handbook/ops/deploy.md
+  -> handbook/ops/setup.md  (setup.md)
+  -> kc-gov/ownership.md  (/kc-gov/ownership.md)
+--- stderr
+--- files

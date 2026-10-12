@@ -1,0 +1,17 @@
+$ okf refs handbook/getting-started.md
+exit: 0
+--- stdout
+inbound (4):
+  _ctx/onboarding.md  ->  /handbook/getting-started.md
+  handbook/overview.md  ->  getting-started.md
+  handbook/index.md  ->  /handbook/getting-started.md
+  handbook/ops/deploy.md  ->  ../getting-started.md
+outbound (6):
+  /handbook/glossary.md  ->  handbook/glossary.md
+  ops/deploy.md  ->  handbook/ops/deploy.md
+  security.md  ->  handbook/security.md
+  ops/retired-tool.md  ->  handbook/ops/retired-tool.md
+  assets/diagram.svg  ->  handbook/assets/diagram.svg
+  /handbook/ops/missing.md  ->  handbook/ops/missing.md  [missing]
+--- stderr
+--- files

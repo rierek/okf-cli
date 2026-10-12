@@ -1,0 +1,6 @@
+$ okf ctx list --json
+exit: 0
+--- stdout
+{"command": "ctx list", "ok": true, "data": [{"slug": "cooking", "description": "Cooking basics", "entries": 3, "required": 3, "path": "_ctx/cooking.md"}, {"slug": "legacy", "description": "", "entries": 5, "required": 3, "path": "_ctx/legacy.md"}, {"slug": "onboarding", "description": "Read this first on day one", "entries": 4, "required": 3, "path": "_ctx/onboarding.md"}], "warnings": [], "error": null}
+--- stderr
+--- files

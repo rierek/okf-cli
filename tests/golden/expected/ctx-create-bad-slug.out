@@ -1,0 +1,6 @@
+$ okf ctx create Bad_Slug handbook/glossary
+exit: 2
+--- stdout
+--- stderr
+ctx: invalid slug "Bad_Slug": use lowercase letters, digits and hyphens
+--- files

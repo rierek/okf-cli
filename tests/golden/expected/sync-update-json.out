@@ -1,0 +1,6 @@
+$ okf sync-update --json
+exit: 0
+--- stdout
+{"command": "sync-update", "ok": true, "data": {"applied": false, "files": [{"path": "kc-gov/naming.md", "old_path": null, "diff": "--- a/kc-gov/naming.md\n+++ b/kc-gov/naming.md\n@@ -9,8 +9,8 @@\n \n Refer to [ownership](/kc-gov/ownership.md).\n \n-<!-- okf:sync id=naming-rule source=/kc-gov/ownership.md hash=68dca574d22c -->\n+<!-- okf:sync id=naming-rule source=/kc-gov/ownership.md hash=5f1068e89974 -->\n > [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.\n <!-- okf:sync-body -->\n-Names are lowercase, hyphenated and stable.\n+Names are lowercase, hyphenated, stable and unique.\n <!-- /okf:sync -->\n"}], "updated": [{"consumer": "kc-gov/naming.md", "source": "/kc-gov/ownership.md", "id": "naming-rule"}], "refused": [], "unresolvable": []}, "warnings": [], "error": null}
+--- stderr
+--- files

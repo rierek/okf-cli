@@ -1,0 +1,34 @@
+$ okf sync-update --block naming-rule --apply
+exit: 0
+--- stdout
+--- a/kc-gov/naming.md
++++ b/kc-gov/naming.md
+@@ -9,8 +9,8 @@
+ 
+ Refer to [ownership](/kc-gov/ownership.md).
+ 
+-<!-- okf:sync id=naming-rule source=/kc-gov/ownership.md hash=68dca574d22c -->
++<!-- okf:sync id=naming-rule source=/kc-gov/ownership.md hash=5f1068e89974 -->
+ > [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.
+ <!-- okf:sync-body -->
+-Names are lowercase, hyphenated and stable.
++Names are lowercase, hyphenated, stable and unique.
+ <!-- /okf:sync -->
+updated        kc-gov/naming.md   /kc-gov/ownership.md#naming-rule
+sync-update: 1 updated, 0 refused, 0 unresolvable.
+--- stderr
+--- files
+M kc-gov/naming.md
+--- a/kc-gov/naming.md
++++ b/kc-gov/naming.md
+@@ -9,8 +9,8 @@
+ 
+ Refer to [ownership](/kc-gov/ownership.md).
+ 
+-<!-- okf:sync id=naming-rule source=/kc-gov/ownership.md hash=68dca574d22c -->
++<!-- okf:sync id=naming-rule source=/kc-gov/ownership.md hash=5f1068e89974 -->
+ > [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.
+ <!-- okf:sync-body -->
+-Names are lowercase, hyphenated and stable.
++Names are lowercase, hyphenated, stable and unique.
+ <!-- /okf:sync -->

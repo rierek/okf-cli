@@ -1,0 +1,6 @@
+$ okf refs handbook/nope.md
+exit: 3
+--- stdout
+--- stderr
+refs: target not found: handbook/nope.md
+--- files

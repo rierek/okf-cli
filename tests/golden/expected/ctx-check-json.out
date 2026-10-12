@@ -1,0 +1,6 @@
+$ okf ctx check --json
+exit: 4
+--- stdout
+{"command": "ctx check", "ok": false, "data": {"findings": [{"rule": "kc/ctx/dead-entry", "severity": "error", "path": "_ctx/legacy.md", "message": "dead entry: handbook/ops/gone.md"}, {"rule": "kc/ctx/empty-description", "severity": "warning", "path": "_ctx/legacy.md", "message": "empty description"}, {"rule": "kc/ctx/archived-entry", "severity": "warning", "path": "_ctx/legacy.md", "message": "entry under _archive/: _archive/handbook/old-process.md"}]}, "warnings": [], "error": {"kind": "non_conformant", "code": 4, "message": "non_conformant"}}
+--- stderr
+--- files

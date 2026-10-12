@@ -1,0 +1,18 @@
+$ okf tags --register newtag 'A brand new tag'
+exit: 0
+--- stdout
+registered 1 new tag(s) in TAGS.md: newtag
+--- stderr
+warning: auto-embed skipped for new tag(s) (HTTPError: HTTP Error 404: Not Found) — run cli/embeddings/build_tagvec.py --produce manually later
+--- files
+M TAGS.md
+--- a/TAGS.md
++++ b/TAGS.md
+@@ -10,6 +10,7 @@
+ | `glossary` | Term definitions |
+ | `governance` | Rules and ownership |
+ | `incident` | Incident reports |
++| `newtag` | A brand new tag |
+ | `ops` | Operations |
+ | `onboarding` | First-day material |
+ | `pasta` | Pasta dishes |

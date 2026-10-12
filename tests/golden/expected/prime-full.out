@@ -1,0 +1,210 @@
+$ okf prime --full
+exit: 0
+--- stdout
+# OKF Knowledge Catalogue — agent onboarding
+
+The catalogue is a read-mostly, LLM-facing knowledge store, separate from any
+Obsidian vault it may be opened in. It holds thematic *bundles*; a bundle is a
+folder of Markdown *concepts*, each with YAML frontmatter carrying a non-empty
+`type`. A concept-id is its path below the bundle, minus `.md`. The store is a
+plain git repo — ordinary file tools and git apply.
+
+Every invocation needs `--root <catalogue>`; without it the CLI searches cwd and
+its ancestors for a catalogue marker and fails if it finds none. It never falls
+back to its own script directory.
+
+## Retrieve — by command, not by blind grep
+
+Progressive disclosure: widen only when the cheaper step left the question open.
+
+  1. find "<query>"             ranked search across all bundles; narrow it with
+                                --where "type = Runbook and path ~ <bundle>/"
+  2. index [<bundle>]           what bundles and directories exist
+  3. toc <bundle>[/<concept>]   headings before bodies — the cheapest way to
+                                decide whether a page is worth reading. A bare
+                                <bundle> or <bundle>/<subdir> resolves to its
+                                index.md, so the names listed below are the
+                                argument, verbatim.
+  4. read <bundle>/<concept>    the page itself. `read --section "<heading>"`
+                                prints one section; `read --follow N` adds the
+                                pages it links to (`--inbound`: also those
+                                linking to it)
+  5. refs / wikilinks           follow the graph out of a page
+
+Reach for `toc` before `read`: a concept can run long, and its headings usually
+settle the question or name the section to read. Concepts cross-link in
+Markdown — following a link beats re-running a search, and a large bundle's
+`index.md` is the map its concepts hang from.
+
+## Write — through the ce-okf skill, never by hand
+
+Concepts are not hand-authored. The `ce-okf` skill routes a source to a bundle,
+applies frontmatter and re-indexes. `index.md` listings are marker-managed and
+generated (`reindex`) — never edit between the `<!-- okf:... -->` markers. Tag
+edits go through `merge-tags` / `remove-tags`, not a search-and-replace. A
+commit is allowed only once `check` reports zero violations.
+
+commands by purpose:
+  navigation:
+    ctx              context bundles: curated, ordered reading lists per topic (`ctx` lists
+                     them, `ctx <slug>` shows one)
+    index            catalogue TOC (bundle names + one-line descriptions), or one bundle's
+                     index.md
+    info             print catalogue schema docs (TYPES.md + PROPERTIES.md)
+    list             list the complete, unranked set of concepts a required --where expression
+                     selects
+    prime            one-shot agent onboarding: usage guide, command directory, catalogue state
+                     and bundle TOC
+    read             print one concept page
+    recent           list the most recently created concepts, newest first
+    sync-export      print a canonical block's payload for materialisation elsewhere
+    toc              print a concept's headings (default: h2 only)
+    visualize        write a viz.html concept graph for a bundle (embeds every concept body;
+                     needs network for cytoscape/marked)
+  search:
+    build-index      (re)build the FTS5 lexical search index at <root>/.fts/fts.sqlite (local
+                     only, no network)
+    build-semantic-index fill <root>/.tagvec/tag_vectors.sqlite's concept_emb table for every
+                     concept still missing a voyage-3-large embedding (NETWORK, requires
+                     VOYAGE_API_KEY)
+    find             hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm
+    refs             list inbound and outbound markdown links of a file
+  tags:
+    merge-tags       merge/rename one or more tags into a target tag across concept frontmatter
+    normalize-tags   convert inline `tags: [...]` fields to YAML block-list form (local
+                     convention)
+    remove-tags      remove one or more tags from concept frontmatter (no merge target)
+    tags             list all tags with usage counts, or fuzzy-search candidate tags
+  maintenance:
+    archive          move a concept into _archive/<bundle>/, or back with --restore (dry-run
+                     default)
+    check            conformance scan: §9 hard rules + local invariants
+    fix-crosslinks   rewrite links to catalogue-root-absolute form (/bundle/subdir/concept.md)
+    fix-xml-tags     wrap `<tag>`/`<tag>.<tag2>` placeholders in inline code
+    install          register okf, its agent skill, MCP server and shell completion with this
+                     machine's agents and shells (dry-run default; needs no catalogue)
+    migrate          migrate frontmatter to OKF 0.2: `timestamp` to `generated` (git), `status`
+                     per D37 (dry-run default)
+    registry         reformat registry entries of TAGS.md or TYPES.md (table or block form);
+                     prose stays
+    reindex          (re)generate marker-bounded index listings: index.md one level, index-
+                     map.md the whole subtree
+    rename           move a concept + rewrite every inbound/outbound link + reindex (dry-run
+                     default)
+    rewrite-path     literal path-string rewrite across text files
+    sync-insert      materialise a canonical block inside a consumer concept (dry-run default)
+    sync-status      drift report for every materialised canon block
+    sync-update      re-materialise outdated consumer blocks from their canon owner (dry-run
+                     default)
+    verify           record that a concept was checked against its sources
+    wikilinks        report Obsidian wikilinks ([[…]]) and whether each resolves to a concept
+
+## find — the entry point, in full
+
+usage: okf find [-h] [--include-topics] [--limit LIMIT] [--where EXPR] [--breakdown]
+                [--expand-tags] [--json]
+                query
+
+hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm
+
+positional arguments:
+  query             search terms; quote multi-word queries
+
+options:
+  -h, --help        show this help message and exit
+  --include-topics  widen beyond .okf.toml declared bundle to topic folders
+  --limit LIMIT     max results to print (default 10)
+  --where EXPR      select concepts by an expression: `field op value` with op one of = != < <= >
+                    >= ~ (contains), or `field in (a, b)`; combine with and, or, not and
+                    parentheses. Fields: type, tag, path (<bundle>/<concept-id>), archived (true
+                    or false), tier (unverified, machine-confirmed or human-reviewed), stale (true
+                    or false), status (an absent status is stable) and any frontmatter key
+                    (nested: a.b; through lists: verified.by, sources.resource). Timestamp keys
+                    (generated.at, verified.at, stale_after, usage_window.from/to,
+                    sources.last_modified, sources.usage_window.from/to) compare as instants and
+                    take an ISO 8601 value with an explicit offset: stale_after <
+                    2026-10-01T00:00:00Z. Archived concepts are hidden unless the expression names
+                    `archived`. Quote a value holding spaces, + or other characters: 'a b'.
+                    Example: (type = Runbook and tag != draft) and path ~ home-lab/
+  --breakdown       print per-hit contributing field(s)/term(s); output is byte-identical to today
+                    without this flag
+  --expand-tags     expand the query with semantically near registered tags before lexical
+                    scoring; measured against the full catalogue and found ineffective for the
+                    vocabulary-mismatch class it was built for, so it stays off by default
+                    (Q05/D17)
+  --json            print one JSON envelope {command, ok, data, warnings, error}
+
+rank / score lines:
+  Every hit's headline number is `rank: N` — its 1-based position in the
+  delivered list. It is the one scale comparable across a mixed-arm result,
+  because it IS the list order, and it claims nothing about the two arms'
+  raw scores being on one scale (D12: fuse_conditional hands the ranking to
+  whichever arm owns it, it never blends the two by score). Those raw,
+  non-comparable values stay out of the default output and show only with
+  --breakdown, one `score:` line per hit naming which arm produced it:
+    a/100        the FTS5/BM25 lexical arm, relative to this run's own top
+                 hit.
+    a/(6 * n)    the substring fallback used when no FTS index is available:
+                 per query term 3 for a title hit, 2 for a tag hit, 1 for a
+                 body hit, capped at one per field per term — so the maximum
+                 is 6 * number of terms.
+    cosine X.XX  the semantic arm's raw cosine similarity — printed on its
+                 own line, not folded into an a/100 fraction, because that
+                 shape would invite comparing it against a lexical score
+                 (D12, same rule as above).
+  `provenance:` names the arm that produced the line. Degradations (index
+  absent or stale, embedding backend unavailable) are announced on stderr,
+  one note per degraded arm.
+
+filters:
+  --where EXPR selects the concepts the answer may hold, whichever arm owns
+  the ranking: the lexical, substring and semantic arms all apply it before
+  the result is cut to --limit. Without `archived` in the expression,
+  archived concepts are hidden; the semantic arm never covers them.
+
+## This catalogue
+
+root: <ROOT>
+bundles: 4 · concepts: 24
+fts index: absent — `find` degrades to a substring scan; run `build-index`
+semantic index: absent — `find` runs its lexical arm only
+tag vocabulary: closed — 11 tags in TAGS.md; check a new one with `tags --validate`, adopt it with `tags --register`
+ctx bundles: 3 — cooking · legacy · onboarding — `ctx show <slug>` lists one
+root docs: SPEC.md · TYPES.md · PROPERTIES.md · TAGS.md
+
+## Bundles
+
+The catalogue TOC, as `index` renders it. Each name is a path: `toc <bundle>`,
+`index <bundle>`, `--where "path ~ <bundle>/"` on find and list.
+
+bundle: _ctx
+description: Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.
+concepts: 3
+types: Context
+tags: 
+-----
+bundle: handbook
+description: Welcome to the handbook.
+concepts: 10
+directories:
+- ops
+types: Concept, Gadget, Guide, Note, Runbook
+tags: deploy, glossary, incident, onboarding, ops, security, x-experimental
+-----
+bundle: kc-gov
+description: 
+concepts: 2
+types: Rule
+tags: governance
+-----
+bundle: recipes
+description: 
+concepts: 9
+directories:
+- drafts
+- seasonal
+types: Concept, Note, Recipe
+tags: bread, food, misc, pasta, soup
+-----
+--- stderr
+--- files

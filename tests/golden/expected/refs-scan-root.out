@@ -1,0 +1,11 @@
+$ okf refs handbook/ops/deploy.md --scan-root '{ROOT}/recipes'
+exit: 0
+--- stdout
+inbound (0):
+  (none)
+outbound (3):
+  ../getting-started.md  ->  <ROOT>/handbook/getting-started.md
+  setup.md  ->  <ROOT>/handbook/ops/setup.md
+  /kc-gov/ownership.md  ->  kc-gov/ownership.md  [missing]
+--- stderr
+--- files

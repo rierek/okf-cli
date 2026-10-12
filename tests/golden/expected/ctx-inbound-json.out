@@ -1,0 +1,6 @@
+$ okf ctx inbound onboarding --json
+exit: 0
+--- stdout
+{"command": "ctx inbound", "ok": true, "data": {"slug": "onboarding", "direction": "inbound", "include_internal": false, "members": [{"path": "handbook/getting-started.md", "links": [{"source": "handbook/overview.md", "link": "getting-started.md"}, {"source": "handbook/index.md", "link": "/handbook/getting-started.md"}]}, {"path": "handbook/glossary.md", "links": [{"source": "handbook/index.md", "link": "/handbook/glossary.md"}]}, {"path": "handbook/ops/deploy.md", "links": [{"source": "handbook/ops/index.md", "link": "/handbook/ops/deploy.md"}, {"source": "handbook/ops/retired-tool.md", "link": "deploy.md"}]}, {"path": "handbook/security.md", "links": [{"source": "handbook/index.md", "link": "/handbook/security.md"}]}]}, "warnings": [], "error": null}
+--- stderr
+--- files

@@ -1,0 +1,32 @@
+$ okf archive --restore _archive/handbook/old-process
+exit: 0
+--- stdout
+1 active concept(s) still link to this concept
+--- a/_ctx/legacy.md
++++ b/_ctx/legacy.md
+@@ -10,5 +10,5 @@
+ | 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |
+ | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |
+ | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |
+-| - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |
++| - | nachschlag | [old-process](/handbook/old-process.md) |  |
+ | - | nachschlag | [incident-2026](/handbook/ops/incident-2026.md) | stale page |
+--- a/handbook/index.md
++++ b/handbook/index.md
+@@ -15,6 +15,7 @@
+ * [Getting started](/handbook/getting-started.md) - First steps: accounts, tools, and where to find things
+ * [Glossary](/handbook/glossary.md) - Terms used here: "bundle" and "concept"
+ * [Handbook overview](/handbook/overview.md) - Overview of the handbook
++* [Old process](/handbook/old-process.md) - A process from the past
+ * [Security basics](/handbook/security.md)
+ * [wiki-notes](/handbook/wiki-notes.md) - Loose notes with many wikilinks
+ <!-- /okf:index -->
+rename from _archive/handbook/old-process.md
+rename to handbook/old-process.md
+would move   _archive/handbook/old-process.md  ->  handbook/old-process.md
+  inbound    _ctx/legacy.md   /_archive/handbook/old-process.md  ->  /handbook/old-process.md
+  ctx        legacy (reference)
+  reindex    _archive, handbook
+rename (dry-run): 1 inbound, 0 outbound link(s), 0 wikilink(s) (0 skipped-ambiguous), 2 bundle(s), 0 sync source(s). Re-run with --apply.
+--- stderr
+--- files

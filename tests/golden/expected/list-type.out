@@ -1,0 +1,42 @@
+$ okf list --where 'type = Recipe'
+exit: 0
+--- stdout
+------
+title: Bread
+type: Recipe
+path: recipes/bread
+description: Bread with a long rise
+------
+title: Gazpacho
+type: Recipe
+path: recipes/seasonal/gazpacho
+description: Cold tomato soup
+------
+title: Pasta
+type: Recipe
+path: recipes/pasta
+description: Spaghetti, simple
+------
+title: Punch
+type: Recipe
+path: recipes/seasonal/punch
+description: Hot spiced drink
+------
+title: Salad
+type: Recipe
+path: recipes/salad
+description: A salad that was replaced
+------
+title: Soup
+type: Recipe
+path: recipes/soup
+description: Tomatensuppe
+------
+title: stew
+type: Recipe
+path: recipes/stew
+description: 
+------
+list: 7 concept(s)
+--- stderr
+--- files

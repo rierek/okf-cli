@@ -1,0 +1,11 @@
+$ okf migrate handbook
+exit: 0
+--- stdout
+status mapping:
+  deprecated -> deprecated (1 concept(s))
+  maybe-later -> (no decision) (1 concept(s))
+  stable -> stable (1 concept(s))
+unresolved handbook/wiki-notes.md: no recorded decision for status value 'maybe-later'
+migrate: would migrate 0 file(s), 1 unresolved; dry-run: re-run with --apply
+--- stderr
+--- files

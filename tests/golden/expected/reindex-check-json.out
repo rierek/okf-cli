@@ -1,0 +1,6 @@
+$ okf reindex recipes --check --json
+exit: 5
+--- stdout
+{"command": "reindex", "ok": false, "data": {"applied": false, "init": null, "updated": [], "skipped": ["recipes/drafts/index.md", "recipes/seasonal/index.md"], "stale": ["recipes/index.md"], "uncovered": ["recipes/drafts/index.md", "recipes/seasonal/index.md"], "unreadable": [], "files": [{"path": "recipes/index.md", "old_path": null, "diff": "--- a/recipes/index.md\n+++ b/recipes/index.md\n@@ -7,10 +7,12 @@\n ## Contents\n \n <!-- okf:index -->\n-* [Drafts](/recipes/drafts/index.md)\n+* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.\n+* [Seasonal](/recipes/seasonal/index.md)\n * [Bread](/recipes/bread.md) - Bread with a long rise\n * [Pasta](/recipes/pasta.md) - Spaghetti, simple\n * [Recipes overview](/recipes/overview.md) - Overview of the recipes\n * [Salad](/recipes/salad.md) - A salad that was replaced\n * [Soup](/recipes/soup.md) - Tomatensuppe\n+* [stew](/recipes/stew.md)\n <!-- /okf:index -->\n"}]}, "warnings": [], "error": {"kind": "drift", "code": 5, "message": "drift"}}
+--- stderr
+--- files

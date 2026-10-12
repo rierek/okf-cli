@@ -1,0 +1,6 @@
+$ okf merge-tags misc
+exit: 2
+--- stdout
+--- stderr
+<usage error>
+--- files

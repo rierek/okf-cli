@@ -1,0 +1,28 @@
+$ okf merge-tags misc --into food --apply
+exit: 0
+--- stdout
+--- a/recipes/stew.md
++++ b/recipes/stew.md
+@@ -4,7 +4,6 @@
+ beschreibung: Deutscher Eintopf
+ tags:
+   - food
+-  - misc
+ superseded_by: handbook/ops/deploy
+ ---
+ 
+unparseable    handbook/broken-yaml.md  (frontmatter does not parse: expected ',' or ']', but got ':' (line 4, column 12) — skipped)
+merge-tags: 1 file(s) rewrote, 1 unparseable — misc -> food
+--- stderr
+--- files
+M recipes/stew.md
+--- a/recipes/stew.md
++++ b/recipes/stew.md
+@@ -4,7 +4,6 @@
+ beschreibung: Deutscher Eintopf
+ tags:
+   - food
+-  - misc
+ superseded_by: handbook/ops/deploy
+ ---
+ 

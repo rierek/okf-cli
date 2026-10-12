@@ -19,6 +19,11 @@ default:
 test *ARGS:
     uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py --with mcp python -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
 
+# Golden-Output-Vergleich (tests/okf_golden.py): --update schreibt die Goldens neu, --cmd prueft eine
+# andere Implementierung (z.B. ein Port-Binary), --only <text> waehlt Faelle per Namensteil
+golden *ARGS:
+    uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py python tests/okf_golden.py {{ARGS}}
+
 # Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
 build:
     uv build

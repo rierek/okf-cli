@@ -1,0 +1,9 @@
+$ okf fix-crosslinks handbook/ops
+exit: 0
+--- stdout
+unresolved     handbook/ops/deploy.md  -> ../getting-started.md
+unresolved     handbook/ops/deploy.md  -> setup.md
+unresolved     handbook/ops/retired-tool.md  -> deploy.md
+fix-crosslinks: 0 file(s) rewrote, 3 unresolved link(s)
+--- stderr
+--- files

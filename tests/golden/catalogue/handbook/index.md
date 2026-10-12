@@ -1,0 +1,20 @@
+---
+okf_version: "0.2"
+description: "Team handbook: onboarding, operations, security"
+---
+
+# Handbook
+
+Welcome to the handbook.
+
+## Contents
+
+<!-- okf:index -->
+* [Operations](/handbook/ops/index.md) - Runbooks and tools.
+* [broken-yaml](/handbook/broken-yaml.md)
+* [Getting started](/handbook/getting-started.md) - First steps: accounts, tools, and where to find things
+* [Glossary](/handbook/glossary.md) - Terms used here: "bundle" and "concept"
+* [Handbook overview](/handbook/overview.md) - Overview of the handbook
+* [Security basics](/handbook/security.md)
+* [wiki-notes](/handbook/wiki-notes.md) - Loose notes with many wikilinks
+<!-- /okf:index -->

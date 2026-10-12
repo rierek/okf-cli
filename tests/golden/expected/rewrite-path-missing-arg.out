@@ -1,0 +1,6 @@
+$ okf rewrite-path onlyone
+exit: 2
+--- stdout
+--- stderr
+<usage error>
+--- files

@@ -1,0 +1,21 @@
+$ okf ctx outbound onboarding --include-internal
+exit: 0
+--- stdout
+outbound — ctx onboarding, 4 member(s), including internal links:
+handbook/getting-started.md
+  -> handbook/glossary.md  (/handbook/glossary.md)
+  -> handbook/ops/deploy.md  (ops/deploy.md)
+  -> handbook/security.md  (security.md)
+  -> handbook/ops/retired-tool.md  (ops/retired-tool.md)
+  -> handbook/assets/diagram.svg  (assets/diagram.svg)
+  -> handbook/ops/missing.md  (/handbook/ops/missing.md)  [missing]
+handbook/glossary.md
+  (none)
+handbook/ops/deploy.md
+  -> handbook/getting-started.md  (../getting-started.md)
+  -> handbook/ops/setup.md  (setup.md)
+  -> kc-gov/ownership.md  (/kc-gov/ownership.md)
+handbook/security.md
+  (none)
+--- stderr
+--- files

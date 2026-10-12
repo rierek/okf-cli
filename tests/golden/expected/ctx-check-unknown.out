@@ -1,0 +1,6 @@
+$ okf ctx check nope
+exit: 3
+--- stdout
+--- stderr
+ctx: unknown slug: nope
+--- files

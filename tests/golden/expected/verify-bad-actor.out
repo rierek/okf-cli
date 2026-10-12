@@ -1,0 +1,6 @@
+$ okf verify handbook/ops/setup --by nobody
+exit: 2
+--- stdout
+--- stderr
+--by 'nobody' is not `<producer>/<version>`, `human:<id>` or `process:<id>`
+--- files

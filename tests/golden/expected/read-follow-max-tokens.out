@@ -1,0 +1,52 @@
+$ okf read handbook/getting-started --follow 2 --max-tokens 120
+exit: 0
+--- stdout
+===== depth 0 handbook/getting-started =====
+---
+type: Guide
+title: "Getting started"
+description: "First steps: accounts, tools, and where to find things"
+tags:
+  - onboarding
+  - ops
+---
+
+# Getting started
+
+## Accounts
+
+Ask for an account. See the [glossary](/handbook/glossary.md) for terms.
+
+## Tools
+
+Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
+The old tool is described in [retired tool](ops/retired-tool.md).
+Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+
+### Wikilinks
+
+Also see [[glossary]], [[deploy|the deploy page]] and [[does-not-exist]].
+
+## Next
+
+Continue with [[overview]].
+
+===== depth 1 handbook/glossary [reduced] =====
+Glossary
+Terms used here: "bundle" and "concept"
+===== depth 1 handbook/ops/deploy [reduced] =====
+Deploy
+How to deploy: build, ship, verify
+===== depth 1 handbook/security [reduced] =====
+Security basics
+===== depth 1 handbook/ops/retired-tool [reduced] =====
+Retired tool
+A tool nobody uses any more
+===== depth 2 handbook/ops/setup [reduced] =====
+Setup
+Local setup
+===== depth 2 kc-gov/ownership [reduced] =====
+Ownership
+Every normative statement has exactly one owner
+--- stderr
+--- files

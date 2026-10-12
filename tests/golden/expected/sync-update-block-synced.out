@@ -1,0 +1,6 @@
+$ okf sync-update --block ownership-rule
+exit: 0
+--- stdout
+sync-update: 0 would update, 0 refused, 0 unresolvable. Re-run with --apply.
+--- stderr
+--- files

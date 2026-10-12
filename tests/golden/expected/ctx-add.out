@@ -1,0 +1,14 @@
+$ okf ctx add cooking recipes/salad --comment 'Fresh option'
+exit: 0
+--- stdout
+added recipes/salad.md to cooking (pos 4)
+--- stderr
+--- files
+M _ctx/cooking.md
+--- a/_ctx/cooking.md
++++ b/_ctx/cooking.md
+@@ -10,3 +10,4 @@
+ | 1 | pflicht | [bread](/recipes/bread.md) |  |
+ | 2 | pflicht | [pasta](/recipes/pasta.md) |  |
+ | 3 | pflicht | [soup](/recipes/soup.md) |  |
++| 4 | pflicht | [salad](/recipes/salad.md) | Fresh option |

@@ -1,0 +1,54 @@
+$ okf rename handbook/ops/retired-tool.md handbook/ops/legacy-tool.md --apply --json
+exit: 0
+--- stdout
+{"command": "rename", "ok": true, "data": {"applied": true, "old": "handbook/ops/retired-tool.md", "new": "handbook/ops/legacy-tool.md", "inbound": [{"source": "_ctx/legacy.md", "old": "/handbook/ops/retired-tool.md", "new": "/handbook/ops/legacy-tool.md"}, {"source": "handbook/getting-started.md", "old": "ops/retired-tool.md", "new": "/handbook/ops/legacy-tool.md"}, {"source": "handbook/ops/index.md", "old": "/handbook/ops/retired-tool.md", "new": "/handbook/ops/legacy-tool.md"}], "outbound": [], "wikilinks": [{"source": "handbook/wiki-notes.md", "region": "body", "raw": "[[retired-tool|old tool]]", "new_raw": "[[legacy-tool|old tool]]"}], "sync_sources": [], "ctx": ["legacy (pos 1)"], "skipped_ambiguous": [], "wikilink_collisions": [], "turns_ambiguous": [], "reindex_bundles": ["handbook"], "files": [{"path": "_ctx/legacy.md", "old_path": null, "diff": "--- a/_ctx/legacy.md\n+++ b/_ctx/legacy.md\n@@ -7,7 +7,7 @@\n \n | pos | mode | path | comment |\n |---|---|---|---|\n-| 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |\n+| 1 | pflicht | [legacy-tool](/handbook/ops/legacy-tool.md) |  |\n | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |\n | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |\n | - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |\n"}, {"path": "handbook/getting-started.md", "old_path": null, "diff": "--- a/handbook/getting-started.md\n+++ b/handbook/getting-started.md\n@@ -16,7 +16,7 @@\n ## Tools\n \n Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).\n-The old tool is described in [retired tool](ops/retired-tool.md).\n+The old tool is described in [retired tool](/handbook/ops/legacy-tool.md).\n Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.\n \n ### Wikilinks\n"}, {"path": "handbook/ops/index.md", "old_path": null, "diff": "--- a/handbook/ops/index.md\n+++ b/handbook/ops/index.md\n@@ -7,6 +7,6 @@\n <!-- okf:index -->\n * [Deploy](/handbook/ops/deploy.md) - How to deploy: build, ship, verify\n * [Incident 2026](/handbook/ops/incident-2026.md) - A past incident\n-* [Retired tool](/handbook/ops/retired-tool.md) - A tool nobody uses any more\n+* [Retired tool](/handbook/ops/legacy-tool.md) - A tool nobody uses any more\n * [Setup](/handbook/ops/setup.md) - Local setup\n <!-- /okf:index -->\n"}, {"path": "handbook/ops/legacy-tool.md", "old_path": "handbook/ops/retired-tool.md", "diff": "rename from handbook/ops/retired-tool.md\nrename to handbook/ops/legacy-tool.md\n"}, {"path": "handbook/wiki-notes.md", "old_path": null, "diff": "--- a/handbook/wiki-notes.md\n+++ b/handbook/wiki-notes.md\n@@ -14,7 +14,7 @@\n \n - [[glossary]] resolves.\n - [[handbook/ops/deploy]] resolves by path.\n-- [[retired-tool|old tool]] resolves with an alias.\n+- [[legacy-tool|old tool]] resolves with an alias.\n - [[glossary#Bundle]] resolves with a section.\n - [[overview]] is ambiguous (handbook and recipes).\n - [[nowhere]] is dead.\n"}], "moved_with": "git mv", "tracked_in": null, "untracked_reason": null, "rewritten": {"inbound_links": 3, "inbound_files": 3, "outbound_links": 0, "wikilinks": 1, "wikilink_files": 1, "sync_sources": 0, "sync_files": 0}, "ctx_not_refreshed": [], "reindexed": 0}, "warnings": [], "error": null}
+--- stderr
+--- files
+R handbook/ops/retired-tool.md -> handbook/ops/legacy-tool.md
+M _ctx/legacy.md
+--- a/_ctx/legacy.md
++++ b/_ctx/legacy.md
+@@ -7,7 +7,7 @@
+ 
+ | pos | mode | path | comment |
+ |---|---|---|---|
+-| 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |
++| 1 | pflicht | [legacy-tool](/handbook/ops/legacy-tool.md) |  |
+ | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |
+ | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |
+ | - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |
+M handbook/getting-started.md
+--- a/handbook/getting-started.md
++++ b/handbook/getting-started.md
+@@ -16,7 +16,7 @@
+ ## Tools
+ 
+ Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
+-The old tool is described in [retired tool](ops/retired-tool.md).
++The old tool is described in [retired tool](/handbook/ops/legacy-tool.md).
+ Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+ 
+ ### Wikilinks
+M handbook/ops/index.md
+--- a/handbook/ops/index.md
++++ b/handbook/ops/index.md
+@@ -7,6 +7,6 @@
+ <!-- okf:index -->
+ * [Deploy](/handbook/ops/deploy.md) - How to deploy: build, ship, verify
+ * [Incident 2026](/handbook/ops/incident-2026.md) - A past incident
+-* [Retired tool](/handbook/ops/retired-tool.md) - A tool nobody uses any more
++* [Retired tool](/handbook/ops/legacy-tool.md) - A tool nobody uses any more
+ * [Setup](/handbook/ops/setup.md) - Local setup
+ <!-- /okf:index -->
+M handbook/wiki-notes.md
+--- a/handbook/wiki-notes.md
++++ b/handbook/wiki-notes.md
+@@ -14,7 +14,7 @@
+ 
+ - [[glossary]] resolves.
+ - [[handbook/ops/deploy]] resolves by path.
+-- [[retired-tool|old tool]] resolves with an alias.
++- [[legacy-tool|old tool]] resolves with an alias.
+ - [[glossary#Bundle]] resolves with a section.
+ - [[overview]] is ambiguous (handbook and recipes).
+ - [[nowhere]] is dead.
