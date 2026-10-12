@@ -19,11 +19,11 @@ The MCP server registration itself (`uv run --with "mcp<2" …/mcp/okf_mcp.py`) 
 Until approval the live callers keep running `main` (0.1). Deploy means these steps, in this order:
 
 1. In `repo/` on `main`: `git merge --no-ff milestone/0.2`, check `git diff --quiet milestone/0.2 HEAD`, run `just test`, then `git push origin main`.
-2. Tag the merge commit: `git tag -a rel-0-2-0 -m "okf-cli 0.2.0" && git push origin rel-0-2-0`.
-3. `~/dotfiles`: merge `main` into `okf-0.2`, re-run `just test-arch test-start test-end test-smoke`, then on `main` run `git merge --no-ff okf-0.2`, `stow -R -d ~/dotfiles -t ~ okf` and `git push origin main`.
-4. `~/.claude`: merge `main` into `okf-0.2`, then on `main` run `git merge --no-ff okf-0.2`.
+2. Tag the merge commit: `git tag -a rel-0-2-0 -m "okf-cli 0.2.0" && git push origin rel-0-2-0`, then watch the run: `gh run watch -R xRiErOS/okf-cli $(gh run list -R xRiErOS/okf-cli -w release.yml -L 1 --json databaseId -q '.[0].databaseId')`.
+3. `~/dotfiles`: check `git status --short` is empty, merge `main` into `okf-0.2`, re-run `just test-arch test-start test-end test-smoke`, then on `main` run `git merge --no-ff okf-0.2`, `stow -R -d ~/dotfiles -t ~ okf` and `git push origin main`; then `git worktree remove /tmp/okft-cnjd-dotfiles && git branch -d okf-0.2`.
+4. `~/.claude`: commit pending edits of `git status --short`, merge `main` into `okf-0.2`, then on `main` run `git merge --no-ff okf-0.2`.
 5. Replace the wrapper and the completion link: write `~/.local/bin/okf` with `exec uv run --script "$HOME/dev/cli/OKF_cli/repo/cli/okf-cli.py" "$@"` (mode 755), run `rm ~/.local/bin/okf-cli ~/.zsh/completions/_okf-cli`, `ln -s ~/dev/cli/OKF_cli/repo/cli/_okf ~/.zsh/completions/_okf` and `rm -f ~/.zcompdump*`.
-6. In `~/.claude`: `just arch-snapshot && just arch-check && just aca tpic check --render`, commit the snapshot and `TPIC-CHAIN.md`, then push `main`.
+6. In `~/.claude`: `just arch-snapshot && just arch-check && just aca tpic check --render`, commit the snapshot and `TPIC-CHAIN.md`, then `git push origin main && git worktree remove /tmp/okft-cnjd-claude && git branch -d okf-0.2`.
 7. Apply the recorded `~/.omp` edits (managed skills, `agents/skill-reviewer.md`, memory notes). `~/.omp` is not a git repository, so there is no branch.
 8. Apply the recorded Knowledge Catalogue edits: the `uv run --script` form of `.githooks/pre-commit`, the `justfile` recipes (`okf`, normalize-tags with `--where`), the header of `TAGS.md` and the concept texts.
 9. Commit the Knowledge Catalogue and push `main` to `nas` and `github`; this also pushes its migration commits.
