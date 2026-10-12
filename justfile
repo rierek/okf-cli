@@ -7,6 +7,8 @@ mod? wt '~/.config/just/wt.just'
 cli_dir := "cli"
 # Catalogue-Root fuer Smoke-Laeufe gegen einen echten Store
 catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
+# Ruff-Version fuer den Lint-Gate (eine Quelle; Regelsatz steht in pyproject.toml)
+ruff_version := "0.17.0"
 
 # Alle Rezepte auflisten
 default:
@@ -21,6 +23,17 @@ test *ARGS:
 build:
     uv build
 
+# Korrektheits-Lint (Syntaxfehler, pyflakes) ueber cli/ und mcp/; Regeln in pyproject.toml [tool.ruff.lint]
+lint:
+    uvx ruff@{{ruff_version}} check cli mcp
+
+# Paket pruefen: bauen, twine check --strict, Wheel in leerer venv installieren, okf-cli --help
+pack-check:
+    scripts/pack-check.sh
+
+# Offline Eval-Gate: lexikalische Messung auf Wegwerf-Catalogue gegen die eingefrorene Baseline, nur S1-literal-Guard (OKFT-cuj7)
+eval-gate:
+    scripts/eval-gate.sh
 
 # okf-cli bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf-cli.py install --help`)
 setup *ARGS:

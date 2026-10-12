@@ -429,15 +429,17 @@ def iter_concepts(bundle_path, prune_staging=True):
     Same shape as OKFT-n8xz's `indexable_only` on resolve_scopes(): one
     shared walk, the default serving the majority, the minority opting
     explicitly at its own call site rather than a second, duplicated walk."""
+    # sorted: os.walk yields in directory order (arbitrary on ext4, sorted on APFS); every caller's
+    # output order, e.g. the `files` list of merge-tags, must not depend on the filesystem.
     for dirpath, dirnames, filenames in os.walk(bundle_path):
         if prune_staging:
-            dirnames[:] = [d for d in dirnames
-                           if not d.startswith(".") and not d.startswith("_")
-                           and d != "assets"]
+            dirnames[:] = sorted(d for d in dirnames
+                                 if not d.startswith(".") and not d.startswith("_")
+                                 and d != "assets")
         else:
-            dirnames[:] = [d for d in dirnames
-                           if not d.startswith(".") and d != "assets"]
-        for fn in filenames:
+            dirnames[:] = sorted(d for d in dirnames
+                                 if not d.startswith(".") and d != "assets")
+        for fn in sorted(filenames):
             if not fn.endswith(".md") or fn.lower() in RESERVED:
                 continue
             ap = os.path.join(dirpath, fn)
