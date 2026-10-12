@@ -37,7 +37,10 @@ Progressive disclosure: widen only when the cheaper step left the question open.
                                 <bundle> or <bundle>/<subdir> resolves to its
                                 index.md, so the names listed below are the
                                 argument, verbatim.
-  4. read <bundle>/<concept>    the page itself
+  4. read <bundle>/<concept>    the page itself. `read --section "<heading>"`
+                                prints one section; `read --follow N` adds the
+                                pages it links to (`--inbound`: also those
+                                linking to it)
   5. refs / wikilinks           follow the graph out of a page
 
 Reach for `toc` before `read`: a concept can run long, and its headings usually
@@ -76,7 +79,10 @@ Progressive disclosure: widen only when the cheaper step left the question open.
                                 <bundle> or <bundle>/<subdir> resolves to its
                                 index.md, so the names listed below are the
                                 argument, verbatim.
-  4. read <bundle>/<concept>    the page itself
+  4. read <bundle>/<concept>    the page itself. `read --section "<heading>"`
+                                prints one section; `read --follow N` adds the
+                                pages it links to (`--inbound`: also those
+                                linking to it)
   5. refs / wikilinks           follow the graph out of a page
 
 ## Write — through the ce-okf skill, never by hand
