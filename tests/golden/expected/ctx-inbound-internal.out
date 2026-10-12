@@ -3,16 +3,16 @@ exit: 0
 --- stdout
 inbound — ctx cooking, 3 member(s), including internal links:
 recipes/bread.md
-  <- recipes/overview.md  (/recipes/bread.md)
   <- recipes/index.md  (/recipes/bread.md)
+  <- recipes/overview.md  (/recipes/bread.md)
   <- recipes/soup.md  (/recipes/bread.md)
 recipes/pasta.md
-  <- recipes/overview.md  (pasta.md)
   <- recipes/bread.md  (pasta.md)
   <- recipes/index.md  (/recipes/pasta.md)
+  <- recipes/overview.md  (pasta.md)
 recipes/soup.md
-  <- recipes/overview.md  (soup.md)
   <- recipes/index.md  (/recipes/soup.md)
+  <- recipes/overview.md  (soup.md)
   <- recipes/salad.md  (soup.md)
 --- stderr
 --- files

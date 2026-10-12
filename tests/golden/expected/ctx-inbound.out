@@ -3,8 +3,8 @@ exit: 0
 --- stdout
 inbound — ctx onboarding, 4 member(s), external sources only:
 handbook/getting-started.md
-  <- handbook/overview.md  (getting-started.md)
   <- handbook/index.md  (/handbook/getting-started.md)
+  <- handbook/overview.md  (getting-started.md)
 handbook/glossary.md
   <- handbook/index.md  (/handbook/glossary.md)
 handbook/ops/deploy.md

@@ -94,8 +94,8 @@ exit: 0
 -Use a pot <size>. Compare with [bread](/recipes/bread.md).
 would move   recipes/soup.md  ->  recipes/bread.md
   inbound    _ctx/cooking.md   /recipes/soup.md  ->  /recipes/bread.md
-  inbound    recipes/overview.md   soup.md  ->  /recipes/bread.md
   inbound    recipes/index.md   /recipes/soup.md  ->  /recipes/bread.md
+  inbound    recipes/overview.md   soup.md  ->  /recipes/bread.md
   inbound    recipes/salad.md   soup.md  ->  /recipes/bread.md
   ctx        cooking (pos 3)
   reindex    recipes

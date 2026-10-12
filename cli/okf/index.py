@@ -11,7 +11,7 @@ from okf.errors import OkfError
 from okf.catalogue import (
     EXEMPT, MARK_END, MARK_START, REAL_FS, _collapse, _find_reserved_name, fm_text, index_h1_and_desc,
     iter_headings, iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_and_fm, meta_of, read_file,
-    read_file_verbatim, read_frontmatter, replace_managed_block, require_bundle_dir, tags_of,
+    read_file_verbatim, read_frontmatter, replace_managed_block, require_bundle_dir, sorted_walk, tags_of,
 )
 from okf.output import _add_output
 from okf.parser_support import _complete_bundles, _complete_scopes, _sub
@@ -208,7 +208,7 @@ def init_indexes(root, target, force=False):
     are flattened too (prose/tables still refuse).
     """
     results, plan = [], []
-    for dp, dn, fn in os.walk(target):
+    for dp, dn, fn in sorted_walk(target):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
         idx_name = _find_reserved_name(fn)
         if not idx_name:
@@ -282,7 +282,7 @@ def uncovered_index_dirs(root, target):
     proves those files appear in the index. Returns sorted rel index.md paths.
     """
     out = []
-    for dp, dn, fn in os.walk(os.path.join(root, target)):
+    for dp, dn, fn in sorted_walk(os.path.join(root, target)):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
         idx_name = _find_reserved_name(fn)
         if not idx_name:
