@@ -55,7 +55,7 @@ catalogue/
 └── PROPERTIES.md
 ```
 
-A bundle is an immediate subdirectory not starting with `.` or `_`.
+A bundle is an immediate subdirectory not starting with `.` or `_`, except `_ctx/`, the context-bundle directory.
 
 A v0.2 concept carries its trust signals in frontmatter. Only `type` is required; every other field is optional:
 
@@ -151,7 +151,7 @@ rename (dry-run): 1 inbound, 0 outbound link(s), 0 wikilink(s) (0 skipped-ambigu
 
 ### Output, `--json` and exit codes
 
-Every command takes `--json`. It prints exactly one envelope on stdout and nothing else:
+Every command takes `--json`. Once the command runs, it prints exactly one envelope on stdout and nothing else. A usage error caught by the argument parser (missing argument, excluded option combination) exits 2 with its message on stderr and no envelope:
 
 ```json
 {"command": "read", "ok": false, "data": null, "warnings": [], "error": {"kind": "not_found", "code": 3, "message": "not found: notes/nope"}}
@@ -222,7 +222,7 @@ okf-cli read notes/design --section Design --follow 1 --json
 
 - **`--section HEADING`** prints the section from that heading up to the next heading of equal or higher level, sub-sections included. Matching is case-insensitive and exact. `A > B` finds `B` inside `A`. An unknown heading exits with code 3; a heading that matches more than once exits with code 2.
 - **`--frontmatter-only`** and **`--body-only`** split the page at the frontmatter block.
-- **`--follow N`** adds the concepts the page links to, up to `N` hops deep, as one block (breadth-first, every page once). Each page is headed `===== depth <n> <concept> =====`; in `--json` the block is `data.nodes`, each with `path`, `depth`, `reduced`, `text` and `tokens`. With `--section`, only the starting page is narrowed.
+- **`--follow N`** adds the concepts the page links to, up to `N` hops deep, as one block (breadth-first, every page once). Each page is headed `===== depth <n> <concept> =====`; in `--json` the block is `data.nodes`, each with `path`, `depth`, `reduced`, `tokens` and `text`; a node with `reduced: true` carries `title` and `description` instead of `text`. With `--section`, only the starting page is narrowed.
 - **`--inbound`** (with `--follow`): the pages that link to a page count as its neighbours too.
 - **`--max-tokens K`** (with `--follow`): keep the block within `K` tokens (estimated as characters / 4). The starting page always prints in full; from the first page that no longer fits, pages show title and description only (`reduced: true`).
 
