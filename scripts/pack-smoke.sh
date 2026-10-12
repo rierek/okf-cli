@@ -20,7 +20,7 @@ uv venv -q "$T/venv" && uv pip install -q --python "$T/venv/bin/python" "${whl[0
 cli="$T/venv/bin/okf-cli"
 HOME="$T/home" "$cli" --help >/dev/null && echo "ok   okf-cli --help"
 HOME="$T/home" "$cli" --root "$T/cat" prime 2>/dev/null | grep -q "agent onboarding" && echo "ok   prime"
-HOME="$T/home" "$cli" install --json --only claude,zsh | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["steps"], d' && echo "ok   install plan"
+HOME="$T/home" "$cli" install --json --only claude,zsh | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["data"]["steps"], d' && echo "ok   install plan"
 
 mcp="$(cd "$T" && "$T/venv/bin/python" -c 'import okf_cli,os; print(os.path.join(os.path.dirname(okf_cli.__file__), "mcp", "okf_mcp.py"))')"
 python3 - "$mcp" "$T/cat" <<'EOF'
