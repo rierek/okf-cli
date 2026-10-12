@@ -146,7 +146,7 @@ ctx-inbound-json ctx inbound onboarding --json
 ctx-inbound-internal ctx inbound cooking --include-internal
 
 # --- ctx (write)
-ctx-create ctx create reading handbook/glossary recipes/pasta --description "A new reading list"
+ctx-create ctx create reading --description "A new reading list" handbook/glossary recipes/pasta
 ctx-create-json ctx create reading handbook/glossary --description "A new reading list" --json
 ctx-create-import ctx create imported --import {ROOT}/handbook/assets/import-list.txt
 ctx-create-existing ctx create onboarding handbook/glossary

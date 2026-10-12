@@ -3,6 +3,7 @@ Holds its 14 verbs, the `ctx <slug>` shorthand, the slug completer and the parse
 block; the ctx storage layer (load_ctx, save_ctx, ctx_findings, ...) stays in
 okf.catalogue."""
 
+import argparse
 import os
 import shlex
 import subprocess
@@ -461,11 +462,29 @@ def _complete_ctx_slugs(parsed_args, **_):
     return {s: load_ctx(root, s)["description"] for s in ctx_slugs(root)}
 
 
+class _IntermixedParser(argparse.ArgumentParser):
+    """A ctx verb parser that takes options between positionals. argparse before 3.12 matches
+    `create`'s `PATH...` empty when an option follows the slug and then rejects the paths after
+    the option (`ctx create s --description d p`); intermixed parsing matches all positionals at
+    once. parse_known_intermixed_args calls parse_known_args itself, hence the guard."""
+    _mixing = False
+
+    def parse_known_args(self, args=None, namespace=None):
+        if self._mixing:
+            return super().parse_known_args(args, namespace)
+        self._mixing = True
+        try:
+            return self.parse_known_intermixed_args(args, namespace)
+        finally:
+            self._mixing = False
+
+
 def add_ctx_parser(sub):
     pcx = _sub(sub, "ctx", "navigation",
                "context bundles: curated, ordered reading lists per topic "
                "(`ctx` lists them, `ctx <slug>` shows one)")
     ctx_verbs = pcx.add_subparsers(dest="ctx_verb", required=True, metavar="VERB",
+                                   parser_class=_IntermixedParser,
                                    help="ctx verb; `ctx <slug>` is short for `ctx show <slug>`")
     pcxa = ctx_verbs.add_parser(
         "add", help="add one entry to a ctx bundle",
