@@ -17,7 +17,8 @@ for want in okf_cli/cli/okf-cli.py okf_cli/cli/okf_install.py okf_cli/cli/_okf o
 done
 echo "ok   wheel file list"
 
-uv venv -q "$T/venv" && uv pip install -q --python "$T/venv/bin/python" "${whl[0]}"
+uv venv -q "$T/venv"
+uv pip install -q --python "$T/venv/bin/python" "${whl[0]}"
 cli="$T/venv/bin/okf"
 HOME="$T/home" "$cli" --help >/dev/null
 echo "ok   okf --help"
