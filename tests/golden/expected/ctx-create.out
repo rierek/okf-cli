@@ -1,4 +1,4 @@
-$ okf ctx create reading handbook/glossary recipes/pasta --description 'A new reading list'
+$ okf ctx create reading --description 'A new reading list' handbook/glossary recipes/pasta
 exit: 0
 --- stdout
 created _ctx/reading.md (2 entries)
