@@ -2,7 +2,7 @@ name: test
 
 on:
   push:
-    branches: [main, "milestone/**", "wt/**"]
+    branches: [main, "milestone/**", "wt/**", "chore/**"]
   pull_request:
 
 permissions:
@@ -18,24 +18,55 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # tomllib (okf-cli.py) braucht >= 3.11
+        # requires-python in the PEP 723 header of cli/okf-cli.py is the lowest leg
         os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13", "3.14"]
         include:
           # APFS ist case-insensitiv: nur hier laufen die 4 Case-Tests.
           - os: macos-latest
             python-version: "3.14"
+    env:
+      # Jede Matrix-Zeile testet ihren eigenen Interpreter. Cache und Interpreter-Ablage
+      # liegen ausserhalb von HOME, damit das leere HOME unten nur den Vault ausschliesst.
+      UV_PYTHON: ${{ matrix.python-version }}
+      UV_CACHE_DIR: /tmp/uv-cache
+      UV_PYTHON_INSTALL_DIR: /tmp/uv-python
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: extractions/setup-just@v2
-      # Optionale Abhaengigkeiten: ohne sie werden 6 Tests uebersprungen.
-      - run: python -m pip install argcomplete mcp
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - name: Interpreter dieser Matrix-Zeile
+        run: uv run --no-project python -VV
+      # Laufzeit-Abhaengigkeiten kommen aus dem PEP-723-Header von cli/okf-cli.py (just test);
+      # mcp ist das einzige Test-Extra (`just test`), nicht im Header deklariert.
       # Leeres HOME: beweist, dass die Suite keinen Live-Vault
       # (~/Obsidian/Knowledge-Catalogue) braucht oder beschreibt (CLAUDE.md Regel 1).
       - name: just test (leeres HOME)
         run: HOME="$(mktemp -d)" just test
       - name: Arbeitsbaum sauber (Tests hinterlassen keine Reste)
         run: git diff --exit-code && test -z "$(git status --porcelain)"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: just lint
+
+  # Offline lexical-only gate (OKFT-cuj7): literal S1 rank vs the frozen baseline
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: HOME="$(mktemp -d)" just eval-gate
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: just pack-check

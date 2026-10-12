@@ -19,21 +19,20 @@ which bundle a fixture landed in — teardown() walks every real bundle and
 removes anything it owns, so it stays idempotent even after a partial seed
 or if bundle selection drifts between runs.
 
-Usage:
-    python3 fixtures.py --root <catalogue> --seed
-    python3 fixtures.py --root <catalogue> --teardown
+Usage (the script imports the okf package, so uv starts it with the dependencies of the
+PEP 723 header of cli/okf-cli.py; there is no second dependency list):
+    uv run --no-project --with-requirements cli/okf-cli.py python cli/eval/fixtures.py --root <catalogue> --seed
+    uv run --no-project --with-requirements cli/okf-cli.py python cli/eval/fixtures.py --root <catalogue> --teardown
 """
 import argparse
 import collections
-import importlib.util
 import os
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_CLI_PATH = os.path.join(_HERE, "..", "okf-cli.py")
-_spec = importlib.util.spec_from_file_location("okf_cli", _CLI_PATH)
-okf = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(okf)
+# Started by path, only cli/eval is on sys.path; the okf package sits in cli/.
+sys.path.insert(0, os.path.dirname(_HERE))
+from okf.catalogue import list_bundles  # noqa: E402
 
 # Rare token unlikely to collide with real content — the shared "secret" the
 # golden queries (Task 3) search for.
@@ -53,7 +52,7 @@ Fixture = collections.namedtuple(
 # not derived from list_bundles() alphabetical order. Matches the bundle
 # segment cli/eval/golden.json's expected_path / s4-index-walk query.bundle
 # fields already hardcode — golden.json's literals are checked against
-# these two constants by cli/test_eval_runner.py's
+# these two constants by tests/test_eval_runner.py's
 # GoldenBundleConsistencyTest, so the two files cannot drift silently.
 # Changing either constant without updating golden.json (or vice versa)
 # fails that guard immediately.
@@ -72,7 +71,7 @@ def _pick_bundles(root):
     bundle while golden.json kept expecting `agent-memory`). Pinning by
     name removes the coupling to catalogue sort order entirely."""
     real = {
-        b for b in okf.list_bundles(root)
+        b for b in list_bundles(root)
         if not os.path.islink(os.path.join(root, b))
     }
     missing = [b for b in (CORRECT_BUNDLE, WRONG_BUNDLE) if b not in real]
@@ -114,7 +113,7 @@ def _fixture_spec(root):
                 "## Zqxeval Overview\n\n"
                 "Same placement as S1 — zqxeval in title, heading, and body "
                 "— but seeded into the wrong bundle on purpose, to isolate "
-                "location-sensitivity: find is location-blind, list --scope "
+                "location-sensitivity: find is location-blind, list --where "
                 "is not.\n"
             ),
             correct_bundle=False,
@@ -187,7 +186,7 @@ def teardown(root):
     every real (non-symlink) bundle. Idempotent — safe to call after a
     partial seed or with nothing seeded at all."""
     removed = []
-    for b in okf.list_bundles(root):
+    for b in list_bundles(root):
         bp = os.path.join(root, b)
         if os.path.islink(bp):
             continue

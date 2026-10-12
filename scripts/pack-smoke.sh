@@ -10,17 +10,17 @@ mkdir "$T/home" "$T/cat"
 uv build --out-dir "$T/dist" -q
 whl=("$T"/dist/*.whl)
 files="$(python3 -m zipfile -l "${whl[0]}")"
-for want in okf_cli/cli/okf-cli.py okf_cli/cli/okf_install.py okf_cli/cli/_okf-cli okf_cli/cli/embeddings/build_tagvec.py \
+for want in okf_cli/cli/okf-cli.py okf_cli/cli/okf_install.py okf_cli/cli/_okf okf_cli/cli/embeddings/build_tagvec.py \
             okf_cli/mcp/okf_mcp.py okf_cli/skills/okf/SKILL.md okf_cli/skills/okf/evals/evals.json; do
     grep -q "$want" <<<"$files" || { echo "FAIL: wheel lacks $want" >&2; exit 1; }
 done
 echo "ok   wheel file list"
 
 uv venv -q "$T/venv" && uv pip install -q --python "$T/venv/bin/python" "${whl[0]}"
-cli="$T/venv/bin/okf-cli"
-HOME="$T/home" "$cli" --help >/dev/null && echo "ok   okf-cli --help"
+cli="$T/venv/bin/okf"
+HOME="$T/home" "$cli" --help >/dev/null && echo "ok   okf --help"
 HOME="$T/home" "$cli" --root "$T/cat" prime 2>/dev/null | grep -q "agent onboarding" && echo "ok   prime"
-HOME="$T/home" "$cli" install --json --only claude,zsh | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["steps"], d' && echo "ok   install plan"
+HOME="$T/home" "$cli" install --json --only claude,zsh | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["data"]["steps"], d' && echo "ok   install plan"
 
 mcp="$(cd "$T" && "$T/venv/bin/python" -c 'import okf_cli,os; print(os.path.join(os.path.dirname(okf_cli.__file__), "mcp", "okf_mcp.py"))')"
 python3 - "$mcp" "$T/cat" <<'EOF'

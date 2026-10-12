@@ -5,7 +5,7 @@
   "eng": [
    {
     "path": "cat/.okf.toml",
-    "content": "# okf-cli catalogue marker\n"
+    "content": "# okf catalogue marker\n"
    },
    {
     "path": "cat/TYPES.md",
@@ -69,7 +69,7 @@
    "files": [
     {
      "path": "cat/.okf.toml",
-     "content": "# okf-cli catalogue marker\n"
+     "content": "# okf catalogue marker\n"
     },
     {
      "path": "cat/TYPES.md",
@@ -93,8 +93,8 @@
     }
    ],
    "setup": [
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "mv cat/.pending/use-postgres.md cat/eng/decisions/use-postgres.md"
    ],
    "prompt": "Using the OKF catalogue in ./cat: which database stores our orders?",
@@ -151,8 +151,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "Using the OKF catalogue in ./cat: what is our Kubernetes autoscaling policy?",
@@ -191,7 +191,7 @@
   },
   {
    "id": "retrieval-cli-fallback",
-   "name": "okf-cli not on PATH: falls back to python3 okf-cli.py",
+   "name": "okf not on PATH: falls back to python3 okf-cli.py",
    "workflow": "retrieval",
    "base": "eng",
    "files": [],
@@ -199,7 +199,7 @@
     "python3 {CLI_PY} --root cat reindex eng >/dev/null",
     "python3 {CLI_PY} --root cat build-index >/dev/null"
    ],
-   "prompt": "Using the OKF catalogue in ./cat: how long must the worker drain before it is restarted? (okf-cli is not installed as a command here; the checkout script is {CLI_PY}.)",
+   "prompt": "Using the OKF catalogue in ./cat: how long must the worker drain before it is restarted? (okf is not installed as a command here; the checkout script is {CLI_PY}.)",
    "no_path_cli": true,
    "routing": {
     "must_not_read": [
@@ -218,14 +218,14 @@
     },
     {
      "type": "transcript_cmd",
-     "regex": "python3?\\s+\\S*okf-cli\\.py",
+     "regex": "python3?\\s+\\S*okf\\.py",
      "desc": "uses the python3 okf-cli.py form"
     },
     {
      "type": "transcript_cmd",
-     "regex": "(^|[;&|]\\s*)okf-cli\\s",
+     "regex": "(^|[;&|]\\s*)okf\\s",
      "present": false,
-     "desc": "does not call a missing okf-cli command"
+     "desc": "does not call a missing okf command"
     },
     {
      "type": "tree_unchanged",
@@ -234,7 +234,7 @@
    ],
    "expected_output": "30 seconds, found through python3 <checkout>/cli/okf-cli.py commands.",
    "assertions": [
-    "Runs --help or goes straight to the python3 form after okf-cli is not found",
+    "Runs --help or goes straight to the python3 form after okf is not found",
     "Answers 30 seconds"
    ]
   },
@@ -294,8 +294,8 @@
     },
     {
      "type": "transcript_cmd",
-     "regex": "okf-cli\\b.*(prime|find|index|read)",
-     "desc": "uses okf-cli"
+     "regex": "okf\\b.*(prime|find|index|read)",
+     "desc": "uses okf"
     },
     {
      "type": "tree_unchanged",
@@ -316,8 +316,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat, which Decisions are tagged `storage`? Give the names and say which of them is still current.",
@@ -370,8 +370,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat create a new bundle `ops` for team runbooks. First concept: how to rotate the TLS certificate (renew with certbot, reload nginx, verify with `curl -I`). Do not commit.",
@@ -409,14 +409,14 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat reindex ops --check",
+     "run": "okf --root cat reindex ops --check",
      "exit": 0,
      "desc": "listings generated"
     },
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check ops",
+     "run": "okf --root cat check ops",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -472,7 +472,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root kb prime --compact",
+     "run": "okf --root kb prime --compact",
      "exit": 0,
      "stderr_not_regex": "no catalogue marker",
      "stdout_regex": "team",
@@ -481,13 +481,13 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root kb check team",
+     "run": "okf --root kb check team",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root kb reindex team --check",
+     "run": "okf --root kb reindex team --check",
      "exit": 0
     }
    ],
@@ -505,8 +505,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat create a new bundle `people` with a first concept about Dana (role: SRE lead), type `Person`. Do not commit.",
@@ -529,7 +529,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat check people",
+     "run": "okf --root cat check people",
      "exit": 0,
      "stdout_regex": "OK — 0 violations",
      "stdout_not_regex": "type-registered",
@@ -538,7 +538,7 @@
     {
      "type": "cmd",
      "desc": "check --strict clean",
-     "run": "okf-cli --root cat check people --strict",
+     "run": "okf --root cat check people --strict",
      "exit": 0
     },
     {
@@ -565,8 +565,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat create a new bundle `sec` with one Concept about our password rotation policy (rotate every 90 days). Tag it with whatever fits from the catalogue's own tag vocabulary. Do not commit.",
@@ -585,19 +585,19 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check sec",
+     "run": "okf --root cat check sec",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
     {
      "type": "cmd",
      "desc": "check --strict clean",
-     "run": "okf-cli --root cat check sec --strict",
+     "run": "okf --root cat check sec --strict",
      "exit": 0
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat tags --validate security",
+     "run": "okf --root cat tags --validate security",
      "exit": 0
     },
     {
@@ -625,8 +625,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat create a bundle `research` with two subdirectories `papers` and `notes`, one concept in each: a paper summary of 'Attention Is All You Need' (source https://arxiv.org/abs/1706.03762) in papers, and a short note on how we read papers in notes. Do not commit.",
@@ -656,13 +656,13 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat reindex research --check",
+     "run": "okf --root cat reindex research --check",
      "exit": 0
     },
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check research",
+     "run": "okf --root cat check research",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -686,8 +686,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "Add a Concept to the architecture directory of the eng bundle in the OKF catalogue ./cat: the public API allows 100 requests per minute per key (source: https://wiki.example/api/limits, page title 'API limits'). Cite the source. Do not commit.",
@@ -741,7 +741,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -766,8 +766,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "Update eng/architecture/order-service.md in the OKF catalogue ./cat: orders are now archived to cold storage after 12 months. Do not commit.",
@@ -814,7 +814,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -843,8 +843,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat, eng/decisions/use-postgres.md holds our order retention rule as canon block `retention`. Make eng/operations/restart-worker.md show the same rule and keep it in sync with the source. Do not commit.",
@@ -862,7 +862,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat sync-status",
+     "run": "okf --root cat sync-status",
      "exit": 0,
      "desc": "every block synced"
     },
@@ -875,7 +875,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -903,10 +903,10 @@
     }
    ],
    "setup": [
-    "okf-cli --root cat sync-insert eng/operations/restart-worker eng/decisions/use-postgres retention --apply >/dev/null",
+    "okf --root cat sync-insert eng/operations/restart-worker eng/decisions/use-postgres retention --apply >/dev/null",
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat, change the order retention rule (canon block `retention` in eng/decisions/use-postgres.md) from 30 days to 90 days, and make sure everything that shows that rule is current. Do not commit.",
@@ -934,7 +934,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat sync-status",
+     "run": "okf --root cat sync-status",
      "exit": 0
     },
     {
@@ -945,7 +945,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -969,8 +969,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "I am Erik (actor id human:erik). I wrote this note myself; put it into the OKF catalogue ./cat as a Concept in eng/architecture, text as is: 'Backups of the order database run nightly at 02:00 UTC and are kept for 14 days.' Do not commit.",
@@ -1001,7 +1001,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -1024,8 +1024,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat we now use NATS instead of Kafka for domain events. Record that as a new Decision in eng/decisions and mark the Kafka decision as superseded by it. Do not commit.",
@@ -1050,7 +1050,7 @@
     {
      "type": "cmd",
      "desc": "check clean (superseded_by resolves)",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -1073,8 +1073,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "Add a Concept to eng/architecture in the OKF catalogue ./cat. Title exactly: [WIP] Queue: retry policy. Description exactly: Retries use backoff: 1s, 2s, 4s # per attempt. Body: one sentence on exponential backoff. Do not commit.",
@@ -1099,7 +1099,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -1121,7 +1121,7 @@
    "files": [
     {
      "path": "cat/.okf.toml",
-     "content": "# okf-cli catalogue marker\n"
+     "content": "# okf catalogue marker\n"
     },
     {
      "path": "cat/TYPES.md",
@@ -1146,7 +1146,7 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat, record the decision that orders now live in Postgres because MySQL lacked the JSON features we need, and rename eng/decisions/old-db.md to eng/decisions/use-mysql-legacy.md.",
@@ -1210,7 +1210,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -1222,7 +1222,7 @@
    ],
    "expected_output": "A new Decision concept in eng/decisions, the old concept renamed with its inbound link in eng/overview.md rewritten, listings regenerated, check clean, no commit.",
    "assertions": [
-    "Renames with okf-cli rename: a preview run first, then --apply; never mv, git mv or rm",
+    "Renames with okf rename: a preview run first, then --apply; never mv, git mv or rm",
     "eng/overview.md links to /eng/decisions/use-mysql-legacy.md afterwards",
     "The new concept has type Decision, a one-sentence description and generated.by naming the agent itself, not an invented human",
     "No verified field is added",
@@ -1238,8 +1238,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat rename the directory eng/decisions to eng/adr. Every link must keep working. Do not commit.",
@@ -1287,13 +1287,13 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat reindex eng --check",
+     "run": "okf --root cat reindex eng --check",
      "exit": 0
     },
     {
@@ -1333,8 +1333,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "Tag cleanup in the OKF catalogue ./cat: the tags `postgresql` and `PostgreSQL` should all become `postgres`. Do not commit.",
@@ -1377,7 +1377,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -1401,8 +1401,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "The MySQL decision (eng/decisions/use-mysql.md) in the OKF catalogue ./cat is obsolete. Retire it from the active catalogue but keep its history, and make sure nothing active points at a missing file. Do not commit.",
@@ -1445,7 +1445,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -1477,8 +1477,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline",
     "mv cat/.pending/queue-sizing.md cat/eng/architecture/queue-sizing.md",
     "git -C cat add -A && git -C cat commit -qm 'add queue sizing'"
@@ -1493,19 +1493,19 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check eng",
+     "run": "okf --root cat check eng",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
     {
      "type": "cmd",
      "desc": "check --strict clean",
-     "run": "okf-cli --root cat check eng --strict",
+     "run": "okf --root cat check eng --strict",
      "exit": 0
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat reindex eng --check",
+     "run": "okf --root cat reindex eng --check",
      "exit": 0,
      "desc": "listings current"
     },
@@ -1529,7 +1529,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat fix-crosslinks eng --check",
+     "run": "okf --root cat fix-crosslinks eng --check",
      "exit": 0
     },
     {
@@ -1578,8 +1578,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "Which concepts in the OKF catalogue ./cat are past their stale_after date? Today is 2026-10-11. Report only, change nothing.",
@@ -1726,13 +1726,13 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root repo/docs check shop",
+     "run": "okf --root repo/docs check shop",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root repo/docs fix-crosslinks shop --check",
+     "run": "okf --root repo/docs fix-crosslinks shop --check",
      "exit": 0,
      "stdout_regex": "0 unresolved"
     },
@@ -1884,13 +1884,13 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root repo/docs check shop",
+     "run": "okf --root repo/docs check shop",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root repo/docs fix-crosslinks shop --check",
+     "run": "okf --root repo/docs fix-crosslinks shop --check",
      "exit": 0,
      "stdout_regex": "0 unresolved"
     },
@@ -2048,10 +2048,10 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline",
-    "okf-cli --root repo/docs reindex shop >/dev/null",
+    "okf --root repo/docs reindex shop >/dev/null",
     "git -C repo init -q",
     "git -C repo add -A && git -C repo commit -qm baseline"
    ],
@@ -2077,7 +2077,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat index",
+     "run": "okf --root cat index",
      "exit": 0,
      "stdout_regex": "\\bshop\\b",
      "desc": "catalogue lists shop"
@@ -2085,7 +2085,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check shop",
+     "run": "okf --root cat check shop",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -2161,7 +2161,7 @@
     }
    ],
    "setup": [
-    "okf-cli --root repo/docs reindex shop >/dev/null",
+    "okf --root repo/docs reindex shop >/dev/null",
     "git -C repo init -q",
     "git -C repo add -A && git -C repo commit -qm baseline"
    ],
@@ -2193,13 +2193,13 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root repo/docs check shop",
+     "run": "okf --root repo/docs check shop",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root repo/docs reindex shop --check",
+     "run": "okf --root repo/docs reindex shop --check",
      "exit": 0
     },
     {
@@ -2227,8 +2227,8 @@
    "files": [],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat create a reading list (ctx) `onboarding` for new engineers. Required reading, in this order: eng/architecture/overview, then eng/decisions/use-postgres. eng/operations/restart-worker is lookup material only. Do not commit.",
@@ -2264,7 +2264,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat ctx show onboarding",
+     "run": "okf --root cat ctx show onboarding",
      "exit": 0
     },
     {
@@ -2274,7 +2274,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check _ctx",
+     "run": "okf --root cat check _ctx",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -2303,8 +2303,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "Load the `onboarding` reading list from the OKF catalogue ./cat and tell me in one sentence per required page what it says.",
@@ -2357,8 +2357,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat the reading list `onboarding` shows a dead entry. Fix the list without touching the other entries. Do not commit.",
@@ -2386,7 +2386,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat ctx show onboarding",
+     "run": "okf --root cat ctx show onboarding",
      "exit": 0
     },
     {
@@ -2419,8 +2419,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "In the OKF catalogue ./cat, in the reading list `onboarding`: make eng/decisions/use-postgres the first required entry and turn eng/architecture/overview into lookup-only material. Do not commit.",
@@ -2451,7 +2451,7 @@
     },
     {
      "type": "cmd",
-     "run": "okf-cli --root cat ctx show onboarding",
+     "run": "okf --root cat ctx show onboarding",
      "exit": 0
     },
     {
@@ -2486,8 +2486,8 @@
    ],
    "setup": [
     "git -C cat init -q",
-    "okf-cli --root cat reindex eng >/dev/null",
-    "okf-cli --root cat build-index >/dev/null",
+    "okf --root cat reindex eng >/dev/null",
+    "okf --root cat build-index >/dev/null",
     "git -C cat add -A && git -C cat commit -qm baseline"
    ],
    "prompt": "Which reading lists (ctx) in the OKF catalogue ./cat contain eng/decisions/use-postgres? Give the slugs.",
@@ -2522,7 +2522,7 @@
    "files": [
     {
      "path": "cat/.okf.toml",
-     "content": "# okf-cli catalogue marker\n"
+     "content": "# okf catalogue marker\n"
     },
     {
      "path": "cat/TYPES.md",
@@ -2612,7 +2612,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check finance",
+     "run": "okf --root cat check finance",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -2641,7 +2641,7 @@
    "files": [
     {
      "path": "cat/.okf.toml",
-     "content": "# okf-cli catalogue marker\n"
+     "content": "# okf catalogue marker\n"
     },
     {
      "path": "cat/TYPES.md",
@@ -2710,7 +2710,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check finance",
+     "run": "okf --root cat check finance",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -2733,7 +2733,7 @@
    "files": [
     {
      "path": "cat/.okf.toml",
-     "content": "# okf-cli catalogue marker\n"
+     "content": "# okf catalogue marker\n"
     },
     {
      "path": "cat/TYPES.md",
@@ -2797,7 +2797,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check finance",
+     "run": "okf --root cat check finance",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -2819,7 +2819,7 @@
    "files": [
     {
      "path": "cat/.okf.toml",
-     "content": "# okf-cli catalogue marker\n"
+     "content": "# okf catalogue marker\n"
     },
     {
      "path": "cat/TYPES.md",
@@ -2877,7 +2877,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check kb",
+     "run": "okf --root cat check kb",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },
@@ -2900,7 +2900,7 @@
    "files": [
     {
      "path": "cat/.okf.toml",
-     "content": "# okf-cli catalogue marker\n"
+     "content": "# okf catalogue marker\n"
     },
     {
      "path": "cat/TYPES.md",
@@ -2984,7 +2984,7 @@
     {
      "type": "cmd",
      "desc": "check clean",
-     "run": "okf-cli --root cat check research",
+     "run": "okf --root cat check research",
      "exit": 0,
      "stdout_regex": "OK — 0 violations"
     },

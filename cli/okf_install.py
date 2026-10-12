@@ -1,6 +1,6 @@
-"""okf-cli install: put okf-cli, its agent skill, its MCP server and TAB
+"""okf install: put okf, its agent skill, its MCP server and TAB
 completion where this machine's coding agents and shells look for them.
-Standard library only; loaded lazily by `okf-cli.py install`, which needs no
+Standard library only; loaded lazily by `okf install`, which needs no
 catalogue.
 
 `install` builds a plan (a list of Steps) from what is on disk and changes
@@ -10,7 +10,6 @@ Edits never guess: rc files, TOML and YAML get one marker-bounded block
 one-time `<file>.okf-cli.bak` of a file that existed. A config that cannot be
 edited safely turns its step into BLOCKED and prints the manual edit instead.
 """
-import importlib.util
 import json
 import os
 import re
@@ -18,10 +17,9 @@ import shlex
 import shutil
 import subprocess
 import sys
-try:
-    import tomllib
-except ImportError:  # Python < 3.11: run() says so instead of crashing
-    tomllib = None
+import tomllib
+
+from okf.errors import OkfError
 
 HARNESSES = ("claude", "omp", "codex", "opencode", "kimi", "openclaw", "hermes")
 SHELLS = ("zsh", "bash", "fish")
@@ -30,12 +28,11 @@ SHARED_READERS = ("codex", "opencode", "kimi", "omp", "openclaw")
 
 BEGIN = "# >>> okf-cli >>>"
 END = "# <<< okf-cli <<<"
-MANAGED = "# managed by `okf-cli install`; undo with `okf-cli install --uninstall --apply`"
+MANAGED = "# managed by `okf install`; undo with `okf install --uninstall --apply`"
 WRAPPER_HEAD = "#!/bin/sh\n" + MANAGED + "\n"
 SCRIPT = "okf_mcp.py"  # an MCP entry that names this script is okf's own
 CHANGES = ("create", "update", "remove")
 IGNORED = shutil.ignore_patterns(".DS_Store", "__pycache__")
-GIT_URL = "git+https://github.com/xRiErOS/okf-cli"
 
 
 class Unsafe(Exception):
@@ -64,16 +61,14 @@ def brew_opt_path(path):
 class Ctx:
     """Everything install reads from the machine; tests inject tmp values."""
 
-    def __init__(self, env=None, home=None, pkg_root=None, platform=None, argcomplete=None, timeout=30):
+    def __init__(self, env=None, home=None, pkg_root=None, platform=None, timeout=30):
         self.env = dict(os.environ if env is None else env)
         self.home = os.path.abspath(home or self.env.get("HOME") or os.path.expanduser("~"))
         # same relative layout in a git checkout and in the installed wheel:
-        # <pkg_root>/{cli/okf-cli.py, cli/_okf-cli, mcp/okf_mcp.py, skills/okf}
+        # <pkg_root>/{cli/okf-cli.py, cli/_okf, mcp/okf_mcp.py, skills/okf}
         self.pkg_root = os.path.abspath(
             pkg_root or brew_opt_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)))
         self.platform = platform or sys.platform
-        self.argcomplete = (importlib.util.find_spec("argcomplete") is not None
-                            if argcomplete is None else argcomplete)
         self.timeout = timeout  # seconds a harness CLI may take
 
     @property
@@ -138,7 +133,7 @@ def find_block(lines):
     if not s and not e:
         return None
     if len(s) != 1 or len(e) != 1 or e[0] < s[0]:
-        raise Unsafe("the okf-cli begin/end markers are unbalanced; fix or remove them by hand")
+        raise Unsafe("the okf begin/end markers are unbalanced; fix or remove them by hand")
     return s[0], e[0]
 
 
@@ -416,18 +411,18 @@ def same(src, dest):
 
 
 def mine(p):
-    """p is an okf-cli install of this thing: the okf skill dir or the zsh glue."""
+    """p is an okf install of this thing: the okf skill dir or the zsh glue."""
     try:
         if os.path.isdir(p):
             head = read(os.path.join(p, "SKILL.md")) or ""
             return re.match(r"---\r?\n(?:[^\n]*\n)*?name:[ \t]*okf[ \t]*\r?\n", head) is not None
-        return (read(p) or "").startswith("#compdef okf-cli")
+        return (read(p) or "").startswith("#compdef okf\n")
     except (OSError, Unsafe):
         return False
 
 
 def put_state(src, dest, copy):
-    tail = "/".join(src.split(os.sep)[-2:])  # skills/okf or cli/_okf-cli
+    tail = "/".join(src.split(os.sep)[-2:])  # skills/okf or cli/_okf
     if os.path.islink(dest):
         if not copy and os.path.realpath(dest) == os.path.realpath(src):
             return "ok"
@@ -661,27 +656,23 @@ def shell_paths(ctx):
         # uninstall looks everywhere a block may have gone, whatever platform or ZDOTDIR said then
         "zsh_rcs": list(dict.fromkeys([os.path.join(ctx.env.get("ZDOTDIR") or ctx.home, ".zshrc"),
                                        ctx.path(".zshrc")])),
-        "zsh_comp": ctx.path(".zsh", "completions", "_okf-cli"),
+        "zsh_comp": ctx.path(".zsh", "completions", "_okf"),
         "bash_rc": bash_rc,
         "bash_rcs": [ctx.path(n) for n in (".bashrc", ".bash_profile", ".bash_login", ".profile")],
-        "bash_comp": os.path.join(data, "bash-completion", "completions", "okf-cli"),
+        "bash_comp": os.path.join(data, "bash-completion", "completions", "okf"),
         "fish_dir": conf,
-        "fish_conf": os.path.join(conf, "conf.d", "okf-cli.fish"),
-        "fish_comp": os.path.join(conf, "completions", "okf-cli.fish"),
+        "fish_conf": os.path.join(conf, "conf.d", "okf.fish"),
+        "fish_comp": os.path.join(conf, "completions", "okf.fish"),
     }
 
 
 def wrapper_step(ctx, un):
-    """~/.local/bin/okf-cli for a source tree whose okf-cli is not on PATH yet.
+    """~/.local/bin/okf for a source tree whose okf is not on PATH yet.
     -> (step, whether ~/.local/bin must be on PATH)"""
-    dest = ctx.path(".local", "bin", "okf-cli")
+    dest = ctx.path(".local", "bin", "okf")
     cli = os.path.join(ctx.pkg_root, "cli", "okf-cli.py")
-    # The interpreter that runs install (>= 3.11, checked in run()), not whatever `python3` is on PATH
-    # later: macOS ships 3.9 as /usr/bin/python3 and okf-cli.py needs tomllib.
-    py = sys.executable
-    text = WRAPPER_HEAD + '[ -x {0} ] || {{ echo "okf-cli: {1} is gone; run okf-cli install --apply again" >&2; exit 127; }}\n' \
-                          'exec {0} {2} "$@"\n'.format(shlex.quote(py), py, shlex.quote(cli))
-    what = "{} (runs {} with {})".format(ctx.short(dest), ctx.short(cli), py)
+    text = WRAPPER_HEAD + 'exec uv run --script {} "$@"\n'.format(shlex.quote(cli))
+    what = "{} (runs {})".format(ctx.short(dest), ctx.short(cli))
     try:
         ours = (read(dest) or "").startswith(WRAPPER_HEAD)
     except (Unsafe, OSError):
@@ -699,12 +690,12 @@ def wrapper_step(ctx, un):
         return s, s.status != "blocked"  # a wrapper that could not be placed needs no PATH line
     if un or ours:
         return step()
-    found = ctx.which("okf-cli")
+    found = ctx.which("okf")
     if found:
-        return Step("shell", "PATH", "skip", "okf-cli is already on PATH: " + ctx.short(found)), False
+        return Step("shell", "PATH", "skip", "okf is already on PATH: " + ctx.short(found)), False
     if not ctx.source_tree:  # pipx/uv put their own console script in a bin directory; that is not ours to touch
         return Step("shell", "PATH", "skip",
-                    "okf-cli is not on PATH; run `pipx ensurepath` (or add its bin directory to PATH)"), False
+                    "okf is not on PATH; run `pipx ensurepath` (or add its bin directory to PATH)"), False
     return step()  # a foreign file in the way comes back BLOCKED
 
 
@@ -713,21 +704,7 @@ def argcomplete_code(shell):
         from argcomplete.shell_integration import shellcode
     except ImportError as e:
         raise Unsafe("argcomplete cannot be imported ({})".format(e))
-    return "{}\n{}".format(MANAGED, shellcode(["okf-cli"], shell=shell))
-
-
-def argcomplete_hint():
-    prefix = sys.prefix.replace("\\", "/")
-    if "/pipx/venvs/" in prefix:
-        how = "pipx inject okf-cli argcomplete"
-    elif "/uv/tools/" in prefix:
-        how = "uv tool install --force --with argcomplete " + GIT_URL
-    elif importlib.util.find_spec("pip") is None:  # e.g. a `uv venv`
-        how = 'uv pip install --python {} "argcomplete>=3"'.format(shlex.quote(sys.executable))
-    else:
-        how = '{} -m pip install "argcomplete>=3"'.format(shlex.quote(sys.executable))
-    return ("needs argcomplete in the Python that runs okf-cli; install it with:\n{}\n"
-            "then re-run `okf-cli install --apply`".format(how))
+    return "{}\n{}".format(MANAGED, shellcode(["okf"], shell=shell))
 
 
 def owned_file(content, un, where):
@@ -742,10 +719,8 @@ def owned_file(content, un, where):
 
 def completion_step(ctx, sh, p, un):
     subject = sh + " completion"
-    if not un and not ctx.argcomplete:
-        return Step("shell", subject, "skip", argcomplete_hint())
     if sh == "zsh":
-        return put_step(ctx, "shell", subject, os.path.join(ctx.pkg_root, "cli", "_okf-cli"),
+        return put_step(ctx, "shell", subject, os.path.join(ctx.pkg_root, "cli", "_okf"),
                         p["zsh_comp"], not ctx.source_tree, un)
     path = p[sh + "_comp"]
     return file_step(ctx, "shell", subject, path, owned_file(lambda: argcomplete_code(sh), un, ctx.short(path)),
@@ -770,7 +745,7 @@ def rc_body(ctx, sh, rest, p, needs_path, comp):
         if not compinit:
             body.append("autoload -Uz compinit && compinit")
         elif not fpath:  # compinit may have run already: register without waiting for it
-            body += ["autoload -Uz _okf-cli", "(( $+functions[compdef] )) && compdef _okf-cli okf-cli"]
+            body += ["autoload -Uz _okf", "(( $+functions[compdef] )) && compdef _okf okf"]
     elif comp:
         body.append("if [ -r {0} ]; then . {0}; fi".format(home_var(ctx, p["bash_comp"])))
     return body
@@ -893,7 +868,7 @@ def report(ctx, steps, apply, un):
 
 
 def render(ctx, steps, apply, un):
-    print("okf-cli install{} - {}".format(
+    print("okf install{} - {}".format(
         " --uninstall" if un else "",
         "applied" if apply else "PLAN only, nothing is changed (add --apply to perform it)"))
     print("source: {} ({})".format(ctx.short(ctx.pkg_root),
@@ -927,28 +902,22 @@ def render(ctx, steps, apply, un):
 
 
 def run(args, ctx=None):
-    """Entry point of `okf-cli install`; returns the exit code."""
+    """Entry point of `okf install`; returns (exit code, report). Prints the text report
+    unless `args.json`; a refused call raises OkfError."""
     ctx = ctx or Ctx()
     if ctx.platform == "win32":
-        sys.exit("ERROR: okf-cli install supports macOS and Linux only")
-    if tomllib is None:  # needed to read and validate Codex's config.toml
-        sys.exit("ERROR: okf-cli install needs Python 3.11 or newer (this is {}). Run it with a newer "
-                 "interpreter, e.g. `python3.12 cli/okf-cli.py install`, or install the tool with "
-                 "`uv tool install {}` (uv fetches a suitable Python).".format(sys.version.split()[0], GIT_URL))
+        raise OkfError("internal", "ERROR: okf install supports macOS and Linux only")
     only = None
     if args.only is not None:
         only = [n.strip() for n in args.only.split(",") if n.strip()]
         unknown = [n for n in only if n not in HARNESSES + SHELLS]
         if unknown or not only:
-            sys.stderr.write("install: unknown --only name(s): {}; valid: {}\n".format(
+            raise OkfError("invalid_input", "install: unknown --only name(s): {}; valid: {}".format(
                 ", ".join(unknown) or "(none given)", ", ".join(HARNESSES + SHELLS)))
-            sys.exit(2)
     steps = plan(ctx, only, args.uninstall)
     if args.apply:
         execute(steps)
     code = 1 if any(s.status in ("blocked", "failed") for s in steps) else 0
-    if args.json:
-        print(json.dumps(report(ctx, steps, args.apply, args.uninstall)))
-    else:
+    if not args.json:
         render(ctx, steps, args.apply, args.uninstall)
-    return code
+    return code, report(ctx, steps, args.apply, args.uninstall)

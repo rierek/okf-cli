@@ -1,17 +1,39 @@
 set shell := ["bash", "-uc"]
+# Container-Lebenszyklus just wt start|merge|finish -- eine Quelle in den dotfiles.
+# mod?: fehlt die Datei (CI, andere Rechner), entfaellt nur das Modul.
+mod? wt '~/.config/just/wt.just'
 
 # Verzeichnis der Test- und Quelldateien
 cli_dir := "cli"
 # Catalogue-Root fuer Smoke-Laeufe gegen einen echten Store
 catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
+# Ruff-Version fuer den Lint-Gate (eine Quelle; Regelsatz steht in pyproject.toml)
+ruff_version := "0.17.0"
 
 # Alle Rezepte auflisten
 default:
     @just --list
 
-# Testsuite (unittest discovery ueber cli/test_*.py)
+# Testsuite (unittest discovery ueber tests/test_*.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
+# PEP-723-Header von cli/okf-cli.py; mcp ist ein reines Test-Extra. UV_PYTHON waehlt den Interpreter.
 test *ARGS:
-    cd {{cli_dir}} && python3 -m unittest {{ if ARGS == "" { "discover -p 'test_*.py'" } else { ARGS } }}
+    uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py --with mcp python -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
+
+# Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
+build:
+    uv build
+
+# Korrektheits-Lint (Syntaxfehler, pyflakes) ueber cli/ und mcp/; Regeln in pyproject.toml [tool.ruff.lint]
+lint:
+    uvx ruff@{{ruff_version}} check cli mcp
+
+# Paket pruefen: bauen, twine check --strict, Wheel in leerer venv installieren, okf --help
+pack-check:
+    scripts/pack-check.sh
+
+# Offline Eval-Gate: lexikalische Messung auf Wegwerf-Catalogue gegen die eingefrorene Baseline, nur S1-literal-Guard (OKFT-cuj7)
+eval-gate:
+    scripts/eval-gate.sh
 
 # Skill-Evals mit headless omp-Agenten (kostet Tokens): just skill-eval --only write- --models small=claude-haiku-4-5
 skill-eval *ARGS:
@@ -22,9 +44,9 @@ gate-a *ARGS:
     @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }
     @cd "{{invocation_directory()}}" && ahm gate-a {{ARGS}}
 
-# okf-cli bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf-cli.py install --help`)
+# okf bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf install --help`)
 setup *ARGS:
-    python3 {{cli_dir}}/okf-cli.py install {{ARGS}}
+    uv run --script {{cli_dir}}/okf-cli.py install {{ARGS}}
 
 # Verpackungs-Smoke: Wheel bauen, in Wegwerf-venv installieren, CLI + MCP-stdio gegen die installierte Kopie pruefen
 smoke-pack:
@@ -32,41 +54,8 @@ smoke-pack:
 
 # Konformitaets-Scan des Catalogue (§9 + lokale Invarianten)
 check root=catalogue:
-    python3 {{cli_dir}}/okf-cli.py --root {{root}} check
+    uv run --script {{cli_dir}}/okf-cli.py --root {{root}} check
 
 # Agent-Onboarding gegen den echten Catalogue ausgeben
 prime root=catalogue:
-    python3 {{cli_dir}}/okf-cli.py --root {{root}} prime
-
-# spec_dir wird per scripts/spec-dir.sh abgeleitet (D-siyu-07), nicht als
-# Modul-Variable -- die wuerde `just` bei JEDEM Rezept eager auswerten und
-# bei Fehlschlag auch test/check/prime mitreissen, nicht nur dieses.
-
-# EARS-Konformitaet der Rewrite-SPEC pruefen (Abgabekriterium je SPEC-Datei)
-spec-check *FILES:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
-    exec node scripts/ears-table-check.js "$@"
-
-# Eigener Schritt (D-wqge-09): spec-check prueft die EARS-Form, dieser Schritt
-# loest jeden Symbolanker an seiner Definitionsstelle auf (D-wqge-12).
-# Grounding-Wahrheit der Rewrite-SPEC pruefen
-spec-grounding *FILES:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ -z "{{FILES}}" ]; then dir="$(scripts/spec-dir.sh)"; set -- "$dir"/*.md; else set -- {{FILES}}; fi
-    exec node scripts/spec-grounding-check.js "$@"
-
-# Fixtures der scripts/-Tests gehoeren in einen eigenen tmpdir, nie ins
-# SPEC-Verzeichnis -- der Glob von spec-check fischt dort jede *.md ein
-# (CLAUDE.md Regel 1 gilt sinngemaess).
-
-# Tests der scripts/-Werkzeuge (node built-in runner, gefiltert je Datei)
-test-scripts *FILES:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    shopt -s nullglob
-    if [ -z "{{FILES}}" ]; then set -- scripts/*.test.js; else set -- {{FILES}}; fi
-    [ "$#" -gt 0 ] || { echo 'test-scripts: no test file matched scripts/*.test.js -- nothing was checked' >&2; exit 1; }
-    exec node --test "$@"
+    uv run --script {{cli_dir}}/okf-cli.py --root {{root}} prime

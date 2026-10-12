@@ -10,7 +10,7 @@ Needs git, grep and find: `command -v git grep find`.
 
 - Checklist
 - What v0.2 adds
-- What okf-cli checks, and what it does not
+- What okf checks, and what it does not
 - Mapping from v0.1 and ad-hoc frontmatter
 - Deciding values
 - Procedure: phases 0 to 6
@@ -22,8 +22,8 @@ Copy into your task list (todo tool or scratch list), tick one by one. Each phas
 
 - [ ] Phase 0: baseline -> done when the outputs of `check`, `reindex --check` and both `grep` calls are saved as the work list, and the user agreed to the planned mapping
 - [ ] Phase 1: structure -> done when `reindex <bundle> --check` reports `0 stale, 0 uncovered` and `check <bundle>` ends `OK — 0 violations` -> on failure: create missing index files or convert listings by hand, rerun phase 1
-- [ ] Phase 2: normalisation -> done when `fix-crosslinks --check` reports `0 unresolved link(s)` and `check` shows no `tags-block-form` or `xml-like-tags` warning -> on failure: fix links by hand, rerun phase 2
-- [ ] Phase 3: vocabulary -> done when `check` shows no `type-registered`, `tag-registered` or `english-keys` warning -> on failure: register or rename, rerun `check`
+- [ ] Phase 2: normalisation -> done when `fix-crosslinks --check` reports `0 unresolved link(s)` and `check` shows no `kc/frontmatter/tags-block-form` or `kc/markup/xml-like-tags` warning -> on failure: fix links by hand, rerun phase 2
+- [ ] Phase 3: vocabulary -> done when `check` shows no `kc/type/registered`, `kc/tag/registered` or `kc/frontmatter/english-keys` warning -> on failure: register or rename, rerun `check`
 - [ ] Phase 4: frontmatter fields -> done when the phase 0 `grep` calls print nothing, except keys kept on purpose -> on failure: edit the listed files, rerun the `grep` calls
 - [ ] Phase 5: trust and lifecycle -> done when every `status`, `verified` and `stale_after` value traces to a user statement or a record -> on failure: remove the value or ask the user
 - [ ] Phase 6: verify -> done when every criterion in phase 6 holds -> on failure: back to the phase that owns the finding, rerun phase 6 until clean
@@ -40,11 +40,11 @@ Copy into your task list (todo tool or scratch list), tick one by one. Each phas
 
 Unchanged from v0.1: required `type`, recommended `title`, `description`, `resource`, `tags`, reserved `index.md` and `log.md`, markdown links. Extra keys are allowed.
 
-## What okf-cli checks, and what it does not
+## What okf checks, and what it does not
 
-- No migrator exists. Every frontmatter change below is a manual edit; okf-cli handles only the structural steps.
+- No migrator exists. Every frontmatter change below is a manual edit; okf handles only the structural steps.
 - `check` enforces the v0.2 hard rules (frontmatter block present, non-empty `type`, no `type` in reserved files) plus local rules: tag block form, link form, registered types and tags, file names, asset placement, canon and ctx integrity.
-- `check` does not validate `generated`, `sources`, `verified`, `status`, `stale_after` or `okf_version`, and does not parse YAML. A misspelled or malformed v0.2 field passes `check`. Verify those fields with the `grep` and `read` steps of phase 6.
+- In a bundle whose root `index.md` declares `okf_version: "0.2"` (quoted), `check` also validates `sources`, `usage_window`, `generated`, `verified`, `status`, `stale_after`, timestamp and actor formats and the `runtime` of an `Attested Computation` (rule IDs `okf/provenance/*`, `okf/trust/*`, `okf/lifecycle/*`, `okf/format/*`, `okf/computation/*`), and warns when a body changed after `generated.at` without a new `generated.at` (`okf/trust/drift`). Declare the version, then run `check <bundle>` after phase 5. A bundle without the declaration gets none of these findings: verify its fields with the `grep` and `read` steps of phase 6.
 
 ## Mapping from v0.1 and ad-hoc frontmatter
 
@@ -63,7 +63,7 @@ Unchanged from v0.1: required `type`, recommended `title`, `description`, `resou
 | `deprecated: true`, `obsolete: true` | `status: deprecated` | Or `archive` the concept. |
 | `review_by`, `expires`, `valid_until` | `stale_after` | Absolute time with offset. |
 | `reviewed_by` plus `reviewed_at`, `approved_by` | `verified: { by: human:<id>, at: <t> }` | Only for a review that happened. |
-| Keys flagged by warning `english-keys` | English equivalents | `title`, `description`, `type`, `tags`, `generated.at`. |
+| Keys flagged by warning `kc/frontmatter/english-keys` | English equivalents | `title`, `description`, `type`, `tags`, `generated.at`. |
 | `superseded_by`, `resource`, other keys | keep | `superseded_by` only on `type: Decision`. |
 
 ## Deciding values
@@ -83,8 +83,8 @@ Work in the repository that holds the bundle: `git -C <catalogue>/<bundle> rev-p
 
 ```bash
 git -C <catalogue>/<bundle> status --short
-okf-cli --root <catalogue> check <bundle>
-okf-cli --root <catalogue> reindex <bundle> --check
+okf --root <catalogue> check <bundle>
+okf --root <catalogue> reindex <bundle> --check
 grep -rlE --include='*.md' '^(timestamp|date|created|updated|author|source|url|draft):' <catalogue>/<bundle>
 grep -rl --include='*.md' '^# Citations' <catalogue>/<bundle>
 ```
@@ -93,37 +93,37 @@ Keep the output: it is the work list and the comparison point. Show the user the
 
 ### Phase 1: structure
 
-1. Every directory that holds concepts needs an `index.md`. List directories with `find <catalogue>/<bundle> -type d`; for each without `index.md`: `okf-cli --root <catalogue> reindex <bundle>/<subdir> --init`, then add an intro line under its H1.
+1. Every directory that holds concepts needs an `index.md`. List directories with `find <catalogue>/<bundle> -type d`; for each without `index.md`: `okf --root <catalogue> reindex <bundle>/<subdir> --init`, then add an intro line under its H1.
 2. Convert hand-written listings. Preview, then run:
 
    ```bash
-   okf-cli --root <catalogue> reindex <bundle> --init --check
-   okf-cli --root <catalogue> reindex <bundle> --init
-   okf-cli --root <catalogue> reindex <bundle>
+   okf --root <catalogue> reindex <bundle> --init --check
+   okf --root <catalogue> reindex <bundle> --init
+   okf --root <catalogue> reindex <bundle>
    ```
 
    `--init` replaces a single-section bullet list with an empty marker block; the listing is then generated from each concept's `title` and `description`. Move information that exists only in the old list into the concepts first. Multi-section indexes are skipped and flagged; convert them by hand, or with `--force` when they hold only headings and bullets.
-3. `okf-cli --root <catalogue> check <bundle>`, review `git diff`.
+3. `okf --root <catalogue> check <bundle>`, review `git diff`.
 
 ### Phase 2: mechanical normalisation
 
 ```bash
-okf-cli --root <catalogue> normalize-tags --scope <bundle>
-okf-cli --root <catalogue> normalize-tags --scope <bundle> --apply
-okf-cli --root <catalogue> fix-crosslinks <bundle> --check
-okf-cli --root <catalogue> fix-crosslinks <bundle>
-okf-cli --root <catalogue> fix-xml-tags <bundle> --check
-okf-cli --root <catalogue> fix-xml-tags <bundle>
-okf-cli --root <catalogue> check <bundle>
+okf --root <catalogue> normalize-tags --where "path ~ <bundle>/"
+okf --root <catalogue> normalize-tags --where "path ~ <bundle>/" --apply
+okf --root <catalogue> fix-crosslinks <bundle> --check
+okf --root <catalogue> fix-crosslinks <bundle>
+okf --root <catalogue> fix-xml-tags <bundle> --check
+okf --root <catalogue> fix-xml-tags <bundle>
+okf --root <catalogue> check <bundle>
 ```
 
 Fix every `unresolved` link that `fix-crosslinks` reports by hand.
 
 ### Phase 3: vocabulary
 
-- `type-registered` warnings: add the type to `TYPES.md`, or change the concept to an existing type.
-- `tag-registered` warnings (closed vocabulary): `tags <candidate>` to find the existing tag, then `merge-tags <old> --into <existing> --scope <bundle> --apply`, or `tags --register <tag> "<description>"` (writes at once).
-- `english-keys` warnings: rename the keys.
+- `kc/type/registered` warnings: add the type to `TYPES.md`, or change the concept to an existing type.
+- `kc/tag/registered` warnings (closed vocabulary): `tags <candidate>` to find the existing tag, then `merge-tags <old> --into <existing> --where "path ~ <bundle>/" --apply`, or `tags --register <tag> "<description>"` (writes at once).
+- `kc/frontmatter/english-keys` warnings: rename the keys.
 
 Run `check <bundle>`.
 
@@ -167,7 +167,7 @@ Revenue sums amount per fiscal year.[^revenue-recognition]
 [^revenue-recognition]: Revenue recognition policy
 ```
 
-After each batch: `okf-cli --root <catalogue> check <bundle>`, review `git diff`.
+After each batch: `okf --root <catalogue> check <bundle>`, review `git diff`.
 
 ### Phase 5: trust and lifecycle
 
@@ -185,14 +185,14 @@ Never add `type` there.
 ### Phase 6: verify
 
 ```bash
-okf-cli --root <catalogue> check <bundle> --strict
-okf-cli --root <catalogue> reindex <bundle> --check
+okf --root <catalogue> check <bundle> --strict
+okf --root <catalogue> reindex <bundle> --check
 grep -rlE --include='*.md' '^(timestamp|date|created|updated|author|source|url|draft):' <catalogue>/<bundle>
 grep -rl --include='*.md' '^# Citations' <catalogue>/<bundle>
 grep -rL --include='*.md' '^generated:' <catalogue>/<bundle>
-okf-cli --root <catalogue> read <bundle>/<concept-id>
-okf-cli --root <catalogue> build-index --if-stale
-okf-cli --root <catalogue> find "<term>" --scope <bundle>
+okf --root <catalogue> read <bundle>/<concept-id>
+okf --root <catalogue> build-index --if-stale
+okf --root <catalogue> find "<term>" --where "path ~ <bundle>/"
 ```
 
 Done when:
@@ -208,7 +208,7 @@ Done when:
 |---|---|---|
 | Hand-written index text lost | `reindex --init` replaced the old list | Restore from git; move the text into concepts or into prose above `## Contents`; run `--init` again |
 | Concepts of a subdirectory missing from listings | Subdirectory without `index.md` | Phase 1, step 1 |
-| `ERROR reserved-no-type` on `index.md` | `type` added next to `okf_version` | Remove `type` |
+| `ERROR okf/type/reserved-no-type` on `index.md` | `type` added next to `okf_version` | Remove `type` |
 | `generated` without `by` | Author unknown | Ask the user; never fill in your own actor for text you did not write |
 | `verified` added during migration | Migration mistaken for review | Remove it unless a real check happened |
 | `check` clean but another OKF reader fails | Invalid YAML (for example an unquoted `: `) | Quote the value; `check` does not parse YAML |

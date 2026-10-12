@@ -43,51 +43,51 @@ description: "Read these first when joining the widget project"
 
 - Modes are literal CLI values: `pflicht` = required entry, read in order, positions `1..n`. `nachschlag` = reference entry, consulted when needed, position `-`.
 - A path is a catalogue concept, written as a `/`-link, or any other file, written as a code span.
-- `type: Context` must be registered in `TYPES.md` when that file exists, else `check` warns `type-registered`. Add the row ``| `Context` | Curated reading list (ctx) |``.
+- `type: Context` must be registered in `TYPES.md` when that file exists, else `check` warns `kc/type/registered`. Add the row ``| `Context` | Curated reading list (ctx) |``.
 - Slug: lowercase letters, digits and hyphens. Reserved: the ctx verb names and `index`, `log`, `readme`, `index-map`.
 
 ## Read a ctx
 
 ```bash
-okf-cli --root <catalogue> ctx list
-okf-cli --root <catalogue> ctx list --for <bundle>/<concept-id>.md
-okf-cli --root <catalogue> ctx <slug>
-okf-cli --root <catalogue> ctx read <slug>
-okf-cli --root <catalogue> ctx toc <slug> --depth 2
-okf-cli --root <catalogue> ctx outbound <slug>
-okf-cli --root <catalogue> ctx inbound <slug>
+okf --root <catalogue> ctx list
+okf --root <catalogue> ctx list --for <bundle>/<concept-id>.md
+okf --root <catalogue> ctx <slug>
+okf --root <catalogue> ctx read <slug>
+okf --root <catalogue> ctx toc <slug> --depth 2
+okf --root <catalogue> ctx outbound <slug>
+okf --root <catalogue> ctx inbound <slug>
 ```
 
 - `ctx list`: slug, description, entry and required counts. `--for <path>`: only the ctx files that contain that path.
-- `ctx <slug>` (short for `ctx show <slug>`): required entries in reading order, then reference entries, with type, title, description and a token estimate. Exit 1 when an entry is dead.
+- `ctx <slug>` (short for `ctx show <slug>`): required entries in reading order, then reference entries, with type, title, description and a token estimate. Exit 4 (non_conformant) when an entry is dead.
 - `ctx read <slug>`: prints the full text of every required entry in position order, each after a `===== i/n <path> =====` separator. Reference entries are not printed. This is the one call that loads a whole ctx into context.
 - `ctx toc <slug>`: headings of every entry; `--depth N` limits the heading level.
 - `ctx outbound` and `ctx inbound`: links leaving or reaching each entry; `--file <title, path or stem>` limits to one entry, `--include-internal` adds links between members.
-- `--json` exists on `ctx list`, `ctx show`, `ctx check`, `ctx inbound` and `ctx outbound`.
+- `--json` exists on every ctx verb and prints the one envelope `{command, ok, data, warnings, error}` (`command` is `ctx <verb>`); the result of the verb is `data`. `ctx check` and `ctx show` with a dead entry exit 4, `ok` is `false` and `data` still carries the result.
 
 ## Create a ctx
 
 ```bash
-okf-cli --root <catalogue> find "<topic>"
-okf-cli --root <catalogue> ctx create <slug> <bundle>/<concept-id> <bundle>/<concept-id> --description "<one line>"
-okf-cli --root <catalogue> ctx create <slug> --import <file> --description "<one line>"
+okf --root <catalogue> find "<topic>"
+okf --root <catalogue> ctx create <slug> <bundle>/<concept-id> <bundle>/<concept-id> --description "<one line>"
+okf --root <catalogue> ctx create <slug> --import <file> --description "<one line>"
 ```
 
 1. Pick the pages with `find`, `toc` and `read`. Fewer is better: every required entry costs reading time.
 2. Create the ctx. Paths are `<bundle>/<concept-id>` (with or without `.md`) or file paths. `--import <file>` reads a local text file with one path per line; blank lines and lines starting with `#` are skipped; text after a TAB becomes the entry comment.
 3. `ctx create` makes every path a required entry, ordered alphabetically by path, not in the order given. Fix the order with `ctx move` (next section).
-4. Always pass `--description`; an empty description is a `ctx` warning.
+4. Always pass `--description`; an empty description is a `kc/ctx/empty-description` warning.
 
 ## Edit a ctx
 
 ```bash
-okf-cli --root <catalogue> ctx add <slug> <path> --pos 2 --comment "<why>"
-okf-cli --root <catalogue> ctx add <slug> <path> --mode nachschlag --comment "<why>"
-okf-cli --root <catalogue> ctx move <slug> <path> --pos 1
-okf-cli --root <catalogue> ctx move <slug> <path> --mode nachschlag
-okf-cli --root <catalogue> ctx drop <slug> <path>
-okf-cli --root <catalogue> ctx rename <old-slug> <new-slug>
-okf-cli --root <catalogue> ctx remove <slug>
+okf --root <catalogue> ctx add <slug> <path> --pos 2 --comment "<why>"
+okf --root <catalogue> ctx add <slug> <path> --mode nachschlag --comment "<why>"
+okf --root <catalogue> ctx move <slug> <path> --pos 1
+okf --root <catalogue> ctx move <slug> <path> --mode nachschlag
+okf --root <catalogue> ctx drop <slug> <path>
+okf --root <catalogue> ctx rename <old-slug> <new-slug>
+okf --root <catalogue> ctx remove <slug>
 ```
 
 - `ctx add`: new required entry at the end, or at `--pos N`; `--mode nachschlag` adds a reference entry.
@@ -100,17 +100,17 @@ okf-cli --root <catalogue> ctx remove <slug>
 ## Verify
 
 ```bash
-okf-cli --root <catalogue> ctx check <slug>
-okf-cli --root <catalogue> ctx check --stale
-okf-cli --root <catalogue> check _ctx
-okf-cli --root <catalogue> ctx <slug>
+okf --root <catalogue> ctx check <slug>
+okf --root <catalogue> ctx check --stale
+okf --root <catalogue> check _ctx
+okf --root <catalogue> ctx <slug>
 ```
 
-Done when `ctx check` and `check _ctx` end `OK — 0 violations` and `ctx <slug>` lists the entries in the intended order. `--stale` warns for every entry modified after the ctx file: review whether the ctx still fits. A check fails: fix the entry, then rerun the checks until clean.
+Done when `ctx check` and `check _ctx` end `OK — 0 violations` and `ctx <slug>` lists the entries in the intended order. `--stale` reports `kc/ctx/stale-entry` as a warning for every entry modified after the ctx file: review whether the ctx still fits. A check fails: fix the entry, then rerun the checks until clean.
 
 ## Maintenance
 
-- `rename` and `archive` of a concept rewrite ctx entries automatically. An entry that now points into `_archive/` is a `ctx` warning: drop it or replace it.
+- `rename` and `archive` of a concept rewrite ctx entries automatically. An entry that now points into `_archive/` is a `kc/ctx/archived-entry` warning: drop it or replace it.
 - `ctx list --for <path>` before deleting or archiving a concept shows which ctx files depend on it.
 - MCP offers only `okf_ctx_list` and `okf_ctx_show`; every other ctx verb is CLI-only.
 
@@ -120,8 +120,8 @@ Done when `ctx check` and `check _ctx` end `OK — 0 violations` and `ctx <slug>
 |---|---|---|
 | `ctx: unknown slug: <slug>` | Typo, or the ctx was renamed | `ctx list` |
 | `ctx create` rejects the slug | Uppercase, underscore, or a reserved name | Use lowercase letters, digits, hyphens |
-| `ctx <slug>` exits 1, entry shown `[DEAD]` | Entry file deleted or moved outside `rename` | `ctx drop <slug> <path>`, then `ctx add` the new path |
-| `WARNING type-registered _ctx/<slug>.md` | `Context` missing from `TYPES.md` | Add the `Context` row |
-| `WARNING ctx ... entry under _archive/` | Member was archived | Drop or replace the entry |
+| `ctx <slug>` exits 4, entry shown `[DEAD]` | Entry file deleted or moved outside `rename` | `ctx drop <slug> <path>`, then `ctx add` the new path |
+| `WARNING kc/type/registered _ctx/<slug>.md` | `Context` missing from `TYPES.md` | Add the `Context` row |
+| `WARNING kc/ctx/archived-entry ... entry under _archive/` | Member was archived | Drop or replace the entry |
 | Reading order wrong after `create` | `create` sorts alphabetically | `ctx move <slug> <path> --pos <n>` |
-| `ERROR ctx ... required positions are not 1..n` | Table edited by hand | Fix the `pos` column, or rebuild with `ctx move` |
+| `ERROR kc/ctx/required-positions ... required positions are not 1..n` | Table edited by hand | Fix the `pos` column, or rebuild with `ctx move` |

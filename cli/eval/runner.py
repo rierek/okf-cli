@@ -39,17 +39,17 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 CLI_PATH = os.path.join(_HERE, "..", "okf-cli.py")
 
-# Generous — a golden row's true rank must not be truncated by okf-cli's
+# Generous — a golden row's true rank must not be truncated by okf's
 # find default of --limit 10 (S3 alone expects rank 4, real-catalogue noise
 # could push further).
 FIND_LIMIT = 50
 
 
 def _run_cli(root, argv):
-    """Invoke okf-cli.py via subprocess (real process boundary — SC-003).
+    """Invoke okf-cli.py through `uv run --script` (real process boundary — SC-003).
     Returns stdout text; raises on nonzero exit."""
     proc = subprocess.run(
-        ["python3", CLI_PATH, "--root", root] + argv,
+        ["uv", "run", "--script", CLI_PATH, "--root", root] + argv,
         capture_output=True, text=True,
     )
     if proc.returncode != 0:
@@ -115,16 +115,8 @@ def _score_find_row(root, row):
 
 
 def _score_list_row(root, row):
-    q = row["query"]
-    argv = ["list", "--json"]
-    if q.get("type"):
-        argv += ["--type", q["type"]]
-    if q.get("tag"):
-        argv += ["--tag", q["tag"]]
-    if q.get("scope"):
-        argv += ["--scope", q["scope"]]
-    out = _run_cli(root, argv)
-    entries = json.loads(out) if out.strip() else []
+    out = _run_cli(root, ["list", "--json", "--where", row["query"]["where"]])
+    entries = json.loads(out)["data"]
     hit = any(e.get("path") == row["expected_path"] for e in entries)
     return {"rank": 1 if hit else float("inf"), "score_ratio": None}
 
@@ -132,8 +124,7 @@ def _score_list_row(root, row):
 def _score_index_row(root, row):
     bundle = row["query"]["bundle"]
     out = _run_cli(root, ["index", bundle, "--json"])
-    data = json.loads(out) if out.strip() else {}
-    concepts = data.get("concepts", [])
+    concepts = json.loads(out)["data"]["concepts"]
     hit = any(
         "{}/{}".format(bundle, c.get("id")) == row["expected_path"]
         for c in concepts
@@ -216,7 +207,7 @@ def run(catalogue_root, golden_path):
     # runner would score the substring fallback and report it as the shipped
     # behaviour. Local, no network, ~ms on a fixture catalogue.
     subprocess.run(
-        ["python3", CLI_PATH, "--root", root, "build-index"],
+        ["uv", "run", "--script", CLI_PATH, "--root", root, "build-index"],
         check=True, capture_output=True, text=True)
     with open(golden_path, encoding="utf-8") as f:
         golden = json.load(f)
