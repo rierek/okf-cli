@@ -53,14 +53,16 @@ def compute_scenario_deltas(baseline, hybrid):
     return rows
 
 
-def verdict(baseline, hybrid):
+def verdict(baseline, hybrid, check_paraphrase=True):
     """(ok, reasons). Guards per EARS (bean okf-cli-6gq6):
-    paraphrase zero-hit-rate must DECREASE; literal S1 must not regress."""
+    paraphrase zero-hit-rate must DECREASE; literal S1 must not regress.
+    check_paraphrase=False skips the first guard: an offline lexical-only run
+    (CI, no Voyage network, no semantic index) cannot lower the paraphrase rate."""
     reasons = []
 
     base_zh = baseline["metrics"]["zero_hit_rate_paraphrase"]
     hyb_zh = hybrid["metrics"]["zero_hit_rate_paraphrase"]
-    if not hyb_zh < base_zh:
+    if check_paraphrase and not hyb_zh < base_zh:
         reasons.append(
             "paraphrase zero-hit-rate did not decrease "
             "(baseline {:.3f} -> hybrid {:.3f})".format(base_zh, hyb_zh))
@@ -113,14 +115,16 @@ def main():
     ap.add_argument("--baseline", required=True,
                     help="frozen baseline result json (Task 5)")
     ap.add_argument("--hybrid", required=True,
-                    help="fresh hybrid result json (NEW file, Task 12)")
+                    help="fresh re-measurement result json (NEW file, Task 12)")
+    ap.add_argument("--literal-only", action="store_true",
+                    help="enforce only the literal S1 guard (offline lexical run)")
     args = ap.parse_args()
 
     baseline = load_result(args.baseline)
     hybrid = load_result(args.hybrid)
 
     print_report(baseline, hybrid)
-    ok, reasons = verdict(baseline, hybrid)
+    ok, reasons = verdict(baseline, hybrid, check_paraphrase=not args.literal_only)
     print()
     if ok:
         print("GATE: PASS")
