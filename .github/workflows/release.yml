@@ -2,7 +2,8 @@ name: release
 
 # Runs when the PO pushes a rel-* tag (CLAUDE.md rule 19). Nothing here creates or pushes a tag.
 # workflow_dispatch is a dry run: it builds, makes provenance, creates a DRAFT release named
-# dry-run-<sha>, lists its assets and deletes it. It never publishes and never creates a tag.
+# dry-run-<sha>, checks its assets and deletes it. It never publishes and never creates a tag,
+# also when started on a tag ref: only the push event publishes.
 on:
   push:
     tags: ["rel-*"]
@@ -72,8 +73,10 @@ jobs:
         run: |
           set -euo pipefail
           ls -l release-files
-          test -n "$(ls release-files/*.whl)" && test -n "$(ls release-files/*.tar.gz)" && test -f "release-files/$PROVENANCE"
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
+          ls release-files/*.whl >/dev/null
+          ls release-files/*.tar.gz >/dev/null
+          test -f "release-files/$PROVENANCE"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
             TAG="$GITHUB_REF_NAME"
             VERSION="$(echo "${TAG#rel-}" | tr - .)"
             gh release create "$TAG" --draft --verify-tag --title "okf-cli $VERSION" \
@@ -89,9 +92,19 @@ jobs:
           set -euo pipefail
           gh release view "$TAG" --json isDraft,assets -q '{draft:.isDraft,assets:[.assets[].name]}'
           # wheel, sdist, provenance: nothing else may ride along
-          [ "$(gh release view "$TAG" --json assets -q '.assets|length')" = 3 ]
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
+          names="$(gh release view "$TAG" --json assets -q '.assets|map(.name)|sort|join(" ")')"
+          case "$names" in
+            "multiple.intoto.jsonl okf_cli-"*"-py3-none-any.whl okf_cli-"*".tar.gz") ;;
+            *) echo "unexpected assets: $names" >&2; exit 1 ;;
+          esac
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
             gh release edit "$TAG" --draft=false
           else
             gh release delete "$TAG" --yes
           fi
+      # A failed run must not leave a draft that blocks the next run; a published release is never touched.
+      - name: Delete a draft left by this run
+        if: failure()
+        run: |
+          [ -n "${TAG:-}" ] || exit 0
+          [ "$(gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null)" = true ] && gh release delete "$TAG" --yes || true
