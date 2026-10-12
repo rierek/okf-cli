@@ -33,7 +33,7 @@ Other hosts: remove `~/.local/bin/okf-cli` and `~/.zsh/completions/_okf-cli`; th
 
 ## GitHub release workflow
 
-Pushing `rel-0-2-0` runs `release.yml`. While `xRiErOS/okf-cli` is private, the provenance job stops at the generator's privacy check and no GitHub release is created. After the repository turns public: `gh run rerun <run-id> --failed` (within 30 days of the tag push).
+The tag `rel-0-2-0` ran `release.yml` while `xRiErOS/okf-cli` was private. The provenance job stopped at the generator's privacy check, and its upload step still published an empty GitHub release. That release is immutable and stays without files. The wheel, the sdist and the provenance of 0.2.0 exist as artifacts of the run `38218110005`; `slsa-verifier` verified both files against `multiple.intoto.jsonl` (`--source-tag rel-0-2-0`). The first GitHub release with all files is 0.2.1 (`RELEASE-0.2.1.md`).
 
 ## Breaking changes
 
