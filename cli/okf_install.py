@@ -47,6 +47,17 @@ class Failed(Exception):
     """A subprocess failed."""
 
 
+def brew_opt_path(path):
+    """Homebrew installs to <prefix>/Cellar/<formula>/<version>, which `brew upgrade` deletes; the
+    symlink <prefix>/opt/<formula> stays. Config files must name that one."""
+    path = os.path.abspath(path)
+    m = re.match(r"(.*)/Cellar/([^/]+)/[^/]+(?=/|$)", path)
+    opt = m and os.path.join(m[1], "opt", m[2])
+    if opt and os.path.isdir(opt) and os.path.samefile(opt, m[0]):
+        return opt + path[len(m[0]):]
+    return path
+
+
 class Ctx:
     """Everything install reads from the machine; tests inject tmp values."""
 
@@ -56,7 +67,7 @@ class Ctx:
         # same relative layout in a git checkout and in the installed wheel:
         # <pkg_root>/{cli/okf-cli.py, cli/_okf-cli, mcp/okf_mcp.py, skills/okf}
         self.pkg_root = os.path.abspath(
-            pkg_root or os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+            pkg_root or brew_opt_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)))
         self.platform = platform or sys.platform
         self.timeout = timeout  # seconds a harness CLI may take
 
@@ -264,17 +275,25 @@ def yaml_edit(args, un):
     whole = [BEGIN, "mcp_servers:"] + ["  " + l for l in child("")[1:-1]] + [END]
 
     def t(old):
+        try:
+            return go(old)
+        except Unsafe:
+            if un:  # nothing of ours to find in a shape we cannot read
+                return old
+            raise
+
+    def go(old):
         lines = lines_of(old or "")
         span = find_block(lines)
-        if un:
-            return old if span is None else join(drop_block(lines)) or None
+        if un and span:
+            return join(drop_block(lines)) or None
         if span:  # ours: regenerate in place, in the shape it was written
             s = span[0]
             ind = lines[s][:len(lines[s]) - len(lines[s].lstrip())]
             return join(put_block(lines, whole if lines[s + 1].strip() == "mcp_servers:" else child(ind)))
         tops = [i for i, l in enumerate(lines) if re.match(r"""["']?mcp_servers["']?\s*:""", l)]
         if not tops:
-            return join(put_block(lines, whole))
+            return old if un else join(put_block(lines, whole))
         if len(tops) > 1:
             raise Unsafe("config.yaml has more than one top-level mcp_servers key")
         k = tops[0]
@@ -297,8 +316,12 @@ def yaml_edit(args, un):
                     j -= 1
                 if SCRIPT not in "\n".join(lines[i:j]):
                     raise Unsafe("config.yaml already has an mcp_servers.okf entry that is not okf's own")
+                if un:  # Hermes rewrites config.yaml on `hermes config set` and drops our markers
+                    rest = lines[:i] + lines[j:]
+                    left = [l for l in rest[k + 1:end - (j - i)] if l.strip() and not l.lstrip().startswith("#")]
+                    return join(rest if left else rest[:k] + rest[end - (j - i):]) or None
                 return join(lines[:i] + child(ci) + lines[j:])
-        return join(put_block(lines, child(ci), at=k))
+        return old if un else join(put_block(lines, child(ci), at=k))
     return t, whole
 
 
@@ -342,7 +365,8 @@ def file_step(ctx, group, subject, path, transform, what, manual="", backup=True
     if new == old:
         return Step(group, subject, "ok", what)
     status = "remove" if new is None else "create" if old is None else "update"
-    return Step(group, subject, status, what, lambda: edit(path, transform, backup, mode))
+    return Step(group, subject, status, what, lambda: (
+        edit(path, transform, backup, mode), new is None and prune(ctx, os.path.dirname(path))))
 
 
 # --- symlinks / copies (skills, zsh glue) ------------------------------------
@@ -353,6 +377,18 @@ def clear(p):
         os.unlink(p)
     elif os.path.isdir(p):
         shutil.rmtree(p)
+
+
+def prune(ctx, d):
+    """Remove the empty directories an uninstall left behind; never HOME, above it or an agent's own dir."""
+    home = os.path.realpath(ctx.home)
+    stop = {home} | {os.path.realpath(harness_dir(ctx, h)) for h in HARNESSES}
+    while os.path.realpath(d).startswith(home + os.sep) and os.path.realpath(d) not in stop:
+        try:
+            os.rmdir(d)
+        except OSError:
+            return
+        d = os.path.dirname(d)
 
 
 def tree(path):
@@ -424,7 +460,7 @@ def put_step(ctx, group, subject, src, dest, copy, un, note=""):
             return Step(group, subject, "ok")
         if state == "foreign":
             return Step(group, subject, "skip", "{} is not okf's; left alone".format(ctx.short(dest)))
-        return Step(group, subject, "remove", what, lambda: clear(dest))
+        return Step(group, subject, "remove", what, lambda: (clear(dest), prune(ctx, os.path.dirname(dest))))
     if state == "ok":
         return Step(group, subject, "ok", what)
     if state == "foreign":
@@ -459,10 +495,10 @@ def skill_steps(ctx, hs, un):
         steps.append(put_step(ctx, "skills", subject, src, dest, copy, un, note))
     if "claude" in hs:
         own("claude", os.path.join(harness_dir(ctx, "claude"), "skills", "okf"), copy)
-    if "hermes" in hs:  # a symlinked skill directory is unverified there
+    if "hermes" in hs:  # follows symlinks, but logs a security warning for a skill resolving outside ~/.hermes/skills
         own("hermes", os.path.join(harness_dir(ctx, "hermes"), "skills", "okf"), True)
     custom_openclaw = "openclaw" in hs and bool(ctx.env.get("OPENCLAW_STATE_DIR"))
-    if custom_openclaw:  # only the default state dir is known to read ~/.agents/skills
+    if custom_openclaw:  # a custom state dir drops ~/.agents/skills from the session skill index
         own("openclaw", os.path.join(harness_dir(ctx, "openclaw"), "skills", "okf"), True)
     readers = [h for h in SHARED_READERS if h in hs and not (h == "openclaw" and custom_openclaw)]
     shared = ctx.path(".agents", "skills", "okf")
@@ -759,9 +795,18 @@ def shell_steps(ctx, ss, un):
 # --- selection, plan, output -------------------------------------------------
 
 
+def passwd_shell():
+    import pwd  # not at module level: Windows has no pwd, and run() rejects it with a message
+    try:
+        return pwd.getpwuid(os.getuid()).pw_shell
+    except KeyError:  # a container user without a passwd entry
+        return ""
+
+
 def shell_detected(ctx, sh):
     p = shell_paths(ctx)
-    login = os.path.basename(ctx.env.get("SHELL", ""))
+    # SHELL is set by login(1) and by bash, not by zsh: without it (cron, env -i, sudo) the passwd entry is the login shell
+    login = os.path.basename(ctx.env.get("SHELL") or passwd_shell())
     if sh == "zsh":
         return os.path.isfile(p["zsh_rc"]) or login == "zsh"
     if sh == "bash":

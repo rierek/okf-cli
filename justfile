@@ -35,9 +35,22 @@ pack-check:
 eval-gate:
     scripts/eval-gate.sh
 
+# Skill-Evals mit headless omp-Agenten (kostet Tokens): just skill-eval --only write- --models small=claude-haiku-4-5
+skill-eval *ARGS:
+    python3 scripts/skill-eval.py {{ARGS}}
+
+# Gate A (EARS-Form der Acceptance Criteria) gegen rohe .beans/-Dateien, z.B. `just gate-a ../.beans/OKFT-xxxx--slug.md`. Exit 0 = sauber, 1 = Befund, 2 = Fehlaufruf.
+gate-a *ARGS:
+    @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }
+    @cd "{{invocation_directory()}}" && ahm gate-a {{ARGS}}
+
 # okf-cli bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf-cli.py install --help`)
 setup *ARGS:
     uv run --script {{cli_dir}}/okf-cli.py install {{ARGS}}
+
+# Verpackungs-Smoke: Wheel bauen, in Wegwerf-venv installieren, CLI + MCP-stdio gegen die installierte Kopie pruefen
+smoke-pack:
+    scripts/pack-smoke.sh
 
 # Konformitaets-Scan des Catalogue (§9 + lokale Invarianten)
 check root=catalogue:

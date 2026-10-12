@@ -131,7 +131,7 @@ okf-cli --root <catalogue> sync-insert <consumer-bundle>/<consumer-id> <owner-bu
 ```
 
 - `sync-export` prints the payload and writes nothing.
-- `sync-insert` previews; with `--apply` it appends the consumer copy to the end of the consumer body: an `<!-- okf:sync id=... source=... hash=... -->` line, a generated attribution callout (the CLI writes it in German; leave it unchanged), `<!-- okf:sync-body -->`, the payload, `<!-- /okf:sync -->`. You may move the whole copy within the body. Never edit its content.
+- `sync-insert` previews by default. Run it without `--apply` first and read the preview (hard rule 5); only then repeat it with `--apply`, which appends the consumer copy to the end of the consumer body: an `<!-- okf:sync id=... source=... hash=... -->` line, a generated attribution callout (the CLI writes it in German; leave it unchanged), `<!-- okf:sync-body -->`, the payload, `<!-- /okf:sync -->`. You may move the whole copy within the body. Never edit its content.
 - `sync-insert` refuses an unknown block id and a block the consumer already holds.
 
 Keep consumer copies current:

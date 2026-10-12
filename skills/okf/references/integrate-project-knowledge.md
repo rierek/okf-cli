@@ -95,6 +95,16 @@ Show the user one table with every file and the proposed verdict. Move nothing b
 
 `rename` moves only `.md` files that already sit in a directory under the catalogue root, and rewrites links only inside that root. Files elsewhere in the repository therefore move with `git mv` (the one exception to hard rule 4), and references from outside `docs/` are fixed with `rewrite-path`. One procedure covers both cases, so use it for every adopted file.
 
+**Scripted run (preferred).** `scripts/adopt-files.py` in the skill directory performs steps 2 to 5 below for all files at once: `git mv`, frontmatter, every markdown link to a moved file (also `../` forms) and every relative link inside a moved file, `rewrite-path` for plain mentions in code and config, then `fix-crosslinks` and `check`. Create the target `index.md` files (step 4) first, then preview, read the link list, and apply:
+
+```bash
+python3 <skill directory>/scripts/adopt-files.py --repo <repo> --root <repo>/docs --bundle <bundle> --by <your agent/model id> \
+    --move <old> <new> <Type> [--move <old> <new> <Type> ...]
+python3 <skill directory>/scripts/adopt-files.py ... --apply
+```
+
+Review the generated `title` and `description` of every moved file, and fix each "leftover mention" the script lists. The manual steps below are the same procedure and the fallback when the script is not available.
+
 For every `bundle` file: `<old>` = its path relative to `<repo>`, `<old-from-docs>` = the same file relative to `<repo>/docs` (a root-level file is `../<name>.md`), `<new>` = `docs/<bundle>/<subdir>/<slug>.md`.
 
 1. Record the references before moving:
