@@ -1,12 +1,12 @@
-# Copy of the tap formula (xRiErOS/homebrew-tap, Formula/okf-cli.rb) for rel-0-2-3. At the next release: set url, version and sha256, then copy to the tap.
+# Copy of the tap formula (xRiErOS/homebrew-tap, Formula/okf-cli.rb) for rel-0-2-4. At the next release: set url, version and sha256, then copy to the tap.
 class OkfCli < Formula
   include Language::Python::Virtualenv
 
   desc "CLI and MCP server for Open Knowledge Format (OKF) catalogues"
   homepage "https://github.com/xRiErOS/okf-cli"
-  url "https://github.com/xRiErOS/okf-cli/archive/refs/tags/rel-0-2-3.tar.gz"
-  sha256 "8cfddc7b8862870709e2e5d988af1d4242746957eb13b1aba26fe9e2dfe89b14"
-  version "0.2.3"
+  url "https://github.com/xRiErOS/okf-cli/archive/refs/tags/rel-0-2-4.tar.gz"
+  sha256 "75dd89e5ae8e5d22d6f4d2849d5fc9297aa94f94299d723c17f60ce9b6dedce7"
+  version "0.2.4"
   license "Apache-2.0"
 
   depends_on "python@3.14"
