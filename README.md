@@ -316,7 +316,7 @@ The commands that rewrite concept files preview first and show **one unified dif
 
 | default behaviour | commands | to write |
 |---|---|---|
-| previews, writes nothing | `rename`, `archive`, `migrate`, `merge-tags`, `remove-tags`, `normalize-tags`, `sync-insert`, `sync-update`, `install` | add `--apply` |
+| previews, writes nothing | `rename`, `archive`, `migrate`, `merge-tags`, `remove-tags`, `normalize-tags`, `registry convert`, `sync-insert`, `sync-update`, `install` | add `--apply` |
 | writes immediately | `fix-crosslinks`, `fix-xml-tags`, `rewrite-path`, `reindex` | add `--check` to preview |
 
 `verify`, the editing verbs of `ctx`, `tags --register` and the two index builders write immediately.
@@ -340,6 +340,28 @@ okf check notes                      # v0.2 rules need okf_version: "0.2" in the
 ### Tags
 
 `tags` prints every tag with its usage count; `tags <candidate>…` fuzzy-searches the existing tags for candidates, `--singletons` shows tags used once. `tags --register TAG "description"` adds a tag to the `TAGS.md` allow-list (closed vocabulary); `tags --validate TAG…` checks tags against it. `merge-tags a b --into c` merges or renames; `remove-tags` removes; `normalize-tags` rewrites inline `tags: [x, y]` to block-list form. The three editing verbs take `--where` and preview by default.
+
+#### Registry format
+
+`TAGS.md` and `TYPES.md` list their entries as table rows, as blocks, or both mixed. `okf` reads both forms everywhere:
+
+```markdown
+| Tag | Description |
+|-----|-------------|
+| `git` | Version control. |
+```
+
+```markdown
+### `git`
+rank: 1
+Version control.
+```
+
+- An entry is a table row whose first cell is one backticked value, or a `###` heading that holds exactly one backticked value and nothing else. A block runs to the next heading; the optional first line `rank: 1|2|3|—` and the one-line description belong to it. Nothing reads the rank.
+- Lines inside code fences (` ``` ` or `~~~`) never count. A table row outside fences counts anywhere in the file; the section it stands in only documents.
+- `.okf.toml` `registry_format = "table" | "block"` (default `table`) sets the form of **new** entries (`tags --register`). Any other value fails with exit 2.
+- `tags --register` only inserts: every other byte of `TAGS.md` stays, so frontmatter, prose and check sections survive. A new entry lands among entries of its form in casefold order. With a form mismatch, a block goes to the end of the last table's section and a table goes before the first block. A missing file is created with a short header.
+- `registry convert TAGS.md|TYPES.md --to block|table [--apply]` rewrites every entry in the target form; the text between entries stays. It previews a diff unless `--apply`. It refuses (exit 2, file untouched) when text follows a table directly (it would become part of the last block), when a block has a multi-line description or a `|` (a table cell holds one line), or when a table mixes registry rows with other rows. A rank column becomes `rank:` lines and back; entries without a rank get `—` in a ranked table.
 
 ### Move, archive and repair
 

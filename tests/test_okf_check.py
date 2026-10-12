@@ -660,7 +660,7 @@ class TagRegistryGate(unittest.TestCase):
         self.assertIsNone(okf_catalogue.load_tags(self.tmp))
 
     def test_unknown_tag_warns(self):
-        self._w("TAGS.md", okf_catalogue.TAGS_HEADER + "| `known` |  |\n")
+        self._w("TAGS.md", (okf_catalogue.TAGS_INTRO + okf_catalogue.TAGS_TABLE_HEAD) + "| `known` |  |\n")
         self._w("b/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - known\n  - novel\n---\n# X\n")
         errors, warnings = _scan(self.tmp, "b")
         self.assertIn("kc/tag/registered", self._names(warnings))
@@ -669,7 +669,7 @@ class TagRegistryGate(unittest.TestCase):
         self.assertFalse(any("known" in m for m in msgs))
 
     def test_all_known_tags_clean(self):
-        self._w("TAGS.md", okf_catalogue.TAGS_HEADER + "| `a` |  |\n| `b` |  |\n")
+        self._w("TAGS.md", (okf_catalogue.TAGS_INTRO + okf_catalogue.TAGS_TABLE_HEAD) + "| `a` |  |\n| `b` |  |\n")
         self._w("c/x.md", "---\ntype: Concept\ntitle: X\ntags:\n  - a\n  - b\n---\n# X\n")
         errors, warnings = _scan(self.tmp, "c")
         self.assertNotIn("kc/tag/registered", self._names(warnings))
@@ -689,7 +689,7 @@ class TagRegistryGate(unittest.TestCase):
         self.assertIn("| `alpha` | a |", body)  # existing description is kept, not overwritten
 
     def test_register_preserves_descriptions(self):
-        self._w("TAGS.md", okf_catalogue.TAGS_HEADER + "| `a` | keep me |\n")
+        self._w("TAGS.md", (okf_catalogue.TAGS_INTRO + okf_catalogue.TAGS_TABLE_HEAD) + "| `a` | keep me |\n")
         okf_catalogue.register_tags(self.tmp, [("b", "bee")])
         body = open(os.path.join(self.tmp, "TAGS.md"), encoding="utf-8").read()
         self.assertIn("| `a` | keep me |", body)
