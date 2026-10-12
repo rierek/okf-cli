@@ -2,6 +2,7 @@
 # Packaging smoke: build the wheel, check its file list, install it into a throwaway venv,
 # run the console script, prime and the install plan, then complete an MCP stdio initialize
 # and one tool call against the installed copy. Everything lives under one tmpdir.
+# Never write `check && echo ok`: under `set -e` a failing check in an && list does not abort.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
@@ -16,11 +17,15 @@ for want in okf_cli/cli/okf-cli.py okf_cli/cli/okf_install.py okf_cli/cli/_okf o
 done
 echo "ok   wheel file list"
 
-uv venv -q "$T/venv" && uv pip install -q --python "$T/venv/bin/python" "${whl[0]}"
+uv venv -q "$T/venv"
+uv pip install -q --python "$T/venv/bin/python" "${whl[0]}"
 cli="$T/venv/bin/okf"
-HOME="$T/home" "$cli" --help >/dev/null && echo "ok   okf --help"
-HOME="$T/home" "$cli" --root "$T/cat" prime 2>/dev/null | grep -q "agent onboarding" && echo "ok   prime"
-HOME="$T/home" "$cli" install --json --only claude,zsh | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["data"]["steps"], d' && echo "ok   install plan"
+HOME="$T/home" "$cli" --help >/dev/null
+echo "ok   okf --help"
+HOME="$T/home" "$cli" --root "$T/cat" prime 2>/dev/null | grep -q "agent onboarding"
+echo "ok   prime"
+HOME="$T/home" "$cli" install --json --only claude,zsh | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["data"]["steps"], d'
+echo "ok   install plan"
 
 mcp="$(cd "$T" && "$T/venv/bin/python" -c 'import okf_cli,os; print(os.path.join(os.path.dirname(okf_cli.__file__), "mcp", "okf_mcp.py"))')"
 python3 - "$mcp" "$T/cat" <<'EOF'
