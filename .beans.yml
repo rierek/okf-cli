@@ -18,3 +18,8 @@ worktree:
     run: ""
     # Integration strategy: "local" (squash-merge locally) or "pr" (push and create PRs)
     integrate: local
+statuses:
+  - name: to-review
+    color: yellow
+    short: R
+    description: Waiting for PO acceptance
