@@ -3,7 +3,7 @@ exit: 0
 --- stdout
 registered 1 new tag(s) in TAGS.md: newtag
 --- stderr
-warning: auto-embed skipped for new tag(s) (HTTPError: HTTP Error 404: Not Found) — run cli/embeddings/build_tagvec.py --produce manually later
+warning: auto-embed skipped for new tag(s) (URLError: <urlopen error [Errno ECONNREFUSED] Connection refused>) — run cli/embeddings/build_tagvec.py --produce manually later
 --- files
 M TAGS.md
 --- a/TAGS.md

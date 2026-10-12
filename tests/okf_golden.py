@@ -10,7 +10,9 @@ cases.txt: one case per line, `<name> [KEY=VALUE ...] <args...>` (shlex); `#` li
 blank lines are skipped. The harness runs `<cmd> --root <copy> <args>` with cwd = <copy>;
 `{ROOT}` inside an arg becomes the copy's path. Every case gets a fresh copy of a git
 template built from tests/golden/catalogue/: one commit per file in sorted path order,
-pinned author/committer and dates 2026-01-01 plus one day per file."""
+pinned author/committer and dates 2026-01-01 plus one day per file; each file's mtime is
+its commit date, so mtime comparisons (ctx staleness, build-index --if-stale) do not depend
+on the checkout. HTTP goes to a closed local port, so no case reaches a network service."""
 import argparse
 import concurrent.futures
 import datetime
@@ -36,6 +38,7 @@ _ENV = re.compile(r"[A-Z_][A-Z0-9_]*=")
 _EPOCH = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
 _GIT_ID = {"GIT_AUTHOR_NAME": "Golden", "GIT_AUTHOR_EMAIL": "golden@example.org",
            "GIT_COMMITTER_NAME": "Golden", "GIT_COMMITTER_EMAIL": "golden@example.org"}
+_NO_NETWORK = "http://127.0.0.1:9"  # discard port, closed: every proxied request is refused
 
 Case = namedtuple("Case", "name env args")
 
@@ -85,11 +88,14 @@ def _files(root):
 
 
 def build_template(dest):
-    """The fixture as a git repository with one pinned commit per file; returns dest."""
+    """The fixture as a git repository with one pinned commit per file, each file's mtime set
+    to its commit date; returns dest."""
     shutil.copytree(FIXTURE, dest, symlinks=True)
     _git(dest, "init", "-q", "-b", "main")
     for i, rel in enumerate(_files(dest)):
-        when = (_EPOCH + datetime.timedelta(days=i)).strftime("%Y-%m-%dT%H:%M:%S+0000")
+        instant = _EPOCH + datetime.timedelta(days=i)
+        when = instant.strftime("%Y-%m-%dT%H:%M:%S+0000")
+        os.utime(os.path.join(dest, rel), (instant.timestamp(),) * 2, follow_symlinks=False)
         _git(dest, "add", "--", rel)
         _git(dest, "commit", "-q", "-m", "add " + rel,
              env={**_GIT_ID, "GIT_AUTHOR_DATE": when, "GIT_COMMITTER_DATE": when})
@@ -148,10 +154,11 @@ def _stream(data):
     return text if not text or text.endswith("\n") else text + "\n\\ no newline at end\n"
 
 
-def _usage(stderr):
+def _stderr(stderr):
     """argparse's usage-error text changes between Python releases (3.11 to 3.14, even patch
     releases) and a port cannot reproduce it: such stderr pins only as <usage error>; the
-    exit code stays."""
+    exit code stays. The errno of a refused connection differs by OS (61 macOS, 111 Linux)."""
+    stderr = re.sub(r"\[Errno \d+\] Connection refused", "[Errno ECONNREFUSED] Connection refused", stderr)
     return "<usage error>\n" if re.match(r"usage: okf\b", stderr) else stderr
 
 
@@ -163,7 +170,9 @@ def run_case(case, cmd, template, workdir):
     os.makedirs(home)
     env = {"PATH": os.environ.get("PATH", ""), "HOME": home,
            "XDG_CONFIG_HOME": os.path.join(home, ".config"), "LC_ALL": "C.UTF-8", "TZ": "UTC",
-           "COLUMNS": "100", "NO_COLOR": "1", "TERM": "dumb", **case.env}
+           "COLUMNS": "100", "NO_COLOR": "1", "TERM": "dumb",
+           **{var: _NO_NETWORK for var in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY")},
+           **case.env}
     args = [a.replace("{ROOT}", root) for a in case.args]
     before = _snapshot(root)
     days = {_today()}
@@ -174,7 +183,7 @@ def run_case(case, cmd, template, workdir):
     if case.env:
         record += "env: {}\n".format(" ".join("{}={}".format(k, v) for k, v in case.env.items()))
     record += "exit: {}\n--- stdout\n{}--- stderr\n{}--- files\n".format(
-        proc.returncode, _stream(proc.stdout), _usage(_stream(proc.stderr)))
+        proc.returncode, _stream(proc.stdout), _stderr(_stream(proc.stderr)))
     record += "".join(line + "\n" for line in _tree_effect(before, _snapshot(root)))
     for path, token in ((root, "<ROOT>"), (home, "<HOME>")):
         for form in sorted({os.path.realpath(path), path}, key=len, reverse=True):
