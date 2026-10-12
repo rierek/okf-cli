@@ -59,9 +59,12 @@ def load_cases(path=CASES):
 
 
 def command(cmd=None):
-    """argv prefix of the implementation under test."""
-    cmd = cmd or os.environ.get("OKF_GOLDEN_CMD")
-    return shlex.split(cmd) if cmd else DEFAULT_CMD
+    """argv prefix of the implementation under test; a relative executable path resolves against
+    the caller's cwd, not the case's temp copy."""
+    argv = shlex.split(cmd or os.environ.get("OKF_GOLDEN_CMD") or "")
+    if not argv:
+        return DEFAULT_CMD
+    return [os.path.abspath(argv[0]) if os.sep in argv[0] else argv[0]] + argv[1:]
 
 
 def _git(cwd, *argv, env=None):
@@ -97,7 +100,11 @@ def _snapshot(root):
     snap = {}
     for rel in _files(root):
         path = os.path.join(root, rel)
-        snap[rel] = ("link:" + os.readlink(path)).encode() if os.path.islink(path) else open(path, "rb").read()
+        if os.path.islink(path):
+            snap[rel] = ("link:" + os.readlink(path)).encode()
+        else:
+            with open(path, "rb") as fh:
+                snap[rel] = fh.read()
     return snap
 
 
@@ -129,8 +136,10 @@ def _tree_effect(before, after):
         if old_text is None or new_text is None:
             lines.append("  (binary)")
             continue
-        lines += [d.rstrip("\n") for d in difflib.unified_diff(
-            old_text.splitlines(True), new_text.splitlines(True), "a/" + path, "b/" + path)]
+        # a last line without newline gets git's marker, so a dropped final newline shows
+        lines += [d[:-1] if d.endswith("\n") else d + "\n\\ No newline at end of file"
+                  for d in difflib.unified_diff(old_text.splitlines(True), new_text.splitlines(True),
+                                                "a/" + path, "b/" + path)]
     return lines
 
 
@@ -230,10 +239,10 @@ def main(argv=None):
                     fh.write(records[case.name])
                 print("updated", case.name)
         return 0
-    failed = [c.name for c in cases if diff(c, records[c.name])]
-    for case in cases:
-        if case.name in failed:
-            sys.stdout.write(diff(case, records[case.name]))
+    deltas = {c.name: diff(c, records[c.name]) for c in cases}
+    failed = [name for name, delta in deltas.items() if delta]
+    for name in failed:
+        sys.stdout.write(deltas[name])
     print("{} of {} cases differ{}".format(len(failed), len(cases), ": " + " ".join(failed) if failed else ""))
     return 1 if failed else 0
 

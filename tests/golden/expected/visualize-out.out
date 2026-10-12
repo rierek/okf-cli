@@ -42,3 +42,4 @@ A out.html
 +document.getElementById('s').addEventListener('input',ev=>{const q=ev.target.value.toLowerCase();
 + cy.nodes().forEach(n=>{const h=!q||n.data('label').toLowerCase().includes(q)||(n.data('type')||'').toLowerCase().includes(q);n.style('display',h?'element':'none');});});
 +</script></body></html>
+\ No newline at end of file
