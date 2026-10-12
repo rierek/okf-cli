@@ -1,4 +1,4 @@
-# okf — CLI and MCP server for Open Knowledge Format (OKF) v0.2 catalogues
+# okf-cli — CLI and MCP server for Open Knowledge Format (OKF) v0.2 catalogues
 
 Search, navigate, validate and refactor a **catalogue of [Open Knowledge Format (OKF) v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) bundles** — markdown files with YAML frontmatter, built for humans and AI agents.
 

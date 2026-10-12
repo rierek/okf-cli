@@ -416,7 +416,7 @@ def mine(p):
         if os.path.isdir(p):
             head = read(os.path.join(p, "SKILL.md")) or ""
             return re.match(r"---\r?\n(?:[^\n]*\n)*?name:[ \t]*okf[ \t]*\r?\n", head) is not None
-        return (read(p) or "").startswith("#compdef okf")
+        return (read(p) or "").startswith("#compdef okf\n")
     except (OSError, Unsafe):
         return False
 
