@@ -27,7 +27,11 @@ okf-cli install
 okf-cli install --apply
 ```
 
-Then use it from any directory (run inside a catalogue root to drop `--root`):
+Then use it from any directory. Without `--root` it takes the nearest catalogue above the current directory, else the `root` in `~/.config/okf/config.toml` (`$XDG_CONFIG_HOME/okf/config.toml`):
+
+```toml
+root = "~/path/to/catalogue"
+```
 
 ```bash
 okf-cli --root /path/to/catalogue prime          # agent onboarding

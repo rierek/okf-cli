@@ -6,7 +6,8 @@ all correctness logic lives in okf-cli.py.
 catalogue by walking this server process's own cwd upward for a `.okf.toml`/
 `SPEC.md`+`TYPES.md` marker, checked both in each candidate directory and in
 its `docs/` child (the workspace+repo/-hull layout keeps the marker under
-`<hull>/docs/`, never in `<hull>` itself). Since each server instance's cwd
+`<hull>/docs/`, never in `<hull>` itself); if nothing is found there, the `root` in
+`~/.config/okf/config.toml` applies. Since each server instance's cwd
 is the session's own project directory — main checkout or linked worktree
 alike — this resolves correctly from a worktree with no path arithmetic.
 Pass an explicit `root` only for a catalogue outside the session's own
