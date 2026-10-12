@@ -19,6 +19,8 @@ if _HERE not in sys.path:  # cli/ holds the okf package
 from okf import catalogue as okf_catalogue
 from okf import index as okf_index
 from okf import rename as okf_rename
+from okf.diffs import write_plan
+from tests.git_preview import HAS_GIT, GitPreviewMixin
 
 M0, M1 = okf_catalogue.MARK_START, okf_catalogue.MARK_END
 
@@ -133,7 +135,9 @@ class InitIndexesRecursion(unittest.TestCase):
 
     def test_recurses_and_writes_conversions(self):
         self._build()
-        results = dict(okf_index.init_indexes(self.tmp, os.path.join(self.tmp, "b"), dry_run=False))
+        results, plan = okf_index.init_indexes(self.tmp, os.path.join(self.tmp, "b"))
+        write_plan(self.tmp, plan)
+        results = dict(results)
         self.assertEqual(results["b/index.md"], "converted")
         self.assertEqual(results["b/sub1/index.md"], "converted")
         self.assertEqual(results["b/sub2/index.md"], "skip-multi-section")
@@ -147,9 +151,10 @@ class InitIndexesRecursion(unittest.TestCase):
     def test_dry_run_reports_but_writes_nothing(self):
         self._build()
         before = self._r("b/sub1/index.md")
-        results = dict(okf_index.init_indexes(self.tmp, os.path.join(self.tmp, "b"), dry_run=True))
-        self.assertEqual(results["b/sub1/index.md"], "converted")
-        # no write in dry-run
+        results, plan = okf_index.init_indexes(self.tmp, os.path.join(self.tmp, "b"))
+        self.assertEqual(dict(results)["b/sub1/index.md"], "converted")
+        self.assertIn("b/sub1/index.md", [p[0] for p in plan])
+        # init_indexes only plans
         self.assertEqual(self._r("b/sub1/index.md"), before)
         self.assertNotIn(M0, self._r("b/sub1/index.md"))
 
@@ -158,14 +163,15 @@ class InitIndexesRecursion(unittest.TestCase):
         # case-insensitive (matches the already-case-insensitive RESERVED
         # check) instead of silently skipping the dir (B-2026-07-08).
         self._w("b/sub3/INDEX.md", "# Sub3\n\n## Concepts\n\n* [W](w.md) - d\n")
-        results = dict(okf_index.init_indexes(self.tmp, os.path.join(self.tmp, "b"), dry_run=False))
-        self.assertEqual(results["b/sub3/INDEX.md"], "converted")
+        results, plan = okf_index.init_indexes(self.tmp, os.path.join(self.tmp, "b"))
+        write_plan(self.tmp, plan)
+        self.assertEqual(dict(results)["b/sub3/INDEX.md"], "converted")
         self.assertIn(M0, self._r("b/sub3/INDEX.md"))
 
 
-class EnsureMarkersCreateOnly(unittest.TestCase):
-    """ensure_markers must not naively append to a marker-less file that has
-    content (convert_flat_index owns that case now). It only creates if missing."""
+class ReindexInitPlanCreatesOnlyMissing(unittest.TestCase):
+    """plan_reindex(init=True) plans a stub for a missing index.md and never a naive append to a
+    marker-less file that has content (convert_flat_index owns that case)."""
 
     def setUp(self):
         import tempfile
@@ -175,21 +181,19 @@ class EnsureMarkersCreateOnly(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_creates_index_when_missing(self):
-        okf_index.ensure_markers(self.tmp)
-        idx = os.path.join(self.tmp, "index.md")
-        self.assertTrue(os.path.isfile(idx))
-        with open(idx, encoding="utf-8") as f:
-            self.assertIn(M0, f.read())
+    def test_plans_created_index_when_missing(self):
+        plan, _info = okf_index.plan_reindex(self.tmp, self.tmp, init=True)
+        self.assertEqual([(rel, old) for rel, old, _new in plan], [("index.md", None)])
+        self.assertIn(M0, plan[0][2])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "index.md")))
 
-    def test_leaves_markerless_content_untouched(self):
+    def test_leaves_markerless_content_unplanned_without_list(self):
         idx = os.path.join(self.tmp, "index.md")
-        body = "# T\n\n## Concepts\n\n* [A](a.md)\n"
         with open(idx, "w", encoding="utf-8") as f:
-            f.write(body)
-        okf_index.ensure_markers(self.tmp)
-        with open(idx, encoding="utf-8") as f:
-            self.assertEqual(f.read(), body)  # no naive append
+            f.write("# T\n\n## Concepts\n\nprose only\n")
+        plan, info = okf_index.plan_reindex(self.tmp, self.tmp, init=True)
+        self.assertEqual(plan, [])  # no naive append
+        self.assertEqual(info["init"], [("index.md", "skip-no-list")])
 
 
 class UncoveredIndexDirs(unittest.TestCase):
@@ -600,6 +604,49 @@ class IndexMapRecursiveBlock(unittest.TestCase):
         text = self._map()
         self.assertIn("/b/sub/deeper.md", text)
         self.assertNotIn("/b/sub/deep.md", text)
+
+
+@unittest.skipUnless(HAS_GIT, "git not installed")
+class ReindexPreviewEqualsGitDiff(GitPreviewMixin, unittest.TestCase):
+    """OKFT-d6an SC-01/SC-02 — the `--check` preview of reindex, with and without --init, equals the
+    `git diff` after the write run. With --init the preview is the final text of every file the write
+    run changes or creates: the created index.md, the converted flat index and the refreshed blocks."""
+
+    FILES = {
+        "b/a.md": b"---\ntype: Concept\ntitle: A\ndescription: first\n---\n# A\n",
+        "b/sub/c.md": b"---\ntype: Concept\ntitle: C\n---\n# C\n",
+        "b/sub/index.md": b"# Sub\n\n## Concepts\n\n* [C](c.md)\n",
+        "b/stale/d.md": b"---\ntype: Concept\ntitle: D\n---\n# D\n",
+        "b/stale/index.md": b"# Stale\r\n\r\n<!-- okf:index -->\r\n<!-- /okf:index -->\r\n",
+        "b/latin/index.md": b"# Latin caf\xe9\n\n<!-- okf:index -->\n<!-- /okf:index -->\n",
+    }
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.commit_files(self.tmp, self.FILES)
+
+    def _run(self, *extra, check):
+        return self.json_files(self.tmp, "reindex", "b", *extra, *(["--check"] if check else []),
+                               ok_codes=(0, 5))
+
+    def test_stale_blocks_preview_equals_git_diff(self):
+        preview = self.assert_preview_equals_git_diff(
+            self.tmp, lambda: self._run(check=True), lambda: self._run(check=False))
+        self.assertEqual([f["path"] for f in preview], ["b/stale/index.md"])
+
+    def test_init_preview_covers_the_final_text_of_created_and_converted_files(self):
+        preview = self.assert_preview_equals_git_diff(
+            self.tmp, lambda: self._run("--init", check=True), lambda: self._run("--init", check=False))
+        paths = [f["path"] for f in preview]
+        self.assertEqual(paths, ["b/index.md", "b/stale/index.md", "b/sub/index.md"])
+        created = preview[0]["diff"]
+        self.assertTrue(created.startswith("--- /dev/null\n+++ b/b/index.md\n"))
+        self.assertIn("+* [A](/b/a.md)", created)  # the refreshed block, not the empty stub
+        converted = preview[2]["diff"]
+        self.assertIn("+* [C](/b/sub/c.md)", converted)  # converted and refreshed in one text
+        with open(os.path.join(self.tmp, "b/latin/index.md"), "rb") as f:
+            self.assertEqual(f.read(), self.FILES["b/latin/index.md"])
 
 
 if __name__ == "__main__":

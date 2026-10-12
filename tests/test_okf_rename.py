@@ -24,7 +24,9 @@ from okf import catalogue as okf_catalogue
 from okf import linkscan as okf_linkscan
 from okf import rename as okf_rename
 from okf import wikilinks as okf_wikilinks
+from okf.diffs import write_plan
 from okf.errors import OkfError
+from tests.git_preview import HAS_GIT, GitPreviewMixin
 from tests.okf_testkit import needs_case_insensitive_fs
 from tests.test_okf_wikilinks import WikilinkFixtureMixin
 
@@ -56,7 +58,8 @@ class RewritePath(unittest.TestCase):
     def test_rewrites_across_md_and_code(self):
         self._w("README.md", "docs live at docs/notes.md today\n")
         self._w("app.py", "# see docs/notes.md for details\n")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/demo-okf/notes.md")
+        touched, plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/demo-okf/notes.md")
+        write_plan(self.tmp, plan)
         self.assertEqual(sorted(t[0] for t in touched), ["README.md", "app.py"])
         self.assertIn("docs/demo-okf/notes.md", self._r("README.md"))
         self.assertIn("docs/demo-okf/notes.md", self._r("app.py"))
@@ -64,24 +67,25 @@ class RewritePath(unittest.TestCase):
     def test_dry_run_writes_nothing_but_reports(self):
         self._w("README.md", "docs/notes.md\n")
         before = self._r("README.md")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md", dry_run=True)
+        touched, _plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
         self.assertEqual(touched, [("README.md", 1)])
         self.assertEqual(self._r("README.md"), before)
 
     def test_prunes_git_and_node_modules(self):
         self._w(".git/config", "docs/notes.md\n")
         self._w("node_modules/x.js", "docs/notes.md\n")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        touched, _plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
         self.assertEqual(touched, [])
 
     def test_counts_multiple_occurrences(self):
         self._w("a.txt", "docs/notes.md and docs/notes.md again\n")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        touched, _plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
         self.assertEqual(touched, [("a.txt", 2)])
 
     def test_does_not_touch_substring_collision(self):
         self._w("a.txt", "my-docs/notes.md and docs/notes.md-old and docs/notes.md\n")
-        touched = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        touched, plan, _ = okf_rename.rewrite_path(self.tmp, "docs/notes.md", "docs/x.md")
+        write_plan(self.tmp, plan)
         self.assertEqual(touched, [("a.txt", 1)])            # only the standalone path
         self.assertIn("my-docs/notes.md", self._r("a.txt"))  # prefix-collision untouched
         self.assertIn("docs/notes.md-old", self._r("a.txt")) # suffix-collision untouched
@@ -161,12 +165,8 @@ class RenameConcept(unittest.TestCase):
         self.assertEqual(plan["outbound"], [])
         self.assertEqual(plan["bundles"], ["aaa", "bbb"])
 
-    def test_apply_link_rewrites_targets_link_not_label(self):
-        p = self._ap("aaa/b.md")
-        self._w("aaa/b.md", "[/a.md](/a.md) and text /a.md bare")
-        okf_rename._apply_link_rewrites(p, [("/a.md", "/a2.md")])
-        with open(p) as f:
-            out = f.read()
+    def test_link_rewrite_text_targets_link_not_label(self):
+        out = okf_rename.link_rewrite_text("[/a.md](/a.md) and text /a.md bare", [("/a.md", "/a2.md")])
         # only the ](...) target rewritten; label text + bare mention untouched
         self.assertEqual(out, "[/a.md](/a2.md) and text /a.md bare")
 
@@ -654,7 +654,7 @@ class RenameWikilinks(WikilinkFixtureMixin, unittest.TestCase):
                               "Real [T](target.md)\n\nand `[U](other.md)` inline.\n")
         out = self._rename("a/mover.md", "b/mover.md")
         self.assertIn("1 outbound link(s)", out)
-        self.assertNotIn("other.md", out)
+        self.assertNotIn("`[U](/a/other.md)`", out)
         self._rename("a/mover.md", "b/mover.md", apply=True)
         self.assertIn("`[U](other.md)`", self._r("b/mover.md"))
 
@@ -1428,6 +1428,101 @@ class GitMvBeyondSymlink(unittest.TestCase):
         # there is no second repository to name — the report must not claim
         # one (point 3: the two causes share a surface but not a report).
         self.assertNotIn("repository differs from --root", out)
+
+
+@unittest.skipUnless(HAS_GIT, "git not installed")
+class RewritePathPreviewEqualsGitDiff(GitPreviewMixin, unittest.TestCase):
+    """OKFT-d6an SC-01 — the `--check` preview of rewrite-path, paths relative to its --scan-root
+    (a git repository outside the catalogue root), equals the `git diff` after the write run."""
+
+    FILES = {
+        "README.md": b"docs live at docs/notes.md today\n" + b"x\n" * 20 + b"and docs/notes.md again\n",
+        "src/app.py": b"# see docs/notes.md for details",
+        "crlf.txt": b"docs/notes.md\r\nmore\r\n",
+        "latin.txt": b"docs/notes.md caf\xe9\n",
+    }
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.catalogue = os.path.join(self.tmp, "cat")
+        self.repo = os.path.join(self.tmp, "repo")
+        os.makedirs(self.catalogue)
+        os.makedirs(self.repo)
+
+    def test_preview_equals_git_diff_after_write_run(self):
+        self.commit_files(self.repo, self.FILES)
+        args = ("rewrite-path", "docs/notes.md", "docs/x.md", "--scan-root", self.repo)
+        preview = self.assert_preview_equals_git_diff(
+            self.repo,
+            lambda: self.json_files(self.catalogue, *args, "--check"),
+            lambda: self.json_files(self.catalogue, *args))
+        self.assertEqual([f["path"] for f in preview], ["README.md", "crlf.txt", "src/app.py"])
+        with open(os.path.join(self.repo, "latin.txt"), "rb") as f:
+            self.assertEqual(f.read(), self.FILES["latin.txt"])
+
+
+@unittest.skipUnless(HAS_GIT, "git not installed")
+class RenamePreviewEqualsGitDiff(GitPreviewMixin, unittest.TestCase):
+    """OKFT-zwd0 SC-01 — the preview of rename, archive and archive --restore equals the staged
+    `git diff -M` after their `--apply` run: the moved file with its rename header, every inbound
+    link, wikilink and sync `source=` file, the ctx bundle and the managed index files."""
+
+    BODY = "".join("Line {} of the moved concept.\n".format(i) for i in range(30))
+    FILES = {
+        "a/index.md": "# A\n\nIntro.\n\n" + M0 + "\n* [Mover](/a/mover.md)\n* [Keep](/a/keep.md)\n" + M1 + "\n",
+        "b/index.md": "# B\n\nIntro.\n\n" + M0 + "\n" + M1 + "\n",
+        "a/keep.md": "---\ntype: Concept\ntitle: Keep\n---\nSee [M](/a/mover.md#h) and [[mover]].\n",
+        "a/mover.md": "---\ntype: Concept\ntitle: Mover\n---\n" + BODY + "Relative [K](keep.md).\n" + BODY,
+        "b/consumer.md": ("---\ntype: Concept\ntitle: Consumer\n---\n"
+                          "<!-- okf:sync id=blk source=/a/mover.md hash=0123456789ab -->\n> from mover\n"
+                          "<!-- okf:sync-body -->\npayload\n<!-- /okf:sync -->\n"),
+        "_ctx/index.md": "# Context bundles\n\n" + M0 + "\n* [Demo](/_ctx/demo.md) - old\n" + M1 + "\n",
+        "_ctx/demo.md": ("---\ntype: Context\ndescription: Demo\n---\n\n# demo\n\n"
+                         "| pos | mode | path | comment |\n|---|---|---|---|\n"
+                         "| 1 | pflicht | [mover](/a/mover.md) | c |\n"),
+    }
+
+    def setUp(self):
+        self.repo = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.commit_files(self.repo, {k: v.encode() for k, v in self.FILES.items()})
+
+    def _compare(self, *argv):
+        return self.assert_preview_equals_staged_diff(
+            self.repo, lambda: self.json_files(self.repo, *argv),
+            lambda: self.json_files(self.repo, *argv, "--apply"))
+
+    def test_rename_across_bundles(self):
+        preview = self._compare("rename", "a/mover.md", "b/mover.md")
+        self.assertEqual([f["path"] for f in preview],
+                         ["_ctx/demo.md", "_ctx/index.md", "a/index.md", "a/keep.md", "b/consumer.md",
+                          "b/index.md", "b/mover.md"])
+        moved = [f for f in preview if f["old_path"]]
+        self.assertEqual([(f["path"], f["old_path"]) for f in moved], [("b/mover.md", "a/mover.md")])
+        self.assertTrue(moved[0]["diff"].startswith("rename from a/mover.md\nrename to b/mover.md\n"))
+
+    def test_archive_and_restore(self):
+        archived = self._compare("archive", "a/mover.md")
+        self.assertEqual(next(f["old_path"] for f in archived if f["path"] == "_archive/a/mover.md"),
+                         "a/mover.md")
+        self._git(self.repo, "commit", "-qm", "archived")
+        restored = self._compare("archive", "--restore", "_archive/a/mover.md")
+        self.assertEqual(next(f["old_path"] for f in restored if f["path"] == "a/mover.md"),
+                         "_archive/a/mover.md")
+
+
+    def test_force_overwrite_previews_the_destination_loss(self):
+        self._git(self.repo, "rm", "-q", "b/index.md")
+        with open(os.path.join(self.repo, "b/mover.md"), "w") as f:
+            f.write("---\ntype: Concept\ntitle: Old destination\n---\nbye\n")
+        self._git(self.repo, "add", "-A")
+        self._git(self.repo, "commit", "-qm", "destination")
+        preview = self._compare("rename", "a/mover.md", "b/mover.md", "--force")
+        by_path = {f["path"]: f for f in preview}
+        self.assertIn("-bye\n", by_path["b/mover.md"]["diff"])
+        self.assertTrue(by_path["a/mover.md"]["diff"].startswith("--- a/a/mover.md\n+++ /dev/null\n"))
+        self.assertTrue(all(f["old_path"] is None for f in preview))
 
 
 if __name__ == "__main__":

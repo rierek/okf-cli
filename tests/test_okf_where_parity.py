@@ -171,7 +171,7 @@ class WhereParity(unittest.TestCase):
         if command.startswith("find"):
             paths = [h["path"] for h in data["hits"]]
         elif command == "merge-tags":
-            paths = data["files"]
+            paths = [f["path"] for f in data["files"]]
         else:
             paths = [row["path"] for row in data]
         return sorted(p[:-3] if p.endswith(".md") else p for p in paths)

@@ -7,6 +7,7 @@ import contextlib
 import io
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import types
@@ -182,7 +183,7 @@ class TagVerbsHonourWhere(unittest.TestCase):
         import types
         args = types.SimpleNamespace(where=where, apply=False, json=True, **extra)
         with contextlib.redirect_stdout(io.StringIO()):
-            return sorted(cmd(self.tmp, args)["files"])
+            return sorted(f["path"] for f in cmd(self.tmp, args)["files"])
 
     def verbs(self):
         return [("merge-tags", lambda where: self.files(okf_tags.cmd_merge_tags, where,
@@ -239,7 +240,7 @@ class TagVerbsWriteThroughTheWriter(TmpTree, unittest.TestCase):
         ap = self._w("b/x.md", self.FRONT)
         out = self._verb(okf_tags.cmd_merge_tags, apply=False, tags=["alpha"], into="omega")
         self.assertEqual(self._text(ap), self.FRONT)
-        self.assertIn("would rewrite  b/x.md", out)
+        self.assertIn("--- a/b/x.md\n+++ b/b/x.md\n", out)
         self.assertIn("merge-tags: 1 file(s) would rewrite, 0 unparseable — alpha -> omega", out)
 
     def test_remove_drops_the_tag_and_keeps_everything_else(self):
@@ -278,7 +279,8 @@ class TagVerbsWriteThroughTheWriter(TmpTree, unittest.TestCase):
         self._w("b/bad.md", "---\ntype: Note\ndescription: a: b\n---\n")
         self._w("b/flow.md", "---\ntype: Note\ntags: [a, b]\n---\n")
         data = okf_tags.cmd_normalize_tags(self.tmp, types.SimpleNamespace(where=None, apply=False, json=True))
-        self.assertEqual(data, {"applied": False, "files": ["b/flow.md"], "unparseable": ["b/bad.md"]})
+        self.assertEqual(data["files"][0]["path"], "b/flow.md")
+        self.assertEqual((data["applied"], len(data["files"]), data["unparseable"]), (False, 1, ["b/bad.md"]))
         self.assertIn("normalize-tags: 1 file(s) would rewrite, 1 unparseable",
                       self._verb(okf_tags.cmd_normalize_tags, apply=False))
 
@@ -288,6 +290,148 @@ class TagVerbsWriteThroughTheWriter(TmpTree, unittest.TestCase):
         out = self._verb(okf_tags.cmd_merge_tags, tags=["alpha"], into="omega")
         self.assertEqual(self._text(ap), text)
         self.assertIn("unparseable    b/odd.md  (tags field not in inline/block form — skipped)", out)
+
+
+class TagVerbDiffPreview(TmpTree, unittest.TestCase):
+    """OKFT-guup — the tag verbs preview one unified diff per affected file (text and `data.files`),
+    leave the tree alone without --apply and write exactly the planned text with --apply."""
+
+    VERBS = (("merge-tags", okf_tags.cmd_merge_tags, dict(tags=["alpha"], into="omega")),
+             ("remove-tags", okf_tags.cmd_remove_tags, dict(tags=["alpha"])),
+             ("normalize-tags", okf_tags.cmd_normalize_tags, dict()))
+    BLOCK = "---\ntype: Note\ntitle: T\ntags:\n  - alpha\n  - beta\n---\n# T\n" + "line\n" * 20 + "end\n"
+    FLOW = "---\ntype: Note\ntags: [alpha, beta]\n---\nbody"  # flow list, no final newline
+
+    def _tree(self):
+        for rel, text in (("b/z.md", self.FLOW), ("a/y.md", self.BLOCK), ("a/x.md", self.FLOW),
+                          ("a/none.md", "---\ntype: Note\ntags:\n  - beta\n---\n"),
+                          ("a/bad.md", "---\ntype: Note\ndescription: a: b\n---\n"),
+                          ("a/odd.md", "---\ntype: Note\ntags: alpha, beta\n---\n")):
+            self._w(rel, text)
+
+    def _snapshot(self):
+        out = {}
+        for dp, _dn, fns in os.walk(self.tmp):
+            for fn in fns:
+                with open(os.path.join(dp, fn), "rb") as f:
+                    out[os.path.relpath(os.path.join(dp, fn), self.tmp)] = f.read()
+        return out
+
+    def _json(self, cmd, apply=False, **extra):
+        args = types.SimpleNamespace(where=None, apply=apply, json=True, **extra)
+        return cmd(self.tmp, args)
+
+    def test_preview_leaves_every_byte_alone_and_json_lists_ordered_diffs(self):
+        self._tree()
+        for name, cmd, extra in self.VERBS:
+            with self.subTest(verb=name):
+                before = self._snapshot()
+                data = self._json(cmd, **extra)
+                self.assertEqual(self._snapshot(), before)
+                paths = [f["path"] for f in data["files"]]
+                self.assertEqual(paths, sorted(paths))
+                self.assertTrue(paths)
+                for f in data["files"]:
+                    self.assertEqual(sorted(f), ["diff", "old_path", "path"])
+                    self.assertIsNone(f["old_path"])
+                    self.assertTrue(f["diff"].startswith("--- a/{0}\n+++ b/{0}\n".format(f["path"])))
+                self.assertNotIn("a/none.md", paths)
+                self.assertNotIn("a/bad.md", paths)
+
+    def test_text_mode_prints_the_json_diffs_in_path_order_and_the_summary(self):
+        self._tree()
+        data = self._json(okf_tags.cmd_merge_tags, tags=["alpha"], into="omega")
+        out = self._verb(okf_tags.cmd_merge_tags, apply=False, tags=["alpha"], into="omega")
+        self.assertEqual([f["path"] for f in data["files"]], ["a/x.md", "a/y.md", "b/z.md"])
+        positions = [out.index(f["diff"]) for f in data["files"]]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("merge-tags: 3 file(s) would rewrite, 2 unparseable", out)
+
+    def test_unparseable_files_are_reported_and_kept_out_of_the_plan(self):
+        self._tree()
+        data = self._json(okf_tags.cmd_merge_tags, tags=["alpha"], into="omega")
+        self.assertEqual(data["unparseable"], ["a/bad.md", "a/odd.md"])
+        out = self._verb(okf_tags.cmd_merge_tags, apply=False, tags=["alpha"], into="omega")
+        self.assertIn("unparseable    a/odd.md", out)
+        self.assertNotIn("+++ b/a/odd.md", out)
+
+    def test_apply_writes_exactly_the_planned_texts(self):
+        self._tree()
+        for name, cmd, extra in self.VERBS:
+            with self.subTest(verb=name):
+                self._tree()
+                before = self._snapshot()
+                plan = self._json(cmd, **extra)["files"]
+                applied = self._json(cmd, apply=True, **extra)["files"]
+                self.assertEqual(applied, plan)
+                after = self._snapshot()
+                changed = sorted(k for k in after if after[k] != before[k])
+                self.assertEqual(changed, [f["path"] for f in plan])
+
+    def test_a_crlf_file_shows_its_line_end_change_and_an_invalid_utf8_file_is_left_alone(self):
+        crlf = self._w("c/crlf.md", "x")
+        with open(crlf, "wb") as f:
+            f.write(b"---\r\ntype: Note\r\ntags: [alpha]\r\n---\r\nbody\r\n")
+        bad = os.path.join(self.tmp, "c/latin.md")
+        with open(bad, "wb") as f:
+            f.write(b"---\ntype: Note\ntags: [alpha]\n---\ncaf\xe9\n")
+        data = self._json(okf_tags.cmd_merge_tags, tags=["alpha"], into="omega")
+        self.assertEqual([f["path"] for f in data["files"]], ["c/crlf.md"])
+        self.assertEqual(data["unparseable"], ["c/latin.md"])
+        self.assertIn("\r", data["files"][0]["diff"])  # the old side is the stored text, CRLF kept
+        self._json(okf_tags.cmd_merge_tags, apply=True, tags=["alpha"], into="omega")
+        with open(bad, "rb") as f:
+            self.assertEqual(f.read(), b"---\ntype: Note\ntags: [alpha]\n---\ncaf\xe9\n")
+
+
+@unittest.skipUnless(shutil.which("git"), "git not installed")
+class TagVerbPreviewEqualsGitDiff(TmpTree, unittest.TestCase):
+    """OKFT-guup SC-01 — per file, the preview of a tag verb and the `git diff` after --apply agree on
+    the `---`/`+++` headers and every hunk (git's `diff --git`/`index`/mode lines carry hashes and are
+    excluded)."""
+
+    def _git(self, *argv):
+        env = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null",
+                   HOME=self.tmp, GIT_TERMINAL_PROMPT="0")
+        res = subprocess.run(["git", "-C", self.tmp, "-c", "init.defaultBranch=main", "-c", "user.name=t",
+                              "-c", "user.email=t@e", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
+                             + list(argv), capture_output=True, env=env)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        return res.stdout.decode()  # bytes first: text mode would fold the CRLF the diff must show
+
+    def _git_diff(self, rel):
+        out = self._git("diff", "--no-color", "--no-ext-diff", "--", rel)
+        return out[out.index("--- a/"):]
+
+    def test_preview_equals_git_diff_after_apply(self):
+        long_desc = "description: " + "word " * 30 + "end\n"
+        files = {
+            "kc/a.md": "---\ntype: Note\n" + long_desc + "tags:\n  - alpha\n  - beta   # keep\n---\n\n"
+                       + "body\n" * 30 + "alpha\n",
+            "kc/b.md": "---\ntype: Note\ntags: [alpha, beta]\ngenerated: {by: x}\n---\nno final newline",
+            "kc/sub/c.md": "---\ntype: Note\ntags:\n  - beta\n  - alpha\n  - gamma\n---\n",
+            "kc/d.md": "---\r\ntype: Note\r\ntags: [alpha]\r\n---\r\nbody\r\n",
+        }
+        for name, cmd, extra in TagVerbDiffPreview.VERBS:
+            with self.subTest(verb=name):
+                shutil.rmtree(self.tmp, ignore_errors=True)
+                os.makedirs(self.tmp)
+                for rel, text in files.items():
+                    ap = os.path.join(self.tmp, rel)
+                    os.makedirs(os.path.dirname(ap), exist_ok=True)
+                    with open(ap, "wb") as f:
+                        f.write(text.encode())
+                self._git("init", "-q")
+                self._git("add", "-A")
+                self._git("commit", "-qm", "base")
+                run = lambda apply: cmd(self.tmp, types.SimpleNamespace(where=None, apply=apply, json=True, **extra))
+                preview = run(False)["files"]
+                self.assertEqual(self._git("status", "--porcelain"), "")
+                self.assertTrue(preview)
+                run(True)
+                self.assertEqual(sorted(self._git("diff", "--name-only").split()), [f["path"] for f in preview])
+                for f in preview:
+                    self.assertEqual(f["diff"], self._git_diff(f["path"]), f["path"])
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import hashlib
 import os
 import sys
 from okf.errors import OkfError
+from okf.diffs import unified_diffs
 
 from okf.catalogue import (
     CANON_END, CANON_OPEN_RE, SYNC_BODY, SYNC_END, SYNC_OPEN_LIT, SYNC_OPEN_RE, iter_all_md,
@@ -252,18 +253,22 @@ def cmd_sync_insert(root, args):
         raise OkfError("invalid_input", message)
     block = render_sync_block(args.block_id, source, payload)
     new_body = body.rstrip("\n") + "\n\n" + block + "\n"
+    new_text = head + new_body
+    files = unified_diffs([(consumer_rel, text, new_text)])
     result = {"applied": bool(args.apply), "consumer": consumer_rel, "source": source,
-              "id": args.block_id}
-    if not args.apply:
-        if not getattr(args, "json", False):
-            print("would insert    {}   {}#{}".format(
-                consumer_rel, source, args.block_id))
+              "id": args.block_id, "files": files}
+    as_json = getattr(args, "json", False)
+    if not as_json:
+        for entry in files:
+            print(entry["diff"], end="")
+    if args.apply:
+        write_file_verbatim(cap, new_text)
+    if not as_json:
+        if args.apply:
+            print("inserted        {}   {}#{}".format(consumer_rel, source, args.block_id))
+        else:
+            print("would insert    {}   {}#{}".format(consumer_rel, source, args.block_id))
             print("sync-insert (dry-run): re-run with --apply.")
-        return result
-    write_file_verbatim(cap, head + new_body)
-    if not getattr(args, "json", False):
-        print("inserted        {}   {}#{}".format(
-            consumer_rel, source, args.block_id))
     return result
 
 
@@ -317,7 +322,7 @@ def cmd_sync_update(root, args):
             refused.append((rel, rec, status))
             continue
         per_file.setdefault(ap, []).append((rel, rec))
-    updated = []
+    updated, plan = [], []
     for ap, recs in per_file.items():
         text = read_file_verbatim(ap)
         if text is None:
@@ -334,14 +339,19 @@ def cmd_sync_update(root, args):
             last = b
             updated.append((rel, rec))
         out.append(body[last:])
-        if args.apply:
-            write_file_verbatim(ap, head + "".join(out))
-    result = {"applied": bool(args.apply),
+        plan.append((os.path.relpath(ap, root).replace(os.sep, "/"), text, head + "".join(out)))
+    files = unified_diffs(plan)
+    if args.apply:
+        for rel, _old, new in plan:
+            write_file_verbatim(os.path.join(root, rel), new)
+    result = {"applied": bool(args.apply), "files": files,
               "updated": [_block_row(rel, rec) for rel, rec in updated],
               "refused": [_block_row(rel, rec) for rel, rec, _status in refused],
               "unresolvable": [dict(_block_row(rel, rec), status=status)
                                for rel, rec, status in unresolvable]}
     if not getattr(args, "json", False):
+        for entry in files:
+            print(entry["diff"], end="")
         for rel, rec in updated:
             print("{:<14} {}   {}".format(verb, rel, _sync_addr(rec)))
         for rel, rec, _status in refused:

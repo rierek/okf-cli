@@ -275,7 +275,8 @@ def load_ctx(root, slug):
     return {"slug": slug, "description": desc, "entries": entries, "problems": problems}
 
 
-def save_ctx(root, ctx):
+def ctx_text(ctx, existing):
+    """The full text `save_ctx` writes for `ctx` over the file text `existing` (None: a new file)."""
     es = ctx["entries"]
     pf = [dict(e) for e in es if e["mode"] == "pflicht"]
     rest = [dict(e) for e in es if e["mode"] != "pflicht"]
@@ -283,10 +284,14 @@ def save_ctx(root, ctx):
         e["pos"] = i
     for e in rest:
         e["pos"] = None
+    return render_ctx(ctx["slug"], ctx["description"], pf + rest, existing)
+
+
+def save_ctx(root, ctx):
     os.makedirs(ctx_dir(root), exist_ok=True)
     path = ctx_file(root, ctx["slug"])
     existing = read_file(path) if os.path.isfile(path) else None
-    write_file(path, render_ctx(ctx["slug"], ctx["description"], pf + rest, existing))
+    write_file(path, ctx_text(ctx, existing))
     idx = os.path.join(ctx_dir(root), "index.md")
     if not os.path.exists(idx):
         write_file(idx, _CTX_INDEX_SKELETON)
@@ -507,6 +512,24 @@ def read_file(ap):
         return f.read()
 
 
+class RealFs:
+    """The catalogue tree as it is on disk. The index renderers and `plan_reindex` read the tree
+    through one of these, so a planner can hand them a view of a tree that does not exist yet."""
+    listdir = staticmethod(os.listdir)
+    isfile = staticmethod(os.path.isfile)
+    isdir = staticmethod(os.path.isdir)
+    walk = staticmethod(os.walk)
+
+    def read(self, ap):
+        return read_file(ap)
+
+    def read_verbatim(self, ap):
+        return read_file_verbatim(ap)
+
+
+REAL_FS = RealFs()
+
+
 def scalar_text(value):
     """A scalar as the text the author wrote: a string as is, nothing as empty, a typed scalar
     (bool, number, date, timestamp) in its YAML form, so `true` stays `true`, not `True`."""
@@ -546,14 +569,14 @@ def fm_meta(data, stem):
     return fm_text(data, "type"), fm_text(data, "title") or stem, fm_text(data, "description")
 
 
-def meta_and_fm(ap):
+def meta_and_fm(ap, fs=REAL_FS):
     """((type, title, description), frontmatter mapping) of one concept file, read once."""
-    fm = read_frontmatter(read_file(ap)).data
+    fm = read_frontmatter(fs.read(ap)).data
     return fm_meta(fm, os.path.basename(ap)[:-3]), fm
 
 
-def meta_of(ap):
-    return meta_and_fm(ap)[0]
+def meta_of(ap, fs=REAL_FS):
+    return meta_and_fm(ap, fs)[0]
 
 
 def all_tags(root):
@@ -675,28 +698,28 @@ def _collapse(s):
     return re.sub(r"\s+", " ", s or "").strip()
 
 
-def list_dir_concepts(dirpath):
+def list_dir_concepts(dirpath, fs=REAL_FS):
     """(title, slug, description) for non-reserved .md directly in dirpath, by title."""
     out = []
-    for fn in os.listdir(dirpath):
+    for fn in fs.listdir(dirpath):
         if not fn.endswith(".md") or fn.lower() in RESERVED:
             continue
         ap = os.path.join(dirpath, fn)
-        if not os.path.isfile(ap):
+        if not fs.isfile(ap):
             continue
-        _, title, desc = meta_of(ap)
+        _, title, desc = meta_of(ap, fs)
         out.append((title, fn[:-3], desc))
     out.sort(key=lambda x: x[0].casefold())
     return out
 
 
-def index_h1_and_desc(ap):
+def index_h1_and_desc(ap, fs=REAL_FS):
     """First H1 text and the intro paragraph of an index.md (no frontmatter).
 
     The intro is the first non-empty line after the H1 *only if* it is a real
     paragraph; if the body leads with a heading/list/comment there is no intro.
     """
-    body = read_frontmatter(read_file(ap)).body
+    body = read_frontmatter(fs.read(ap)).body
     lines = body.splitlines()
     heads = list(iter_headings(body))
     h1 = next((text for level, text, _line in heads if level == 1), None)
@@ -714,18 +737,18 @@ def index_h1_and_desc(ap):
     return h1, desc
 
 
-def list_subdirs_with_index(dirpath):
+def list_subdirs_with_index(dirpath, fs=REAL_FS):
     """(title, subdir_name, description) for immediate subdirs containing index.md."""
     out = []
-    for name in sorted(os.listdir(dirpath)):
+    for name in sorted(fs.listdir(dirpath)):
         p = os.path.join(dirpath, name)
-        if not os.path.isdir(p) or name.startswith(".") or name == "assets":
+        if not fs.isdir(p) or name.startswith(".") or name == "assets":
             continue
-        idx_name = _find_reserved_name(os.listdir(p))
+        idx_name = _find_reserved_name(fs.listdir(p))
         if not idx_name:
             continue
         idx = os.path.join(p, idx_name)
-        h1, desc = index_h1_and_desc(idx)
+        h1, desc = index_h1_and_desc(idx, fs)
         out.append((h1 or name, name, desc))
     out.sort(key=lambda x: x[0].casefold())
     return out
@@ -752,7 +775,7 @@ def render_block(subdirs, concepts, dir_rel=""):
     return "\n".join(lines)
 
 
-def render_tree(dirpath, root, depth=0):
+def render_tree(dirpath, root, depth=0, fs=REAL_FS):
     """Recursive variant of render_block for a managed `index-map.md`.
 
     `index.md` lists one level; `index-map.md` lists the whole subtree below
@@ -765,26 +788,26 @@ def render_tree(dirpath, root, depth=0):
     dir_rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
     pad = "  " * depth
     lines = []
-    for title, name, _desc in list_subdirs_with_index(dirpath):
+    for title, name, _desc in list_subdirs_with_index(dirpath, fs):
         sub = os.path.join(dirpath, name)
         head = render_block([(title, name, _desc)], [], dir_rel)
         lines.append(pad + head)
-        child = render_tree(sub, root, depth + 1)
+        child = render_tree(sub, root, depth + 1, fs)
         if child:
             lines.append(child)
-    body = render_block([], list_dir_concepts(dirpath), dir_rel)
+    body = render_block([], list_dir_concepts(dirpath, fs), dir_rel)
     if body:
         lines.extend(pad + ln for ln in body.split("\n"))
     return "\n".join(lines)
 
 
-def managed_block_for(dirpath, root, idx_name):
+def managed_block_for(dirpath, root, idx_name, fs=REAL_FS):
     """The generated block for one reserved index file: recursive full tree
     for `index-map.md`, single level for every other managed index."""
     if idx_name.lower() == "index-map.md":
-        return render_tree(dirpath, root)
+        return render_tree(dirpath, root, fs=fs)
     dir_rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
-    return render_block(list_subdirs_with_index(dirpath), list_dir_concepts(dirpath), dir_rel)
+    return render_block(list_subdirs_with_index(dirpath, fs), list_dir_concepts(dirpath, fs), dir_rel)
 
 
 def replace_managed_block(text, block):

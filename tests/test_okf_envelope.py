@@ -594,11 +594,13 @@ class WriteFixture(Fixture):
 class TagWrites(WriteFixture):
     def test_merge_preview_then_apply(self):
         preview = self.ok("merge-tags", "alpha", "--into", "omega")["data"]
-        self.assertEqual(preview, {"applied": False, "files": ["kc-a/alpha.md", "kc-a/inline.md"],
-                                   "unparseable": [], "from": ["alpha"], "into": "omega"})
+        self.assertEqual({k: v for k, v in preview.items() if k != "files"},
+                         {"applied": False, "unparseable": [], "from": ["alpha"], "into": "omega"})
+        paths = [f["path"] for f in preview["files"]]
+        self.assertEqual(paths, ["kc-a/alpha.md", "kc-a/inline.md"])
         self.assertIn("alpha", self.read("kc-a/alpha.md"))
         text = self.text("merge-tags", "alpha", "--into", "omega")
-        self.assertEqual(re.findall(r"^would rewrite\s+(\S+)$", text, re.M), preview["files"])
+        self.assertEqual(re.findall(r"^\+\+\+ b/(\S+)$", text, re.M), paths)
         applied = self.ok("merge-tags", "alpha", "--into", "omega", "--apply")["data"]
         self.assertEqual((applied["applied"], applied["files"]), (True, preview["files"]))
         self.assertIn("omega", self.read("kc-a/alpha.md"))
@@ -608,27 +610,31 @@ class TagWrites(WriteFixture):
     def test_merge_reports_a_tags_field_it_cannot_rewrite(self):
         self._w("kc-a/odd.md", "---\ntype: Note\ntitle: Odd\ndescription: d\ntags: alpha, beta\n---\n\n# Odd\n")
         data = self.ok("merge-tags", "alpha", "--into", "omega")["data"]
-        self.assertEqual((data["files"], data["unparseable"]), (["kc-a/alpha.md", "kc-a/inline.md"], ["kc-a/odd.md"]))
+        self.assertEqual(([f["path"] for f in data["files"]], data["unparseable"]),
+                         (["kc-a/alpha.md", "kc-a/inline.md"], ["kc-a/odd.md"]))
         self.assertIn("unparseable    kc-a/odd.md", self.text("merge-tags", "alpha", "--into", "omega"))
 
     def test_remove_preview_then_apply_names_the_emptied_files(self):
         preview = self.ok("remove-tags", "beta", "gamma")["data"]
-        self.assertEqual(preview, {"applied": False, "files": ["kc-a/beta.md"], "emptied": ["kc-a/beta.md"],
-                                   "unparseable": [], "removed": ["beta", "gamma"]})
+        self.assertEqual([f["path"] for f in preview["files"]], ["kc-a/beta.md"])
+        self.assertEqual({k: v for k, v in preview.items() if k != "files"},
+                         {"applied": False, "emptied": ["kc-a/beta.md"], "unparseable": [], "removed": ["beta", "gamma"]})
         self.assertIn("tags:", self.read("kc-a/beta.md"))
         applied = self.ok("remove-tags", "beta", "gamma", "--apply")["data"]
         self.assertEqual((applied["applied"], applied["emptied"]), (True, ["kc-a/beta.md"]))
         self.assertNotIn("tags:", self.read("kc-a/beta.md"))
         partial = self.ok("remove-tags", "alpha")["data"]
-        self.assertEqual((partial["files"], partial["emptied"]),
+        self.assertEqual(([f["path"] for f in partial["files"]], partial["emptied"]),
                          (["kc-a/alpha.md", "kc-a/inline.md"], ["kc-a/alpha.md"]))
 
     def test_normalize_rewrites_an_inline_list(self):
         preview = self.ok("normalize-tags")["data"]
-        self.assertEqual(preview, {"applied": False, "files": ["kc-a/inline.md"], "unparseable": []})
+        self.assertEqual([f["path"] for f in preview["files"]], ["kc-a/inline.md"])
+        self.assertEqual((preview["applied"], preview["unparseable"]), (False, []))
         self.assertIn("tags: [alpha, zeta]", self.read("kc-a/inline.md"))
-        self.assertEqual(self.ok("normalize-tags", "--apply")["data"],
-                         {"applied": True, "files": ["kc-a/inline.md"], "unparseable": []})
+        applied = self.ok("normalize-tags", "--apply")["data"]
+        self.assertEqual((applied["applied"], [f["path"] for f in applied["files"]], applied["unparseable"]),
+                         (True, ["kc-a/inline.md"], []))
         self.assertIn("tags:\n  - alpha\n  - zeta", self.read("kc-a/inline.md"))
 
     def test_where_limits_the_rewrite(self):
@@ -686,11 +692,13 @@ class IndexBuilds(WriteFixture):
 class LinkFixes(WriteFixture):
     def test_fix_crosslinks_preview_then_apply(self):
         preview = self.ok("fix-crosslinks", "--check")["data"]
-        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/inline.md", "links": 1}],
-                                   "unresolved": []})
+        self.assertEqual([(f["path"], f["old_path"]) for f in preview["files"]], [("kc-a/inline.md", None)])
+        self.assertTrue(preview["files"][0]["diff"].startswith("--- a/kc-a/inline.md\n+++ b/kc-a/inline.md\n"))
+        self.assertEqual((preview["applied"], preview["unresolved"], preview["skipped"]), (False, [], []))
         self.assertIn("](beta.md)", self.read("kc-a/inline.md"))
         text = self.text("fix-crosslinks", "--check")
-        self.assertIn("would rewrite  kc-a/inline.md  (1 link(s))", text)
+        self.assertIn("--- a/kc-a/inline.md\n+++ b/kc-a/inline.md\n", text)
+        self.assertIn("fix-crosslinks: 1 file(s) would rewrite, 0 unresolved link(s)", text)
         applied = self.ok("fix-crosslinks")["data"]
         self.assertEqual((applied["applied"], applied["files"]), (True, preview["files"]))
         self.assertIn("](/kc-a/beta.md)", self.read("kc-a/inline.md"))
@@ -702,7 +710,9 @@ class LinkFixes(WriteFixture):
 
     def test_fix_xml_tags_preview_then_apply(self):
         preview = self.ok("fix-xml-tags", "--check")["data"]
-        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/inline.md", "chains": 1}]})
+        self.assertEqual([(f["path"], f["old_path"]) for f in preview["files"]], [("kc-a/inline.md", None)])
+        self.assertIn("+", preview["files"][0]["diff"])
+        self.assertEqual((preview["applied"], preview["skipped"]), (False, []))
         self.assertIn(" <tag> ", self.read("kc-a/inline.md"))
         self.assertEqual(self.ok("fix-xml-tags")["data"]["applied"], True)
         self.assertIn("`<tag>`", self.read("kc-a/inline.md"))
@@ -715,7 +725,8 @@ class LinkFixes(WriteFixture):
     def test_rewrite_path_preview_then_apply(self):
         self._w("kc-a/refs.md", "---\ntype: Note\ntitle: R\ndescription: d\n---\n\n# R\n\nsee old/place.md twice: old/place.md\n")
         preview = self.ok("rewrite-path", "old/place.md", "new/place.md", "--check")["data"]
-        self.assertEqual(preview, {"applied": False, "files": [{"path": "kc-a/refs.md", "count": 2}]})
+        self.assertEqual([(f["path"], f["old_path"]) for f in preview["files"]], [("kc-a/refs.md", None)])
+        self.assertEqual((preview["applied"], preview["skipped"]), (False, []))
         self.assertIn("old/place.md", self.read("kc-a/refs.md"))
         self.assertEqual(self.ok("rewrite-path", "old/place.md", "new/place.md")["data"]["applied"], True)
         self.assertNotIn("old/place.md", self.read("kc-a/refs.md"))
@@ -820,6 +831,7 @@ class SyncWrites(WriteFixture):
     def test_insert_preview_then_apply(self):
         argv = ("sync-insert", "kc-a/beta", "kc-gov/ownership", "ownership-rule")
         preview = self.ok(*argv)["data"]
+        self.assertEqual([(f["path"], f["old_path"]) for f in preview.pop("files")], [("kc-a/beta.md", None)])
         self.assertEqual(preview, {"applied": False, "consumer": "kc-a/beta.md",
                                    "source": "/kc-gov/ownership.md", "id": "ownership-rule"})
         self.assertNotIn("okf:canon", self.read("kc-a/beta.md"))
@@ -840,6 +852,7 @@ class SyncWrites(WriteFixture):
         self._outdate()
         preview = self.ok("sync-update")["data"]
         row = {"consumer": "kc-a/beta.md", "source": "/kc-gov/ownership.md", "id": "ownership-rule"}
+        self.assertEqual([f["path"] for f in preview.pop("files")], ["kc-a/beta.md"])
         self.assertEqual(preview, {"applied": False, "updated": [row], "refused": [], "unresolvable": []})
         self.assertIn("Every statement", self.read("kc-a/beta.md"))
         self.assertIn("would update   kc-a/beta.md", self.text("sync-update"))
@@ -851,7 +864,8 @@ class SyncWrites(WriteFixture):
         self._w("kc-a/beta.md", self.read("kc-a/beta.md").replace("Every statement has one owner.", "Local edit."))
         env = self.fails("drift", 5, "sync-update", "--apply")
         row = {"consumer": "kc-a/beta.md", "source": "/kc-gov/ownership.md", "id": "ownership-rule"}
-        self.assertEqual(env["data"], {"applied": True, "updated": [], "refused": [row], "unresolvable": []})
+        self.assertEqual(env["data"], {"applied": True, "files": [], "updated": [], "refused": [row],
+                                       "unresolvable": []})
         self.assertIn("Local edit.", self.read("kc-a/beta.md"))
         forced = self.ok("sync-update", "--apply", "--force")["data"]
         self.assertEqual(forced["updated"], [row])
