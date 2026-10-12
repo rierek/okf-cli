@@ -11,9 +11,10 @@ from okf.output import _add_output
 
 from okf import catalogue
 from okf.catalogue import (
-    TAG_DESC_MAX, all_tags, flow_tags, iter_concepts, load_tags, read_file, read_frontmatter, register_tags,
-    render_frontmatter, resolve_scopes, scalar_text, tags_of, write_file,
+    TAG_DESC_MAX, all_tags, flow_tags, iter_concepts, load_tags, read_file, read_file_verbatim, read_frontmatter,
+    register_tags, render_frontmatter, resolve_scopes, scalar_text, tags_of, write_file_verbatim,
 )
+from okf.diffs import unified_diffs
 from okf.find_filters import compile_where
 from okf.parser_support import _add_filters, _complete_tags, _sub
 
@@ -22,20 +23,24 @@ _NOT_A_LIST = "tags field not in inline/block form"
 
 
 def _selected_concepts(root, filters):
-    """(path, relative path, Frontmatter) of every concept the --where expression selects; without an
+    """(path, relative path, Frontmatter, stored text) of every concept the --where expression selects; without an
     expression every concept is selected. prune_staging=False (OKFT-oe8t Review D02): the write verbs
     must reach staging content too, or a tag change silently leaves the old tag behind there."""
     for _bundle, bp in resolve_scopes(root, None, filters.include_archive):
         for _cid, ap in iter_concepts(bp, prune_staging=False):
             fm = read_frontmatter(read_file(ap))
+            stored = read_file_verbatim(ap)  # None: not valid UTF-8, a rewrite would corrupt it
             rel = os.path.relpath(ap, root).replace(os.sep, "/")
             if filters and not filters.matches_loaded(rel[:-3] if rel.endswith(".md") else rel, fm.data):
                 continue
-            yield ap, rel, fm
+            yield ap, rel, fm, stored
 
 
-def _unparseable_reason(fm):
-    """Why a write verb leaves the file alone when its frontmatter does not parse, else None."""
+def _unparseable_reason(fm, stored):
+    """Why a write verb leaves the file alone when its frontmatter does not parse or the file is not
+    valid UTF-8, else None."""
+    if stored is None:
+        return "file is not valid UTF-8"
     if fm.head and fm.data is None:
         return "frontmatter does not parse: {}".format(fm.error)
 
@@ -61,19 +66,30 @@ def _retag(data, rename):
     return bool(edits)
 
 
-def _print_write_result(verb, touched, unparseable):
-    for rel in touched:
-        print("{:<14} {}".format(verb, rel))
-    for rel, reason in unparseable.items():
-        print("unparseable    {}  ({} — skipped)".format(rel, reason))
+def _write_result(root, args, plan, unparseable, result):
+    """Render the plan of (rel path, stored text, new text) as unified diffs, write exactly the new
+    texts on --apply, and return `result` with `files` (the diffs) or print the text report.
+    Returns (result, verb, files)."""
+    files = unified_diffs(plan)
+    if args.apply:
+        for rel, _old, new in plan:
+            write_file_verbatim(os.path.join(root, rel), new)
+    verb = "rewrote" if args.apply else "would rewrite"
+    result["files"] = files
+    if not getattr(args, "json", False):
+        for entry in files:
+            print(entry["diff"], end="")
+        for rel, reason in unparseable.items():
+            print("unparseable    {}  ({} — skipped)".format(rel, reason))
+    return result, verb, len(files)
 
 
 def cmd_merge_tags(root, args):
     filters = compile_where(args.where)
     sources = set(args.tags)
-    touched, unparseable = [], {}
-    for ap, rel, fm in _selected_concepts(root, filters):
-        reason = _unparseable_reason(fm)
+    plan, unparseable = [], {}
+    for ap, rel, fm, stored in _selected_concepts(root, filters):
+        reason = _unparseable_reason(fm, stored)
         if reason:
             unparseable[rel] = reason
             continue
@@ -91,17 +107,14 @@ def cmd_merge_tags(root, args):
         if changed is None:
             unparseable[rel] = _NOT_A_LIST
         elif changed:
-            touched.append(rel)
-            if args.apply:
-                write_file(ap, render_frontmatter(fm))
-    result = {"applied": bool(args.apply), "files": touched, "unparseable": list(unparseable),
-              "from": sorted(sources), "into": args.into}
+            plan.append((rel, stored, render_frontmatter(fm)))
+    result, verb, n = _write_result(root, args, plan, unparseable, {
+        "applied": bool(args.apply), "unparseable": list(unparseable),
+        "from": sorted(sources), "into": args.into})
     if getattr(args, "json", False):
         return result
-    verb = "rewrote" if args.apply else "would rewrite"
-    _print_write_result(verb, touched, unparseable)
     print("merge-tags: {} file(s) {}, {} unparseable — {} -> {}".format(
-        len(touched), verb, len(unparseable), ", ".join(sorted(sources)), args.into))
+        n, verb, len(unparseable), ", ".join(sorted(sources)), args.into))
 
 
 def cmd_remove_tags(root, args):
@@ -110,9 +123,9 @@ def cmd_remove_tags(root, args):
     Emptying the tag list strips the whole `tags:` field (no dangling key)."""
     filters = compile_where(args.where)
     targets = set(args.tags)
-    touched, emptied, unparseable = [], [], {}
-    for ap, rel, fm in _selected_concepts(root, filters):
-        reason = _unparseable_reason(fm)
+    plan, emptied, unparseable = [], [], {}
+    for ap, rel, fm, stored in _selected_concepts(root, filters):
+        reason = _unparseable_reason(fm, stored)
         if reason:
             unparseable[rel] = reason
             continue
@@ -125,17 +138,14 @@ def cmd_remove_tags(root, args):
         if not fm.data["tags"]:
             del fm.data["tags"]
             emptied.append(rel)
-        touched.append(rel)
-        if args.apply:
-            write_file(ap, render_frontmatter(fm))
-    result = {"applied": bool(args.apply), "files": touched, "emptied": emptied,
-              "unparseable": list(unparseable), "removed": sorted(targets)}
+        plan.append((rel, stored, render_frontmatter(fm)))
+    result, verb, n = _write_result(root, args, plan, unparseable, {
+        "applied": bool(args.apply), "emptied": emptied,
+        "unparseable": list(unparseable), "removed": sorted(targets)})
     if getattr(args, "json", False):
         return result
-    verb = "rewrote" if args.apply else "would rewrite"
-    _print_write_result(verb, touched, unparseable)
     print("remove-tags: {} file(s) {}, {} emptied, {} unparseable — removed {}".format(
-        len(touched), verb, len(emptied), len(unparseable), ", ".join(sorted(targets))))
+        n, verb, len(emptied), len(unparseable), ", ".join(sorted(targets))))
 
 
 def cmd_normalize_tags(root, args):
@@ -143,9 +153,9 @@ def cmd_normalize_tags(root, args):
     catalogue), not an OKF spec requirement: both forms stay valid OKF. A file whose frontmatter does
     not parse is never written."""
     filters = compile_where(args.where)
-    touched, unparseable = [], {}
-    for ap, rel, fm in _selected_concepts(root, filters):
-        reason = _unparseable_reason(fm)
+    plan, unparseable = [], {}
+    for ap, rel, fm, stored in _selected_concepts(root, filters):
+        reason = _unparseable_reason(fm, stored)
         if reason:
             unparseable[rel] = reason
             continue
@@ -153,15 +163,12 @@ def cmd_normalize_tags(root, args):
         if tags is None:
             continue
         tags.fa.set_block_style()
-        touched.append(rel)
-        if args.apply:
-            write_file(ap, render_frontmatter(fm))
-    result = {"applied": bool(args.apply), "files": touched, "unparseable": list(unparseable)}
+        plan.append((rel, stored, render_frontmatter(fm)))
+    result, verb, n = _write_result(root, args, plan, unparseable, {
+        "applied": bool(args.apply), "unparseable": list(unparseable)})
     if getattr(args, "json", False):
         return result
-    verb = "rewrote" if args.apply else "would rewrite"
-    _print_write_result(verb, touched, unparseable)
-    print("normalize-tags: {} file(s) {}, {} unparseable".format(len(touched), verb, len(unparseable)))
+    print("normalize-tags: {} file(s) {}, {} unparseable".format(n, verb, len(unparseable)))
 
 
 def fuzzy_matches(query, candidates, limit=8):

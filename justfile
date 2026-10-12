@@ -1,4 +1,7 @@
 set shell := ["bash", "-uc"]
+# Container-Lebenszyklus just wt start|merge|finish -- eine Quelle in den dotfiles.
+# mod?: fehlt die Datei (CI, andere Rechner), entfaellt nur das Modul.
+mod? wt '~/.config/just/wt.just'
 
 # Verzeichnis der Test- und Quelldateien
 cli_dir := "cli"

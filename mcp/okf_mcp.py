@@ -251,8 +251,8 @@ def _register(server):
                    force: bool = False) -> dict:
         """Move a concept and keep every reference intact: rewrites inbound links
         repo-wide plus the file's own outbound links on a bundle change, then
-        reindexes affected bundles. Defaults to a dry-run preview; pass apply=True
-        to perform the move (git mv, staged). Reference-integrity step b."""
+        reindexes affected bundles. Defaults to a dry-run preview (data.files: one
+        unified diff per affected file); pass apply=True to perform the move (git mv, staged). Reference-integrity step b."""
         return run_okf(root, "rename", {"old": old, "new": new, "apply": apply, "force": force})
 
     @server.tool()

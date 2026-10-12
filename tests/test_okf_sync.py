@@ -3,7 +3,11 @@
 the sync-insert, sync-status and sync-update commands. unittest.
 Run: just test tests.test_okf_sync -v
 """
+import argparse
 import os
+import re
+import shutil
+import subprocess
 import sys
 import unittest
 
@@ -15,6 +19,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from okf import catalogue as okf_catalogue
+from okf import diffs as okf_diffs
 from okf import sync as okf_sync
 from okf.errors import EXIT_CODES
 from tests.okf_testkit import SyncFixtureMixin
@@ -248,6 +253,107 @@ class SyncOwnerInStagingDir(SyncFixtureMixin, unittest.TestCase):
         self.assertIn("updated", out)
         self.assertEqual(self._payload_of("kc-proj/setup.md").strip(),
                          "Neuer Kanon.")
+
+
+class SyncVerbDiffPreview(SyncFixtureMixin, unittest.TestCase):
+    """OKFT-9xan — sync-insert and sync-update preview one unified diff per consumer file (text and
+    `data.files`), keep the dry run byte-identical and write exactly the previewed texts on --apply."""
+
+    def _json(self, fn, **kw):
+        base = dict(consumer="kc-proj/setup", concept="kc-gov/ownership", block_id="ownership-rule",
+                    target=None, source=None, block=None, force=False, apply=False, json=True)
+        base.update(kw)
+        try:
+            return fn(self.tmp, argparse.Namespace(**base))
+        except okf_sync.OkfError as e:
+            return e.result
+
+    def _consumer2(self):
+        self._w("kc-proj/other.md", "---\ntype: Runbook\ndescription: d\n---\n\n# Other\n")
+        self._insert(consumer="kc-proj/other")
+
+    def test_insert_preview_is_one_diff_and_writes_nothing(self):
+        before = self._r("kc-proj/setup.md")
+        data = self._json(okf_sync.cmd_sync_insert)
+        self.assertEqual([f["path"] for f in data["files"]], ["kc-proj/setup.md"])
+        self.assertIsNone(data["files"][0]["old_path"])
+        self.assertEqual(self._r("kc-proj/setup.md"), before)
+        out, _ = self._insert(apply=False)
+        self.assertEqual(out.split("would insert")[0], data["files"][0]["diff"])
+        self.assertTrue(out.startswith("--- a/kc-proj/setup.md\n+++ b/kc-proj/setup.md\n"))
+
+    def test_insert_apply_writes_the_previewed_text(self):
+        data = self._json(okf_sync.cmd_sync_insert)
+        self._insert()
+        new = self._r("kc-proj/setup.md")
+        self.assertIn("okf:sync", new)
+        self.assertEqual(data["files"], okf_diffs.unified_diffs([("kc-proj/setup.md", self._base, new)]))
+
+    def test_update_preview_orders_files_by_path_and_skips_refused_blocks(self):
+        self._insert()
+        self._consumer2()
+        self._w("kc-gov/ownership.md", self._r("kc-gov/ownership.md").replace(self.OWNER_PAYLOAD, "Neu.\n"))
+        self._w("kc-proj/setup.md", self._r("kc-proj/setup.md").replace(self.OWNER_PAYLOAD, "Lokal.\n"))
+        snap = {r: self._r(r) for r in ("kc-proj/setup.md", "kc-proj/other.md")}
+        data = self._json(okf_sync.cmd_sync_update)
+        self.assertEqual([f["path"] for f in data["files"]], ["kc-proj/other.md"])
+        self.assertEqual(len(data["refused"]), 1)
+        self.assertEqual({r: self._r(r) for r in snap}, snap)
+        _, code = self._update(apply=True)
+        self.assertEqual(code, EXIT_CODES["drift"])
+        self.assertEqual(self._r("kc-proj/setup.md"), snap["kc-proj/setup.md"])
+        self.assertEqual(okf_diffs.unified_diffs([("kc-proj/other.md", snap["kc-proj/other.md"],
+                                                   self._r("kc-proj/other.md"))]), data["files"])
+
+    def setUp(self):
+        super().setUp()
+        self._base = self._r("kc-proj/setup.md")
+
+
+@unittest.skipUnless(shutil.which("git"), "git not installed")
+class SyncVerbPreviewEqualsGitDiff(SyncFixtureMixin, unittest.TestCase):
+    """OKFT-9xan R-21 — per file, the preview of a sync verb and the `git diff` after --apply agree on
+    the `---`/`+++` headers and every hunk (git's `diff --git`/`index`/mode lines are excluded)."""
+
+    def _git(self, *argv):
+        env = dict(os.environ, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null",
+                   HOME=self.tmp, GIT_TERMINAL_PROMPT="0")
+        res = subprocess.run(["git", "-C", self.tmp, "-c", "init.defaultBranch=main", "-c", "user.name=t",
+                              "-c", "user.email=t@e", "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"]
+                             + list(argv), capture_output=True, env=env)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        return res.stdout.decode()
+
+    def _git_diff(self, rel):
+        out = self._git("diff", "--no-color", "--no-ext-diff", "--", rel)
+        out = out[out.index("--- a/"):]
+        return re.sub(r"(?m)^(@@ [^@]* @@).*$", r"\1", out)  # git appends a function-context hint
+
+    def _check(self, fn, **kw):
+        base = dict(target=None, source=None, block=None, force=False, json=True)
+        base.update(kw)
+        run = lambda apply: fn(self.tmp, argparse.Namespace(apply=apply, **base))
+        self._git("init", "-q")
+        self._git("add", "-A")
+        self._git("commit", "-qm", "base")
+        preview = run(False)["files"]
+        self.assertEqual(self._git("status", "--porcelain"), "")
+        self.assertTrue(preview)
+        run(True)
+        self.assertEqual(sorted(self._git("diff", "--name-only").split()), [f["path"] for f in preview])
+        for f in preview:
+            self.assertEqual(f["diff"], self._git_diff(f["path"]), f["path"])
+
+    def test_sync_insert(self):
+        self._check(okf_sync.cmd_sync_insert, consumer="kc-proj/setup", concept="kc-gov/ownership",
+                    block_id="ownership-rule")
+
+    def test_sync_update(self):
+        for name in ("a", "b"):
+            self._w("kc-proj/{}.md".format(name), "---\ntype: Runbook\ndescription: d\n---\n\nx\n")
+            self._insert(consumer="kc-proj/" + name)
+        self._w("kc-gov/ownership.md", self._r("kc-gov/ownership.md").replace(self.OWNER_PAYLOAD, "Neu.\n"))
+        self._check(okf_sync.cmd_sync_update)
 
 
 if __name__ == "__main__":

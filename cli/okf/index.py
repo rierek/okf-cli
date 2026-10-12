@@ -6,11 +6,12 @@ import os
 import re
 
 from okf import spec
+from okf.diffs import unified_diffs, write_plan
 from okf.errors import OkfError
 from okf.catalogue import (
-    EXEMPT, MARK_END, MARK_START, _collapse, _find_reserved_name, fm_text, index_h1_and_desc,
+    EXEMPT, MARK_END, MARK_START, REAL_FS, _collapse, _find_reserved_name, fm_text, index_h1_and_desc,
     iter_headings, iter_concepts, list_bundles, list_dir_concepts, managed_block_for, meta_and_fm, meta_of, read_file,
-    read_frontmatter, replace_managed_block, require_bundle_dir, tags_of, write_file,
+    read_file_verbatim, read_frontmatter, replace_managed_block, require_bundle_dir, tags_of,
 )
 from okf.output import _add_output
 from okf.parser_support import _complete_bundles, _complete_scopes, _sub
@@ -190,27 +191,23 @@ def convert_flat_index(text, force=False):
     return new, "converted"
 
 
-def ensure_markers(dirpath):
-    """Create dirpath/index.md with an empty marker block if it is missing.
-
-    Create-only: an existing marker-less index.md is left untouched — its
-    hand-curated content is migrated by convert_flat_index (via init_indexes),
-    never by a naive append.
-    """
-    idx = os.path.join(dirpath, "index.md")
+def index_stub(dirpath):
+    """Text of the index.md `reindex --init` creates in dirpath when it has none: a title and an
+    empty marker block. An existing marker-less index.md is never touched here — its hand-curated
+    content is migrated by convert_flat_index (via init_indexes), never by a naive append."""
     title = os.path.basename(os.path.abspath(dirpath))
-    if not os.path.isfile(idx):
-        write_file(idx, "# {}\n\n## Contents\n\n{}\n{}\n".format(title, MARK_START, MARK_END))
+    return "# {}\n\n## Contents\n\n{}\n{}\n".format(title, MARK_START, MARK_END)
 
 
-def init_indexes(root, target, dry_run=False, force=False):
-    """Walk the target subtree and migrate each marker-less flat index.md.
+def init_indexes(root, target, force=False):
+    """Walk the target subtree and migrate each marker-less flat index.md. Writes nothing.
 
-    Returns a sorted list of (relpath-from-root, status) from convert_flat_index.
-    Writes converted files only when dry_run is False. With force=True, pure
-    multi-section listings are flattened too (prose/tables still refuse).
+    Returns (results, plan): results = sorted (relpath-from-root, status) from convert_flat_index
+    (status "unreadable" for a file that is not valid UTF-8), plan = [(rel, stored_text,
+    converted_text), ...] for the converted files. With force=True, pure multi-section listings
+    are flattened too (prose/tables still refuse).
     """
-    results = []
+    results, plan = [], []
     for dp, dn, fn in os.walk(target):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
         idx_name = _find_reserved_name(fn)
@@ -218,12 +215,66 @@ def init_indexes(root, target, dry_run=False, force=False):
             continue
         idx = os.path.join(dp, idx_name)
         rel = os.path.relpath(idx, root).replace(os.sep, "/")
-        new, status = convert_flat_index(read_file(idx), force=force)
-        if status == "converted" and not dry_run:
-            write_file(idx, new)
+        text = read_file_verbatim(idx)
+        if text is None:
+            results.append((rel, "unreadable"))
+            continue
+        new, status = convert_flat_index(text, force=force)
+        if status == "converted":
+            plan.append((rel, text, new))
         results.append((rel, status))
     results.sort()
-    return results
+    return results, plan
+
+
+def plan_reindex(root, tp, init=False, force=False, fs=REAL_FS):
+    """The final text of every index file the `reindex` write run changes or creates: with `init`
+    the stub of a missing index.md in tp, then the flat-index conversions, then the refreshed
+    managed blocks, one (rel, stored_text, new_text) entry per file (stored_text None for a
+    created file). Writes nothing. Returns (plan, info); info holds `init` = (results from
+    init_indexes, or None), `stale` = rels whose managed block is out of date, `skipped` = rels
+    without markers, `unreadable` = rels that are not valid UTF-8."""
+    stored, final = {}, {}
+    info = {"init": None, "stale": [], "skipped": [], "unreadable": []}
+    created = None
+    if init:
+        idx = os.path.join(tp, "index.md")
+        if not os.path.isfile(idx):
+            created = os.path.relpath(idx, root).replace(os.sep, "/")
+            stored[created], final[created] = None, index_stub(tp)
+        results, conv = init_indexes(root, tp, force=force)
+        info["init"] = results
+        for rel, old, new in conv:
+            stored[rel], final[rel] = old, new
+    dirs = []
+    for dp, dn, fn in fs.walk(tp):
+        dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
+        if created and dp == tp and "index.md" not in fn:
+            fn = fn + ["index.md"]                    # the write run walks the file it created
+        for name in ("index.md", "index-map.md"):
+            idx_name = _find_reserved_name(fn, name)
+            if idx_name:
+                dirs.append((dp, idx_name))
+    for dp, idx_name in sorted(dirs):
+        idx = os.path.join(dp, idx_name)
+        rel = os.path.relpath(idx, root).replace(os.sep, "/")
+        if rel in final:
+            text = final[rel]
+        else:
+            text = fs.read_verbatim(idx)
+            if text is None:
+                info["unreadable"].append(rel)
+                continue
+        if MARK_START not in text:
+            info["skipped"].append(rel)
+            continue
+        new_text, _ = replace_managed_block(text, managed_block_for(dp, root, idx_name, fs))
+        if new_text == text:
+            continue
+        info["stale"].append(rel)
+        stored.setdefault(rel, text)
+        final[rel] = new_text
+    return [(rel, stored[rel], final[rel]) for rel in final], info
 
 
 def uncovered_index_dirs(root, target):
@@ -252,12 +303,17 @@ def cmd_reindex(root, args):
     if not os.path.isdir(tp):
         raise OkfError("not_found", "not a directory: {}".format(target))
     as_json = getattr(args, "json", False)
-    result = {"applied": not args.check, "init": None, "updated": [], "skipped": [],
-              "stale": [], "uncovered": []}
+    plan, info = plan_reindex(root, tp, init=args.init, force=getattr(args, "force", False))
+    files = unified_diffs(plan)
+    if not args.check:
+        write_plan(root, plan)
+    stale, skipped = info["stale"], info["skipped"]
+    changed = [] if args.check else stale
+    result = {"applied": not args.check, "init": None, "updated": changed, "skipped": skipped,
+              "stale": stale if args.check and not args.init else [], "uncovered": [],
+              "unreadable": info["unreadable"], "files": files}
+    conv = info["init"]
     if args.init:
-        if not args.check:
-            ensure_markers(tp)                    # create-only, named target
-        conv = init_indexes(root, tp, dry_run=args.check, force=getattr(args, "force", False))
         verb = "would convert" if args.check else "converted"
         n_conv = sum(1 for _, s in conv if s == "converted")
         n_skip = sum(1 for _, s in conv if s not in ("converted", "already-managed"))
@@ -265,41 +321,21 @@ def cmd_reindex(root, args):
             "converted": [rel for rel, status in conv if status == "converted"],
             "skipped": [{"path": rel, "reason": status} for rel, status in conv
                         if status not in ("converted", "already-managed")]}
-        if not as_json:
+    if not as_json:
+        for entry in files:
+            print(entry["diff"], end="")
+        for rel in info["unreadable"]:
+            print("skipped (not valid UTF-8)  {}".format(rel))
+        if args.init:
             for rel, status in conv:
                 if status == "converted":
                     print("{:<14} {}".format(verb, rel))
                 elif status != "already-managed":
                     print("{:<14} {}  ({})".format("skipped", rel, status))
             print("init: {} {}, {} skipped".format(n_conv, verb, n_skip))
-        if args.check:
-            return result                       # --init --check = conversion preview only
-    dirs = []
-    for dp, dn, fn in os.walk(tp):
-        dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
-        for name in ("index.md", "index-map.md"):
-            idx_name = _find_reserved_name(fn, name)
-            if idx_name:
-                dirs.append((dp, idx_name))
-    changed, skipped, stale = [], [], []
-    for dp, idx_name in sorted(dirs):
-        idx = os.path.join(dp, idx_name)
-        text = read_file(idx)
-        rel = os.path.relpath(idx, root)
-        if MARK_START not in text:
-            skipped.append(rel)
-            continue
-        block = managed_block_for(dp, root, idx_name)
-        new_text, _ = replace_managed_block(text, block)
-        if new_text == text:
-            continue
-        if args.check:
-            stale.append(rel)
-        else:
-            write_file(idx, new_text)
-            changed.append(rel)
-    result.update(updated=changed, skipped=skipped, stale=stale)
     if args.check:
+        if args.init:
+            return result                       # --init --check = final-text preview of the write run
         un = uncovered_index_dirs(root, tp)
         result["uncovered"] = un
         if not as_json:
