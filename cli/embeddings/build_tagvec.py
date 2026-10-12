@@ -19,7 +19,7 @@ one bundle/prefix) and --concept-limit (cap count) — both exist to keep a
 manual --produce run small and deterministic, not required for normal use.
 
 This is an OFFLINE, NON-runtime-dependency script:
-- `okf-cli.py find` reads the cache(s) at query time; it never produces them.
+- `okf find` reads the cache(s) at query time; it never produces them.
 - Import and argument parsing here NEVER touch the network.
 - Network calls (Ollama for bge-m3, Voyage AI for voyage-3-large) run ONLY
   behind the explicit --produce flag. Without --produce this is a pure
@@ -338,7 +338,7 @@ def build_parser():
         prog="build_tagvec.py",
         description=(
             "Offline producer for .tagvec/tag_vectors.sqlite (emb schema, RET10). "
-            "NOT a runtime dependency of okf-cli.py find — see ../docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md. "
+            "NOT a runtime dependency of okf find — see ../docs/okf-tools-okf/retrieval-architecture/tagvec-producer.md. "
             "Without --produce this only plans the delta; no network, no writes."
         ),
     )

@@ -77,7 +77,7 @@ def link_expr(root, src_abs, dst_abs):
     """Canonical OKF link string FROM src file TO dst target: catalogue-root-
     absolute (`/bundle/subdir/concept.md`). Leading `/` = catalogue root =
     Obsidian vault root, so the same form addresses same- and cross-bundle
-    targets and resolves identically for okf-cli and Obsidian. src_abs is kept
+    targets and resolves identically for okf and Obsidian. src_abs is kept
     in the signature for call-site symmetry with resolve_link_target."""
     dst_abs = os.path.abspath(dst_abs)
     return "/" + os.path.relpath(dst_abs, root).replace(os.sep, "/")
@@ -789,7 +789,7 @@ def perform_rename(root, old_abs, new_abs, apply, force, verb="rename",
                 "run okf ctx check".format(note["slug"], note["problems"]))
     _print_skipped()
     say("reindexed {} index file(s) across: {}".format(reidx_n, ", ".join(plan["bundles"])))
-    say("staged for commit — run `okf-cli.py check` before committing.")
+    say("staged for commit — run `okf check` before committing.")
     result.update(
         moved_with="git mv" if moved else "fs", tracked_in=git_repo or None,
         untracked_reason=None if moved else (git_reason if git_reason else "git binary unavailable"),

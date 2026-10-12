@@ -37,7 +37,7 @@ class GitPreviewMixin:
         self._git(repo, "commit", "-qm", "base")
 
     def json_files(self, root, *argv, ok_codes=(0,)):
-        """`data["files"]` of the real CLI run `okf-cli --root <root> <argv> --json`."""
+        """`data["files"]` of the real CLI run `okf --root <root> <argv> --json`."""
         res = _cli(root, *argv, "--json")
         self.assertIn(res.returncode, ok_codes, res.stderr)
         return json.loads(res.stdout)["data"]["files"]

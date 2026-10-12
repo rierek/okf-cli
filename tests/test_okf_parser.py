@@ -137,7 +137,7 @@ class CommandHelpConformance(unittest.TestCase):
 
 class ShellCompletion(unittest.TestCase):
     """TAB completion, driven through the real cli/okf-cli.py with the env
-    protocol the zsh glue cli/_okf-cli speaks. --root is the raw shell word
+    protocol the zsh glue cli/_okf speaks. --root is the raw shell word
     `~/cat`, as the glue delivers it from an alias."""
 
     def setUp(self):
@@ -159,7 +159,7 @@ class ShellCompletion(unittest.TestCase):
     def _complete(self, words, start=None):
         import subprocess
         import sys
-        line = "okf-cli --root ~/cat " + words
+        line = "okf --root ~/cat " + words
         out = os.path.join(self.tmp, "out")
         env = dict(os.environ, HOME=self.tmp, COMP_LINE=line, COMP_POINT=str(len(line)),
                    _ARGCOMPLETE="1", _ARGCOMPLETE_SHELL="zsh",
@@ -175,7 +175,7 @@ class ShellCompletion(unittest.TestCase):
         return [tuple(e.split(":", 1)) if ":" in e else (e, "") for e in raw.split("\x0b")]
 
     def test_completion_through_uv_run_script_returns_the_same_candidates(self):
-        """R-11 — the zsh glue calls the `okf-cli` wrapper, which starts `uv run --script`. The
+        """R-11 — the zsh glue calls the `okf` wrapper, which starts `uv run --script`. The
         script environment holds argcomplete only when the PEP 723 header declares it; without it
         the call returns no candidates and no error."""
         with mock.patch.dict(os.environ, uv_dirs()):  # kept when _complete swaps HOME for the fixture

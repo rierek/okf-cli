@@ -39,7 +39,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 CLI_PATH = os.path.join(_HERE, "..", "okf-cli.py")
 
-# Generous — a golden row's true rank must not be truncated by okf-cli's
+# Generous — a golden row's true rank must not be truncated by okf's
 # find default of --limit 10 (S3 alone expects rank 4, real-catalogue noise
 # could push further).
 FIND_LIMIT = 50

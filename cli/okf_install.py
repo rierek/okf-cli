@@ -1,6 +1,6 @@
-"""okf-cli install: put okf-cli, its agent skill, its MCP server and TAB
+"""okf install: put okf, its agent skill, its MCP server and TAB
 completion where this machine's coding agents and shells look for them.
-Standard library only; loaded lazily by `okf-cli.py install`, which needs no
+Standard library only; loaded lazily by `okf install`, which needs no
 catalogue.
 
 `install` builds a plan (a list of Steps) from what is on disk and changes
@@ -28,7 +28,7 @@ SHARED_READERS = ("codex", "opencode", "kimi", "omp", "openclaw")
 
 BEGIN = "# >>> okf-cli >>>"
 END = "# <<< okf-cli <<<"
-MANAGED = "# managed by `okf-cli install`; undo with `okf-cli install --uninstall --apply`"
+MANAGED = "# managed by `okf install`; undo with `okf install --uninstall --apply`"
 WRAPPER_HEAD = "#!/bin/sh\n" + MANAGED + "\n"
 SCRIPT = "okf_mcp.py"  # an MCP entry that names this script is okf's own
 CHANGES = ("create", "update", "remove")
@@ -47,6 +47,17 @@ class Failed(Exception):
     """A subprocess failed."""
 
 
+def brew_opt_path(path):
+    """Homebrew installs to <prefix>/Cellar/<formula>/<version>, which `brew upgrade` deletes; the
+    symlink <prefix>/opt/<formula> stays. Config files must name that one."""
+    path = os.path.abspath(path)
+    m = re.match(r"(.*)/Cellar/([^/]+)/[^/]+(?=/|$)", path)
+    opt = m and os.path.join(m[1], "opt", m[2])
+    if opt and os.path.isdir(opt) and os.path.samefile(opt, m[0]):
+        return opt + path[len(m[0]):]
+    return path
+
+
 class Ctx:
     """Everything install reads from the machine; tests inject tmp values."""
 
@@ -54,9 +65,9 @@ class Ctx:
         self.env = dict(os.environ if env is None else env)
         self.home = os.path.abspath(home or self.env.get("HOME") or os.path.expanduser("~"))
         # same relative layout in a git checkout and in the installed wheel:
-        # <pkg_root>/{cli/okf-cli.py, cli/_okf-cli, mcp/okf_mcp.py, skills/okf}
+        # <pkg_root>/{cli/okf-cli.py, cli/_okf, mcp/okf_mcp.py, skills/okf}
         self.pkg_root = os.path.abspath(
-            pkg_root or os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+            pkg_root or brew_opt_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)))
         self.platform = platform or sys.platform
         self.timeout = timeout  # seconds a harness CLI may take
 
@@ -122,7 +133,7 @@ def find_block(lines):
     if not s and not e:
         return None
     if len(s) != 1 or len(e) != 1 or e[0] < s[0]:
-        raise Unsafe("the okf-cli begin/end markers are unbalanced; fix or remove them by hand")
+        raise Unsafe("the okf begin/end markers are unbalanced; fix or remove them by hand")
     return s[0], e[0]
 
 
@@ -264,17 +275,25 @@ def yaml_edit(args, un):
     whole = [BEGIN, "mcp_servers:"] + ["  " + l for l in child("")[1:-1]] + [END]
 
     def t(old):
+        try:
+            return go(old)
+        except Unsafe:
+            if un:  # nothing of ours to find in a shape we cannot read
+                return old
+            raise
+
+    def go(old):
         lines = lines_of(old or "")
         span = find_block(lines)
-        if un:
-            return old if span is None else join(drop_block(lines)) or None
+        if un and span:
+            return join(drop_block(lines)) or None
         if span:  # ours: regenerate in place, in the shape it was written
             s = span[0]
             ind = lines[s][:len(lines[s]) - len(lines[s].lstrip())]
             return join(put_block(lines, whole if lines[s + 1].strip() == "mcp_servers:" else child(ind)))
         tops = [i for i, l in enumerate(lines) if re.match(r"""["']?mcp_servers["']?\s*:""", l)]
         if not tops:
-            return join(put_block(lines, whole))
+            return old if un else join(put_block(lines, whole))
         if len(tops) > 1:
             raise Unsafe("config.yaml has more than one top-level mcp_servers key")
         k = tops[0]
@@ -297,8 +316,12 @@ def yaml_edit(args, un):
                     j -= 1
                 if SCRIPT not in "\n".join(lines[i:j]):
                     raise Unsafe("config.yaml already has an mcp_servers.okf entry that is not okf's own")
+                if un:  # Hermes rewrites config.yaml on `hermes config set` and drops our markers
+                    rest = lines[:i] + lines[j:]
+                    left = [l for l in rest[k + 1:end - (j - i)] if l.strip() and not l.lstrip().startswith("#")]
+                    return join(rest if left else rest[:k] + rest[end - (j - i):]) or None
                 return join(lines[:i] + child(ci) + lines[j:])
-        return join(put_block(lines, child(ci), at=k))
+        return old if un else join(put_block(lines, child(ci), at=k))
     return t, whole
 
 
@@ -342,7 +365,8 @@ def file_step(ctx, group, subject, path, transform, what, manual="", backup=True
     if new == old:
         return Step(group, subject, "ok", what)
     status = "remove" if new is None else "create" if old is None else "update"
-    return Step(group, subject, status, what, lambda: edit(path, transform, backup, mode))
+    return Step(group, subject, status, what, lambda: (
+        edit(path, transform, backup, mode), new is None and prune(ctx, os.path.dirname(path))))
 
 
 # --- symlinks / copies (skills, zsh glue) ------------------------------------
@@ -353,6 +377,18 @@ def clear(p):
         os.unlink(p)
     elif os.path.isdir(p):
         shutil.rmtree(p)
+
+
+def prune(ctx, d):
+    """Remove the empty directories an uninstall left behind; never HOME, above it or an agent's own dir."""
+    home = os.path.realpath(ctx.home)
+    stop = {home} | {os.path.realpath(harness_dir(ctx, h)) for h in HARNESSES}
+    while os.path.realpath(d).startswith(home + os.sep) and os.path.realpath(d) not in stop:
+        try:
+            os.rmdir(d)
+        except OSError:
+            return
+        d = os.path.dirname(d)
 
 
 def tree(path):
@@ -375,18 +411,18 @@ def same(src, dest):
 
 
 def mine(p):
-    """p is an okf-cli install of this thing: the okf skill dir or the zsh glue."""
+    """p is an okf install of this thing: the okf skill dir or the zsh glue."""
     try:
         if os.path.isdir(p):
             head = read(os.path.join(p, "SKILL.md")) or ""
             return re.match(r"---\r?\n(?:[^\n]*\n)*?name:[ \t]*okf[ \t]*\r?\n", head) is not None
-        return (read(p) or "").startswith("#compdef okf-cli")
+        return (read(p) or "").startswith("#compdef okf\n")
     except (OSError, Unsafe):
         return False
 
 
 def put_state(src, dest, copy):
-    tail = "/".join(src.split(os.sep)[-2:])  # skills/okf or cli/_okf-cli
+    tail = "/".join(src.split(os.sep)[-2:])  # skills/okf or cli/_okf
     if os.path.islink(dest):
         if not copy and os.path.realpath(dest) == os.path.realpath(src):
             return "ok"
@@ -424,7 +460,7 @@ def put_step(ctx, group, subject, src, dest, copy, un, note=""):
             return Step(group, subject, "ok")
         if state == "foreign":
             return Step(group, subject, "skip", "{} is not okf's; left alone".format(ctx.short(dest)))
-        return Step(group, subject, "remove", what, lambda: clear(dest))
+        return Step(group, subject, "remove", what, lambda: (clear(dest), prune(ctx, os.path.dirname(dest))))
     if state == "ok":
         return Step(group, subject, "ok", what)
     if state == "foreign":
@@ -459,10 +495,10 @@ def skill_steps(ctx, hs, un):
         steps.append(put_step(ctx, "skills", subject, src, dest, copy, un, note))
     if "claude" in hs:
         own("claude", os.path.join(harness_dir(ctx, "claude"), "skills", "okf"), copy)
-    if "hermes" in hs:  # a symlinked skill directory is unverified there
+    if "hermes" in hs:  # follows symlinks, but logs a security warning for a skill resolving outside ~/.hermes/skills
         own("hermes", os.path.join(harness_dir(ctx, "hermes"), "skills", "okf"), True)
     custom_openclaw = "openclaw" in hs and bool(ctx.env.get("OPENCLAW_STATE_DIR"))
-    if custom_openclaw:  # only the default state dir is known to read ~/.agents/skills
+    if custom_openclaw:  # a custom state dir drops ~/.agents/skills from the session skill index
         own("openclaw", os.path.join(harness_dir(ctx, "openclaw"), "skills", "okf"), True)
     readers = [h for h in SHARED_READERS if h in hs and not (h == "openclaw" and custom_openclaw)]
     shared = ctx.path(".agents", "skills", "okf")
@@ -620,20 +656,20 @@ def shell_paths(ctx):
         # uninstall looks everywhere a block may have gone, whatever platform or ZDOTDIR said then
         "zsh_rcs": list(dict.fromkeys([os.path.join(ctx.env.get("ZDOTDIR") or ctx.home, ".zshrc"),
                                        ctx.path(".zshrc")])),
-        "zsh_comp": ctx.path(".zsh", "completions", "_okf-cli"),
+        "zsh_comp": ctx.path(".zsh", "completions", "_okf"),
         "bash_rc": bash_rc,
         "bash_rcs": [ctx.path(n) for n in (".bashrc", ".bash_profile", ".bash_login", ".profile")],
-        "bash_comp": os.path.join(data, "bash-completion", "completions", "okf-cli"),
+        "bash_comp": os.path.join(data, "bash-completion", "completions", "okf"),
         "fish_dir": conf,
-        "fish_conf": os.path.join(conf, "conf.d", "okf-cli.fish"),
-        "fish_comp": os.path.join(conf, "completions", "okf-cli.fish"),
+        "fish_conf": os.path.join(conf, "conf.d", "okf.fish"),
+        "fish_comp": os.path.join(conf, "completions", "okf.fish"),
     }
 
 
 def wrapper_step(ctx, un):
-    """~/.local/bin/okf-cli for a source tree whose okf-cli is not on PATH yet.
+    """~/.local/bin/okf for a source tree whose okf is not on PATH yet.
     -> (step, whether ~/.local/bin must be on PATH)"""
-    dest = ctx.path(".local", "bin", "okf-cli")
+    dest = ctx.path(".local", "bin", "okf")
     cli = os.path.join(ctx.pkg_root, "cli", "okf-cli.py")
     text = WRAPPER_HEAD + 'exec uv run --script {} "$@"\n'.format(shlex.quote(cli))
     what = "{} (runs {})".format(ctx.short(dest), ctx.short(cli))
@@ -654,12 +690,12 @@ def wrapper_step(ctx, un):
         return s, s.status != "blocked"  # a wrapper that could not be placed needs no PATH line
     if un or ours:
         return step()
-    found = ctx.which("okf-cli")
+    found = ctx.which("okf")
     if found:
-        return Step("shell", "PATH", "skip", "okf-cli is already on PATH: " + ctx.short(found)), False
+        return Step("shell", "PATH", "skip", "okf is already on PATH: " + ctx.short(found)), False
     if not ctx.source_tree:  # pipx/uv put their own console script in a bin directory; that is not ours to touch
         return Step("shell", "PATH", "skip",
-                    "okf-cli is not on PATH; run `pipx ensurepath` (or add its bin directory to PATH)"), False
+                    "okf is not on PATH; run `pipx ensurepath` (or add its bin directory to PATH)"), False
     return step()  # a foreign file in the way comes back BLOCKED
 
 
@@ -668,7 +704,7 @@ def argcomplete_code(shell):
         from argcomplete.shell_integration import shellcode
     except ImportError as e:
         raise Unsafe("argcomplete cannot be imported ({})".format(e))
-    return "{}\n{}".format(MANAGED, shellcode(["okf-cli"], shell=shell))
+    return "{}\n{}".format(MANAGED, shellcode(["okf"], shell=shell))
 
 
 def owned_file(content, un, where):
@@ -684,7 +720,7 @@ def owned_file(content, un, where):
 def completion_step(ctx, sh, p, un):
     subject = sh + " completion"
     if sh == "zsh":
-        return put_step(ctx, "shell", subject, os.path.join(ctx.pkg_root, "cli", "_okf-cli"),
+        return put_step(ctx, "shell", subject, os.path.join(ctx.pkg_root, "cli", "_okf"),
                         p["zsh_comp"], not ctx.source_tree, un)
     path = p[sh + "_comp"]
     return file_step(ctx, "shell", subject, path, owned_file(lambda: argcomplete_code(sh), un, ctx.short(path)),
@@ -709,7 +745,7 @@ def rc_body(ctx, sh, rest, p, needs_path, comp):
         if not compinit:
             body.append("autoload -Uz compinit && compinit")
         elif not fpath:  # compinit may have run already: register without waiting for it
-            body += ["autoload -Uz _okf-cli", "(( $+functions[compdef] )) && compdef _okf-cli okf-cli"]
+            body += ["autoload -Uz _okf", "(( $+functions[compdef] )) && compdef _okf okf"]
     elif comp:
         body.append("if [ -r {0} ]; then . {0}; fi".format(home_var(ctx, p["bash_comp"])))
     return body
@@ -759,9 +795,18 @@ def shell_steps(ctx, ss, un):
 # --- selection, plan, output -------------------------------------------------
 
 
+def passwd_shell():
+    import pwd  # not at module level: Windows has no pwd, and run() rejects it with a message
+    try:
+        return pwd.getpwuid(os.getuid()).pw_shell
+    except KeyError:  # a container user without a passwd entry
+        return ""
+
+
 def shell_detected(ctx, sh):
     p = shell_paths(ctx)
-    login = os.path.basename(ctx.env.get("SHELL", ""))
+    # SHELL is set by login(1) and by bash, not by zsh: without it (cron, env -i, sudo) the passwd entry is the login shell
+    login = os.path.basename(ctx.env.get("SHELL") or passwd_shell())
     if sh == "zsh":
         return os.path.isfile(p["zsh_rc"]) or login == "zsh"
     if sh == "bash":
@@ -823,7 +868,7 @@ def report(ctx, steps, apply, un):
 
 
 def render(ctx, steps, apply, un):
-    print("okf-cli install{} - {}".format(
+    print("okf install{} - {}".format(
         " --uninstall" if un else "",
         "applied" if apply else "PLAN only, nothing is changed (add --apply to perform it)"))
     print("source: {} ({})".format(ctx.short(ctx.pkg_root),
@@ -857,11 +902,11 @@ def render(ctx, steps, apply, un):
 
 
 def run(args, ctx=None):
-    """Entry point of `okf-cli install`; returns (exit code, report). Prints the text report
+    """Entry point of `okf install`; returns (exit code, report). Prints the text report
     unless `args.json`; a refused call raises OkfError."""
     ctx = ctx or Ctx()
     if ctx.platform == "win32":
-        raise OkfError("internal", "ERROR: okf-cli install supports macOS and Linux only")
+        raise OkfError("internal", "ERROR: okf install supports macOS and Linux only")
     only = None
     if args.only is not None:
         only = [n.strip() for n in args.only.split(",") if n.strip()]

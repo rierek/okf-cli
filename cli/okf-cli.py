@@ -6,7 +6,7 @@
 #     "ruamel.yaml>=0.19.1,<0.20",
 # ]
 # ///
-"""okf-cli.py — navigation, search and maintenance for an OKF Knowledge Catalogue.
+"""okf — navigation, search and maintenance for an OKF Knowledge Catalogue.
 
 Catalogue-aware fork inspired by Cole Medin's single-bundle okf-cli.py.
 A *catalogue* is a directory whose immediate subdirectories (not starting with
@@ -14,16 +14,18 @@ A *catalogue* is a directory whose immediate subdirectories (not starting with
 metadata in the header of this file; `uv run --script okf-cli.py` installs them
 on first use.
 
-Run `okf-cli.py --help` for the command directory (flat + grouped by purpose),
-and `okf-cli.py <command> --help` for one command's options. Both are generated
+Run `okf --help` for the command directory (flat + grouped by purpose),
+and `okf <command> --help` for one command's options. Both are generated
 from the parser — this file documents no command list by hand.
 
-Run from the catalogue root, or pass --root <path>.
+Catalogue root: --root, else the nearest catalogue above cwd (.okf.toml, or SPEC.md plus
+TYPES.md, also in a docs/ child), else `root` in $XDG_CONFIG_HOME/okf/config.toml
+(default ~/.config/okf/config.toml).
 """
 import os
 import sys
 
-from okf.catalogue import catalogue_root
+from okf.catalogue import catalogue_root, user_config_path
 from okf.ctx import _ctx_shorthand
 from okf.entry_support import _silence_broken_pipe_streams
 from okf.errors import OkfError
@@ -39,7 +41,8 @@ def _dispatch(args):
     root = catalogue_root(args.root)
     if root is None:
         raise OkfError("not_found",
-                       "ERROR: no catalogue found in cwd or its ancestors; pass --root <path>")
+                       "ERROR: no catalogue found in cwd or its ancestors and no root in {}; "
+                       "pass --root <path>".format(user_config_path()))
     if not os.path.isdir(root):
         raise OkfError("not_found",
                        "ERROR: root not found: {} (pass --root <path>)".format(root))

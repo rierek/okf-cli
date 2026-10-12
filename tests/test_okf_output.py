@@ -52,7 +52,7 @@ class _MainHarness(unittest.TestCase):
         self.addCleanup(__import__("shutil").rmtree, self.root, True)
 
     def run_main(self, argv, handler, root=None):
-        """(stdout, stderr, exit code) of `okf-cli.py --root <root> <argv>` with `handler`
+        """(stdout, stderr, exit code) of `okf --root <root> <argv>` with `handler`
         behind both probe commands."""
         argv = ["okf-cli.py", "--root", root or self.root] + argv
         out, err = io.StringIO(), io.StringIO()

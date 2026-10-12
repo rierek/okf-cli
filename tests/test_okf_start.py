@@ -1,4 +1,4 @@
-"""How okf-cli is started (R-11): the executable entry file and the repo justfile recipes resolve the
+"""How okf is started (R-11): the executable entry file and the repo justfile recipes resolve the
 PEP 723 header of cli/okf-cli.py through `uv run --script`, never through a bare `python3`.
 
 Run: just test tests.test_okf_start -v
@@ -24,14 +24,14 @@ class EntryFileRunsDirectly(unittest.TestCase):
         env["PATH"] = os.pathsep.join([os.path.dirname(uv), "/usr/bin", "/bin"])
         done = subprocess.run([ENTRY, "--help"], capture_output=True, text=True, env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertTrue(done.stdout.startswith("usage: okf-cli"), done.stdout[:200])
+        self.assertTrue(done.stdout.startswith("usage: okf"), done.stdout[:200])
 
 
 class JustRecipesStartThroughUv(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        # Asked before the shim is in place, so the shim logs only how the recipes start okf-cli.
+        # Asked before the shim is in place, so the shim logs only how the recipes start okf.
         self.uv_env = uv_dirs()
         self.calls = uv_start_log(self)
 

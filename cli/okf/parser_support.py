@@ -7,6 +7,7 @@ import os
 import textwrap
 
 from okf.catalogue import all_tags, catalogue_root, iter_concepts, list_bundles
+from okf.errors import OkfError
 
 
 def subcommand_parsers(ap):
@@ -36,7 +37,7 @@ COMMAND_GROUPS = {}
 def _sub(sub, name, group, summary, **kwargs):
     """Register one subcommand. The summary is authored exactly once, here,
     and reaches both help levels: argparse prints it in the top-level command
-    directory (help=) and at the top of `okf-cli.py <command> --help`
+    directory (help=) and at the top of `okf <command> --help`
     (description=). The group feeds the rendered overview in the epilog.
 
     A command cannot ship undocumented: summary and group are required
@@ -103,13 +104,13 @@ def render_command_overview(parsers, footer=True, width=96):
                 subsequent_indent=" " * 21))
     if footer:
         lines.append("")
-        lines.append("run `okf-cli.py <command> --help` for one command's options.")
+        lines.append("run `okf <command> --help` for one command's options.")
     return "\n".join(lines)
 
 
 # --- shell TAB completion (argcomplete; optional dependency) ---------------
 # main() hands the parser to argcomplete only when a shell's completion glue
-# (cli/_okf-cli for zsh; argcomplete's own shellcode for bash and fish, all
+# (cli/_okf for zsh; argcomplete's own shellcode for bash and fish, all
 # placed by `install`) runs us with _ARGCOMPLETE set; a normal run never
 # imports it. Each value-taking argument names its completer via
 # `.completer` in build_parser;
@@ -121,9 +122,12 @@ def render_command_overview(parsers, footer=True, width=96):
 def _completion_root(parsed_args):
     """The catalogue root a completer reads, or None. --root arrives as the raw
     shell word: the glue joins zsh's alias-expanded $words, so
-    `alias okf='okf-cli --root ~/…'` delivers an unexpanded `~`."""
+    `alias okf='okf --root ~/…'` delivers an unexpanded `~`."""
     explicit = getattr(parsed_args, "root", None)
-    root = catalogue_root(os.path.expanduser(explicit) if explicit else None)
+    try:
+        root = catalogue_root(os.path.expanduser(explicit) if explicit else None)
+    except OkfError:  # a broken user config must not break TAB completion
+        return None
     return root if root and os.path.isdir(root) else None
 
 

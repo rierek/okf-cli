@@ -11,5 +11,5 @@ uv run --no-project --with build python -m build --outdir "$tmp/dist"
 uvx twine check --strict "$tmp"/dist/*
 uv venv -q "$tmp/venv"
 uv pip install -q --python "$tmp/venv/bin/python" "$tmp"/dist/*.whl
-"$tmp/venv/bin/okf-cli" --help >/dev/null
+"$tmp/venv/bin/okf" --help >/dev/null
 echo "pack-check ok: $(ls "$tmp/dist" | tr '\n' ' ')"

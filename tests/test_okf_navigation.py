@@ -261,7 +261,7 @@ class ListIncludeArchive(unittest.TestCase):
 class ArchiveHitPathResolvesViaRead(unittest.TestCase):
     """SC-02 (R-12, okf-cli-iwx4) — end to end: the path an archive hit
     prints under --include-archive is not just A path, it is the path
-    `okf-cli read` resolves to the same file. Exercised through both
+    `okf read` resolves to the same file. Exercised through both
     surfaces this bean touches, not a unit test on path arithmetic."""
 
     def setUp(self):

@@ -31,9 +31,9 @@ Copy into your task list (todo tool or scratch list), tick one by one. Step 6 ap
 ## 1. Look before writing
 
 ```bash
-okf-cli --root <catalogue> find "<topic words>"
-okf-cli --root <catalogue> toc <bundle>/<concept-id>
-okf-cli --root <catalogue> info
+okf --root <catalogue> find "<topic words>"
+okf --root <catalogue> toc <bundle>/<concept-id>
+okf --root <catalogue> info
 ```
 
 - An on-topic concept exists: update it (section 6). Never create a near-duplicate.
@@ -53,7 +53,7 @@ okf-cli --root <catalogue> info
 - Slug: English, lowercase kebab-case, named after the meaning, no numeric prefixes.
 - Forbidden characters in file names: `# ^ [ ] | \ : ? * " < > %` (error `kc/name/filename-chars`).
 - Never use a reserved name, in any letter case: `index.md`, `INDEX-MAP.md`, `log.md`, `readme.md`.
-- The directory needs an `index.md` with the `<!-- okf:index -->` marker pair, otherwise the concept appears in no listing. Missing: `okf-cli --root <catalogue> reindex <bundle>/<subdir> --init`, then add an intro line under its H1.
+- The directory needs an `index.md` with the `<!-- okf:index -->` marker pair, otherwise the concept appears in no listing. Missing: `okf --root <catalogue> reindex <bundle>/<subdir> --init`, then add an intro line under its H1.
 
 ## 4. Frontmatter
 
@@ -81,7 +81,7 @@ sources:
 | `generated` | `{ by: <actor>, at: <time> }`, `by` required. Set on creation and on every meaningful content change. `<UTC now>`: output of `date -u +%Y-%m-%dT%H:%M:%SZ`. |
 | `sources` | One entry per material the content derives from. `resource` is required (URL, path, or a scope description such as "all queries in project X"); `id` when the body cites the source; optional `title`, `author`, `usage_count`, `last_modified`; a sibling key `usage_window: { from, to }` frames `usage_count`. Cite a claim with a footnote whose label is the id: `[^<source-id>]`. |
 | `status` | `draft`, `stable` (the default when absent) or `deprecated`. |
-| `verified` | Only for a real confirmation against the sources: `{ by: <actor>, at: <time> }`, or a list of such entries. Writing a concept is not verifying it. Record a confirmation with `okf-cli --root <catalogue> verify <bundle>/<concept-id> --by <actor>`: it appends one entry with the current UTC time and changes nothing else. Trust tier: none = unverified, only non-human actors = machine-confirmed, any `human:` actor = human-reviewed. |
+| `verified` | Only for a real confirmation against the sources: `{ by: <actor>, at: <time> }`, or a list of such entries. Writing a concept is not verifying it. Record a confirmation with `okf --root <catalogue> verify <bundle>/<concept-id> --by <actor>`: it appends one entry with the current UTC time and changes nothing else. Trust tier: none = unverified, only non-human actors = machine-confirmed, any `human:` actor = human-reviewed. |
 | `stale_after` | Absolute time from which the content counts as stale, for example `2027-01-31T00:00:00Z`. Only for content that expires. |
 | `superseded_by` | Only on `type: Decision`: catalogue-root-absolute path of the replacing decision, for example `/<bundle>/decisions/<new>.md`. Must resolve (error `kc/supersede/resolves`); on another type it is warning `kc/supersede/scope`. |
 
@@ -94,19 +94,19 @@ sources:
 ## 5. Body
 
 - Start with `# <Title>`. Prefer headings, lists, tables and code fences over long prose.
-- Link concepts as `[Text](/<bundle>/<subdir>/<concept>.md)`. The leading `/` is the catalogue root, so the same form works across bundles. Relative links are warning `kc/link/crosslink-format`; `okf-cli --root <catalogue> fix-crosslinks <bundle>` converts every relative link whose target exists.
+- Link concepts as `[Text](/<bundle>/<subdir>/<concept>.md)`. The leading `/` is the catalogue root, so the same form works across bundles. Relative links are warning `kc/link/crosslink-format`; `okf --root <catalogue> fix-crosslinks <bundle>` converts every relative link whose target exists.
 - External links stay full URLs.
-- Wrap placeholders such as `<name>` in backticks. Bare ones are warning `kc/markup/xml-like-tags`; `okf-cli --root <catalogue> fix-xml-tags <bundle>` wraps them.
+- Wrap placeholders such as `<name>` in backticks. Bare ones are warning `kc/markup/xml-like-tags`; `okf --root <catalogue> fix-xml-tags <bundle>` wraps them.
 - Non-markdown files go to `<bundle>/assets/`; anywhere else they are error `kc/asset/placement`.
 - Follow the body language of the bundle. Frontmatter keys stay English.
 
 ## 6. Update an existing concept
 
-1. `okf-cli --root <catalogue> read <bundle>/<concept-id>`
+1. `okf --root <catalogue> read <bundle>/<concept-id>`
 2. Edit the file in place. Merge new facts into the existing structure; do not append a second copy of a section.
 3. Content changed meaningfully: set `generated` to your actor and the current time. Keep existing `verified` entries; add one with `verify` only after a real re-check.
-4. New file name or bundle: never `mv`. Preview with `okf-cli --root <catalogue> rename <bundle>/<old>.md <bundle>/<new>.md`, then repeat with `--apply`; it rewrites every inbound link and reindexes.
-5. Content no longer current: `status: deprecated` keeps it in place for inbound links; `okf-cli --root <catalogue> archive <bundle>/<concept-id>.md --apply` (after the preview without `--apply`) removes it from default search.
+4. New file name or bundle: never `mv`. Preview with `okf --root <catalogue> rename <bundle>/<old>.md <bundle>/<new>.md`, then repeat with `--apply`; it rewrites every inbound link and reindexes.
+5. Content no longer current: `status: deprecated` keeps it in place for inbound links; `okf --root <catalogue> archive <bundle>/<concept-id>.md --apply` (after the preview without `--apply`) removes it from default search.
 
 ## 7. Share canonical text: canon blocks
 
@@ -125,22 +125,22 @@ The canonical text.
 Consumer copy:
 
 ```bash
-okf-cli --root <catalogue> sync-export <owner-bundle>/<owner-id> <block-id>
-okf-cli --root <catalogue> sync-insert <consumer-bundle>/<consumer-id> <owner-bundle>/<owner-id> <block-id>
-okf-cli --root <catalogue> sync-insert <consumer-bundle>/<consumer-id> <owner-bundle>/<owner-id> <block-id> --apply
+okf --root <catalogue> sync-export <owner-bundle>/<owner-id> <block-id>
+okf --root <catalogue> sync-insert <consumer-bundle>/<consumer-id> <owner-bundle>/<owner-id> <block-id>
+okf --root <catalogue> sync-insert <consumer-bundle>/<consumer-id> <owner-bundle>/<owner-id> <block-id> --apply
 ```
 
 - `sync-export` prints the payload and writes nothing.
-- `sync-insert` previews; with `--apply` it appends the consumer copy to the end of the consumer body: an `<!-- okf:sync id=... source=... hash=... -->` line, a generated attribution callout (the CLI writes it in German; leave it unchanged), `<!-- okf:sync-body -->`, the payload, `<!-- /okf:sync -->`. You may move the whole copy within the body. Never edit its content.
+- `sync-insert` previews by default. Run it without `--apply` first and read the preview (hard rule 5); only then repeat it with `--apply`, which appends the consumer copy to the end of the consumer body: an `<!-- okf:sync id=... source=... hash=... -->` line, a generated attribution callout (the CLI writes it in German; leave it unchanged), `<!-- okf:sync-body -->`, the payload, `<!-- /okf:sync -->`. You may move the whole copy within the body. Never edit its content.
 - `sync-insert` refuses an unknown block id and a block the consumer already holds.
 
 Keep consumer copies current:
 
 ```bash
-okf-cli --root <catalogue> sync-status
-okf-cli --root <catalogue> sync-status --source /<owner-bundle>/<owner-id>.md
-okf-cli --root <catalogue> sync-update
-okf-cli --root <catalogue> sync-update --apply
+okf --root <catalogue> sync-status
+okf --root <catalogue> sync-status --source /<owner-bundle>/<owner-id>.md
+okf --root <catalogue> sync-update
+okf --root <catalogue> sync-update --apply
 ```
 
 `sync-status` exits 5 (drift) unless every block is `synced`; `--source` lists the consumers of one canon owner. `sync-update` previews; `--apply` rewrites outdated consumer copies.
@@ -159,11 +159,11 @@ okf-cli --root <catalogue> sync-update --apply
 ## 8. Finish and verify
 
 ```bash
-okf-cli --root <catalogue> reindex <bundle>
-okf-cli --root <catalogue> check <bundle>
-okf-cli --root <catalogue> build-index --if-stale
-okf-cli --root <catalogue> find "<words from the title>"
-okf-cli --root <catalogue> read <bundle>/<concept-id>
+okf --root <catalogue> reindex <bundle>
+okf --root <catalogue> check <bundle>
+okf --root <catalogue> build-index --if-stale
+okf --root <catalogue> find "<words from the title>"
+okf --root <catalogue> read <bundle>/<concept-id>
 ```
 
 Done when `reindex` lists the concept's `index.md` as `updated` (or reports no change for an edit that kept title and description), `check` ends `OK — 0 violations`, `find` returns the concept and `read` shows the frontmatter. A criterion fails: fix it, then rerun this step until clean.

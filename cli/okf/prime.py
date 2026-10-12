@@ -188,7 +188,7 @@ def cmd_prime(root, args):
     made prime empty the moment that file was removed (okf-cli-3hjr); it is now
     the CLI's own, and its command section is generated from the parser.
 
-    --compact is the session-start rendering (okf-cli, 2026-08-05): a recipe
+    --compact is the session-start rendering (okf, 2026-08-05): a recipe
     that primes on every session pays this guide against the SSTD, the roadmap
     and the git log. It keeps every command, every find flag and the live
     state, and drops the prose that is one call away."""

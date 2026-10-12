@@ -177,7 +177,7 @@ class FindFilterContract(unittest.TestCase):
         """B04 — a hit's path must be the concept's true position below the
         root. The substring arm once built it from the BUNDLE name plus a cid
         relative to a narrowed SUBDIR, printing `keep/wanted` for a concept
-        living at `keep/inner/wanted`: a path no `okf-cli read` can resolve.
+        living at `keep/inner/wanted`: a path no `okf read` can resolve.
         Unfiltered output is unaffected, which is what keeps the frozen eval
         baseline valid."""
         self.assertFalse(os.path.isfile(okf_fts._fts_db_path(self.tmp)))
@@ -1246,7 +1246,7 @@ class ZeroHitSuggestions(unittest.TestCase):
         out = run_find(self.root, "zzzzqqqq")
         self.assertEqual(out, "(no matches for: zzzzqqqq)\n")
         self.assertNotIn("nearest registered tags", out)
-        self.assertNotIn("try: okf-cli find", out)
+        self.assertNotIn("try: okf find", out)
 
 
 class ZeroHitSuggestionsPF4(unittest.TestCase):
@@ -1287,7 +1287,7 @@ class ZeroHitSuggestionsPF4(unittest.TestCase):
         stdout = out_buf.getvalue()
         self.assertIn("(no matches for: tailscael)", stdout)
         self.assertIn("nearest registered tags: tailscale", stdout)
-        self.assertIn("try: okf-cli find \"tailscale\"", stdout)
+        self.assertIn("try: okf find \"tailscale\"", stdout)
 
 
 class FindSupersededByField(unittest.TestCase):
@@ -1392,7 +1392,7 @@ class CorpusScopingTask1(unittest.TestCase):
         self.assertEqual(
             lexical_notes,
             ["note: lexical index excludes topic folders — run "
-             "`okf-cli build-index --include-topics`"])
+             "`okf build-index --include-topics`"])
 
     def test_topic_request_without_fts_uses_wide_substring_scan(self):
         filters = okf_find_filters.FindFilters(include_topics=True)

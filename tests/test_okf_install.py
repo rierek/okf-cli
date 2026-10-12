@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `okf-cli install` (okf_install.py) — unittest.
+"""Tests for `okf install` (okf_install.py) — unittest.
 
 Every test runs in a tmp HOME with a PATH that holds only stub binaries: nothing
 touches the real home, the real PATH or a real harness. Stub CLIs (claude,
@@ -51,7 +51,7 @@ _STUB_HEAD = ('#!%s\nimport json, os, re, sys, time\n'
               'time.sleep(float(os.environ.get("OKF_STUB_SLEEP", "0")))\n' % sys.executable)
 STUBS = {
     "uv": "",
-    "okf-cli": "",
+    "okf": "",
     "claude": '''
 cfg = os.path.join(os.path.expanduser("~"), ".claude.json")
 doc = json.load(open(cfg)) if os.path.exists(cfg) else {}
@@ -151,7 +151,7 @@ class Machine(unittest.TestCase):
                  "---\nname: okf\ndescription: test skill\n---\nbody\n")
         self.put(os.path.join(root, "skills", "okf", "references", "a.md"), "ref\n")
         os.makedirs(os.path.join(root, "cli"), exist_ok=True)
-        shutil.copy(os.path.join(_HERE, "_okf-cli"), os.path.join(root, "cli", "_okf-cli"))
+        shutil.copy(os.path.join(_HERE, "_okf"), os.path.join(root, "cli", "_okf"))
         self.put(os.path.join(root, "cli", "okf-cli.py"), "import sys\nprint(sys.argv[1:])\n")
         self.put(os.path.join(root, "mcp", "okf_mcp.py"), "# stub\n")
         return root
@@ -310,9 +310,9 @@ class ApplyAndIdempotence(Machine):
         for d in (".claude/skills/okf", ".agents/skills/okf"):
             self.assertTrue(os.path.islink(self.h(d)))
             self.assertEqual(os.path.realpath(self.h(d)), os.path.realpath(src))
-        self.assertFalse(os.path.islink(self.h(".hermes/skills/okf")), "hermes: symlinked skill dirs unverified")
+        self.assertFalse(os.path.islink(self.h(".hermes/skills/okf")), "hermes warns about symlinked skills outside its dir")
         self.assertTrue(os.path.isfile(self.h(".hermes/skills/okf/SKILL.md")))
-        self.assertTrue(os.path.islink(self.h(".zsh/completions/_okf-cli")), "a clone links the zsh glue too")
+        self.assertTrue(os.path.islink(self.h(".zsh/completions/_okf")), "a clone links the zsh glue too")
 
     def test_stale_copy_of_the_skill_is_replaced_and_foreign_dir_refused(self):
         self.harness_dirs("claude", "hermes")
@@ -482,9 +482,9 @@ class Refusals(Machine):
         self.harness_dirs("claude")
         self.mk("home", ".config", "fish")
         foreign = {".claude/skills/okf/SKILL.md": "someone else's\n",
-                   ".local/bin/okf-cli": "#!/bin/sh\necho mine\n",
-                   ".zsh/completions/_okf-cli": "#compdef other\n",
-                   ".config/fish/completions/okf-cli.fish": "complete -c okf-cli\n"}
+                   ".local/bin/okf": "#!/bin/sh\necho mine\n",
+                   ".zsh/completions/_okf": "#compdef other\n",
+                   ".config/fish/completions/okf.fish": "complete -c okf\n"}
         for rel, text in foreign.items():
             self.put(self.h(rel), text, 0o755)
         code, out = self.apply()
@@ -561,6 +561,32 @@ class Uninstall(Machine):
         self.assertEqual(code, 0)
         self.assertIn("codex mcp remove okf", out)
         self.assertEqual(self.get(self.h(".codex/config.toml")), text)
+
+    def test_uninstall_leaves_no_empty_directories_it_created(self):
+        self.use_source_tree()
+        self.harness_dirs("claude", "hermes", "codex")
+        self.apply(only="claude,hermes,codex")
+        self.install(un=True, apply=True)
+        for rel in (".agents", ".claude/skills", ".hermes/skills", ".local"):
+            self.assertFalse(os.path.exists(self.h(rel)), rel)
+        self.assertTrue(os.path.isdir(self.h(".claude")))  # a harness dir is never pruned
+
+    def test_hermes_rewriting_config_yaml_drops_our_markers_but_uninstall_still_finds_the_entry(self):
+        # what `hermes config set` writes back: the entry survives, comments and markers do not
+        self.put(self.h(".hermes/config.yaml"),
+                 "model:\n  default: x\nmcp_servers:\n  time:\n    command: uvx\n  okf:\n    command: uv\n"
+                 "    args:\n      - run\n      - --with\n      - mcp<2\n      - %s\ndisplay:\n  compact: true\n"
+                 % self.script)
+        code, out = self.install(only="hermes", un=True, apply=True)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.get(self.h(".hermes/config.yaml")),
+                         "model:\n  default: x\nmcp_servers:\n  time:\n    command: uvx\ndisplay:\n  compact: true\n")
+
+    def test_a_foreign_okf_entry_in_config_yaml_survives_uninstall(self):
+        text = "mcp_servers:\n  okf:\n    command: other\n"
+        self.put(self.h(".hermes/config.yaml"), text)
+        self.install(only="hermes", un=True, apply=True)
+        self.assertEqual(self.get(self.h(".hermes/config.yaml")), text)
 
 
 class EnvOverrides(Machine):
@@ -647,6 +673,13 @@ class Detection(Machine):
         self.assertNotRegex(out, r"skip\s+fish\s+not detected")
         self.assertNotRegex(self.install()[1], r"skip\s+zsh\s+not detected", "SHELL=zsh makes zsh the login shell")
 
+    def test_login_shell_falls_back_to_the_passwd_entry_when_SHELL_is_unset(self):
+        env = {k: v for k, v in self.env.items() if k != "SHELL"}  # zsh does not set SHELL itself
+        with mock.patch.object(inst, "passwd_shell", return_value="/bin/zsh"):
+            self.assertNotRegex(self.install(env=env)[1], r"skip\s+zsh\s+not detected")
+        with mock.patch.object(inst, "passwd_shell", return_value=""):
+            self.assertRegex(self.install(env=env)[1], r"skip\s+zsh\s+not detected")
+
     def test_windows_is_refused(self):
         with self.assertRaises(okf_errors.OkfError) as cm:
             self.install(platform="win32")
@@ -672,12 +705,12 @@ class Uv(Machine):
         self.mk("home", ".config", "fish")
         code, out = self.apply()
         self.assertEqual(code, 0, out)
-        for sh, rel in (("bash", ".local/share/bash-completion/completions/okf-cli"),
-                        ("fish", ".config/fish/completions/okf-cli.fish")):
+        for sh, rel in (("bash", ".local/share/bash-completion/completions/okf"),
+                        ("fish", ".config/fish/completions/okf.fish")):
             text = self.get(self.h(rel))
             self.assertTrue(text.startswith(inst.MANAGED + "\n"))
-            self.assertEqual(text.split("\n", 1)[1], shellcode(["okf-cli"], shell=sh))
-        self.assertIn('if [ -r "$HOME/.local/share/bash-completion/completions/okf-cli" ]', self.get(self.h(".bashrc")))
+            self.assertEqual(text.split("\n", 1)[1], shellcode(["okf"], shell=sh))
+        self.assertIn('if [ -r "$HOME/.local/share/bash-completion/completions/okf" ]', self.get(self.h(".bashrc")))
 
 
 class ShellBlocks(Machine):
@@ -698,8 +731,8 @@ class ShellBlocks(Machine):
 
     def test_zsh_with_compinit_elsewhere_registers_without_a_second_compinit(self):
         block = self.zsh("autoload -Uz compinit\ncompinit\n")
-        self.assertNotIn("compinit", block.replace("autoload -Uz _okf-cli", ""))
-        self.assertIn("compdef _okf-cli okf-cli", block)
+        self.assertNotIn("compinit", block.replace("autoload -Uz _okf", ""))
+        self.assertIn("compdef _okf okf", block)
         self.assertIn('fpath=("$HOME/.zsh/completions" $fpath)', block)
 
     def test_zsh_that_already_does_everything_gets_only_what_is_missing(self):
@@ -714,15 +747,15 @@ class ShellBlocks(Machine):
         self.assertIn(".local/bin", block)
 
     def test_path_is_left_alone_when_okf_cli_is_already_on_it(self):
-        self.stub("okf-cli")
+        self.stub("okf")
         code, out = self.apply(only="zsh")
-        self.assertIn("okf-cli is already on PATH", out)
-        self.assertFalse(os.path.exists(self.h(".local/bin/okf-cli")))
+        self.assertIn("okf is already on PATH", out)
+        self.assertFalse(os.path.exists(self.h(".local/bin/okf")))
         self.assertNotIn(".local/bin", self.get(self.h(".zshrc")))
 
     def test_wrapper_starts_the_checkout_through_uv_run_script_and_passes_arguments(self):
         self.apply(only="zsh")
-        wrapper = self.h(".local/bin/okf-cli")
+        wrapper = self.h(".local/bin/okf")
         self.assertTrue(os.access(wrapper, os.X_OK))
         calls = uv_start_log(self)
         done = subprocess.run([wrapper, "a", "b c"], capture_output=True, text=True)
@@ -733,8 +766,8 @@ class ShellBlocks(Machine):
         os.remove(os.path.join(self.pkg, "pyproject.toml"))
         code, out = self.apply(only="zsh")
         self.assertIn("pipx ensurepath", out)
-        self.assertFalse(os.path.exists(self.h(".local/bin/okf-cli")))
-        glue = self.h(".zsh/completions/_okf-cli")
+        self.assertFalse(os.path.exists(self.h(".local/bin/okf")))
+        glue = self.h(".zsh/completions/_okf")
         self.assertTrue(os.path.isfile(glue) and not os.path.islink(glue), "an installed package copies the glue")
 
     def test_bash_rc_file_follows_the_platform(self):
@@ -759,7 +792,7 @@ class ShellBlocks(Machine):
         self.put(os.path.join(moved, "pyproject.toml"), "")
         code, out = self.apply(only="claude,zsh", pkg=moved)
         self.assertEqual(code, 0, out)
-        self.assertIn(os.path.join(moved, "cli", "okf-cli.py"), self.get(self.h(".local/bin/okf-cli")))
+        self.assertIn(os.path.join(moved, "cli", "okf-cli.py"), self.get(self.h(".local/bin/okf")))
         self.assertEqual(os.path.realpath(self.h(".claude/skills/okf")),
                          os.path.realpath(os.path.join(moved, "skills", "okf")))
 
@@ -773,7 +806,7 @@ class ShellBlocks(Machine):
     def test_fish_path_file_is_ours_and_removed_again(self):
         self.mk("home", ".config", "fish")
         self.apply(only="fish")
-        conf = self.h(".config/fish/conf.d/okf-cli.fish")
+        conf = self.h(".config/fish/conf.d/okf.fish")
         self.assertIn("set -gx PATH $HOME/.local/bin $PATH", self.get(conf))
         self.install(only="fish", un=True, apply=True)
         self.assertFalse(os.path.exists(conf))
@@ -800,15 +833,15 @@ class ShellBlocks(Machine):
     def test_generated_zsh_block_registers_the_completion_in_a_real_zsh(self):
         self.put(self.h(".zshrc"), "")
         self.apply(only="zsh")
-        done = subprocess.run(["zsh", "-f", "-c", "source ~/.zshrc; print -r -- ${_comps[okf-cli]}"],
+        done = subprocess.run(["zsh", "-f", "-c", "source ~/.zshrc; print -r -- ${_comps[okf]}"],
                               capture_output=True, text=True, env={"HOME": self.home, "PATH": "/usr/bin:/bin"})
-        self.assertEqual(done.stdout.strip(), "_okf-cli", done.stderr)
+        self.assertEqual(done.stdout.strip(), "_okf", done.stderr)
 
     @unittest.skipUnless(shutil.which("fish"), "no fish")
     def test_generated_fish_path_file_is_valid_fish(self):
         self.mk("home", ".config", "fish")
         self.apply(only="fish")
-        done = subprocess.run(["fish", "--no-config", "-c", "source ~/.config/fish/conf.d/okf-cli.fish; echo $PATH"],
+        done = subprocess.run(["fish", "--no-config", "-c", "source ~/.config/fish/conf.d/okf.fish; echo $PATH"],
                               capture_output=True, text=True, env={"HOME": self.home, "PATH": "/usr/bin:/bin"})
         self.assertIn(self.h(".local/bin"), done.stdout, done.stderr)
 
@@ -835,12 +868,12 @@ class Packaging(unittest.TestCase):
 
     def test_everything_the_code_looks_up_relative_to_itself_ships(self):
         shipped = set(self.wheel["force-include"])
-        for needed in ("cli/okf-cli.py", "cli/okf_install.py", "cli/_okf-cli", "cli/embeddings",
+        for needed in ("cli/okf-cli.py", "cli/okf_install.py", "cli/_okf", "cli/embeddings",
                        "mcp/okf_mcp.py", "skills/okf"):
             self.assertIn(needed, shipped)
 
     def test_the_console_script_runs_the_hyphenated_cli_and_extras_exist(self):
-        module, func = self.cfg["project"]["scripts"]["okf-cli"].split(":")
+        module, func = self.cfg["project"]["scripts"]["okf"].split(":")
         spec = importlib.util.spec_from_file_location(module, os.path.join(_HERE, os.pardir, module, "__init__.py"))
         entry = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(entry)
@@ -893,6 +926,22 @@ class Packaging(unittest.TestCase):
             mcp = _load("okf_mcp_wheel", os.path.join(site, "okf_cli", "mcp", "okf_mcp.py"))
         self.assertTrue(os.path.isfile(mcp.OKF_CLI), mcp.OKF_CLI)
         self.assertTrue(os.path.isfile(os.path.join(site, "okf_cli", "cli", "embeddings", "build_tagvec.py")))
+
+
+class BrewPath(unittest.TestCase):
+    def test_a_cellar_path_becomes_the_opt_symlink_that_survives_an_upgrade(self):
+        with tempfile.TemporaryDirectory() as prefix:
+            prefix = os.path.realpath(prefix)
+            os.makedirs(os.path.join(prefix, "Cellar", "okf-cli", "0.1.0", "libexec", "okf_cli"))
+            os.makedirs(os.path.join(prefix, "opt"))
+            deep = os.path.join(prefix, "Cellar", "okf-cli", "0.1.0", "libexec", "okf_cli")
+            self.assertEqual(inst.brew_opt_path(deep), deep, "no opt symlink yet: unchanged")
+            os.symlink(os.path.join(prefix, "Cellar", "okf-cli", "0.1.0"), os.path.join(prefix, "opt", "okf-cli"))
+            self.assertEqual(inst.brew_opt_path(deep), os.path.join(prefix, "opt", "okf-cli", "libexec", "okf_cli"))
+            os.makedirs(os.path.join(prefix, "Cellar", "other", "1", "x"))
+            os.symlink(os.path.join(prefix, "Cellar", "okf-cli", "0.1.0"), os.path.join(prefix, "opt", "other"))
+            self.assertEqual(inst.brew_opt_path(os.path.join(prefix, "Cellar", "other", "1", "x")),
+                             os.path.join(prefix, "Cellar", "other", "1", "x"), "opt points elsewhere: unchanged")
 
 
 class CommandLine(unittest.TestCase):

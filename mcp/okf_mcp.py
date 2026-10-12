@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""okf-MCP — mechanical okf-cli verbs as MCP tools. Thin subprocess wrapper;
+"""okf-MCP — mechanical okf verbs as MCP tools. Thin subprocess wrapper;
 all correctness logic lives in okf-cli.py.
 
-`root` on every tool defaults to "" (omit it): okf-cli then auto-detects the
+`root` on every tool defaults to "" (omit it): okf then auto-detects the
 catalogue by walking this server process's own cwd upward for a `.okf.toml`/
 `SPEC.md`+`TYPES.md` marker, checked both in each candidate directory and in
 its `docs/` child (the workspace+repo/-hull layout keeps the marker under
-`<hull>/docs/`, never in `<hull>` itself). Since each server instance's cwd
+`<hull>/docs/`, never in `<hull>` itself); if nothing is found there, the `root` in
+`~/.config/okf/config.toml` applies. Since each server instance's cwd
 is the session's own project directory — main checkout or linked worktree
 alike — this resolves correctly from a worktree with no path arithmetic.
 Pass an explicit `root` only for a catalogue outside the session's own
@@ -42,16 +43,16 @@ _COMMANDS = {
     "sync-update": ["target"],
     "ctx":   ["verb", "slug"],
 }
-# optional value-flag params: tool-key -> okf-cli flag
+# optional value-flag params: tool-key -> okf flag
 _FLAGS = {"scan_root": "--scan-root", "where": "--where", "limit": "--limit",
           "source": "--source", "block": "--block",
           "for_path": "--for", "section": "--section",
           "follow": "--follow", "max_tokens": "--max-tokens"}
-# optional boolean-flag params: tool-key -> okf-cli flag (emitted when truthy)
+# optional boolean-flag params: tool-key -> okf flag (emitted when truthy)
 _BOOL_FLAGS = {"apply": "--apply", "force": "--force", "unresolved": "--unresolved",
                "compact": "--compact", "full": "--full", "frontmatter_only": "--frontmatter-only",
                "body_only": "--body-only", "inbound": "--inbound"}
-# _BOOL_FLAGS is shared across every command's params dict, but okf-cli's own
+# _BOOL_FLAGS is shared across every command's params dict, but okf's own
 # argparse defines some of them on one command only — any OTHER command handed
 # that flag would fail at the subprocess boundary with an argparse error.
 # Command-scope it explicitly rather than relying on no other tool function
@@ -124,7 +125,7 @@ def run_okf(root, command, params):
     out = proc.stdout
     if len(out) > MAX_OUTPUT_CHARS:
         raise RuntimeError(
-            "okf-cli {} produced {} characters, over the {} character budget. "
+            "okf {} produced {} characters, over the {} character budget. "
             "Narrow the call -- pass a bundle, filter with where (for example "
             "where=\"type = Runbook\"), or use find for a ranked subset."
             .format(command, len(out), MAX_OUTPUT_CHARS))
@@ -133,12 +134,12 @@ def run_okf(root, command, params):
         ok, data, warnings, error = (envelope["ok"], envelope["data"],
                                      envelope["warnings"], envelope["error"])
     except (ValueError, KeyError, TypeError):
-        raise RuntimeError("okf-cli {} did not print one JSON envelope (exit {}): {}".format(
+        raise RuntimeError("okf {} did not print one JSON envelope (exit {}): {}".format(
             command, proc.returncode, proc.stderr.strip()))
     if ok:
         return {"data": data, "warnings": warnings}
     if data is None:
-        raise RuntimeError("okf-cli {} failed: {}: {}".format(command, error["kind"], error["message"]))
+        raise RuntimeError("okf {} failed: {}: {}".format(command, error["kind"], error["message"]))
     return {"data": data, "warnings": warnings, "error": error}
 
 
