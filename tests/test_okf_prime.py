@@ -132,6 +132,8 @@ class CmdPrimeOnboardingGuide(unittest.TestCase):
         for step in ("find", "index", "toc", "read"):
             self.assertIn(step, out)
         self.assertIn("progressive disclosure", out.lower())
+        self.assertIn("read --section", out)
+        self.assertIn("read --follow", out)
 
     def test_write_path_names_the_skill_and_the_gate(self):
         out = self._prime()
@@ -378,6 +380,8 @@ class CmdPrimeCompactGuide(unittest.TestCase):
         for step in ("find", "index", "toc", "read", "refs"):
             self.assertIn(step, out)
         self.assertIn("progressive disclosure", out.lower())
+        self.assertIn("read --section", out)
+        self.assertIn("read --follow", out)
 
     def test_default_keeps_the_root_contract(self):
         """Counter-mutation to the intro trim: --compact may assume its caller
