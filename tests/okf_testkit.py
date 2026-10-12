@@ -54,7 +54,7 @@ def run_cli(root, *argv, home=None, env=None):
 
 
 def run_json(root, *argv, **kw):
-    """(envelope, stderr, exit code) of `okf-cli.py --root <root> <argv> --json`. Fails
+    """(envelope, stderr, exit code) of `okf --root <root> <argv> --json`. Fails
     unless stdout is exactly one JSON object on one line carrying the five envelope keys."""
     out, err, code = run_cli(root, *argv, "--json", **kw)
     assert out.count("\n") == 1 and out.endswith("\n"), "stdout is not one line: {!r}".format(out)
@@ -74,7 +74,7 @@ def uv_dirs():
 def uv_start_log(case):
     """Put a `uv` shim first on PATH for the test `case`. The shim appends its arguments, one call
     per line, to a log and then runs the real uv. Returns a function that gives the logged calls,
-    so a test sees how a caller starts okf-cli across the process boundary, not which Python runs."""
+    so a test sees how a caller starts okf across the process boundary, not which Python runs."""
     real = shutil.which("uv")
     case.assertIsNotNone(real, "uv is not on PATH")
     tmp = tempfile.mkdtemp()

@@ -444,7 +444,7 @@ class RecentAgainstRealGit(unittest.TestCase):
     Every assertion in T1-T7 stands against a synthetic string that this repo
     itself authored. Nothing pins that string to git's actual output: drop
     `--no-renames` from the argv, or let git change the stanza grammar, and
-    T1-T7 stay green while `okf-cli recent` quietly reports everything
+    T1-T7 stay green while `okf recent` quietly reports everything
     undated. The contract here is with an external binary, so it is observed,
     not imagined."""
 
@@ -506,7 +506,7 @@ class RecentAgainstRealGit(unittest.TestCase):
 
     def test_git_mv_keeps_the_concept_datable(self):
         """D07 guard. git's default rename detection classifies a `git mv` as
-        R, which --diff-filter=A drops — and `okf-cli rename` performs exactly
+        R, which --diff-filter=A drops — and `okf rename` performs exactly
         that move (_git_mv). Removing --no-renames from _git_add_events must
         turn this red; measured on the real catalogue it costs 4 concepts."""
         repo = self._repo("cat")

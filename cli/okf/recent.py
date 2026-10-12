@@ -139,7 +139,7 @@ def _git_add_events(repo, prefixes):
 
     --no-renames is load-bearing, not tidiness: with git's default rename
     detection a `git mv` is classified R and --diff-filter=A drops it, so every
-    concept `okf-cli rename` has ever moved becomes undatable. Measured against
+    concept `okf rename` has ever moved becomes undatable. Measured against
     the real catalogue: 4 concepts missing with detection on, 0 with it off.
 
     core.quotepath=false so a path with an umlaut arrives raw instead of

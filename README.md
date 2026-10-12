@@ -13,7 +13,7 @@ Keywords: Open Knowledge Format, OKF v0.2, knowledge base CLI, markdown frontmat
 
 ## Install
 
-okf-cli is a single-file script with inline dependencies ([PEP 723](https://peps.python.org/pep-0723/)): Python 3.11 or newer, `ruamel.yaml` and `argcomplete`. [`uv`](https://docs.astral.sh/uv/) reads that header and installs the packages on first use, so install `uv` first. Run it from a clone, or install it as a tool. Both end in the same step, `okf-cli install`: it wires okf-cli into your coding agents and shells, and previews before it writes anything.
+okf is a single-file script with inline dependencies ([PEP 723](https://peps.python.org/pep-0723/)): Python 3.11 or newer, `ruamel.yaml` and `argcomplete`. [`uv`](https://docs.astral.sh/uv/) reads that header and installs the packages on first use, so install `uv` first. Run it from a clone, or install it as a tool. Both end in the same step, `okf install`: it wires okf into your coding agents and shells, and previews before it writes anything.
 
 ```bash
 # From a clone: runs in place, `git pull` updates it
@@ -23,8 +23,8 @@ uv run --script cli/okf-cli.py install --apply    # performs it
 
 # As a tool (Python >= 3.11)
 pipx install git+https://github.com/xRiErOS/okf-cli      # or: uv tool install git+https://github.com/xRiErOS/okf-cli
-okf-cli install
-okf-cli install --apply
+okf install
+okf install --apply
 ```
 
 Then use it from any directory. Without `--root` it takes the nearest catalogue above the current directory, else the `root` in `~/.config/okf/config.toml` (`$XDG_CONFIG_HOME/okf/config.toml`):
@@ -34,9 +34,9 @@ root = "~/path/to/catalogue"
 ```
 
 ```bash
-okf-cli --root /path/to/catalogue prime          # agent onboarding
-okf-cli --root /path/to/catalogue find "query"   # ranked search
-okf-cli --root /path/to/catalogue check          # conformance scan
+okf --root /path/to/catalogue prime          # agent onboarding
+okf --root /path/to/catalogue find "query"   # ranked search
+okf --root /path/to/catalogue check          # conformance scan
 ```
 
 From a clone without `install`, `uv run --script cli/okf-cli.py --root … <command>` works the same. Details of what `install` writes, and how to undo it: [agents and shells](#use-with-ai-agents-and-shells).
@@ -47,7 +47,7 @@ From a clone without `install`, `uv run --script cli/okf-cli.py --root … <comm
 
 New to OKF? Read the [annotated guide on okf.md](https://okf.md/spec/) (community walkthrough, still labelled v0.1) first; the normative text is the [v0.2 SPEC.md](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md).
 
-`okf-cli` treats a directory of bundles as one **catalogue**:
+`okf` treats a directory of bundles as one **catalogue**:
 
 ```
 catalogue/
@@ -74,7 +74,7 @@ generated:                    # who produced the text, and when
   at: 2026-09-01T08:00:00Z
 sources:                      # where the facts come from
   - resource: https://wiki.example/db-restore
-verified:                     # who checked it against the sources (written by `okf-cli verify`)
+verified:                     # who checked it against the sources (written by `okf verify`)
   - by: human:erik
     at: 2026-09-03T10:00:00Z
 status: stable                # draft | stable | deprecated; absent means stable
@@ -91,12 +91,12 @@ stale_after: 2027-03-01T00:00:00Z
 
 Ranked search over a catalogue:
 
-![okf-cli find: ranked results with title, type, path and snippet](assets/find.png)
+![okf find: ranked results with title, type, path and snippet](assets/find.png)
 
 Link-safe rename (dry-run) shows one unified diff per rewritten file, then the plan:
 
 ```
-$ okf-cli rename notes/ref.md notes/reference.md
+$ okf rename notes/ref.md notes/reference.md
 --- a/_ctx/demo.md
 +++ b/_ctx/demo.md
 @@ -10,4 +10,4 @@
@@ -116,7 +116,7 @@ rename (dry-run): 1 inbound, 0 outbound link(s), 0 wikilink(s) (0 skipped-ambigu
 
 ## Commands
 
-`okf-cli --help` lists all commands; `okf-cli <command> --help` shows every option of one command. Both are generated from the parser, so this README carries no per-option reference: it names each command, then explains the modes you choose between. The table below uses the same four groups as `--help`.
+`okf --help` lists all commands; `okf <command> --help` shows every option of one command. Both are generated from the parser, so this README carries no per-option reference: it names each command, then explains the modes you choose between. The table below uses the same four groups as `--help`.
 
 | group | command | what it does |
 |---|---|---|
@@ -151,7 +151,7 @@ rename (dry-run): 1 inbound, 0 outbound link(s), 0 wikilink(s) (0 skipped-ambigu
 | | `sync-status` | drift report for materialised canon blocks |
 | | `sync-insert` | materialise a canonical block in a consumer concept |
 | | `sync-update` | re-materialise outdated consumer blocks |
-| | `install` | register okf-cli with this machine's agents and shells |
+| | `install` | register okf with this machine's agents and shells |
 
 ### Output, `--json` and exit codes
 
@@ -187,13 +187,13 @@ The MCP server forwards the same `data`, `warnings` and `error`; it never reads 
 `--where` is the only filter option. `list`, `recent`, `find`, `merge-tags`, `remove-tags` and `normalize-tags` take it; `list` requires it.
 
 ```bash
-okf-cli list --where 'type = Runbook and tag != draft'      # type and tag comparison
-okf-cli list --where 'path ~ notes/'                        # ~ means "contains"
-okf-cli list --where 'tier = human-reviewed'                # trust tier
-okf-cli list --where 'stale = true'                         # stale_after has passed
-okf-cli list --where 'status in (draft, deprecated)'
-okf-cli find "restore" --where '(type = Runbook or type = Guide) and tag = database'
-okf-cli remove-tags draft --where 'path ~ archive-candidates/'
+okf list --where 'type = Runbook and tag != draft'      # type and tag comparison
+okf list --where 'path ~ notes/'                        # ~ means "contains"
+okf list --where 'tier = human-reviewed'                # trust tier
+okf list --where 'stale = true'                         # stale_after has passed
+okf list --where 'status in (draft, deprecated)'
+okf find "restore" --where '(type = Runbook or type = Guide) and tag = database'
+okf remove-tags draft --where 'path ~ archive-candidates/'
 ```
 
 An expression is `field op value`; combine with `and`, `or`, `not` and parentheses. Operators: `=` `!=` `<` `<=` `>` `>=` `~`, and `field in (a, b)`.
@@ -215,13 +215,13 @@ Instants (`generated.at`, `verified.at`, `stale_after`, `usage_window.from`, `us
 `toc` shows headings first: the cheapest way to decide whether a page is worth reading. `read` has three independent ways to choose what comes back, plus one way to widen it:
 
 ```bash
-okf-cli read notes/design                          # the whole page
-okf-cli read notes/design --section Design         # one section
-okf-cli read notes/design --frontmatter-only       # the frontmatter block, delimiters included
-okf-cli read notes/design --body-only              # everything after the frontmatter
-okf-cli read notes/design --follow 1               # the page and the pages it links to
-okf-cli read notes/design --follow 2 --inbound --max-tokens 4000
-okf-cli read notes/design --section Design --follow 1 --json
+okf read notes/design                          # the whole page
+okf read notes/design --section Design         # one section
+okf read notes/design --frontmatter-only       # the frontmatter block, delimiters included
+okf read notes/design --body-only              # everything after the frontmatter
+okf read notes/design --follow 1               # the page and the pages it links to
+okf read notes/design --follow 2 --inbound --max-tokens 4000
+okf read notes/design --section Design --follow 1 --json
 ```
 
 - **`--section HEADING`** prints the section from that heading up to the next heading of equal or higher level, sub-sections included. Matching is case-insensitive and exact. `A > B` finds `B` inside `A`. An unknown heading exits with code 3; a heading that matches more than once exits with code 2.
@@ -242,10 +242,10 @@ okf-cli read notes/design --section Design --follow 1 --json
 Indexes are built, not live. A changed catalogue makes `find` print a staleness note. `build-index --if-stale` and `build-semantic-index --if-stale` skip the work when the index is current.
 
 ```bash
-okf-cli find "restore database"                       # ranked results, default 10
-okf-cli find "restore" --limit 3 --where 'type = Runbook'
-okf-cli find "restore" --breakdown                    # which arm and which score produced each hit
-okf-cli find "restore" --json
+okf find "restore database"                       # ranked results, default 10
+okf find "restore" --limit 3 --where 'type = Runbook'
+okf find "restore" --breakdown                    # which arm and which score produced each hit
+okf find "restore" --json
 ```
 
 Every hit leads with `rank: N`, its position in the delivered list. That is the one scale comparable across both arms. The raw scores (`a/100` for BM25, `cosine X.XX` for the semantic arm) are not comparable with each other and show only with `--breakdown`. `--where` narrows the candidates before the result is cut to `--limit`. `--include-topics` widens the search beyond the bundles declared in `.okf.toml` to topic folders. `--expand-tags` adds semantically near registered tags to the query; it stays off by default because it did not help on the real catalogue.
@@ -287,10 +287,10 @@ WARNING  kc/type/registered   notes/bad.md  (type `Bogus` not registered in TYPE
 Rule IDs start with `okf/` (the format itself, e.g. `okf/trust/verified`, `okf/lifecycle/stale-after`, `okf/trust/drift`) or `kc/` (catalogue conventions, e.g. `kc/link/crosslink-format`, `kc/type/registered`). With `--json`, the findings are `data.findings` with `rule`, `severity`, `path` and `message`.
 
 ```bash
-okf-cli check                       # whole catalogue; exit 4 only for errors
-okf-cli check notes                 # one bundle; notes/sub for a subdirectory
-okf-cli check --strict              # warnings count toward the exit code too (exit 4 if any)
-okf-cli check --ignore 'kc/tag/*' --ignore okf/lifecycle/stale-after
+okf check                       # whole catalogue; exit 4 only for errors
+okf check notes                 # one bundle; notes/sub for a subdirectory
+okf check --strict              # warnings count toward the exit code too (exit 4 if any)
+okf check --ignore 'kc/tag/*' --ignore okf/lifecycle/stale-after
 ```
 
 `--ignore` takes an exact rule ID or a prefix ending in `*`, and may repeat; it adds to the `ignore_rules` list in `.okf.toml`. A suppressed finding is neither printed nor counted. `okf/trust/drift` fires when the body changed in a git commit after `generated.at` without `generated.at` being updated; it needs git history.
@@ -300,8 +300,8 @@ okf-cli check --ignore 'kc/tag/*' --ignore okf/lifecycle/stale-after
 `verify <concept> --by <actor>` appends an entry `{by, at}` to the concept's `verified` list, with the current UTC time. `--by` is `human:<id>`, `process:<id>` or `<producer>/<version>`. The tier follows from the actors: one `human:` entry makes the concept `human-reviewed`. `verify` rewrites only the frontmatter block.
 
 ```bash
-okf-cli verify notes/ref --by human:erik
-okf-cli list --where 'tier = human-reviewed'
+okf verify notes/ref --by human:erik
+okf list --where 'tier = human-reviewed'
 ```
 
 ### Preview, then apply
@@ -324,9 +324,9 @@ The commands that rewrite concept files preview first and show **one unified dif
 - A citations list (heading `Citations`, `Quellen` or `Sources`) moves to `sources`. Content `migrate` cannot move safely (indented code, HTML blocks) is listed for manual rework.
 
 ```bash
-okf-cli migrate notes                    # preview: the status mapping and one diff per file
-okf-cli migrate notes --apply            # write exactly that
-okf-cli check notes                      # v0.2 rules need okf_version: "0.2" in the bundle's index.md
+okf migrate notes                    # preview: the status mapping and one diff per file
+okf migrate notes --apply            # write exactly that
+okf check notes                      # v0.2 rules need okf_version: "0.2" in the bundle's index.md
 ```
 
 `migrate` never writes without `--apply`. `generated` is edited by hand afterwards; no command regenerates it.
@@ -357,15 +357,15 @@ A canonical concept declares addressable blocks; consumers carry copies and stay
 
 ## Works with Obsidian
 
-A catalogue is plain markdown with YAML frontmatter, so it opens as an [Obsidian](https://obsidian.md) vault unchanged: edit and browse in Obsidian, search, validate and refactor with `okf-cli`. `wikilinks` reports `[[wikilinks]]` and whether they resolve; `rename` also rewrites unambiguous wikilinks. To enforce OKF v0.2 inside Obsidian itself, see the [okf-enforcer](https://github.com/MartinForReal/okf-enforcer) plugin.
+A catalogue is plain markdown with YAML frontmatter, so it opens as an [Obsidian](https://obsidian.md) vault unchanged: edit and browse in Obsidian, search, validate and refactor with `okf`. `wikilinks` reports `[[wikilinks]]` and whether they resolve; `rename` also rewrites unambiguous wikilinks. To enforce OKF v0.2 inside Obsidian itself, see the [okf-enforcer](https://github.com/MartinForReal/okf-enforcer) plugin.
 
 ## Works with git
 
-Git is the recommended way to distribute OKF bundles: markdown gives clean diffs, the commit log records who changed which concept, branches and PRs propose knowledge changes. `okf-cli` leaves version control to git. Use `rename` and `archive` instead of `mv`/`rm`, so one commit carries the move and every rewritten link.
+Git is the recommended way to distribute OKF bundles: markdown gives clean diffs, the commit log records who changed which concept, branches and PRs propose knowledge changes. `okf` leaves version control to git. Use `rename` and `archive` instead of `mv`/`rm`, so one commit carries the move and every rewritten link.
 
 ## Use with AI agents and shells
 
-`okf-cli install` finds the coding agents and shells on this machine and wires up each one. The plan lists every file first; `--apply` writes them; a second `--apply` changes nothing.
+`okf install` finds the coding agents and shells on this machine and wires up each one. The plan lists every file first; `--apply` writes them; a second `--apply` changes nothing.
 
 | Agent | Skill (`skills/okf`) | MCP server `okf` |
 |---|---|---|
@@ -382,7 +382,7 @@ The shared copy in `~/.agents/skills/okf` is read by Codex, opencode, Kimi Code,
 ```json
 {
   "mcpServers": {
-    "okf": { "command": "uv", "args": ["run", "--with", "mcp<2", "/path/to/okf-cli/mcp/okf_mcp.py"] }
+    "okf": { "command": "uv", "args": ["run", "--with", "mcp<2", "/path/to/okf/mcp/okf_mcp.py"] }
   }
 }
 ```
@@ -391,18 +391,18 @@ The shared copy in `~/.agents/skills/okf` is read by Codex, opencode, Kimi Code,
 
 | Shell | TAB completion | rc change |
 |---|---|---|
-| zsh | `~/.zsh/completions/_okf-cli` | block in `${ZDOTDIR:-~}/.zshrc`: `fpath` and `compinit`, only where missing |
-| bash | `~/.local/share/bash-completion/completions/okf-cli`, sourced from the rc block | `~/.bashrc`; on macOS the login file: the first of `~/.bash_profile`, `~/.bash_login`, `~/.profile` that exists, else `~/.bash_profile` |
-| fish | `~/.config/fish/completions/okf-cli.fish` | `~/.config/fish/conf.d/okf-cli.fish` |
+| zsh | `~/.zsh/completions/_okf` | block in `${ZDOTDIR:-~}/.zshrc`: `fpath` and `compinit`, only where missing |
+| bash | `~/.local/share/bash-completion/completions/okf`, sourced from the rc block | `~/.bashrc`; on macOS the login file: the first of `~/.bash_profile`, `~/.bash_login`, `~/.profile` that exists, else `~/.bash_profile` |
+| fish | `~/.config/fish/completions/okf.fish` | `~/.config/fish/conf.d/okf.fish` |
 
-From a clone, `install` also creates `~/.local/bin/okf-cli` and puts `~/.local/bin` on `PATH` in that rc block (skipped when `okf-cli` is already on `PATH`, as after pipx or uv). Completion uses `argcomplete`, one of the script's declared dependencies; a normal run never imports it. TAB completes concept paths, bundles, tags and canon block ids from the catalogue (`okf-cli read <TAB>`). An alias must start with `okf-cli` (found via `PATH`), not an absolute path.
+From a clone, `install` also creates `~/.local/bin/okf` and puts `~/.local/bin` on `PATH` in that rc block (skipped when `okf` is already on `PATH`, as after pipx or uv). Completion uses `argcomplete`, one of the script's declared dependencies; a normal run never imports it. TAB completes concept paths, bundles, tags and canon block ids from the catalogue (`okf read <TAB>`). An alias must start with `okf` (found via `PATH`), not an absolute path.
 
 ### How `install` behaves
 
 - **Selection.** Agents and shells are detected by their binary on `PATH` or their config directory (shells: rc file, config directory or login shell; the login shell is `$SHELL`, or the passwd entry when `$SHELL` is unset, as under `env -i`, cron or zsh). `--only claude,codex,zsh` names them explicitly, detected or not: `claude omp codex opencode kimi openclaw hermes zsh bash fish`.
-- **Clone or tool.** A clone links the skills and the zsh glue, so `git pull` updates them. A pipx or uv install copies them: re-run `okf-cli install --apply` after an upgrade. Hermes always gets a copy: it follows a symlinked skill but logs a security warning for a skill that resolves outside `~/.hermes/skills`. OpenClaw with a custom `OPENCLAW_STATE_DIR` gets a copy in `<state dir>/skills`, because that setting removes `~/.agents/skills` from its skill index.
+- **Clone or tool.** A clone links the skills and the zsh glue, so `git pull` updates them. A pipx or uv install copies them: re-run `okf install --apply` after an upgrade. Hermes always gets a copy: it follows a symlinked skill but logs a security warning for a skill that resolves outside `~/.hermes/skills`. OpenClaw with a custom `OPENCLAW_STATE_DIR` gets a copy in `<state dir>/skills`, because that setting removes `~/.agents/skills` from its skill index.
 - **Safe edits.** JSON configs get a key-scoped merge; rc files, TOML and YAML get one block between `# >>> okf-cli >>>` and `# <<< okf-cli <<<`. Writes are atomic, symlinked dotfiles are written through, and the first edit of a file keeps `<file>.okf-cli.bak`. A config that cannot be edited safely (JSON with comments, unusual YAML, a foreign `okf` entry) is reported as BLOCKED with the exact manual edit; nothing is guessed.
-- **Uninstall.** `okf-cli install --uninstall` previews, `--uninstall --apply` removes exactly what `install` created, plus the empty directories that leaves behind (never `$HOME` or an agent's own directory). The `<file>.okf-cli.bak` backups stay. If Hermes rewrites `config.yaml` (`hermes config set` drops comments, so the markers go too), uninstall still removes okf's own `mcp_servers.okf` entry. `claude`, `codex`, `openclaw` and `hermes` create their own state files when they run (for example `~/.claude/backups`, `~/.codex/tmp`, `~/.openclaw/state`); those are theirs and stay. `openclaw mcp set` rewrites `openclaw.json` as plain JSON (JSON5 comments are lost; OpenClaw keeps `openclaw.json.bak`).
+- **Uninstall.** `okf install --uninstall` previews, `--uninstall --apply` removes exactly what `install` created, plus the empty directories that leaves behind (never `$HOME` or an agent's own directory). The `<file>.okf-cli.bak` backups stay. If Hermes rewrites `config.yaml` (`hermes config set` drops comments, so the markers go too), uninstall still removes okf's own `mcp_servers.okf` entry. `claude`, `codex`, `openclaw` and `hermes` create their own state files when they run (for example `~/.claude/backups`, `~/.codex/tmp`, `~/.openclaw/state`); those are theirs and stay. `openclaw mcp set` rewrites `openclaw.json` as plain JSON (JSON5 comments are lost; OpenClaw keeps `openclaw.json.bak`).
 - **Locations.** `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, `CODEX_HOME`, `OPENCODE_CONFIG`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `KIMI_CODE_HOME`, `OPENCLAW_STATE_DIR`, `HERMES_HOME` and `ZDOTDIR` are honoured.
 - **Scripting.** No prompts, no network, timeouts on every agent CLI call. `--json` prints one envelope `{command, ok, data, warnings, error}`; `data` holds a status per step. Exit code 0: done or nothing to do; 1: a step is blocked or failed; 2: usage error.
 - **Platforms.** macOS and Linux, Python 3.11 or newer.
@@ -410,7 +410,7 @@ From a clone, `install` also creates `~/.local/bin/okf-cli` and puts `~/.local/b
 
 ## How it differs
 
-| | okf-cli | single-bundle tools |
+| | okf | single-bundle tools |
 |---|---|---|
 | scope | catalogue of many bundles | one bundle |
 | dependencies | declared inline (PEP 723), installed by `uv run --script` | varies |
@@ -433,12 +433,12 @@ just test     # unittest discovery over tests/test_*.py
 just build    # wheel and sdist into dist/ (uv build)
 just check    # conformance scan against a real catalogue
 just prime
-just setup    # the okf-cli install plan; add --apply to perform it
+just setup    # the okf install plan; add --apply to perform it
 ```
 
 `just test` must be green before anything in `cli/`, `tests/` or `mcp/` is committed. Tests never write into a real catalogue. `just check` and `just prime` take a catalogue root as argument; their default is a personal catalogue path set at the top of the `justfile`.
 
-`cli/okf-cli.py` is only the entry point: it carries the PEP 723 header, builds the parser, resolves the catalogue root and dispatches. The commands live in the `cli/okf/` package; tests live in `tests/`, and `tests/test_okf_cli.py` covers the entry itself. The `cli/_okf-cli` file is the zsh completion glue installed by `okf-cli install`; it stays beside the entry payload because packaging and installer tests verify that path.
+`cli/okf-cli.py` is only the entry point: it carries the PEP 723 header, builds the parser, resolves the catalogue root and dispatches. The commands live in the `cli/okf/` package; tests live in `tests/`, and `tests/test_okf_cli.py` covers the entry itself. The `cli/_okf` file is the zsh completion glue installed by `okf install`; it stays beside the entry payload because packaging and installer tests verify that path.
 
 - Shared foundation: `catalogue` (root, bundles, concepts, tags, configuration), `linkscan` (link and reference scan), `parser_support` (command registration helpers), `errors` (the exit-code classes), `output` (the `--json` envelope), `diffs` (unified-diff previews), `history` (git lookups for `recent`, `migrate` and the drift rule), `spec` (trust tier and staleness).
 - Commands, each module defining its `COMMANDS`: `navigation` (list, read, info, toc, visualize, refs), `prime`, `index` (index, reindex), `ctx`, `recent`, `find` (with `find_filters`, the `--where` grammar), `fts` (build-index), `semantic` (build-semantic-index), `tags`, `check` (check, fix-crosslinks, fix-xml-tags; the v0.2 rules are in `spec_check`), `verify`, `migrate`, `wikilinks`, `sync`, `rename` (rename, archive, rewrite-path) and `install`.

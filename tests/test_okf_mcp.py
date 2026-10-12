@@ -76,7 +76,7 @@ class McpBoundaryTestBase(unittest.TestCase):
 
 
 class McpStartsTheCliThroughUv(McpBoundaryTestBase):
-    """R-11 — every okf_mcp call starts okf-cli as `uv run --script <OKF_CLI>`, so the PEP 723
+    """R-11 — every okf_mcp call starts okf as `uv run --script <OKF_CLI>`, so the PEP 723
     header of the script, not the Python on PATH, supplies the dependencies."""
 
     def test_run_okf_starts_the_cli_with_uv_run_script_and_the_OKF_CLI_path(self):
@@ -388,7 +388,7 @@ class McpWikilinksSurface(unittest.TestCase):
 
 
 class McpPrimeIsCompact(unittest.TestCase):
-    """okf-cli, 2026-08-05 — okf_prime is a session-start call, and the tool
+    """okf, 2026-08-05 — okf_prime is a session-start call, and the tool
     result lands in the agent's context whole. It takes the compact rendering
     for the same reason the `just -g start` recipe does; the long form stays
     reachable from the CLI. A boolean absent from _BOOL_FLAGS is silently
@@ -414,9 +414,9 @@ class McpPrimeIsCompact(unittest.TestCase):
 
 
 class McpOptionalRoot(unittest.TestCase):
-    """okf-cli worktree bug — every MCP tool now defaults `root` to "" so a
+    """okf worktree bug — every MCP tool now defaults `root` to "" so a
     session whose cwd is a linked worktree (never a hull layout's own
-    catalogue root) can omit it and let okf-cli auto-detect from cwd
+    catalogue root) can omit it and let okf auto-detect from cwd
     instead of the caller guessing wrong path arithmetic. build_argv is the
     single point deciding whether `--root` reaches the CLI at all."""
 
@@ -486,7 +486,7 @@ class McpToolSignatureContract(unittest.TestCase):
 
 class McpWhereParameter(unittest.TestCase):
     """OKFT-iy9n — `where` is the one filter parameter: a string on okf_find and okf_list that
-    reaches okf-cli as `--where`; the four removed parameters exist nowhere on the surface."""
+    reaches okf as `--where`; the four removed parameters exist nowhere on the surface."""
 
     REMOVED = ("type", "tag", "scope", "include_archive")
 

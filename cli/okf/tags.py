@@ -261,7 +261,7 @@ def cmd_tags(root, args):
             for t in unknown:
                 print("UNKNOWN  {}".format(t))
             print("OK — all {} known".format(len(args.validate)) if not unknown
-                  else "{} UNKNOWN — register with: okf-cli.py tags --register <tag> \"<description, max {} chars>\"".format(
+                  else "{} UNKNOWN — register with: okf tags --register <tag> \"<description, max {} chars>\"".format(
                       len(unknown), TAG_DESC_MAX))
         result = {"closed_vocabulary": True, "unknown": unknown}
         if unknown:

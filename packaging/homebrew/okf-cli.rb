@@ -20,15 +20,15 @@ class OkfCli < Formula
 
   def caveats
     <<~EOS
-      Wire okf-cli into your coding agents and shells (previews first, changes nothing):
-        okf-cli install
+      Wire okf into your coding agents and shells (previews first, changes nothing):
+        okf install
       Then perform it:
-        okf-cli install --apply
+        okf install --apply
     EOS
   end
 
   test do
-    assert_match "usage:", shell_output("#{bin}/okf-cli --help")
-    system bin/"okf-cli", "install", "--json", "--only", "claude"
+    assert_match "usage:", shell_output("#{bin}/okf --help")
+    system bin/"okf", "install", "--json", "--only", "claude"
   end
 end
