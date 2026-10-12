@@ -15,7 +15,7 @@ from okf.catalogue import (
     CANON_END, CROSSLINK_RE, CTX_DIR, RESERVED, SYNC_OPEN_LIT, SYNC_SPAN_RE,
     _mask_managed_block, _split_managed_block, ctx_findings, fm_text, index_h1_and_desc,
     iter_all_md, load_okf_config, load_tags, load_types, read_file, read_file_verbatim,
-    read_frontmatter, resolve_scopes, flow_tags, tags_of,
+    read_frontmatter, resolve_scopes, flow_tags, sorted_walk, tags_of,
 )
 from okf.parser_support import _complete_files, _complete_scopes, _sub
 from okf.sync import classify_sync_block, parse_canon_blocks, parse_sync_blocks
@@ -346,7 +346,7 @@ def check_asset_placement(bundle_path):
     """Non-md, non-hidden files that live outside <bundle>/assets/. Returns
     a list of paths relative to bundle_path."""
     bad = []
-    for dirpath, dirnames, filenames in os.walk(bundle_path):
+    for dirpath, dirnames, filenames in sorted_walk(bundle_path):
         dirnames[:] = [d for d in dirnames
                        if not d.startswith(".") and not d.startswith("_") and d != "assets"]
         for fn in filenames:

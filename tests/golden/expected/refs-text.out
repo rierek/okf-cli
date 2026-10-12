@@ -3,8 +3,8 @@ exit: 0
 --- stdout
 inbound (4):
   _ctx/onboarding.md  ->  /handbook/getting-started.md
-  handbook/overview.md  ->  getting-started.md
   handbook/index.md  ->  /handbook/getting-started.md
+  handbook/overview.md  ->  getting-started.md
   handbook/ops/deploy.md  ->  ../getting-started.md
 outbound (6):
   /handbook/glossary.md  ->  handbook/glossary.md

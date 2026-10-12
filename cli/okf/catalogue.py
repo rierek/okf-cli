@@ -465,17 +465,13 @@ def iter_concepts(bundle_path, prune_staging=True):
     Same shape as OKFT-n8xz's `indexable_only` on resolve_scopes(): one
     shared walk, the default serving the majority, the minority opting
     explicitly at its own call site rather than a second, duplicated walk."""
-    # sorted: os.walk yields in directory order (arbitrary on ext4, sorted on APFS); every caller's
-    # output order, e.g. the `files` list of merge-tags, must not depend on the filesystem.
-    for dirpath, dirnames, filenames in os.walk(bundle_path):
+    for dirpath, dirnames, filenames in sorted_walk(bundle_path):
         if prune_staging:
-            dirnames[:] = sorted(d for d in dirnames
-                                 if not d.startswith(".") and not d.startswith("_")
-                                 and d != "assets")
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith(".") and not d.startswith("_") and d != "assets"]
         else:
-            dirnames[:] = sorted(d for d in dirnames
-                                 if not d.startswith(".") and d != "assets")
-        for fn in sorted(filenames):
+            dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "assets"]
+        for fn in filenames:
             if not fn.endswith(".md") or fn.lower() in RESERVED:
                 continue
             ap = os.path.join(dirpath, fn)
@@ -550,13 +546,22 @@ def read_file(ap):
         return f.read()
 
 
+def sorted_walk(top):
+    """os.walk in sorted name order. os.walk yields the filesystem's directory order, which
+    differs between APFS and ext4; every listing, preview and write plan must not depend on the
+    filesystem. The caller prunes the yielded dirnames in place as with os.walk."""
+    for dirpath, dirnames, filenames in os.walk(top):
+        dirnames.sort()
+        yield dirpath, dirnames, sorted(filenames)
+
+
 class RealFs:
     """The catalogue tree as it is on disk. The index renderers and `plan_reindex` read the tree
     through one of these, so a planner can hand them a view of a tree that does not exist yet."""
     listdir = staticmethod(os.listdir)
     isfile = staticmethod(os.path.isfile)
     isdir = staticmethod(os.path.isdir)
-    walk = staticmethod(os.walk)
+    walk = staticmethod(sorted_walk)
 
     def read(self, ap):
         return read_file(ap)
@@ -1143,7 +1148,7 @@ def iter_all_md(bundle_path, prune_staging=True):
 
     Prunes "assets" (binary asset store), dot-directories, and, by default,
     "_"-prefixed staging directories."""
-    for dirpath, dirnames, filenames in os.walk(bundle_path):
+    for dirpath, dirnames, filenames in sorted_walk(bundle_path):
         dirnames[:] = [d for d in dirnames
                        if not d.startswith(".") and d != "assets"
                        and (not prune_staging or not d.startswith("_"))]
@@ -1253,7 +1258,7 @@ def reindex_tree(root, tp):
     """Refresh every managed index block under tp (no --init/--check semantics).
     Returns the rel-paths of index files actually rewritten."""
     changed = []
-    for dp, dn, fn in os.walk(tp):
+    for dp, dn, fn in sorted_walk(tp):
         dn[:] = [d for d in dn if not d.startswith(".") and d != "assets"]
         for name in ("index.md", "index-map.md"):
             idx_name = _find_reserved_name(fn, name)
