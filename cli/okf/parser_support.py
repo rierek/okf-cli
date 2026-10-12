@@ -123,9 +123,8 @@ def _completion_root(parsed_args):
     """The catalogue root a completer reads, or None. --root arrives as the raw
     shell word: the glue joins zsh's alias-expanded $words, so
     `alias okf='okf --root ~/…'` delivers an unexpanded `~`."""
-    explicit = getattr(parsed_args, "root", None)
     try:
-        root = catalogue_root(os.path.expanduser(explicit) if explicit else None)
+        root = catalogue_root(getattr(parsed_args, "root", None), getattr(parsed_args, "use_global", False))
     except OkfError:  # a broken user config must not break TAB completion
         return None
     return root if root and os.path.isdir(root) else None

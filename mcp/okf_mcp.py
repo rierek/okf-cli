@@ -10,8 +10,11 @@ its `docs/` child (the workspace+repo/-hull layout keeps the marker under
 `~/.config/okf/config.toml` applies. Since each server instance's cwd
 is the session's own project directory — main checkout or linked worktree
 alike — this resolves correctly from a worktree with no path arithmetic.
-Pass an explicit `root` only for a catalogue outside the session's own
-project tree (e.g. the central Knowledge-Catalogue).
+Two modes, one meaning each: default = the catalogue of the session's own project tree;
+`use_global=true` = the `root` of the user config (the central Knowledge-Catalogue), even
+when a project catalogue lies above cwd. (`global` is a Python keyword, hence `use_global`.)
+Pass an explicit `root` only for a third catalogue; a leading `~` is expanded. `use_global`
+together with `root` fails with `invalid_input`.
 
 Every tool returns the CLI's one `--json` envelope reduced to {"data", "warnings"}:
 `data` is the result, `warnings` the call notes. When the CLI reports a failure that
@@ -71,7 +74,7 @@ def build_argv(root, command, params):
     if command not in _COMMANDS:
         raise ValueError("unsupported okf command: {}".format(command))
     positional = _COMMANDS[command]
-    argv = ["--root", root, command] if root else [command]
+    argv = (["--root", root] if root else []) + (["--global"] if params.get("use_global") else []) + [command]
     for name in positional:
         val = params.get(name)
         if val is not None and val != "":
@@ -145,7 +148,7 @@ def run_okf(root, command, params):
 
 def _register(server):
     @server.tool()
-    def okf_find(root: str = "", *, query: str, limit: int = 10, where: str = "") -> dict:
+    def okf_find(root: str = "", *, query: str, limit: int = 10, where: str = "", use_global: bool = False) -> dict:
         """Ranked search across a catalogue/repo root, narrowed by a `where`
         expression: `field op value` with op one of = != < <= > >= ~ (contains)
         or `field in (a, b)`, joined by and, or, not and parentheses. Fields:
@@ -177,13 +180,13 @@ def _register(server):
         catalogue (a deliberate cost limit), so a call that hands over to the
         semantic arm carries an extra warning saying so (R-13). A malformed
         expression fails the call with an `invalid_input` error."""
-        return run_okf(root, "find", {"query": query, "limit": limit, "where": where})
+        return run_okf(root, "find", {"use_global": use_global, "query": query, "limit": limit, "where": where})
 
     @server.tool()
     def okf_read(root: str = "", *, path: str, section: str = "",
                  frontmatter_only: bool = False, body_only: bool = False,
                  follow: int | None = None, inbound: bool = False,
-                 max_tokens: int | None = None) -> dict:
+                 max_tokens: int | None = None, use_global: bool = False) -> dict:
         """Print one concept page (bundle/concept-id). At most one of `section`,
         `frontmatter_only`, `body_only`: `section` prints only that section — the heading
         text, case-insensitive and exact, up to the next heading of equal or
@@ -200,27 +203,27 @@ def _register(server):
         `max_tokens` (integer, at least 1): with `follow`, keep the block within that many
         tokens (chars/4); the root stays in full, from the first page that does not fit on,
         pages carry title and description only (`reduced`)."""
-        return run_okf(root, "read", {
+        return run_okf(root, "read", {"use_global": use_global,
             "path": path, "section": section,
             "frontmatter_only": frontmatter_only, "body_only": body_only,
             "follow": follow, "inbound": inbound, "max_tokens": max_tokens,
         })
 
     @server.tool()
-    def okf_toc(root: str = "", *, path: str) -> dict:
+    def okf_toc(root: str = "", *, path: str, use_global: bool = False) -> dict:
         """Section headings of a concept."""
-        return run_okf(root, "toc", {"path": path})
+        return run_okf(root, "toc", {"use_global": use_global, "path": path})
 
     @server.tool()
-    def okf_index(root: str = "", bundle: str = "", full: bool = False) -> dict:
+    def okf_index(root: str = "", bundle: str = "", full: bool = False, use_global: bool = False) -> dict:
         """Catalogue/bundle TOC. Without `bundle`, defaults to one entry per
         bundle with just its name + one-line description — pass full=True
         for the structured per-bundle summary (description, concept count,
         directories) instead. With `bundle`, unaffected by `full`."""
-        return run_okf(root, "index", {"bundle": bundle, "full": full})
+        return run_okf(root, "index", {"use_global": use_global, "bundle": bundle, "full": full})
 
     @server.tool()
-    def okf_list(root: str = "", where: str = "") -> dict:
+    def okf_list(root: str = "", where: str = "", use_global: bool = False) -> dict:
         """The complete, unranked set of concepts a `where` expression selects;
         the expression is required (an empty one fails with `invalid_input`).
         Grammar as in okf_find: `field op value` or `field in (a, b)`, joined by
@@ -228,48 +231,48 @@ def _register(server):
         stale, status and any frontmatter key. Example: where="type = Runbook and tag = alpha".
         Archived concepts are listed only when `where` names `archived`, for
         example where="archived in (true, false)"."""
-        return run_okf(root, "list", {"where": where})
+        return run_okf(root, "list", {"use_global": use_global, "where": where})
 
     @server.tool()
-    def okf_check(root: str = "", target: str = "") -> dict:
+    def okf_check(root: str = "", target: str = "", use_global: bool = False) -> dict:
         """§9 conformance scan (config-aware TYPES). Returns {findings}: a list of
         {rule, severity, path, message}, rule an okf/ or kc/ ID, severity error or
         warning; rules matched by the catalogue's .okf.toml ignore_rules are left out."""
-        return run_okf(root, "check", {"target": target})
+        return run_okf(root, "check", {"use_global": use_global, "target": target})
 
     @server.tool()
-    def okf_reindex(root: str = "", *, target: str) -> dict:
+    def okf_reindex(root: str = "", *, target: str, use_global: bool = False) -> dict:
         """Regenerate marker-bounded index listings for a bundle/subdir."""
-        return run_okf(root, "reindex", {"target": target})
+        return run_okf(root, "reindex", {"use_global": use_global, "target": target})
 
     @server.tool()
-    def okf_refs(root: str = "", *, path: str, scan_root: str = "") -> dict:
+    def okf_refs(root: str = "", *, path: str, scan_root: str = "", use_global: bool = False) -> dict:
         """Inbound and outbound markdown references of a file (reference-integrity step a)."""
-        return run_okf(root, "refs", {"path": path, "scan_root": scan_root})
+        return run_okf(root, "refs", {"use_global": use_global, "path": path, "scan_root": scan_root})
 
     @server.tool()
     def okf_rename(root: str = "", *, old: str, new: str, apply: bool = False,
-                   force: bool = False) -> dict:
+                   force: bool = False, use_global: bool = False) -> dict:
         """Move a concept and keep every reference intact: rewrites inbound links
         repo-wide plus the file's own outbound links on a bundle change, then
         reindexes affected bundles. Defaults to a dry-run preview (data.files: one
         unified diff per affected file); pass apply=True to perform the move (git mv, staged). Reference-integrity step b."""
-        return run_okf(root, "rename", {"old": old, "new": new, "apply": apply, "force": force})
+        return run_okf(root, "rename", {"use_global": use_global, "old": old, "new": new, "apply": apply, "force": force})
 
     @server.tool()
-    def okf_ctx_list(root: str = "", *, for_path: str = "") -> dict:
+    def okf_ctx_list(root: str = "", *, for_path: str = "", use_global: bool = False) -> dict:
         """Curated ctx bundles (_ctx/<slug>.md): slug, description, entry counts.
         for_path limits the result to bundles that list that file."""
-        return run_okf(root, "ctx", {"verb": "list", "for_path": for_path})
+        return run_okf(root, "ctx", {"use_global": use_global, "verb": "list", "for_path": for_path})
 
     @server.tool()
-    def okf_ctx_show(root: str = "", *, slug: str) -> dict:
+    def okf_ctx_show(root: str = "", *, slug: str, use_global: bool = False) -> dict:
         """One ctx bundle in reading order: entries with live title, type,
         description, comment, alive flag and token estimate."""
-        return run_okf(root, "ctx", {"verb": "show", "slug": slug})
+        return run_okf(root, "ctx", {"use_global": use_global, "verb": "show", "slug": slug})
 
     @server.tool()
-    def okf_wikilinks(root: str = "", target: str = "", unresolved: bool = False) -> dict:
+    def okf_wikilinks(root: str = "", target: str = "", unresolved: bool = False, use_global: bool = False) -> dict:
         """Obsidian wikilinks ([[…]]) in a catalogue, with the resolution status
         of each. Returns {links, by_bundle, totals}; every link record names its
         source file, the region it sits in (body or frontmatter), the raw
@@ -278,25 +281,25 @@ def _register(server):
         form — use this one before renaming a concept a wikilink may point at.
         Pass unresolved=True to list only the broken and ambiguous ones."""
         return run_okf(root, "wikilinks",
-                       {"target": target, "unresolved": unresolved})
+                       {"use_global": use_global, "target": target, "unresolved": unresolved})
 
     @server.tool()
-    def okf_tags(root: str = "", query: str = "", limit: int = 8) -> dict:
+    def okf_tags(root: str = "", query: str = "", limit: int = 8, use_global: bool = False) -> dict:
         """List all tags with usage counts (query omitted), or fuzzy-search a
         candidate tag against the tag universe. Write/admin tag verbs
         (merge-tags, normalize-tags, --register) stay CLI-only by intent."""
-        return run_okf(root, "tags", {"query": query, "limit": limit})
+        return run_okf(root, "tags", {"use_global": use_global, "query": query, "limit": limit})
 
     @server.tool()
-    def okf_build_index(root: str = "") -> dict:
+    def okf_build_index(root: str = "", use_global: bool = False) -> dict:
         """(Re)build the FTS5 lexical index at <root>/.fts/fts.sqlite. Local
         only, no network, no change to catalogue content. Run this when
         okf_find reports the lexical index as absent or stale — that note
         names this command, and this tool is how you act on it."""
-        return run_okf(root, "build-index", {})
+        return run_okf(root, "build-index", {"use_global": use_global, })
 
     @server.tool()
-    def okf_build_semantic_index(root: str = "") -> dict:
+    def okf_build_semantic_index(root: str = "", use_global: bool = False) -> dict:
         """Fill <root>/.tagvec/tag_vectors.sqlite's concept_emb table for
         every concept still missing a voyage-3-large embedding. NETWORK —
         calls the Voyage AI embedding API and requires VOYAGE_API_KEY in
@@ -306,10 +309,10 @@ def _register(server):
         expose FTS's --if-stale either) — every call here is an
         unconditional delta fill; run this when okf_prime or okf_find
         reports the semantic index as absent or partial."""
-        return run_okf(root, "build-semantic-index", {})
+        return run_okf(root, "build-semantic-index", {"use_global": use_global, })
 
     @server.tool()
-    def okf_prime(root: str = "") -> dict:
+    def okf_prime(root: str = "", use_global: bool = False) -> dict:
         """One-shot onboarding for a fresh session: what the store is, how to
         retrieve from it, the full command directory, `find`'s options and its
         rank/score scales (rank: N is the headline, the arms' own raw scores
@@ -318,27 +321,27 @@ def _register(server):
         catalogue you have not worked with in this session. Rendered compact —
         bundle descriptions come from okf_index, find's full option help from
         the CLI."""
-        return run_okf(root, "prime", {"compact": True})
+        return run_okf(root, "prime", {"use_global": use_global, "compact": True})
 
     @server.tool()
-    def okf_info(root: str = "") -> dict:
+    def okf_info(root: str = "", use_global: bool = False) -> dict:
         """The catalogue's schema docs (TYPES.md + PROPERTIES.md): the valid
         `type` values and the frontmatter properties a concept must carry.
         Read this before writing into a catalogue."""
-        return run_okf(root, "info", {})
+        return run_okf(root, "info", {"use_global": use_global, })
 
     @server.tool()
-    def okf_sync_export(root: str = "", *, concept: str, block_id: str) -> dict:
+    def okf_sync_export(root: str = "", *, concept: str, block_id: str, use_global: bool = False) -> dict:
         """Print one canonical block's payload, as declared between
         `<!-- okf:canon id=<block_id> -->` and `<!-- /okf:canon -->` in
         `concept`. Read-only. Use it to see what a consumer would receive;
         use okf_sync_insert to actually materialise it."""
         return run_okf(root, "sync-export",
-                       {"concept": concept, "block_id": block_id})
+                       {"use_global": use_global, "concept": concept, "block_id": block_id})
 
     @server.tool()
     def okf_sync_insert(root: str = "", *, consumer: str, concept: str,
-                        block_id: str, apply: bool = False) -> dict:
+                        block_id: str, apply: bool = False, use_global: bool = False) -> dict:
         """Materialise a canonical block inside a consumer concept, so the
         consumer holds the Canon it needs in its own context without becoming
         a second authority. The generated block records its owner and the
@@ -347,12 +350,12 @@ def _register(server):
         hand-edit such a block — a needed change goes into the canon owner and
         then downstream through okf_sync_update."""
         return run_okf(root, "sync-insert",
-                       {"consumer": consumer, "concept": concept,
+                       {"use_global": use_global, "consumer": consumer, "concept": concept,
                         "block_id": block_id, "apply": apply})
 
     @server.tool()
     def okf_sync_status(root: str = "", target: str = "", source: str = "",
-                        block: str = "") -> dict:
+                        block: str = "", use_global: bool = False) -> dict:
         """Drift report for every materialised canon block: returns
         {blocks, totals}, each block naming its consumer, id, source and one
         of synced / source-changed / consumer-modified / both-changed /
@@ -360,12 +363,12 @@ def _register(server):
         lists the consumers of one canonical concept; `block` narrows to one
         id. Derived by a live catalogue walk — there is no index to rebuild."""
         return run_okf(root, "sync-status",
-                       {"target": target, "source": source, "block": block})
+                       {"use_global": use_global, "target": target, "source": source, "block": block})
 
     @server.tool()
     def okf_sync_update(root: str = "", target: str = "", source: str = "",
                         block: str = "", apply: bool = False,
-                        force: bool = False) -> dict:
+                        force: bool = False, use_global: bool = False) -> dict:
         """Re-materialise every outdated consumer block from its canon owner.
         Defaults to a dry-run preview; pass apply=True to write. A block whose
         LOCAL copy was modified is refused, not overwritten: reconcile that
@@ -373,7 +376,7 @@ def _register(server):
         instead. A block whose owner is gone or whose markers are broken is
         reported and never written — that is a human decision."""
         return run_okf(root, "sync-update",
-                       {"target": target, "source": source, "block": block,
+                       {"use_global": use_global, "target": target, "source": source, "block": block,
                         "apply": apply, "force": force})
 
     return server

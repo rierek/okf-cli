@@ -447,6 +447,35 @@ class McpOptionalRoot(unittest.TestCase):
         self.assertNotIn("--root", argvs[0])
 
 
+class McpGlobalSwitch(unittest.TestCase):
+    """`use_global=True` reaches the CLI as `--global` (the root from the user config,
+    ignoring a catalogue above cwd), on every tool. The parameter cannot be called
+    `global`: that is a Python keyword."""
+
+    def test_global_is_marshalled_before_the_command(self):
+        self.assertEqual(mcp.build_argv("", "prime", {"compact": True, "use_global": True}),
+                         ["--global", "prime", "--compact", "--json"])
+
+    def test_global_false_or_absent_emits_nothing(self):
+        for params in ({"compact": True}, {"compact": True, "use_global": False}):
+            self.assertNotIn("--global", mcp.build_argv("", "prime", params))
+
+    def test_every_tool_forwards_use_global(self):
+        tools = mcp._register(_ToolCollector()).tools
+        seen = []
+        real = mcp.run_okf
+        mcp.run_okf = lambda root, command, params: seen.append((command, params.get("use_global")))
+        try:
+            for name, fn in tools.items():
+                required = {p: "x" for p, v in inspect.signature(fn).parameters.items()
+                            if v.default is inspect.Parameter.empty}
+                fn(use_global=True, **required)
+        finally:
+            mcp.run_okf = real
+        self.assertEqual(len(seen), len(tools))
+        self.assertEqual([c for c, g in seen if g is not True], [])
+
+
 class McpToolSignatureContract(unittest.TestCase):
     """FastMCP translates a keyword-only parameter without a default into
     JSON-Schema `required`, and a parameter with a default into optional
