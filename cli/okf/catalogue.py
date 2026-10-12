@@ -918,7 +918,7 @@ def load_tags(root, tags_source=None):
     missing (in which case the closed-vocabulary check is a no-op). TAGS.md is a
     pipe-table with a leading `` `tag` `` cell per row — same format as TYPES.md,
     so the extraction regex is shared. The registry is the allowed tag vocabulary;
-    new tags enter it only via `okf-cli.py tags --register` (human-gated)."""
+    new tags enter it only via `okf tags --register` (human-gated)."""
     p = tags_source or os.path.join(root, "TAGS.md")
     if not os.path.isfile(p):
         return None
@@ -929,7 +929,7 @@ TAGS_HEADER = (
     "# TAGS.md — Registered Tag Vocabulary\n\n"
     "Closed vocabulary for concept `tags:`. The `kc/tag/registered` conformance check\n"
     "(warning; `check --strict` counts it toward the exit code) flags any tag not listed here.\n"
-    "Add a new tag only via `okf-cli.py tags --register <tag> <description>` — reuse an existing\n"
+    "Add a new tag only via `okf tags --register <tag> <description>` — reuse an existing\n"
     "tag over minting a near-duplicate. A tag earns its place by aggregating content.\n\n"
     "| Tag | Description |\n|-----|-------------|\n"
 )
@@ -1053,7 +1053,7 @@ def resolve_scopes(root, target, include_archive=False, indexable_only=False):
     under `_archive/` is appended, labelled `_archive/<bundle>` and pointing at
     the real `_archive/...` directory below root — a caller that walks the
     returned pairs reaches the archive without a second traversal shape, and
-    a hit's path stays its true position below root (AC3: `okf-cli read` on
+    a hit's path stays its true position below root (AC3: `okf read` on
     it resolves, SC-02). That includes a bundle with no active counterpart — the
     same discovery R-05/R-06's wikilink basename index already does for the
     archive (build_concept_basename_index, above; that function's traversal

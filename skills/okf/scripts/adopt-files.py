@@ -12,7 +12,7 @@ Without --apply it only prints the plan and every link it would rewrite. With --
      generated: { by: <actor>, at: <UTC now> }) unless the file has one; REVIEW title and description,
   3. rewrites every markdown link to a moved file and every relative link inside a moved file
      (links inside <root>/<bundle> become /<bundle>/...; others stay relative, so `../` links too),
-  4. runs `okf-cli rewrite-path <old> <new> --scan-root <repo>` for plain mentions (code, config),
+  4. runs `okf rewrite-path <old> <new> --scan-root <repo>` for plain mentions (code, config),
   5. runs `fix-crosslinks <bundle>` and `check <bundle>`, then lists leftover mentions of the old paths.
 The destination directory must already hold an index.md (step 4 of the reference). Nothing is committed.
 """
@@ -59,7 +59,7 @@ def main():
     repo, root = os.path.abspath(a.repo), os.path.abspath(a.root)
     rootrel = os.path.relpath(root, repo).replace(os.sep, "/")
     bundle_prefix = f"{rootrel}/{a.bundle}/"
-    cli = ["okf-cli", "--root", root]
+    cli = ["okf", "--root", root]
     moves = {}
     types = {}
     for old, new, typ in a.move:
@@ -133,7 +133,7 @@ def main():
         print((r.stdout + r.stderr).strip())
     for step in (["fix-crosslinks", a.bundle], ["check", a.bundle]):
         r = run(cli + step)
-        print(f"$ okf-cli --root {root} {' '.join(step)}\n" + (r.stdout + r.stderr).strip())
+        print(f"$ okf --root {root} {' '.join(step)}\n" + (r.stdout + r.stderr).strip())
     left = []
     for d, dirs, files in os.walk(repo):
         dirs[:] = [x for x in dirs if x not in SKIP]

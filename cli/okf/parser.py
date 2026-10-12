@@ -25,7 +25,7 @@ COMMAND_DISPATCH = {name: handler for name, (handler, _add_parser) in COMMAND_TA
 
 
 def build_parser(description=None):
-    ap = argparse.ArgumentParser(prog="okf-cli.py", description=description,
+    ap = argparse.ArgumentParser(prog="okf", description=description,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="catalogue root (default: the nearest catalogue above cwd, "
                     "else root in ~/.config/okf/config.toml; hard-fails if neither)").completer = _complete_dirs

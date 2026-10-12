@@ -35,7 +35,7 @@ CATALOGUE_FREE = frozenset({"install"})
 
 def add_install_parser(sub):
     pin = _sub(sub, "install", "maintenance",
-               "register okf-cli, its agent skill, MCP server and shell completion with this "
+               "register okf, its agent skill, MCP server and shell completion with this "
                "machine's agents and shells (dry-run default; needs no catalogue)")
     pin.add_argument("--apply", action="store_true",
                      help="perform the plan (default: print the plan, change nothing)")

@@ -96,7 +96,7 @@ def _substring_ranking(root, query, terms, limit, filters):
             root, None, filters.include_archive,
             indexable_only=not filters.include_topics):
         # The path prefix is the bundle's position under root (`_archive/<b>` for an
-        # archived one), so a hit's path is one `okf-cli read` resolves.
+        # archived one), so a hit's path is one `okf read` resolves.
         prefix = os.path.relpath(bp, root).replace(os.sep, "/")
         for cid, ap in iter_concepts(bp):
             parsed = read_frontmatter(read_file(ap))
@@ -275,7 +275,7 @@ def cmd_find(root, args):
                       and not include_topics else None)
     filters = compile_where(getattr(args, "where", None), include_topics, corpus_bundles)
     if include_topics and _fts_index_includes_topics(root) is False:
-        _note("lexical index excludes topic folders — run `okf-cli build-index --include-topics`")
+        _note("lexical index excludes topic folders — run `okf build-index --include-topics`")
     terms = tokenize(args.query)
     if not terms:
         if getattr(args, "json", False):
@@ -343,7 +343,7 @@ def cmd_find(root, args):
         near = _zero_hit_suggestions(root, args.query)
         if near:
             print("nearest registered tags: {}".format(", ".join(near)))
-            print("try: okf-cli find \"{}\"".format(" ".join(near[:2])))
+            print("try: okf find \"{}\"".format(" ".join(near[:2])))
         return
     for i, h in enumerate(all_hits[: args.limit], start=1):
         print("------")

@@ -49,13 +49,13 @@ description: "Read these first when joining the widget project"
 ## Read a ctx
 
 ```bash
-okf-cli --root <catalogue> ctx list
-okf-cli --root <catalogue> ctx list --for <bundle>/<concept-id>.md
-okf-cli --root <catalogue> ctx <slug>
-okf-cli --root <catalogue> ctx read <slug>
-okf-cli --root <catalogue> ctx toc <slug> --depth 2
-okf-cli --root <catalogue> ctx outbound <slug>
-okf-cli --root <catalogue> ctx inbound <slug>
+okf --root <catalogue> ctx list
+okf --root <catalogue> ctx list --for <bundle>/<concept-id>.md
+okf --root <catalogue> ctx <slug>
+okf --root <catalogue> ctx read <slug>
+okf --root <catalogue> ctx toc <slug> --depth 2
+okf --root <catalogue> ctx outbound <slug>
+okf --root <catalogue> ctx inbound <slug>
 ```
 
 - `ctx list`: slug, description, entry and required counts. `--for <path>`: only the ctx files that contain that path.
@@ -68,9 +68,9 @@ okf-cli --root <catalogue> ctx inbound <slug>
 ## Create a ctx
 
 ```bash
-okf-cli --root <catalogue> find "<topic>"
-okf-cli --root <catalogue> ctx create <slug> <bundle>/<concept-id> <bundle>/<concept-id> --description "<one line>"
-okf-cli --root <catalogue> ctx create <slug> --import <file> --description "<one line>"
+okf --root <catalogue> find "<topic>"
+okf --root <catalogue> ctx create <slug> <bundle>/<concept-id> <bundle>/<concept-id> --description "<one line>"
+okf --root <catalogue> ctx create <slug> --import <file> --description "<one line>"
 ```
 
 1. Pick the pages with `find`, `toc` and `read`. Fewer is better: every required entry costs reading time.
@@ -81,13 +81,13 @@ okf-cli --root <catalogue> ctx create <slug> --import <file> --description "<one
 ## Edit a ctx
 
 ```bash
-okf-cli --root <catalogue> ctx add <slug> <path> --pos 2 --comment "<why>"
-okf-cli --root <catalogue> ctx add <slug> <path> --mode nachschlag --comment "<why>"
-okf-cli --root <catalogue> ctx move <slug> <path> --pos 1
-okf-cli --root <catalogue> ctx move <slug> <path> --mode nachschlag
-okf-cli --root <catalogue> ctx drop <slug> <path>
-okf-cli --root <catalogue> ctx rename <old-slug> <new-slug>
-okf-cli --root <catalogue> ctx remove <slug>
+okf --root <catalogue> ctx add <slug> <path> --pos 2 --comment "<why>"
+okf --root <catalogue> ctx add <slug> <path> --mode nachschlag --comment "<why>"
+okf --root <catalogue> ctx move <slug> <path> --pos 1
+okf --root <catalogue> ctx move <slug> <path> --mode nachschlag
+okf --root <catalogue> ctx drop <slug> <path>
+okf --root <catalogue> ctx rename <old-slug> <new-slug>
+okf --root <catalogue> ctx remove <slug>
 ```
 
 - `ctx add`: new required entry at the end, or at `--pos N`; `--mode nachschlag` adds a reference entry.
@@ -100,10 +100,10 @@ okf-cli --root <catalogue> ctx remove <slug>
 ## Verify
 
 ```bash
-okf-cli --root <catalogue> ctx check <slug>
-okf-cli --root <catalogue> ctx check --stale
-okf-cli --root <catalogue> check _ctx
-okf-cli --root <catalogue> ctx <slug>
+okf --root <catalogue> ctx check <slug>
+okf --root <catalogue> ctx check --stale
+okf --root <catalogue> check _ctx
+okf --root <catalogue> ctx <slug>
 ```
 
 Done when `ctx check` and `check _ctx` end `OK — 0 violations` and `ctx <slug>` lists the entries in the intended order. `--stale` reports `kc/ctx/stale-entry` as a warning for every entry modified after the ctx file: review whether the ctx still fits. A check fails: fix the entry, then rerun the checks until clean.

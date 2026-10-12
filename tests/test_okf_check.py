@@ -45,7 +45,7 @@ def _applied(planner, root, *args, **kwargs):
 
 
 class CheckCommand(unittest.TestCase):
-    """T06 — okf-cli check: the conformance scan over the RULES registry.
+    """T06 — okf check: the conformance scan over the RULES registry.
     error = §9 hard rules + filename/asset placement (exit 4).
     warning = type registration / English keys / cross-link format."""
 

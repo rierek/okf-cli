@@ -27,7 +27,7 @@ build:
 lint:
     uvx ruff@{{ruff_version}} check cli mcp
 
-# Paket pruefen: bauen, twine check --strict, Wheel in leerer venv installieren, okf-cli --help
+# Paket pruefen: bauen, twine check --strict, Wheel in leerer venv installieren, okf --help
 pack-check:
     scripts/pack-check.sh
 
@@ -44,7 +44,7 @@ gate-a *ARGS:
     @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }
     @cd "{{invocation_directory()}}" && ahm gate-a {{ARGS}}
 
-# okf-cli bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf-cli.py install --help`)
+# okf bei Agents und Shells einrichten: zeigt den Plan, `just setup --apply` fuehrt ihn aus (--uninstall, --only: siehe `okf install --help`)
 setup *ARGS:
     uv run --script {{cli_dir}}/okf-cli.py install {{ARGS}}
 

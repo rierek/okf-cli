@@ -103,7 +103,7 @@ class RootSafety(unittest.TestCase):
         self.assertEqual(okf_catalogue.catalogue_root(None), expected)
 
     def test_auto_detect_docs_nested_okf_toml_from_sibling_subdir(self):
-        # okf-cli worktree bug: a hull-layout project keeps `docs/.okf.toml`
+        # okf worktree bug: a hull-layout project keeps `docs/.okf.toml`
         # at the WORKSPACE level, sibling to `repo/` and `worktrees/<id>/` —
         # never inside either checkout. From a linked worktree two levels
         # below the hull, the walk must still find `<hull>/docs/.okf.toml`
@@ -232,13 +232,13 @@ class GroupedOverview(unittest.TestCase):
             self.assertRegex(overview, r"\n\s+{}\s".format(re.escape(name)))
 
     def test_module_docstring_no_longer_lists_commands_by_hand(self):
-        self.assertNotIn("okf-cli.py find", okf.__doc__)
-        self.assertNotIn("okf-cli.py merge-tags", okf.__doc__)
+        self.assertNotIn("okf find", okf.__doc__)
+        self.assertNotIn("okf merge-tags", okf.__doc__)
 
 
 class TopLevelHelpDescription(unittest.TestCase):
     """The parser is built in okf.parser, whose own docstring is another text; the
-    entry hands its docstring over, so `okf-cli.py --help` still opens with it."""
+    entry hands its docstring over, so `okf --help` still opens with it."""
 
     def test_help_prints_the_entry_docstring(self):
         done = subprocess.run([sys.executable, os.path.join(_HERE, "okf-cli.py"), "--help"],
@@ -248,7 +248,7 @@ class TopLevelHelpDescription(unittest.TestCase):
 
 
 class BrokenPipeOnFind(unittest.TestCase):
-    """OKFT-0k55. `okf-cli find <query> | head` must not surface Python's
+    """OKFT-0k55. `okf find <query> | head` must not surface Python's
     plumbing. This needs a REAL subprocess piped into a REAL early-closing
     reader — an in-process contextlib.redirect_stdout(io.StringIO()) (as
     `okf_testkit.run_find` uses) never touches an actual file descriptor, so it

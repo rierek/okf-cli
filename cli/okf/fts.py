@@ -230,7 +230,7 @@ def _fts_ranking(root, query, limit, filters, notify=True):
         # stays byte-identical to the pre-plan output.
         if notify:
             _note("lexical index absent — falling back to substring "
-                  "scan; run `okf-cli build-index` for BM25 ranking")
+                  "scan; run `okf build-index` for BM25 ranking")
         return None
     terms = tokenize(query)
     if not terms:
@@ -286,7 +286,7 @@ def _fts_ranking(root, query, limit, filters, notify=True):
                     and _fts_index_stale(
                         root, conn, filters.include_topics, check_corpus=False)):
                 _note("lexical index is stale (catalogue changed since "
-                      "build) — run `okf-cli build-index`")
+                      "build) — run `okf build-index`")
         finally:
             conn.close()
     except sqlite3.DatabaseError:

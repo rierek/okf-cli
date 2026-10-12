@@ -10,9 +10,9 @@ is copied into the fake HOME). Stdlib only.
 Scenario schema (evals.json):
   id, name, workflow, base?        base = key of top-level "bases" (shared file sets)
   files [{path, content}]          written under <work>/
-  setup [shell]                    run in <work> with okf-cli on PATH, git identity set
+  setup [shell]                    run in <work> with okf on PATH, git identity set
   prompt                           {CLI_PY} = absolute path of cli/okf-cli.py
-  no_path_cli                      true: okf-cli is NOT on PATH (fallback invocation test)
+  no_path_cli                      true: okf is NOT on PATH (fallback invocation test)
   routing {must_read, also_read, must_not_read}  reference files under skills/okf/references/; must_read and
                                    must_not_read decide routing pass/fail, also_read (the table's "Also read") is only reported
   checks [{type, desc, ...}]       programmatic outcome checks, see CHECKS below
@@ -53,7 +53,7 @@ def materialise(sc, bases, root, with_cli=True):
         "[init]\n defaultBranch = main\n")
     if AUTH_DB.exists():
         shutil.copy(AUTH_DB, home / ".omp" / "agent" / "agent.db")
-    wrapper = bindir / "okf-cli"
+    wrapper = bindir / "okf"
     wrapper.write_text(f'#!/bin/sh\nexec python3 "{CLI_PY}" "$@"\n')
     wrapper.chmod(0o755)
     env = dict(os.environ, HOME=str(home), GIT_TERMINAL_PROMPT="0",
@@ -81,10 +81,10 @@ def materialise(sc, bases, root, with_cli=True):
 
 
 def env_path_without_okf():
-    """PATH minus any dir that carries a real okf-cli, so only the tmp wrapper counts."""
+    """PATH minus any dir that carries a real okf, so only the tmp wrapper counts."""
     out = []
     for d in os.environ.get("PATH", "").split(":"):
-        if d and not (Path(d) / "okf-cli").exists():
+        if d and not (Path(d) / "okf").exists():
             out.append(d)
     return ":".join(out)
 

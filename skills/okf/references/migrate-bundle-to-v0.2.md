@@ -10,7 +10,7 @@ Needs git, grep and find: `command -v git grep find`.
 
 - Checklist
 - What v0.2 adds
-- What okf-cli checks, and what it does not
+- What okf checks, and what it does not
 - Mapping from v0.1 and ad-hoc frontmatter
 - Deciding values
 - Procedure: phases 0 to 6
@@ -40,9 +40,9 @@ Copy into your task list (todo tool or scratch list), tick one by one. Each phas
 
 Unchanged from v0.1: required `type`, recommended `title`, `description`, `resource`, `tags`, reserved `index.md` and `log.md`, markdown links. Extra keys are allowed.
 
-## What okf-cli checks, and what it does not
+## What okf checks, and what it does not
 
-- No migrator exists. Every frontmatter change below is a manual edit; okf-cli handles only the structural steps.
+- No migrator exists. Every frontmatter change below is a manual edit; okf handles only the structural steps.
 - `check` enforces the v0.2 hard rules (frontmatter block present, non-empty `type`, no `type` in reserved files) plus local rules: tag block form, link form, registered types and tags, file names, asset placement, canon and ctx integrity.
 - In a bundle whose root `index.md` declares `okf_version: "0.2"` (quoted), `check` also validates `sources`, `usage_window`, `generated`, `verified`, `status`, `stale_after`, timestamp and actor formats and the `runtime` of an `Attested Computation` (rule IDs `okf/provenance/*`, `okf/trust/*`, `okf/lifecycle/*`, `okf/format/*`, `okf/computation/*`), and warns when a body changed after `generated.at` without a new `generated.at` (`okf/trust/drift`). Declare the version, then run `check <bundle>` after phase 5. A bundle without the declaration gets none of these findings: verify its fields with the `grep` and `read` steps of phase 6.
 
@@ -83,8 +83,8 @@ Work in the repository that holds the bundle: `git -C <catalogue>/<bundle> rev-p
 
 ```bash
 git -C <catalogue>/<bundle> status --short
-okf-cli --root <catalogue> check <bundle>
-okf-cli --root <catalogue> reindex <bundle> --check
+okf --root <catalogue> check <bundle>
+okf --root <catalogue> reindex <bundle> --check
 grep -rlE --include='*.md' '^(timestamp|date|created|updated|author|source|url|draft):' <catalogue>/<bundle>
 grep -rl --include='*.md' '^# Citations' <catalogue>/<bundle>
 ```
@@ -93,28 +93,28 @@ Keep the output: it is the work list and the comparison point. Show the user the
 
 ### Phase 1: structure
 
-1. Every directory that holds concepts needs an `index.md`. List directories with `find <catalogue>/<bundle> -type d`; for each without `index.md`: `okf-cli --root <catalogue> reindex <bundle>/<subdir> --init`, then add an intro line under its H1.
+1. Every directory that holds concepts needs an `index.md`. List directories with `find <catalogue>/<bundle> -type d`; for each without `index.md`: `okf --root <catalogue> reindex <bundle>/<subdir> --init`, then add an intro line under its H1.
 2. Convert hand-written listings. Preview, then run:
 
    ```bash
-   okf-cli --root <catalogue> reindex <bundle> --init --check
-   okf-cli --root <catalogue> reindex <bundle> --init
-   okf-cli --root <catalogue> reindex <bundle>
+   okf --root <catalogue> reindex <bundle> --init --check
+   okf --root <catalogue> reindex <bundle> --init
+   okf --root <catalogue> reindex <bundle>
    ```
 
    `--init` replaces a single-section bullet list with an empty marker block; the listing is then generated from each concept's `title` and `description`. Move information that exists only in the old list into the concepts first. Multi-section indexes are skipped and flagged; convert them by hand, or with `--force` when they hold only headings and bullets.
-3. `okf-cli --root <catalogue> check <bundle>`, review `git diff`.
+3. `okf --root <catalogue> check <bundle>`, review `git diff`.
 
 ### Phase 2: mechanical normalisation
 
 ```bash
-okf-cli --root <catalogue> normalize-tags --where "path ~ <bundle>/"
-okf-cli --root <catalogue> normalize-tags --where "path ~ <bundle>/" --apply
-okf-cli --root <catalogue> fix-crosslinks <bundle> --check
-okf-cli --root <catalogue> fix-crosslinks <bundle>
-okf-cli --root <catalogue> fix-xml-tags <bundle> --check
-okf-cli --root <catalogue> fix-xml-tags <bundle>
-okf-cli --root <catalogue> check <bundle>
+okf --root <catalogue> normalize-tags --where "path ~ <bundle>/"
+okf --root <catalogue> normalize-tags --where "path ~ <bundle>/" --apply
+okf --root <catalogue> fix-crosslinks <bundle> --check
+okf --root <catalogue> fix-crosslinks <bundle>
+okf --root <catalogue> fix-xml-tags <bundle> --check
+okf --root <catalogue> fix-xml-tags <bundle>
+okf --root <catalogue> check <bundle>
 ```
 
 Fix every `unresolved` link that `fix-crosslinks` reports by hand.
@@ -167,7 +167,7 @@ Revenue sums amount per fiscal year.[^revenue-recognition]
 [^revenue-recognition]: Revenue recognition policy
 ```
 
-After each batch: `okf-cli --root <catalogue> check <bundle>`, review `git diff`.
+After each batch: `okf --root <catalogue> check <bundle>`, review `git diff`.
 
 ### Phase 5: trust and lifecycle
 
@@ -185,14 +185,14 @@ Never add `type` there.
 ### Phase 6: verify
 
 ```bash
-okf-cli --root <catalogue> check <bundle> --strict
-okf-cli --root <catalogue> reindex <bundle> --check
+okf --root <catalogue> check <bundle> --strict
+okf --root <catalogue> reindex <bundle> --check
 grep -rlE --include='*.md' '^(timestamp|date|created|updated|author|source|url|draft):' <catalogue>/<bundle>
 grep -rl --include='*.md' '^# Citations' <catalogue>/<bundle>
 grep -rL --include='*.md' '^generated:' <catalogue>/<bundle>
-okf-cli --root <catalogue> read <bundle>/<concept-id>
-okf-cli --root <catalogue> build-index --if-stale
-okf-cli --root <catalogue> find "<term>" --where "path ~ <bundle>/"
+okf --root <catalogue> read <bundle>/<concept-id>
+okf --root <catalogue> build-index --if-stale
+okf --root <catalogue> find "<term>" --where "path ~ <bundle>/"
 ```
 
 Done when:
