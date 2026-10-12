@@ -146,7 +146,7 @@ okf --root <catalogue> normalize-tags --where "path ~ <target>/"
 - `TAGS.md` present = closed vocabulary. `--validate` exits 4 (non_conformant) and prints `UNKNOWN <tag>` for unregistered tags; without `TAGS.md` it prints `(no TAGS.md — closed vocabulary not enabled)`.
 - `--register <tag> "<description>"` writes to `TAGS.md` at once, no preview (description required, one line, at most 150 characters, no `|`); repeat the option for several tags. It also tries a local embedding service; a stderr `warning: auto-embed skipped` is harmless.
 - `merge-tags`, `remove-tags` and `normalize-tags` preview; add `--apply` to write. `normalize-tags` converts inline `tags: [a, b]` to a block list.
-- After merging or removing, delete the obsolete rows from `TAGS.md` by hand, then run `check`.
+- After merging or removing, delete the obsolete entries (rows or blocks) from `TAGS.md` by hand, then run `check`.
 
 ## 7. Rename or move a concept
 

@@ -10,7 +10,7 @@ import re
 import subprocess
 import tomllib
 import typing
-from collections import Counter
+from collections import Counter, namedtuple
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.error import YAMLError
@@ -912,53 +912,159 @@ def _git_toplevel(path):
     return res.stdout.strip(), None
 
 
+REGISTRY_FORMATS = ("table", "block")
+REGISTRY_RANKS = ("1", "2", "3", "—")
+RegistryEntry = namedtuple("RegistryEntry", "value kind start end")   # line span, end exclusive
+RegistryScan = namedtuple("RegistryScan", "entries headings fenced")  # headings: line indexes; fenced: set of line indexes
+_TABLE_ENTRY_RE = re.compile(r"^\|\s*`([^`]+)`")
+_BLOCK_ENTRY_RE = re.compile(r"^###\s+`([^`]+)`\s*$")
+_HEADING_RE = re.compile(r"^#{1,6}(?:\s|$)")
+_FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*$")
+
+
+def scan_registry(lines):
+    """Registry entries of TAGS.md/TYPES.md in both forms. `lines` is
+    text.splitlines(keepends=True). A table entry is a row whose first cell is a
+    backticked value; a block entry is a `### `value`` heading and spans to the
+    next heading (or EOF).
+
+    - Both forms are always recognised, so switching form never turns `check` red.
+    - Lines inside a code fence (``` or ~~~) count in neither form: an example in
+      a code block is documentation, not an entry.
+    - A table row outside fences counts anywhere in the file ("section is
+      documentation, not enforcement").
+    - Setext headings are not recognised."""
+    entries, headings, fenced = [], [], set()
+    fence = None  # (char, length) while inside a fence
+    for i, line in enumerate(lines):
+        if fence:
+            fenced.add(i)
+            m = _FENCE_CLOSE_RE.match(line)
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1]:
+                fence = None
+            continue
+        m = _FENCE_OPEN_RE.match(line)
+        if m:
+            fence = (m.group(1)[0], len(m.group(1)))
+            fenced.add(i)
+            continue
+        if _HEADING_RE.match(line):
+            headings.append(i)
+        m = _BLOCK_ENTRY_RE.match(line)
+        if m:
+            entries.append(RegistryEntry(m.group(1), "block", i, None))
+            continue
+        m = _TABLE_ENTRY_RE.match(line)
+        if m:
+            entries.append(RegistryEntry(m.group(1), "table", i, i + 1))
+    out = []
+    for e in entries:
+        if e.kind == "block":
+            e = e._replace(end=next((h for h in headings if h > e.start), len(lines)))
+        out.append(e)
+    return RegistryScan(out, headings, fenced)
+
+
+def _load_registry(p):
+    if not os.path.isfile(p):
+        return None
+    return {e.value for e in scan_registry(read_file(p).splitlines(True)).entries}
+
+
 def load_types(root, types_source=None):
     """Set of registered `type` values, or None if the source is missing.
     types_source overrides the default <root>/TYPES.md so a repo bundle can
-    point at the central catalogue's TYPES.md (config-aware, no local copy)."""
-    p = types_source or os.path.join(root, "TYPES.md")
-    if not os.path.isfile(p):
-        return None
-    return set(re.findall(r"^\|\s*`([^`]+)`", read_file(p), re.M))
+    point at the central catalogue's TYPES.md (config-aware, no local copy).
+    Table and block entries both count (README "Registry format")."""
+    return _load_registry(types_source or os.path.join(root, "TYPES.md"))
 
 
 def load_tags(root, tags_source=None):
     """Set of registered tag values from <root>/TAGS.md, or None if the file is
-    missing (in which case the closed-vocabulary check is a no-op). TAGS.md is a
-    pipe-table with a leading `` `tag` `` cell per row — same format as TYPES.md,
-    so the extraction regex is shared. The registry is the allowed tag vocabulary;
-    new tags enter it only via `okf tags --register` (human-gated)."""
-    p = tags_source or os.path.join(root, "TAGS.md")
-    if not os.path.isfile(p):
-        return None
-    return set(re.findall(r"^\|\s*`([^`]+)`", read_file(p), re.M))
+    missing (in which case the closed-vocabulary check is a no-op). Table and
+    block entries both count (README "Registry format"). The registry is the
+    allowed tag vocabulary; new tags enter it only via `okf tags --register`
+    (human-gated)."""
+    return _load_registry(tags_source or os.path.join(root, "TAGS.md"))
 
 
-TAGS_HEADER = (
+TAGS_INTRO = (
     "# TAGS.md — Registered Tag Vocabulary\n\n"
     "Closed vocabulary for concept `tags:`. The `kc/tag/registered` conformance check\n"
     "(warning; `check --strict` counts it toward the exit code) flags any tag not listed here.\n"
     "Add a new tag only via `okf tags --register <tag> <description>` — reuse an existing\n"
     "tag over minting a near-duplicate. A tag earns its place by aggregating content.\n\n"
-    "| Tag | Description |\n|-----|-------------|\n"
 )
+TAGS_TABLE_HEAD = "| Tag | Description |\n|-----|-------------|\n"
 
 
-def _read_tag_rows(root):
-    """Parse TAGS.md into an ordered {tag: description} dict ({} if absent)."""
-    p = os.path.join(root, "TAGS.md")
-    rows = {}
-    if os.path.isfile(p):
-        for tag, desc in re.findall(r"^\|\s*`([^`]+)`\s*\|(.*?)\|", read_file(p), re.M):
-            rows[tag] = desc.strip()
-    return rows
+def render_registry_entry(kind, value, desc, rank=None):
+    if kind == "table":
+        if rank:
+            return "| `{}` | {} | {} |\n".format(value, rank, desc)
+        return "| `{}` | {} |\n".format(value, desc)
+    return "### `{}`\n".format(value) + ("rank: {}\n".format(rank) if rank else "") + ("{}\n".format(desc) if desc else "")
 
 
-def write_tags_registry(root, rows):
-    """Render {tag: description} to TAGS.md, tags casefold-sorted."""
-    body = "".join("| `{}` | {} |\n".format(t, rows[t]) for t in sorted(rows, key=str.casefold))
-    with open(os.path.join(root, "TAGS.md"), "w", encoding="utf-8") as f:
-        f.write(TAGS_HEADER + body)
+def _splice(lines, at, text):
+    """Insert text before line index `at`. The only change to existing text is a
+    missing newline on the line before `at`."""
+    if at > 0 and not lines[at - 1].endswith("\n"):
+        lines[at - 1] += "\n"
+    lines[at:at] = [text]
+
+
+def _blank_before(lines, at):
+    return at > 0 and lines[at - 1].strip() != ""
+
+
+def _insert_tag(text, tag, desc, fmt):
+    """text with one new entry inserted, in `fmt`, keeping every existing byte.
+
+    A new entry lands only among entries of its own form: a block in the middle
+    of a table would tear the table. A new block goes to the end of the last
+    table's section: straight after the table it would swallow the following
+    prose as its description (a block runs to the next heading). A new table
+    goes before the first block: any later spot lies inside a block's span.
+
+    ponytail: inserted lines always end in \\n, so a CRLF file gets mixed line
+    endings. Upgrade: take the file's line ending."""
+    lines = text.splitlines(True)
+    scan = scan_registry(lines)
+    same = [e for e in scan.entries if e.kind == fmt]
+    other = [e for e in scan.entries if e.kind != fmt]
+    nxt = next((e for e in same if e.value.casefold() > tag.casefold()), None)
+    if fmt == "table":
+        row = render_registry_entry("table", tag, desc)
+        if nxt:
+            at, ins = nxt.start, row
+        elif same:
+            at, ins = same[-1].start + 1, row
+        elif other:
+            at = other[0].start
+            ins = ("\n" if _blank_before(lines, at) else "") + TAGS_TABLE_HEAD + row + "\n"
+        else:
+            at = len(lines)
+            ins = ("\n" if _blank_before(lines, at) else "") + TAGS_TABLE_HEAD + row
+    else:
+        blk = render_registry_entry("block", tag, desc)
+        if nxt:
+            at, ins = nxt.start, blk + "\n"
+        elif same:
+            e = same[-1]
+            at = e.end
+            while at > e.start + 1 and not lines[at - 1].strip():
+                at -= 1
+            ins = "\n" + blk
+        else:
+            at = len(lines)
+            if other:
+                last = other[-1].start
+                at = next((h for h in scan.headings if h > last), len(lines))
+            ins = ("\n" if _blank_before(lines, at) else "") + blk + ("\n" if at < len(lines) else "")
+    _splice(lines, at, ins)
+    return "".join(lines)
 
 
 TAG_DESC_MAX = 150
@@ -967,8 +1073,12 @@ TAG_DESC_MAX = 150
 def register_tags(root, entries):
     """Add [(tag, description)] to TAGS.md (creating it if absent). Returns
     (added, already). Every description is validated before anything is
-    written: non-empty, at most TAG_DESC_MAX chars, one line, no `|` (it would
-    split the table cell). A tag already registered keeps its description."""
+    written: non-empty, at most TAG_DESC_MAX chars, one line, no `|`. The `|`
+    ban holds in both forms so `registry convert --to table` stays lossless. A
+    tag already registered keeps its description.
+
+    Never re-renders: the file belongs to the human, okf only inserts entries
+    (in the form `.okf.toml` registry_format names, default table)."""
     for tag, desc in entries:
         desc = desc.strip()
         if not desc:
@@ -978,15 +1088,21 @@ def register_tags(root, entries):
                 tag, len(desc), TAG_DESC_MAX))
         if "|" in desc or "\n" in desc or "\r" in desc:
             raise ValueError("tag {!r}: description must be one line without '|'".format(tag))
-    rows = _read_tag_rows(root)
+    p = os.path.join(root, "TAGS.md")
+    fmt = load_okf_config(root).get("registry_format", "table")
+    text = read_file_verbatim(p) if os.path.isfile(p) else TAGS_INTRO
+    if text is None:
+        raise ValueError("TAGS.md is not valid UTF-8; nothing written")
+    registered = {e.value for e in scan_registry(text.splitlines(True)).entries}
     new = {}
     for tag, desc in entries:
-        if tag not in rows:
+        if tag not in registered:
             new.setdefault(tag, desc.strip())
-    already = [t for t in dict.fromkeys(t for t, _ in entries) if t in rows]
-    rows.update(new)
+    already = [t for t in dict.fromkeys(t for t, _ in entries) if t in registered]
     if new:
-        write_tags_registry(root, rows)
+        for tag in sorted(new, key=str.casefold):
+            text = _insert_tag(text, tag, new[tag], fmt)
+        write_file_verbatim(p, text)
     return list(new), already
 
 
@@ -1011,6 +1127,14 @@ def load_okf_config(root):
     for k in ("kc_root", "types_source"):
         if isinstance(data.get(k), str):
             data[k] = os.path.expanduser(data[k])
+    # Validated here like the TOML itself: every command loads the config, so a
+    # typo fails at once and not at the next `tags --register`. One key for both
+    # files would be wrong only if TYPES.md had a writer; it has none (`registry
+    # convert` takes --to explicitly), so there is no types_format.
+    if "registry_format" in data and data["registry_format"] not in REGISTRY_FORMATS:
+        raise OkfError("invalid_input",
+                       'ERROR: {}: registry_format must be "table" or "block", got {!r}'.format(
+                           p, data["registry_format"]))
     return data
 
 

@@ -996,6 +996,7 @@ class Conformance(WriteFixture):
         "recent": ["recent"],
         "refs": ["refs", "kc-a/alpha.md"],
         "reindex": ["reindex", "kc-a"],
+        "registry convert": ["registry", "convert", "TAGS.md", "--to", "block"],
         "remove-tags": ["remove-tags", "gamma"],
         "rename": ["rename", "kc-a/old.md", "kc-a/older.md"],
         "rewrite-path": ["rewrite-path", "old/place.md", "new/place.md", "--check"],

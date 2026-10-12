@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import sys
+import difflib
 import tempfile
 import unittest
 
@@ -1059,6 +1060,99 @@ class RenderFrontmatter(unittest.TestCase):
         text = "---\ntype: Note\ntags:\n- git\n- tag\ngenerated: { by: x, at: 2026-10-09T00:00:00Z }\n---\n"
         self.assertEqual(okf_catalogue.render_frontmatter(okf_catalogue.read_frontmatter(text)),
                          "---\ntype: Note\ntags:\n  - git\n  - tag\ngenerated: {by: x, at: 2026-10-09T00:00:00Z}\n---\n")
+
+class RegistryFormat(unittest.TestCase):
+    """TAGS.md/TYPES.md entries as table rows or `###` blocks: both read, new tags inserted
+    byte-preserving in the .okf.toml registry_format."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _w(self, rel, text):
+        with open(os.path.join(self.tmp, rel), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def _r(self, rel):
+        with open(os.path.join(self.tmp, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_table_and_block_yield_the_same_sets(self):
+        self._w("TAGS.md", "| Tag | Description |\n|---|---|\n| `a` | A |\n| `b` | B |\n")
+        as_table = okf_catalogue.load_tags(self.tmp)
+        self._w("TAGS.md", "### `a`\nA\n\n### `b`\nB\n")
+        self.assertEqual(okf_catalogue.load_tags(self.tmp), as_table)
+        self._w("TYPES.md", "| type | rank | Meaning |\n|---|---|---|\n| `X` | 1 | x |\n| `Y` | — | y |\n"
+                            "\n## Other\n\n| type | Meaning |\n|---|---|\n| `Z` | z |\n")
+        as_table = okf_catalogue.load_types(self.tmp)
+        self._w("TYPES.md", "### `X`\nrank: 1\nx\n\n### `Y`\nrank: —\ny\n\n### `Z`\nz\n")
+        self.assertEqual(okf_catalogue.load_types(self.tmp), as_table)
+        self.assertEqual(as_table, {"X", "Y", "Z"})
+
+    def test_mixed_file_counts_entries_outside_fences_only(self):
+        self._w("TAGS.md", "| Tag | Description |\n|---|---|\n| `a` | A |\n\n### `b`\nB\n\n"
+                           "```\n### `ghost`\n| `ghost2` | x |\n```\n\n"
+                           "~~~\n### `ghost3`\n~~~\n\n## `lvl2`\n\n### `x` trailing text\n")
+        self.assertEqual(okf_catalogue.load_tags(self.tmp), {"a", "b"})
+
+    _BLOCK = ("---\nuid: x\n---\n# Eigene Tags\n\nEigener Kopf.\n\n### `alpha`\nA\n\n"
+              "## Gruppe 2\n\nProsa zwischen Einträgen.\n\n### `zulu`\nZ\n\n"
+              "## Prüfungen\n\n`kc/tag/registered` meldet unbekannte Tags.\n")
+    _TABLE = ("---\nuid: x\n---\n# Eigene Tags\n\nEigener Kopf.\n\n" + okf_catalogue.TAGS_TABLE_HEAD
+              + "| `alpha` | A |\n\n## Gruppe 2\n\nProsa zwischen Einträgen.\n\n" + okf_catalogue.TAGS_TABLE_HEAD
+              + "| `zulu` | Z |\n\n## Prüfungen\n\n`kc/tag/registered` meldet unbekannte Tags.\n")
+
+    def _register(self, before, config, tag, desc):
+        self._w("TAGS.md", before)
+        self._w(".okf.toml", 'registry_format = "{}"\n'.format(config))
+        okf_catalogue.register_tags(self.tmp, [(tag, desc)])
+        after = self._r("TAGS.md")
+        ops = difflib.SequenceMatcher(None, before.splitlines(True), after.splitlines(True)).get_opcodes()
+        self.assertEqual({op[0] for op in ops} - {"equal"}, {"insert"})
+        self.assertIn(tag, okf_catalogue.load_tags(self.tmp))
+        return after
+
+    def test_register_only_inserts_in_all_four_file_and_config_combinations(self):
+        mid_block = "### `mid`\nm\n\n"
+        mid_row = "| `mid` | m |\n"
+        cases = (
+            (self._TABLE, "table", "| `zulu` | Z |\n", mid_row),
+            (self._BLOCK, "block", "### `zulu`\n", mid_block),
+            (self._TABLE, "block", "## Prüfungen\n", mid_block),
+            (self._BLOCK, "table", "### `alpha`\n", okf_catalogue.TAGS_TABLE_HEAD + mid_row + "\n"),
+        )
+        for before, config, anchor, inserted in cases:
+            with self.subTest(file="table" if before is self._TABLE else "block", config=config):
+                after = self._register(before, config, "mid", "m")
+                self.assertEqual(after, before.replace(anchor, inserted + anchor, 1))
+
+    def test_register_after_the_last_block(self):
+        after = self._register(self._BLOCK, "block", "zz", "d")
+        self.assertEqual(after, self._BLOCK.replace("Z\n", "Z\n\n### `zz`\nd\n", 1))
+
+    def test_new_file_follows_registry_format(self):
+        self._w(".okf.toml", 'registry_format = "block"\n')
+        okf_catalogue.register_tags(self.tmp, [("zebra", "z"), ("alpha", "a")])
+        self.assertEqual(self._r("TAGS.md"),
+                         okf_catalogue.TAGS_INTRO + "### `alpha`\na\n\n### `zebra`\nz\n")
+
+    def test_registry_format_is_validated(self):
+        for bad in ('"blocks"', "1"):
+            self._w(".okf.toml", "registry_format = {}\n".format(bad))
+            with self.assertRaises(OkfError) as cm:
+                okf_catalogue.load_okf_config(self.tmp)
+            self.assertEqual(cm.exception.code, 2)
+            for part in (".okf.toml", '"table"', '"block"'):
+                self.assertIn(part, cm.exception.message)
+            self._w("TAGS.md", self._TABLE)
+            with self.assertRaises(OkfError):
+                okf_catalogue.register_tags(self.tmp, [("mid", "m")])
+            self.assertEqual(self._r("TAGS.md"), self._TABLE)
+        self._w(".okf.toml", 'registry_format = "block"\n')
+        self.assertEqual(okf_catalogue.load_okf_config(self.tmp)["registry_format"], "block")
+
 
 
 if __name__ == "__main__":
