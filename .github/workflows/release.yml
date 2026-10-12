@@ -60,19 +60,19 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: dist
-          path: assets
+          path: release-files
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.provenance.outputs.provenance-name }}
-          path: assets
+          path: release-files
       # Draft first, publish last: a published immutable release cannot take another file.
       - name: Create the draft release and attach every file
         env:
           PROVENANCE: ${{ needs.provenance.outputs.provenance-name }}
         run: |
           set -euo pipefail
-          ls -l assets
-          test -n "$(ls assets/*.whl)" && test -n "$(ls assets/*.tar.gz)" && test -f "assets/$PROVENANCE"
+          ls -l release-files
+          test -n "$(ls release-files/*.whl)" && test -n "$(ls release-files/*.tar.gz)" && test -f "release-files/$PROVENANCE"
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             TAG="$GITHUB_REF_NAME"
             VERSION="$(echo "${TAG#rel-}" | tr - .)"
@@ -83,11 +83,13 @@ jobs:
             gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "dry run" --notes "dry run"
           fi
           echo "TAG=$TAG" >> "$GITHUB_ENV"
-          gh release upload "$TAG" assets/*
+          gh release upload "$TAG" release-files/*
       - name: Publish, or delete the dry-run draft
         run: |
           set -euo pipefail
           gh release view "$TAG" --json isDraft,assets -q '{draft:.isDraft,assets:[.assets[].name]}'
+          # wheel, sdist, provenance: nothing else may ride along
+          [ "$(gh release view "$TAG" --json assets -q '.assets|length')" = 3 ]
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             gh release edit "$TAG" --draft=false
           else
