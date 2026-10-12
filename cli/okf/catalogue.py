@@ -547,8 +547,8 @@ def read_file(ap):
 
 
 def sorted_walk(top):
-    """os.walk in sorted name order. os.walk yields directory order, which is sorted on APFS
-    but arbitrary on ext4; every listing, preview and write plan must not depend on the
+    """os.walk in sorted name order. os.walk yields the filesystem's directory order, which
+    differs between APFS and ext4; every listing, preview and write plan must not depend on the
     filesystem. The caller prunes the yielded dirnames in place as with os.walk."""
     for dirpath, dirnames, filenames in os.walk(top):
         dirnames.sort()
