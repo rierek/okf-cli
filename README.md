@@ -25,6 +25,12 @@ uv run --script cli/okf-cli.py install --apply    # performs it
 pipx install git+https://github.com/xRiErOS/okf-cli      # or: uv tool install git+https://github.com/xRiErOS/okf-cli
 okf install
 okf install --apply
+
+# Homebrew (macOS, Linuxbrew)
+brew tap xRiErOS/tap
+brew trust xRiErOS/tap      # Homebrew 7 refuses formulae from untrusted taps
+brew install okf-cli
+okf install
 ```
 
 Then use it from any directory. Without `--root` it takes the nearest catalogue above the current directory, else the `root` in `~/.config/okf/config.toml` (`$XDG_CONFIG_HOME/okf/config.toml`). `--global` takes that configured root even when a catalogue lies above the current directory (not together with `--root`). A `~` in `--root` is expanded:
