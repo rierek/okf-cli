@@ -44,13 +44,40 @@ SYNC_OPEN_RE = re.compile(
 SYNC_SPAN_RE = re.compile(r"<!--\s*okf:sync\s[\s\S]*?" + re.escape(SYNC_END))
 
 
+def user_config_path():
+    """$XDG_CONFIG_HOME/okf/config.toml; an unset or relative XDG_CONFIG_HOME means ~/.config."""
+    base = os.environ.get("XDG_CONFIG_HOME", "")
+    if not os.path.isabs(base):
+        base = os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "okf", "config.toml")
+
+
+def configured_root():
+    """`root` from the user config: the catalogue used when no marker sits
+    above cwd. None when the file or the key is absent."""
+    p = user_config_path()
+    if not os.path.isfile(p):
+        return None
+    root = _read_toml(p).get("root")
+    if root is None:
+        return None
+    if not isinstance(root, str) or not os.path.isabs(os.path.expanduser(root)):
+        raise OkfError("invalid_input",
+                       "ERROR: {}: root must be an absolute path or start with ~/".format(p))
+    root = os.path.expanduser(root)
+    if not os.path.isdir(root):
+        raise OkfError("not_found", "ERROR: root {} from {} does not exist".format(root, p))
+    return root
+
+
 def catalogue_root(explicit):
     """Resolve the catalogue root. Explicit --root wins unchanged (abspath,
     even if nonexistent — main() validates that). Absent --root, auto-detect
     by walking cwd upward for a catalogue marker (.okf.toml, or SPEC.md +
     TYPES.md together) either IN the candidate directory or in its `docs/`
-    child; return None if no marker is found anywhere up to the filesystem
-    root — never silently fall back to the script's own directory.
+    child. No marker anywhere up to the filesystem root: the `root` of the
+    user config (configured_root()), or None when that is absent too — never
+    silently fall back to the script's own directory.
 
     The `docs/` child check exists for the workspace+repo/-hull layout
     (okf-p V3): the catalogue root actually returned is `<hull>/docs`, and
@@ -77,7 +104,7 @@ def catalogue_root(explicit):
             return docs
         parent = os.path.dirname(d)
         if parent == d:
-            return None
+            return configured_root()
         d = parent
 
 
@@ -954,20 +981,24 @@ def register_tags(root, entries):
     return list(new), already
 
 
+def _read_toml(p):
+    with open(p, "rb") as f:
+        try:
+            return tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            # Every caller now reaches this on every run, so a parse failure has
+            # to name the file and the reason instead of printing a traceback.
+            raise OkfError("invalid_input",
+                           "ERROR: {} is not valid TOML: {}".format(p, e))
+
+
 def load_okf_config(root):
     """Parse <root>/.okf.toml if present. Returns a dict ({} if absent).
     Leading-~ path values are expanduser-expanded."""
     p = os.path.join(root, ".okf.toml")
     if not os.path.isfile(p):
         return {}
-    with open(p, "rb") as f:
-        try:
-            data = tomllib.load(f)
-        except tomllib.TOMLDecodeError as e:
-            # Every caller now reaches this on every run, so a parse failure has
-            # to name the file and the reason instead of printing a traceback.
-            raise OkfError("invalid_input",
-                           "ERROR: {} is not valid TOML: {}".format(p, e))
+    data = _read_toml(p)
     for k in ("kc_root", "types_source"):
         if isinstance(data.get(k), str):
             data[k] = os.path.expanduser(data[k])

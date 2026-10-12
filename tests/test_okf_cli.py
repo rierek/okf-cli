@@ -72,6 +72,7 @@ class RootSafety(unittest.TestCase):
             _sys.argv, _sys.stderr = old_argv, old_stderr
         self.assertEqual(ctx.exception.code, okf_errors.EXIT_CODES["not_found"])
         self.assertIn("--root", captured.getvalue())
+        self.assertIn("config.toml", captured.getvalue())
 
     def test_auto_detect_okf_toml_marker(self):
         # SC-003
@@ -119,6 +120,101 @@ class RootSafety(unittest.TestCase):
         # from the resolved cwd rather than from self.tmp directly.
         expected = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "docs")
         self.assertEqual(okf_catalogue.catalogue_root(None), expected)
+
+
+class ConfiguredRoot(unittest.TestCase):
+    """Without --root and without a marker above cwd, `root` from
+    $XDG_CONFIG_HOME/okf/config.toml is the catalogue."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.cwd = os.getcwd()
+        self.cfg = os.path.join(self.tmp, "cfg")
+        self.bare = os.path.join(self.tmp, "bare")  # cwd with no marker above it
+        self.cat = os.path.join(self.tmp, "cat")
+        os.makedirs(os.path.join(self.cfg, "okf"))
+        os.makedirs(os.path.join(self.cat, "b"))
+        os.makedirs(self.bare)
+        with open(os.path.join(self.cat, "b", "x.md"), "w", encoding="utf-8") as f:
+            f.write("---\ntype: Note\n---\n# x\n")
+        os.chdir(self.bare)
+        p = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.cfg})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def config(self, text):
+        with open(os.path.join(self.cfg, "okf", "config.toml"), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_root_from_config(self):
+        self.config('root = "{}"\n'.format(self.cat))
+        self.assertEqual(okf_catalogue.catalogue_root(None), self.cat)
+
+    def test_tilde_root_expands_against_home(self):
+        self.config('root = "~/kat"\n')
+        os.makedirs(os.path.join(self.tmp, "kat"))
+        with mock.patch.dict(os.environ, {"HOME": self.tmp}):
+            self.assertEqual(okf_catalogue.catalogue_root(None), os.path.join(self.tmp, "kat"))
+
+    def test_marker_above_cwd_beats_config(self):
+        self.config('root = "{}"\n'.format(self.cat))
+        open(os.path.join(self.bare, ".okf.toml"), "w", encoding="utf-8").close()
+        sub = os.path.join(self.bare, "s")
+        os.makedirs(sub)
+        os.chdir(sub)
+        self.assertEqual(okf_catalogue.catalogue_root(None), self.bare)
+
+    def test_explicit_root_beats_config(self):
+        self.config('root = "{}"\n'.format(self.cat))
+        self.assertEqual(okf_catalogue.catalogue_root(self.bare), self.bare)
+
+    def test_config_without_root_or_missing_config_is_none(self):
+        self.assertIsNone(okf_catalogue.catalogue_root(None))
+        self.config("other = 1\n")
+        self.assertIsNone(okf_catalogue.catalogue_root(None))
+
+    def test_unset_xdg_falls_back_to_home_dot_config(self):
+        home = os.path.join(self.tmp, "home")
+        os.makedirs(os.path.join(home, ".config", "okf"))
+        with open(os.path.join(home, ".config", "okf", "config.toml"), "w", encoding="utf-8") as f:
+            f.write('root = "{}"\n'.format(self.cat))
+        with mock.patch.dict(os.environ, {"HOME": home, "XDG_CONFIG_HOME": ""}):
+            self.assertEqual(okf_catalogue.catalogue_root(None), self.cat)
+
+    def assert_config_error(self, kind):
+        with self.assertRaises(okf_errors.OkfError) as ctx:
+            okf_catalogue.catalogue_root(None)
+        self.assertEqual(ctx.exception.kind, kind)
+        self.assertIn(os.path.join(self.cfg, "okf", "config.toml"), str(ctx.exception))
+
+    def test_invalid_toml_is_invalid_input(self):
+        self.config("root = [unclosed\n")
+        self.assert_config_error("invalid_input")
+
+    def test_relative_root_is_invalid_input(self):
+        self.config('root = "relative/x"\n')
+        self.assert_config_error("invalid_input")
+
+    def test_missing_root_dir_is_not_found(self):
+        self.config('root = "{}"\n'.format(os.path.join(self.tmp, "gone")))
+        self.assert_config_error("not_found")
+
+    def test_main_uses_config_root_end_to_end(self):
+        self.config('root = "{}"\n'.format(self.cat))
+        old_argv, old_stdout = sys.argv, sys.stdout
+        sys.argv = ["okf-cli.py", "index"]
+        sys.stdout = out = io.StringIO()
+        try:
+            okf.main()
+        except SystemExit as e:
+            self.assertFalse(e.code)
+        finally:
+            sys.argv, sys.stdout = old_argv, old_stdout
+        self.assertTrue(out.getvalue().startswith("b:"), out.getvalue())
 
 
 class GroupedOverview(unittest.TestCase):

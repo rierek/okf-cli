@@ -7,6 +7,7 @@ import os
 import textwrap
 
 from okf.catalogue import all_tags, catalogue_root, iter_concepts, list_bundles
+from okf.errors import OkfError
 
 
 def subcommand_parsers(ap):
@@ -123,7 +124,10 @@ def _completion_root(parsed_args):
     shell word: the glue joins zsh's alias-expanded $words, so
     `alias okf='okf-cli --root ~/…'` delivers an unexpanded `~`."""
     explicit = getattr(parsed_args, "root", None)
-    root = catalogue_root(os.path.expanduser(explicit) if explicit else None)
+    try:
+        root = catalogue_root(os.path.expanduser(explicit) if explicit else None)
+    except OkfError:  # a broken user config must not break TAB completion
+        return None
     return root if root and os.path.isdir(root) else None
 
 
