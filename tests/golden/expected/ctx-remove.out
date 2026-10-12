@@ -1,0 +1,16 @@
+$ okf ctx remove onboarding
+exit: 0
+--- stdout
+removed _ctx/onboarding.md (4 entries)
+--- stderr
+--- files
+D _ctx/onboarding.md
+M _ctx/index.md
+--- a/_ctx/index.md
++++ b/_ctx/index.md
+@@ -7,5 +7,4 @@
+ <!-- okf:index -->
+ * [cooking](/_ctx/cooking.md) - Cooking basics
+ * [legacy](/_ctx/legacy.md)
+-* [onboarding](/_ctx/onboarding.md) - Read this first on day one
+ <!-- /okf:index -->

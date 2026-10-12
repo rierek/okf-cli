@@ -1,0 +1,6 @@
+$ okf archive handbook/nope
+exit: 3
+--- stdout
+--- stderr
+archive: source not found: <ROOT>/handbook/nope.md
+--- files

@@ -1,0 +1,6 @@
+$ okf index --json
+exit: 0
+--- stdout
+{"command": "index", "ok": true, "data": {"bundles": [{"bundle": "_ctx", "description": "Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`."}, {"bundle": "handbook", "description": "Welcome to the handbook."}, {"bundle": "kc-gov", "description": ""}, {"bundle": "recipes", "description": ""}]}, "warnings": [], "error": null}
+--- stderr
+--- files

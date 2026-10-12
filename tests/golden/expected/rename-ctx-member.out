@@ -1,0 +1,75 @@
+$ okf rename handbook/ops/deploy.md handbook/ops/release.md --apply
+exit: 0
+--- stdout
+moved (git mv)  handbook/ops/deploy.md  ->  handbook/ops/release.md
+rewrote 4 inbound link(s) in 4 file(s), 0 outbound link(s)
+rewrote 3 wikilink(s) in 3 file(s)
+rewrote 0 sync source(s) in 0 file(s)
+listed in 1 ctx bundle(s): onboarding (pos 3)
+reindexed 0 index file(s) across: handbook
+staged for commit — run `okf check` before committing.
+--- stderr
+--- files
+R handbook/ops/deploy.md -> handbook/ops/release.md
+M _ctx/onboarding.md
+--- a/_ctx/onboarding.md
++++ b/_ctx/onboarding.md
+@@ -9,5 +9,5 @@
+ |---|---|---|---|
+ | 1 | pflicht | [getting-started](/handbook/getting-started.md) |  |
+ | 2 | pflicht | [glossary](/handbook/glossary.md) |  |
+-| 3 | pflicht | [deploy](/handbook/ops/deploy.md) |  |
++| 3 | pflicht | [release](/handbook/ops/release.md) |  |
+ | - | nachschlag | [security](/handbook/security.md) | Background on passwords |
+M handbook/getting-started.md
+--- a/handbook/getting-started.md
++++ b/handbook/getting-started.md
+@@ -15,13 +15,13 @@
+ 
+ ## Tools
+ 
+-Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
++Read the [deploy runbook](/handbook/ops/release.md) and the [security page](security.md).
+ The old tool is described in [retired tool](ops/retired-tool.md).
+ Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+ 
+ ### Wikilinks
+ 
+-Also see [[glossary]], [[deploy|the deploy page]] and [[does-not-exist]].
++Also see [[glossary]], [[release|the deploy page]] and [[does-not-exist]].
+ 
+ ## Next
+ 
+M handbook/ops/index.md
+--- a/handbook/ops/index.md
++++ b/handbook/ops/index.md
+@@ -5,7 +5,7 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Deploy](/handbook/ops/deploy.md) - How to deploy: build, ship, verify
++* [Deploy](/handbook/ops/release.md) - How to deploy: build, ship, verify
+ * [Incident 2026](/handbook/ops/incident-2026.md) - A past incident
+ * [Retired tool](/handbook/ops/retired-tool.md) - A tool nobody uses any more
+ * [Setup](/handbook/ops/setup.md) - Local setup
+M handbook/ops/retired-tool.md
+--- a/handbook/ops/retired-tool.md
++++ b/handbook/ops/retired-tool.md
+@@ -9,4 +9,4 @@
+ 
+ # Retired tool
+ 
+-Replaced by [deploy](deploy.md). See [[deploy]].
++Replaced by [deploy](/handbook/ops/release.md). See [[release]].
+M handbook/wiki-notes.md
+--- a/handbook/wiki-notes.md
++++ b/handbook/wiki-notes.md
+@@ -13,7 +13,7 @@
+ ## Links
+ 
+ - [[glossary]] resolves.
+-- [[handbook/ops/deploy]] resolves by path.
++- [[handbook/ops/release]] resolves by path.
+ - [[retired-tool|old tool]] resolves with an alias.
+ - [[glossary#Bundle]] resolves with a section.
+ - [[overview]] is ambiguous (handbook and recipes).

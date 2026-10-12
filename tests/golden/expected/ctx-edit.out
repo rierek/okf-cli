@@ -1,0 +1,7 @@
+$ okf ctx edit cooking
+env: EDITOR=true
+exit: 0
+--- stdout
+OK — 0 violations
+--- stderr
+--- files

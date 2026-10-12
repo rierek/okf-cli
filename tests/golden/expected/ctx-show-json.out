@@ -1,0 +1,6 @@
+$ okf ctx show cooking --json
+exit: 0
+--- stdout
+{"command": "ctx show", "ok": true, "data": {"slug": "cooking", "description": "Cooking basics", "path": "_ctx/cooking.md", "entries": [{"pos": 1, "mode": "pflicht", "path": "recipes/bread.md", "abspath": "<ROOT>/recipes/bread.md", "title": "Bread", "type": "Recipe", "description": "Bread with a long rise", "comment": "", "alive": true, "chars": 205, "tokens": 52}, {"pos": 2, "mode": "pflicht", "path": "recipes/pasta.md", "abspath": "<ROOT>/recipes/pasta.md", "title": "Pasta", "type": "Recipe", "description": "Spaghetti, simple", "comment": "", "alive": true, "chars": 240, "tokens": 60}, {"pos": 3, "mode": "pflicht", "path": "recipes/soup.md", "abspath": "<ROOT>/recipes/soup.md", "title": "Soup", "type": "Recipe", "description": "Tomatensuppe", "comment": "", "alive": true, "chars": 208, "tokens": 52}], "dead": 0, "tokens_required": 164}, "warnings": [], "error": null}
+--- stderr
+--- files

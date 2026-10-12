@@ -1,0 +1,6 @@
+$ okf tags --register newtag 'has|pipe'
+exit: 2
+--- stdout
+--- stderr
+ERROR: tag 'newtag': description must be one line without '|'
+--- files

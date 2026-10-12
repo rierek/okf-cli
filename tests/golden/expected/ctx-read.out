@@ -1,0 +1,61 @@
+$ okf ctx read cooking
+exit: 0
+--- stdout
+===== 1/3 <ROOT>/recipes/bread.md =====
+---
+type: Recipe
+title: Bread
+description: Bread with a long rise
+tags:
+  - food
+  - bread
+timestamp: 2025-12-02T08:00:00Z
+status: todo
+---
+
+# Bread
+
+## Steps
+
+Mix, rise, bake. Related: [pasta](pasta.md).
+===== 2/3 <ROOT>/recipes/pasta.md =====
+---
+type: Recipe
+title: Pasta
+description: "Spaghetti, simple"
+tags:
+  - food
+  - pasta
+timestamp: 2025-12-01T08:00:00Z
+status: active
+---
+
+# Pasta
+
+## Zutaten
+
+Nudeln, Salz, Wasser.
+
+## Quellen
+
+- [Pasta basics](https://example.org/pasta)
+===== 3/3 <ROOT>/recipes/soup.md =====
+---
+type: Recipe
+title: Soup
+description: Tomatensuppe
+tags: [food, soup]
+status: obsolete
+---
+
+# Suppe
+
+## Zutaten
+
+Tomaten, Zwiebeln.
+
+## Hinweis
+
+Use a pot <size>. Compare with [bread](/recipes/bread.md).
+--- stderr
+--- files

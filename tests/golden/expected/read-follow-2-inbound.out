@@ -1,0 +1,285 @@
+$ okf read handbook/ops/deploy --follow 2 --inbound
+exit: 0
+--- stdout
+===== depth 0 handbook/ops/deploy =====
+---
+type: Runbook
+title: Deploy
+description: "How to deploy: build, ship, verify"
+tags:
+  - ops
+  - deploy
+generated:
+  by: human:golden
+  at: 2026-01-02T10:00:00Z
+verified:
+  - by: human:golden
+    at: 2026-01-03T10:00:00Z
+sources:
+  - resource: https://example.org/deploy-docs
+stale_after: 2099-01-01T00:00:00Z
+---
+
+# Deploy
+
+## Steps
+
+1. Run `deploy <env>` with the target.
+2. Wait for the `<env>.<region>` health check.
+3. Fetch `https://old-host.example.org/status`.
+
+## Links
+
+Back to [getting started](../getting-started.md).
+Compare [setup](setup.md) and the [rule](/kc-gov/ownership.md).
+
+===== depth 1 handbook/getting-started =====
+---
+type: Guide
+title: "Getting started"
+description: "First steps: accounts, tools, and where to find things"
+tags:
+  - onboarding
+  - ops
+---
+
+# Getting started
+
+## Accounts
+
+Ask for an account. See the [glossary](/handbook/glossary.md) for terms.
+
+## Tools
+
+Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
+The old tool is described in [retired tool](ops/retired-tool.md).
+Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+
+### Wikilinks
+
+Also see [[glossary]], [[deploy|the deploy page]] and [[does-not-exist]].
+
+## Next
+
+Continue with [[overview]].
+===== depth 1 handbook/ops/setup =====
+---
+type: Runbook
+title: Setup
+description: Local setup
+tags:
+  - ops
+status: stable
+---
+
+# Setup
+
+Install the tools. Plain `old-host.example.org` is the old status host.
+
+<!-- okf:sync id=ownership-rule source=/kc-gov/ownership.md hash=594970cbf139 -->
+> [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.
+<!-- okf:sync-body -->
+Every normative statement has exactly one owner.
+<!-- /okf:sync -->
+===== depth 1 kc-gov/ownership =====
+---
+type: Rule
+title: Ownership
+description: Every normative statement has exactly one owner
+tags:
+  - governance
+---
+
+# Ownership
+
+<!-- okf:canon id=ownership-rule -->
+Every normative statement has exactly one owner.
+<!-- /okf:canon -->
+
+## Naming
+
+<!-- okf:canon id=naming-rule -->
+Names are lowercase, hyphenated, stable and unique.
+<!-- /okf:canon -->
+===== depth 1 _ctx/onboarding =====
+---
+type: Context
+description: Read this first on day one
+---
+
+# onboarding
+
+| pos | mode | path | comment |
+|---|---|---|---|
+| 1 | pflicht | [getting-started](/handbook/getting-started.md) |  |
+| 2 | pflicht | [glossary](/handbook/glossary.md) |  |
+| 3 | pflicht | [deploy](/handbook/ops/deploy.md) |  |
+| - | nachschlag | [security](/handbook/security.md) | Background on passwords |
+===== depth 1 handbook/ops/index =====
+# Operations
+
+Runbooks and tools.
+
+## Contents
+
+<!-- okf:index -->
+* [Deploy](/handbook/ops/deploy.md) - How to deploy: build, ship, verify
+* [Incident 2026](/handbook/ops/incident-2026.md) - A past incident
+* [Retired tool](/handbook/ops/retired-tool.md) - A tool nobody uses any more
+* [Setup](/handbook/ops/setup.md) - Local setup
+<!-- /okf:index -->
+===== depth 1 handbook/ops/retired-tool =====
+---
+type: Concept
+title: Retired tool
+description: A tool nobody uses any more
+tags:
+  - ops
+status: deprecated
+---
+
+# Retired tool
+
+Replaced by [deploy](deploy.md). See [[deploy]].
+===== depth 2 handbook/glossary =====
+---
+type: Concept
+title: Glossary
+description: 'Terms used here: "bundle" and "concept"'
+tags: [glossary, ops]   # flow form on purpose
+---
+
+# Glossary
+
+## Bundle
+
+A top-level directory of concepts.
+
+## Concept
+
+One Markdown file with frontmatter.
+===== depth 2 handbook/security =====
+---
+type: Gadget
+title: Security basics
+tags:
+  - security
+  - x-experimental
+---
+
+# Security basics
+
+## Passwords
+
+Use a password manager.
+
+## Reporting
+
+Report issues to the security team. Details in [[wiki-notes]].
+===== depth 2 handbook/index =====
+---
+okf_version: "0.2"
+description: "Team handbook: onboarding, operations, security"
+---
+
+# Handbook
+
+Welcome to the handbook.
+
+## Contents
+
+<!-- okf:index -->
+* [Operations](/handbook/ops/index.md) - Runbooks and tools.
+* [broken-yaml](/handbook/broken-yaml.md)
+* [Getting started](/handbook/getting-started.md) - First steps: accounts, tools, and where to find things
+* [Glossary](/handbook/glossary.md) - Terms used here: "bundle" and "concept"
+* [Handbook overview](/handbook/overview.md) - Overview of the handbook
+* [Security basics](/handbook/security.md)
+* [wiki-notes](/handbook/wiki-notes.md) - Loose notes with many wikilinks
+<!-- /okf:index -->
+===== depth 2 handbook/overview =====
+---
+type: Concept
+title: Handbook overview
+description: Overview of the handbook
+tags:
+  - onboarding
+---
+
+# Overview
+
+The handbook explains the [getting started guide](getting-started.md).
+===== depth 2 _ctx/legacy =====
+---
+type: Context
+description: ''
+---
+
+# legacy
+
+| pos | mode | path | comment |
+|---|---|---|---|
+| 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |
+| 2 | pflicht | [setup](/handbook/ops/setup.md) |  |
+| 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |
+| - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |
+| - | nachschlag | [incident-2026](/handbook/ops/incident-2026.md) | stale page |
+===== depth 2 kc-gov/index =====
+---
+description: Governance rules (canon owners)
+---
+
+# Governance
+
+## Contents
+
+<!-- okf:index -->
+* [naming](/kc-gov/naming.md) - Naming conventions
+* [Ownership](/kc-gov/ownership.md) - Every normative statement has exactly one owner
+<!-- /okf:index -->
+===== depth 2 kc-gov/naming =====
+---
+type: Rule
+description: Naming conventions
+tags:
+  - governance
+---
+
+# Naming
+
+Refer to [ownership](/kc-gov/ownership.md).
+
+<!-- okf:sync id=naming-rule source=/kc-gov/ownership.md hash=68dca574d22c -->
+> [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.
+<!-- okf:sync-body -->
+Names are lowercase, hyphenated and stable.
+<!-- /okf:sync -->
+===== depth 2 _ctx/index =====
+# Context bundles
+
+Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.
+
+## Contents
+
+<!-- okf:index -->
+* [cooking](/_ctx/cooking.md) - Cooking basics
+* [legacy](/_ctx/legacy.md)
+* [onboarding](/_ctx/onboarding.md) - Read this first on day one
+<!-- /okf:index -->
+===== depth 2 handbook/ops/incident-2026 =====
+---
+type: Note
+title: "Incident 2026"
+description: A past incident
+tags:
+  - incident
+stale_after: 2026-01-05T00:00:00Z
+---
+
+# Incident 2026
+
+## Timeline
+
+Short timeline.
+--- stderr
+--- files

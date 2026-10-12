@@ -1,0 +1,6 @@
+$ okf verify handbook/ops/setup
+exit: 2
+--- stdout
+--- stderr
+<usage error>
+--- files

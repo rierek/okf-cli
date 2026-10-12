@@ -1,0 +1,6 @@
+$ okf sync-insert recipes/soup kc-gov/ownership nope --apply
+exit: 3
+--- stdout
+--- stderr
+no canon block `nope` in kc-gov/ownership.md
+--- files

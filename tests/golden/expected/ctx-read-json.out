@@ -1,0 +1,6 @@
+$ okf ctx read cooking --json
+exit: 0
+--- stdout
+{"command": "ctx read", "ok": true, "data": {"slug": "cooking", "entries": [{"position": 1, "path": "recipes/bread.md", "abspath": "<ROOT>/recipes/bread.md", "alive": true, "text": "---\ntype: Recipe\ntitle: Bread\ndescription: Bread with a long rise\ntags:\n  - food\n  - bread\ntimestamp: 2025-12-02T08:00:00Z\nstatus: todo\n---\n\n# Bread\n\n## Steps\n\nMix, rise, bake. Related: [pasta](pasta.md).\n"}, {"position": 2, "path": "recipes/pasta.md", "abspath": "<ROOT>/recipes/pasta.md", "alive": true, "text": "---\ntype: Recipe\ntitle: Pasta\ndescription: \"Spaghetti, simple\"\ntags:\n  - food\n  - pasta\ntimestamp: 2025-12-01T08:00:00Z\nstatus: active\n---\n\n# Pasta\n\n## Zutaten\n\nNudeln, Salz, Wasser.\n\n## Quellen\n\n- [Pasta basics](https://example.org/pasta)\n"}, {"position": 3, "path": "recipes/soup.md", "abspath": "<ROOT>/recipes/soup.md", "alive": true, "text": "---\ntype: Recipe\ntitle: Soup\ndescription: Tomatensuppe\ntags: [food, soup]\nstatus: obsolete\n---\n\n# Suppe\n\n## Zutaten\n\nTomaten, Zwiebeln.\n\n## Hinweis\n\nUse a pot <size>. Compare with [bread](/recipes/bread.md).\n"}], "references_not_printed": 0}, "warnings": [], "error": null}
+--- stderr
+--- files

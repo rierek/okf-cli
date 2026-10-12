@@ -1,0 +1,58 @@
+$ okf rename handbook/ops/retired-tool.md handbook/ops/legacy-tool.md
+exit: 0
+--- stdout
+--- a/_ctx/legacy.md
++++ b/_ctx/legacy.md
+@@ -7,7 +7,7 @@
+ 
+ | pos | mode | path | comment |
+ |---|---|---|---|
+-| 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |
++| 1 | pflicht | [legacy-tool](/handbook/ops/legacy-tool.md) |  |
+ | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |
+ | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |
+ | - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |
+--- a/handbook/getting-started.md
++++ b/handbook/getting-started.md
+@@ -16,7 +16,7 @@
+ ## Tools
+ 
+ Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
+-The old tool is described in [retired tool](ops/retired-tool.md).
++The old tool is described in [retired tool](/handbook/ops/legacy-tool.md).
+ Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+ 
+ ### Wikilinks
+--- a/handbook/ops/index.md
++++ b/handbook/ops/index.md
+@@ -7,6 +7,6 @@
+ <!-- okf:index -->
+ * [Deploy](/handbook/ops/deploy.md) - How to deploy: build, ship, verify
+ * [Incident 2026](/handbook/ops/incident-2026.md) - A past incident
+-* [Retired tool](/handbook/ops/retired-tool.md) - A tool nobody uses any more
++* [Retired tool](/handbook/ops/legacy-tool.md) - A tool nobody uses any more
+ * [Setup](/handbook/ops/setup.md) - Local setup
+ <!-- /okf:index -->
+rename from handbook/ops/retired-tool.md
+rename to handbook/ops/legacy-tool.md
+--- a/handbook/wiki-notes.md
++++ b/handbook/wiki-notes.md
+@@ -14,7 +14,7 @@
+ 
+ - [[glossary]] resolves.
+ - [[handbook/ops/deploy]] resolves by path.
+-- [[retired-tool|old tool]] resolves with an alias.
++- [[legacy-tool|old tool]] resolves with an alias.
+ - [[glossary#Bundle]] resolves with a section.
+ - [[overview]] is ambiguous (handbook and recipes).
+ - [[nowhere]] is dead.
+would move   handbook/ops/retired-tool.md  ->  handbook/ops/legacy-tool.md
+  inbound    _ctx/legacy.md   /handbook/ops/retired-tool.md  ->  /handbook/ops/legacy-tool.md
+  inbound    handbook/getting-started.md   ops/retired-tool.md  ->  /handbook/ops/legacy-tool.md
+  inbound    handbook/ops/index.md   /handbook/ops/retired-tool.md  ->  /handbook/ops/legacy-tool.md
+  wikilink   handbook/wiki-notes.md [body]   [[retired-tool|old tool]]  ->  [[legacy-tool|old tool]]
+  ctx        legacy (pos 1)
+  reindex    handbook
+rename (dry-run): 3 inbound, 0 outbound link(s), 1 wikilink(s) (0 skipped-ambiguous), 1 bundle(s), 0 sync source(s). Re-run with --apply.
+--- stderr
+--- files

@@ -1,0 +1,6 @@
+$ okf read handbook/getting-started --follow 1 --frontmatter-only
+exit: 2
+--- stdout
+--- stderr
+error: --follow is not allowed with --frontmatter-only or --body-only
+--- files

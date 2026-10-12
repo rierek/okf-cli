@@ -1,0 +1,17 @@
+$ okf ctx outbound onboarding
+exit: 0
+--- stdout
+outbound — ctx onboarding, 4 member(s), external targets only:
+handbook/getting-started.md
+  -> handbook/ops/retired-tool.md  (ops/retired-tool.md)
+  -> handbook/assets/diagram.svg  (assets/diagram.svg)
+  -> handbook/ops/missing.md  (/handbook/ops/missing.md)  [missing]
+handbook/glossary.md
+  (none)
+handbook/ops/deploy.md
+  -> handbook/ops/setup.md  (setup.md)
+  -> kc-gov/ownership.md  (/kc-gov/ownership.md)
+handbook/security.md
+  (none)
+--- stderr
+--- files

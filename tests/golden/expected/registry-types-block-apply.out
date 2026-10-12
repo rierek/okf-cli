@@ -1,0 +1,77 @@
+$ okf registry convert TYPES.md --to block --apply
+exit: 0
+--- stdout
+--- a/TYPES.md
++++ b/TYPES.md
+@@ -2,12 +2,23 @@
+ 
+ Registered concept types.
+ 
+-| Type | Meaning |
+-|---|---|
+-| `Concept` | An explained idea |
+-| `Context` | A curated reading list |
+-| `Guide` | Step-by-step instructions |
+-| `Runbook` | Operational procedure |
+-| `Rule` | A binding statement |
+-| `Recipe` | Food preparation |
+-| `Note` | Loose observation |
++### `Concept`
++An explained idea
++
++### `Context`
++A curated reading list
++
++### `Guide`
++Step-by-step instructions
++
++### `Runbook`
++Operational procedure
++
++### `Rule`
++A binding statement
++
++### `Recipe`
++Food preparation
++
++### `Note`
++Loose observation
+registry convert: 7 entries in TYPES.md rewrote as block
+--- stderr
+--- files
+M TYPES.md
+--- a/TYPES.md
++++ b/TYPES.md
+@@ -2,12 +2,23 @@
+ 
+ Registered concept types.
+ 
+-| Type | Meaning |
+-|---|---|
+-| `Concept` | An explained idea |
+-| `Context` | A curated reading list |
+-| `Guide` | Step-by-step instructions |
+-| `Runbook` | Operational procedure |
+-| `Rule` | A binding statement |
+-| `Recipe` | Food preparation |
+-| `Note` | Loose observation |
++### `Concept`
++An explained idea
++
++### `Context`
++A curated reading list
++
++### `Guide`
++Step-by-step instructions
++
++### `Runbook`
++Operational procedure
++
++### `Rule`
++A binding statement
++
++### `Recipe`
++Food preparation
++
++### `Note`
++Loose observation

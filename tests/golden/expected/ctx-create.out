@@ -1,0 +1,30 @@
+$ okf ctx create reading handbook/glossary recipes/pasta --description 'A new reading list'
+exit: 0
+--- stdout
+created _ctx/reading.md (2 entries)
+--- stderr
+--- files
+M _ctx/index.md
+--- a/_ctx/index.md
++++ b/_ctx/index.md
+@@ -8,4 +8,5 @@
+ * [cooking](/_ctx/cooking.md) - Cooking basics
+ * [legacy](/_ctx/legacy.md)
+ * [onboarding](/_ctx/onboarding.md) - Read this first on day one
++* [reading](/_ctx/reading.md) - A new reading list
+ <!-- /okf:index -->
+A _ctx/reading.md
+--- a/_ctx/reading.md
++++ b/_ctx/reading.md
+@@ -0,0 +1,11 @@
++---
++type: Context
++description: A new reading list
++---
++
++# reading
++
++| pos | mode | path | comment |
++|---|---|---|---|
++| 1 | pflicht | [glossary](/handbook/glossary.md) |  |
++| 2 | pflicht | [pasta](/recipes/pasta.md) |  |

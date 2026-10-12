@@ -1,0 +1,35 @@
+$ okf ctx rename cooking kitchen --json
+exit: 0
+--- stdout
+{"command": "ctx rename", "ok": true, "data": {"applied": true, "old": "_ctx/cooking.md", "new": "_ctx/kitchen.md", "inbound": [{"source": "_ctx/index.md", "old": "/_ctx/cooking.md", "new": "/_ctx/kitchen.md"}], "outbound": [], "wikilinks": [], "sync_sources": [], "ctx": [], "skipped_ambiguous": [], "wikilink_collisions": [], "turns_ambiguous": [], "reindex_bundles": ["_ctx"], "files": [{"path": "_ctx/index.md", "old_path": null, "diff": "--- a/_ctx/index.md\n+++ b/_ctx/index.md\n@@ -5,7 +5,7 @@\n ## Contents\n \n <!-- okf:index -->\n-* [cooking](/_ctx/cooking.md) - Cooking basics\n+* [kitchen](/_ctx/kitchen.md) - Cooking basics\n * [legacy](/_ctx/legacy.md)\n * [onboarding](/_ctx/onboarding.md) - Read this first on day one\n <!-- /okf:index -->\n"}, {"path": "_ctx/kitchen.md", "old_path": "_ctx/cooking.md", "diff": "rename from _ctx/cooking.md\nrename to _ctx/kitchen.md\n"}], "moved_with": "git mv", "tracked_in": null, "untracked_reason": null, "rewritten": {"inbound_links": 1, "inbound_files": 1, "outbound_links": 0, "wikilinks": 0, "wikilink_files": 0, "sync_sources": 0, "sync_files": 0}, "ctx_not_refreshed": [], "reindexed": 1, "old_slug": "cooking", "new_slug": "kitchen"}, "warnings": [], "error": null}
+--- stderr
+--- files
+D _ctx/cooking.md
+M _ctx/index.md
+--- a/_ctx/index.md
++++ b/_ctx/index.md
+@@ -5,7 +5,7 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [cooking](/_ctx/cooking.md) - Cooking basics
++* [kitchen](/_ctx/kitchen.md) - Cooking basics
+ * [legacy](/_ctx/legacy.md)
+ * [onboarding](/_ctx/onboarding.md) - Read this first on day one
+ <!-- /okf:index -->
+A _ctx/kitchen.md
+--- a/_ctx/kitchen.md
++++ b/_ctx/kitchen.md
+@@ -0,0 +1,12 @@
++---
++type: Context
++description: Cooking basics
++---
++
++# kitchen
++
++| pos | mode | path | comment |
++|---|---|---|---|
++| 1 | pflicht | [bread](/recipes/bread.md) |  |
++| 2 | pflicht | [pasta](/recipes/pasta.md) |  |
++| 3 | pflicht | [soup](/recipes/soup.md) |  |

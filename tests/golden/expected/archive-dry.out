@@ -1,0 +1,55 @@
+$ okf archive handbook/ops/retired-tool
+exit: 0
+--- stdout
+3 active concept(s) still link to this concept
+rename from handbook/ops/retired-tool.md
+rename to _archive/handbook/ops/retired-tool.md
+--- a/handbook/ops/retired-tool.md
++++ b/_archive/handbook/ops/retired-tool.md
+@@ -9,4 +9,4 @@
+ 
+ # Retired tool
+ 
+-Replaced by [deploy](deploy.md). See [[deploy]].
++Replaced by [deploy](/handbook/ops/deploy.md). See [[deploy]].
+--- a/_ctx/legacy.md
++++ b/_ctx/legacy.md
+@@ -7,7 +7,7 @@
+ 
+ | pos | mode | path | comment |
+ |---|---|---|---|
+-| 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |
++| 1 | pflicht | [retired-tool](/_archive/handbook/ops/retired-tool.md) |  |
+ | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |
+ | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |
+ | - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |
+--- a/handbook/getting-started.md
++++ b/handbook/getting-started.md
+@@ -16,7 +16,7 @@
+ ## Tools
+ 
+ Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
+-The old tool is described in [retired tool](ops/retired-tool.md).
++The old tool is described in [retired tool](/_archive/handbook/ops/retired-tool.md).
+ Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+ 
+ ### Wikilinks
+--- a/handbook/ops/index.md
++++ b/handbook/ops/index.md
+@@ -7,6 +7,5 @@
+ <!-- okf:index -->
+ * [Deploy](/handbook/ops/deploy.md) - How to deploy: build, ship, verify
+ * [Incident 2026](/handbook/ops/incident-2026.md) - A past incident
+-* [Retired tool](/handbook/ops/retired-tool.md) - A tool nobody uses any more
+ * [Setup](/handbook/ops/setup.md) - Local setup
+ <!-- /okf:index -->
+would move   handbook/ops/retired-tool.md  ->  _archive/handbook/ops/retired-tool.md
+  inbound    _ctx/legacy.md   /handbook/ops/retired-tool.md  ->  /_archive/handbook/ops/retired-tool.md
+  inbound    handbook/getting-started.md   ops/retired-tool.md  ->  /_archive/handbook/ops/retired-tool.md
+  inbound    handbook/ops/index.md   /handbook/ops/retired-tool.md  ->  /_archive/handbook/ops/retired-tool.md
+  outbound   deploy.md  ->  /handbook/ops/deploy.md
+  ctx        legacy (pos 1)
+  reindex    _archive, handbook
+rename (dry-run): 3 inbound, 1 outbound link(s), 0 wikilink(s) (0 skipped-ambiguous), 2 bundle(s), 0 sync source(s). Re-run with --apply.
+--- stderr
+--- files

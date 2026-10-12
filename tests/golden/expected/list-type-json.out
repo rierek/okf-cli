@@ -1,0 +1,6 @@
+$ okf list --where 'type = Recipe' --json
+exit: 0
+--- stdout
+{"command": "list", "ok": true, "data": [{"title": "Bread", "type": "Recipe", "path": "recipes/bread", "description": "Bread with a long rise", "tier": "unverified", "stale": false}, {"title": "Gazpacho", "type": "Recipe", "path": "recipes/seasonal/gazpacho", "description": "Cold tomato soup", "tier": "unverified", "stale": false}, {"title": "Pasta", "type": "Recipe", "path": "recipes/pasta", "description": "Spaghetti, simple", "tier": "unverified", "stale": false}, {"title": "Punch", "type": "Recipe", "path": "recipes/seasonal/punch", "description": "Hot spiced drink", "tier": "unverified", "stale": false}, {"title": "Salad", "type": "Recipe", "path": "recipes/salad", "description": "A salad that was replaced", "tier": "unverified", "stale": false}, {"title": "Soup", "type": "Recipe", "path": "recipes/soup", "description": "Tomatensuppe", "tier": "unverified", "stale": false}, {"title": "stew", "type": "Recipe", "path": "recipes/stew", "description": "", "tier": "unverified", "stale": false}], "warnings": [], "error": null}
+--- stderr
+--- files

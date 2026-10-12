@@ -1,0 +1,18 @@
+$ okf ctx drop cooking recipes/bread
+exit: 0
+--- stdout
+dropped recipes/bread.md from cooking
+--- stderr
+--- files
+M _ctx/cooking.md
+--- a/_ctx/cooking.md
++++ b/_ctx/cooking.md
+@@ -7,6 +7,5 @@
+ 
+ | pos | mode | path | comment |
+ |---|---|---|---|
+-| 1 | pflicht | [bread](/recipes/bread.md) |  |
+-| 2 | pflicht | [pasta](/recipes/pasta.md) |  |
+-| 3 | pflicht | [soup](/recipes/soup.md) |  |
++| 1 | pflicht | [pasta](/recipes/pasta.md) |  |
++| 2 | pflicht | [soup](/recipes/soup.md) |  |

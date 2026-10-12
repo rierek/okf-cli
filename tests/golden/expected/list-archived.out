@@ -1,0 +1,12 @@
+$ okf list --where 'archived = true'
+exit: 0
+--- stdout
+------
+title: Old process
+type: Concept
+path: _archive/handbook/old-process
+description: A process from the past
+------
+list: 1 concept(s)
+--- stderr
+--- files

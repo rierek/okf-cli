@@ -1,0 +1,6 @@
+$ okf ctx create onboarding handbook/glossary
+exit: 2
+--- stdout
+--- stderr
+ctx: onboarding already exists
+--- files

@@ -1,0 +1,6 @@
+$ okf ctx create reading handbook/ops/gone
+exit: 3
+--- stdout
+--- stderr
+ctx: not found: handbook/ops/gone
+--- files

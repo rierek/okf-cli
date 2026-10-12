@@ -1,0 +1,72 @@
+$ okf fix-crosslinks --check
+exit: 0
+--- stdout
+--- a/handbook/getting-started.md
++++ b/handbook/getting-started.md
+@@ -15,8 +15,8 @@
+ 
+ ## Tools
+ 
+-Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
+-The old tool is described in [retired tool](ops/retired-tool.md).
++Read the [deploy runbook](/handbook/ops/deploy.md) and the [security page](/handbook/security.md).
++The old tool is described in [retired tool](/handbook/ops/retired-tool.md).
+ Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+ 
+ ### Wikilinks
+--- a/handbook/ops/deploy.md
++++ b/handbook/ops/deploy.md
+@@ -26,5 +26,5 @@
+ 
+ ## Links
+ 
+-Back to [getting started](../getting-started.md).
+-Compare [setup](setup.md) and the [rule](/kc-gov/ownership.md).
++Back to [getting started](/handbook/getting-started.md).
++Compare [setup](/handbook/ops/setup.md) and the [rule](/kc-gov/ownership.md).
+--- a/handbook/ops/retired-tool.md
++++ b/handbook/ops/retired-tool.md
+@@ -9,4 +9,4 @@
+ 
+ # Retired tool
+ 
+-Replaced by [deploy](deploy.md). See [[deploy]].
++Replaced by [deploy](/handbook/ops/deploy.md). See [[deploy]].
+--- a/handbook/overview.md
++++ b/handbook/overview.md
+@@ -8,4 +8,4 @@
+ 
+ # Overview
+ 
+-The handbook explains the [getting started guide](getting-started.md).
++The handbook explains the [getting started guide](/handbook/getting-started.md).
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -13,4 +13,4 @@
+ 
+ ## Steps
+ 
+-Mix, rise, bake. Related: [pasta](pasta.md).
++Mix, rise, bake. Related: [pasta](/recipes/pasta.md).
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -7,4 +7,4 @@
+ 
+ # Overview
+ 
+-See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].
++See [pasta](/recipes/pasta.md), [bread](/recipes/bread.md), [soup](/recipes/soup.md) and [[salad]].
+--- a/recipes/salad.md
++++ b/recipes/salad.md
+@@ -9,4 +9,4 @@
+ 
+ # Salad
+ 
+-Superseded by [soup](soup.md).
++Superseded by [soup](/recipes/soup.md).
+unresolved     _ctx/legacy.md  -> /handbook/ops/gone.md
+unresolved     handbook/getting-started.md  -> /handbook/ops/missing.md
+unresolved     recipes/drafts/ideas.md  -> pie.md
+fix-crosslinks: 7 file(s) would rewrite, 3 unresolved link(s)
+--- stderr
+--- files

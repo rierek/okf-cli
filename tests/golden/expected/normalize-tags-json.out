@@ -1,0 +1,6 @@
+$ okf normalize-tags --json
+exit: 0
+--- stdout
+{"command": "normalize-tags", "ok": true, "data": {"applied": false, "unparseable": ["handbook/broken-yaml.md"], "files": [{"path": "handbook/glossary.md", "old_path": null, "diff": "--- a/handbook/glossary.md\n+++ b/handbook/glossary.md\n@@ -2,7 +2,9 @@\n type: Concept\n title: Glossary\n description: 'Terms used here: \"bundle\" and \"concept\"'\n-tags: [glossary, ops]   # flow form on purpose\n+tags:                   # flow form on purpose\n+  - glossary\n+  - ops\n ---\n \n # Glossary\n"}, {"path": "recipes/overview.md", "old_path": null, "diff": "--- a/recipes/overview.md\n+++ b/recipes/overview.md\n@@ -2,7 +2,8 @@\n type: Concept\n title: Recipes overview\n description: Overview of the recipes\n-tags: [food]\n+tags:\n+  - food\n ---\n \n # Overview\n"}, {"path": "recipes/soup.md", "old_path": null, "diff": "--- a/recipes/soup.md\n+++ b/recipes/soup.md\n@@ -2,7 +2,9 @@\n type: Recipe\n title: Soup\n description: Tomatensuppe\n-tags: [food, soup]\n+tags:\n+  - food\n+  - soup\n status: obsolete\n ---\n \n"}]}, "warnings": [], "error": null}
+--- stderr
+--- files

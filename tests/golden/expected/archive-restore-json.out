@@ -1,0 +1,28 @@
+$ okf archive --restore _archive/handbook/old-process --apply --json
+exit: 0
+--- stdout
+{"command": "archive", "ok": true, "data": {"applied": true, "old": "_archive/handbook/old-process.md", "new": "handbook/old-process.md", "inbound": [{"source": "_ctx/legacy.md", "old": "/_archive/handbook/old-process.md", "new": "/handbook/old-process.md"}], "outbound": [], "wikilinks": [], "sync_sources": [], "ctx": ["legacy (reference)"], "skipped_ambiguous": [], "wikilink_collisions": [], "turns_ambiguous": [], "reindex_bundles": ["_archive", "handbook"], "files": [{"path": "_ctx/legacy.md", "old_path": null, "diff": "--- a/_ctx/legacy.md\n+++ b/_ctx/legacy.md\n@@ -10,5 +10,5 @@\n | 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |\n | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |\n | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |\n-| - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |\n+| - | nachschlag | [old-process](/handbook/old-process.md) |  |\n | - | nachschlag | [incident-2026](/handbook/ops/incident-2026.md) | stale page |\n"}, {"path": "handbook/index.md", "old_path": null, "diff": "--- a/handbook/index.md\n+++ b/handbook/index.md\n@@ -15,6 +15,7 @@\n * [Getting started](/handbook/getting-started.md) - First steps: accounts, tools, and where to find things\n * [Glossary](/handbook/glossary.md) - Terms used here: \"bundle\" and \"concept\"\n * [Handbook overview](/handbook/overview.md) - Overview of the handbook\n+* [Old process](/handbook/old-process.md) - A process from the past\n * [Security basics](/handbook/security.md)\n * [wiki-notes](/handbook/wiki-notes.md) - Loose notes with many wikilinks\n <!-- /okf:index -->\n"}, {"path": "handbook/old-process.md", "old_path": "_archive/handbook/old-process.md", "diff": "rename from _archive/handbook/old-process.md\nrename to handbook/old-process.md\n"}], "moved_with": "git mv", "tracked_in": null, "untracked_reason": null, "rewritten": {"inbound_links": 1, "inbound_files": 1, "outbound_links": 0, "wikilinks": 0, "wikilink_files": 0, "sync_sources": 0, "sync_files": 0}, "ctx_not_refreshed": [], "reindexed": 1, "restore": true, "active_inbound_concepts": 1}, "warnings": [], "error": null}
+--- stderr
+--- files
+R _archive/handbook/old-process.md -> handbook/old-process.md
+M _ctx/legacy.md
+--- a/_ctx/legacy.md
++++ b/_ctx/legacy.md
+@@ -10,5 +10,5 @@
+ | 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |
+ | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |
+ | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |
+-| - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |
++| - | nachschlag | [old-process](/handbook/old-process.md) |  |
+ | - | nachschlag | [incident-2026](/handbook/ops/incident-2026.md) | stale page |
+M handbook/index.md
+--- a/handbook/index.md
++++ b/handbook/index.md
+@@ -15,6 +15,7 @@
+ * [Getting started](/handbook/getting-started.md) - First steps: accounts, tools, and where to find things
+ * [Glossary](/handbook/glossary.md) - Terms used here: "bundle" and "concept"
+ * [Handbook overview](/handbook/overview.md) - Overview of the handbook
++* [Old process](/handbook/old-process.md) - A process from the past
+ * [Security basics](/handbook/security.md)
+ * [wiki-notes](/handbook/wiki-notes.md) - Loose notes with many wikilinks
+ <!-- /okf:index -->

@@ -1,0 +1,16 @@
+$ okf ctx toc onboarding --depth 1
+exit: 0
+--- stdout
+# handbook/getting-started.md
+## Getting started
+
+# handbook/glossary.md
+## Glossary
+
+# handbook/ops/deploy.md
+## Deploy
+
+# handbook/security.md
+## Security basics
+--- stderr
+--- files

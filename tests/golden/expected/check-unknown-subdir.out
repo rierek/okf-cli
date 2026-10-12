@@ -1,0 +1,6 @@
+$ okf check handbook/nope
+exit: 3
+--- stdout
+--- stderr
+not a directory: handbook/nope
+--- files

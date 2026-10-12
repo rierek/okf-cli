@@ -1,0 +1,19 @@
+$ okf verify handbook/ops/setup --by process:nightly --json
+exit: 0
+--- stdout
+{"command": "verify", "ok": true, "data": {"path": "handbook/ops/setup", "entry": {"by": "process:nightly", "at": "<NOW>"}}, "warnings": [], "error": null}
+--- stderr
+--- files
+M handbook/ops/setup.md
+--- a/handbook/ops/setup.md
++++ b/handbook/ops/setup.md
+@@ -5,6 +5,9 @@
+ tags:
+   - ops
+ status: stable
++verified:
++  - by: process:nightly
++    at: <NOW>
+ ---
+ 
+ # Setup

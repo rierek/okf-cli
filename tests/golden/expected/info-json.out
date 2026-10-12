@@ -1,0 +1,6 @@
+$ okf info --json
+exit: 0
+--- stdout
+{"command": "info", "ok": true, "data": {"files": [{"name": "TYPES.md", "text": "# TYPES.md\n\nRegistered concept types.\n\n| Type | Meaning |\n|---|---|\n| `Concept` | An explained idea |\n| `Context` | A curated reading list |\n| `Guide` | Step-by-step instructions |\n| `Runbook` | Operational procedure |\n| `Rule` | A binding statement |\n| `Recipe` | Food preparation |\n| `Note` | Loose observation |\n"}, {"name": "PROPERTIES.md", "text": "# PROPERTIES.md\n\nFrontmatter properties.\n\n| Property | Meaning |\n|---|---|\n| `type` | Registered type (required) |\n| `description` | One-line summary |\n| `title` | Display title |\n| `tags` | Registered tags |\n| `status` | draft, stable or deprecated |\n| `generated` | Provenance: `by`, `at` |\n| `verified` | Review entries: `by`, `at` |\n| `stale_after` | Datetime after which the page is stale |\n"}]}, "warnings": [], "error": null}
+--- stderr
+--- files

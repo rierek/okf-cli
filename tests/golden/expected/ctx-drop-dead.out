@@ -1,0 +1,6 @@
+$ okf ctx drop legacy handbook/ops/gone
+exit: 3
+--- stdout
+--- stderr
+ctx: handbook/ops/gone is not in legacy
+--- files

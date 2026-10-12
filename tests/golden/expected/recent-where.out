@@ -1,0 +1,13 @@
+$ okf recent --where 'type = Recipe'
+exit: 0
+--- stdout
+2026-02-11 00:00  Recipe  recipes/stew
+2026-02-10 00:00  Recipe  recipes/soup
+2026-02-08 00:00  Recipe  recipes/seasonal/punch
+2026-02-06 00:00  Recipe  recipes/seasonal/gazpacho
+2026-02-05 00:00  Recipe  recipes/salad
+2026-02-03 00:00  Recipe  recipes/pasta
+2026-01-29 00:00  Recipe  recipes/bread
+recent: 7 of 7 concept(s)
+--- stderr
+--- files

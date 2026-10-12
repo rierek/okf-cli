@@ -1,0 +1,51 @@
+$ okf merge-tags misc x-experimental --into security --apply
+exit: 0
+--- stdout
+--- a/handbook/security.md
++++ b/handbook/security.md
+@@ -3,7 +3,6 @@
+ title: Security basics
+ tags:
+   - security
+-  - x-experimental
+ ---
+ 
+ # Security basics
+--- a/recipes/stew.md
++++ b/recipes/stew.md
+@@ -4,7 +4,7 @@
+ beschreibung: Deutscher Eintopf
+ tags:
+   - food
+-  - misc
++  - security
+ superseded_by: handbook/ops/deploy
+ ---
+ 
+unparseable    handbook/broken-yaml.md  (frontmatter does not parse: expected ',' or ']', but got ':' (line 4, column 12) — skipped)
+merge-tags: 2 file(s) rewrote, 1 unparseable — misc, x-experimental -> security
+--- stderr
+--- files
+M handbook/security.md
+--- a/handbook/security.md
++++ b/handbook/security.md
+@@ -3,7 +3,6 @@
+ title: Security basics
+ tags:
+   - security
+-  - x-experimental
+ ---
+ 
+ # Security basics
+M recipes/stew.md
+--- a/recipes/stew.md
++++ b/recipes/stew.md
+@@ -4,7 +4,7 @@
+ beschreibung: Deutscher Eintopf
+ tags:
+   - food
+-  - misc
++  - security
+ superseded_by: handbook/ops/deploy
+ ---
+ 

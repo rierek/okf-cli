@@ -1,0 +1,9 @@
+$ okf check handbook/ops
+exit: 0
+--- stdout
+WARNING  kc/link/crosslink-format handbook/ops/deploy.md  (non catalogue-absolute link(s) (use /bundle/…): ../getting-started.md, setup.md)
+WARNING  okf/lifecycle/stale-after handbook/ops/incident-2026.md  (`stale_after` 2026-01-05T00:00:00Z has passed)
+WARNING  kc/link/crosslink-format handbook/ops/retired-tool.md  (non catalogue-absolute link(s) (use /bundle/…): deploy.md)
+OK — 0 violations
+--- stderr
+--- files

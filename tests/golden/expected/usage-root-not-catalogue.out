@@ -1,0 +1,6 @@
+$ okf --root /nonexistent info
+exit: 3
+--- stdout
+--- stderr
+ERROR: root not found: /nonexistent (pass --root <path>)
+--- files

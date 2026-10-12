@@ -1,0 +1,6 @@
+$ okf sync-insert handbook/ops/setup kc-gov/ownership ownership-rule --apply
+exit: 2
+--- stdout
+--- stderr
+handbook/ops/setup.md already carries `ownership-rule` from /kc-gov/ownership.md — use sync-update to refresh it
+--- files

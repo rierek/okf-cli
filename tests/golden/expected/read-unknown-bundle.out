@@ -1,0 +1,6 @@
+$ okf read nope/nope
+exit: 3
+--- stdout
+--- stderr
+not found: nope/nope
+--- files

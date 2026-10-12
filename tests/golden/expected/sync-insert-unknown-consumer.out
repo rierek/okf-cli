@@ -1,0 +1,6 @@
+$ okf sync-insert recipes/nope kc-gov/ownership ownership-rule
+exit: 3
+--- stdout
+--- stderr
+not found: recipes/nope
+--- files

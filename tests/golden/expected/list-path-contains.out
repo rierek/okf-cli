@@ -1,0 +1,27 @@
+$ okf list --where 'path ~ handbook/ops/'
+exit: 0
+--- stdout
+------
+title: Deploy
+type: Runbook
+path: handbook/ops/deploy
+description: How to deploy: build, ship, verify
+------
+title: Incident 2026
+type: Note
+path: handbook/ops/incident-2026
+description: A past incident
+------
+title: Retired tool
+type: Concept
+path: handbook/ops/retired-tool
+description: A tool nobody uses any more
+------
+title: Setup
+type: Runbook
+path: handbook/ops/setup
+description: Local setup
+------
+list: 4 concept(s)
+--- stderr
+--- files

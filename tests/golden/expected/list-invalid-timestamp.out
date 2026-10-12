@@ -1,0 +1,6 @@
+$ okf list --where 'stale_after < yesterday'
+exit: 2
+--- stdout
+--- stderr
+--where: stale_after compares instants: = != < <= > >= or in, with an ISO 8601 datetime and an explicit offset, e.g. 2026-09-23T00:00:00Z (quote a value that holds +)
+--- files

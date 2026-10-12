@@ -1,0 +1,57 @@
+$ okf registry convert TAGS.md --to block
+exit: 0
+--- stdout
+--- a/TAGS.md
++++ b/TAGS.md
+@@ -2,16 +2,35 @@
+ 
+ Closed vocabulary for concept `tags:`.
+ 
+-| Tag | Description |
+-|-----|-------------|
+-| `bread` | Bread and baking |
+-| `deploy` | Deployment procedures |
+-| `food` | Anything edible |
+-| `glossary` | Term definitions |
+-| `governance` | Rules and ownership |
+-| `incident` | Incident reports |
+-| `ops` | Operations |
+-| `onboarding` | First-day material |
+-| `pasta` | Pasta dishes |
+-| `security` | Security topics |
+-| `soup` | Soups and broths |
++### `bread`
++Bread and baking
++
++### `deploy`
++Deployment procedures
++
++### `food`
++Anything edible
++
++### `glossary`
++Term definitions
++
++### `governance`
++Rules and ownership
++
++### `incident`
++Incident reports
++
++### `ops`
++Operations
++
++### `onboarding`
++First-day material
++
++### `pasta`
++Pasta dishes
++
++### `security`
++Security topics
++
++### `soup`
++Soups and broths
+registry convert: 11 entries in TAGS.md would rewrite as block
+--- stderr
+--- files

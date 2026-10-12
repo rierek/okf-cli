@@ -1,0 +1,7 @@
+$ okf wikilinks handbook/ops
+exit: 0
+--- stdout
+resolved   body        handbook/ops/retired-tool.md  [[deploy]]
+wikilinks: 1 link(s), 1 resolved, 0 ambiguous, 0 unresolved
+--- stderr
+--- files

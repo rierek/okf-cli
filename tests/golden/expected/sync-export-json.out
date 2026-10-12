@@ -1,0 +1,6 @@
+$ okf sync-export kc-gov/ownership naming-rule --json
+exit: 0
+--- stdout
+{"command": "sync-export", "ok": true, "data": {"payload": "Names are lowercase, hyphenated, stable and unique."}, "warnings": [], "error": null}
+--- stderr
+--- files

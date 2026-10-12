@@ -1,0 +1,19 @@
+$ okf read handbook/ops/deploy --body-only
+exit: 0
+--- stdout
+
+# Deploy
+
+## Steps
+
+1. Run `deploy <env>` with the target.
+2. Wait for the `<env>.<region>` health check.
+3. Fetch `https://old-host.example.org/status`.
+
+## Links
+
+Back to [getting started](../getting-started.md).
+Compare [setup](setup.md) and the [rule](/kc-gov/ownership.md).
+
+--- stderr
+--- files

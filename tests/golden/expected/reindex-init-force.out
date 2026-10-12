@@ -1,0 +1,97 @@
+$ okf reindex recipes --init --force
+exit: 0
+--- stdout
+--- a/recipes/drafts/index.md
++++ b/recipes/drafts/index.md
+@@ -4,4 +4,6 @@
+ 
+ ## Contents
+ 
+-* [Ideas](/recipes/drafts/ideas.md) - Raw recipe ideas
++<!-- okf:index -->
++* [ideas](/recipes/drafts/ideas.md) - Raw recipe ideas
++<!-- /okf:index -->
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,12 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Bread](/recipes/bread.md) - Bread with a long rise
+ * [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+ * [Salad](/recipes/salad.md) - A salad that was replaced
+ * [Soup](/recipes/soup.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->
+--- a/recipes/seasonal/index.md
++++ b/recipes/seasonal/index.md
+@@ -1,9 +1,8 @@
+ # Seasonal
+ 
+-## Summer
++## Contents
+ 
++<!-- okf:index -->
+ * [Gazpacho](/recipes/seasonal/gazpacho.md) - Cold tomato soup
+-
+-## Winter
+-
+ * [Punch](/recipes/seasonal/punch.md) - Hot spiced drink
++<!-- /okf:index -->
+converted      recipes/drafts/index.md
+converted      recipes/seasonal/index.md
+init: 2 converted, 0 skipped
+updated       recipes/index.md
+updated       recipes/drafts/index.md
+updated       recipes/seasonal/index.md
+reindex: 3 updated, 0 skipped
+--- stderr
+--- files
+M recipes/drafts/index.md
+--- a/recipes/drafts/index.md
++++ b/recipes/drafts/index.md
+@@ -4,4 +4,6 @@
+ 
+ ## Contents
+ 
+-* [Ideas](/recipes/drafts/ideas.md) - Raw recipe ideas
++<!-- okf:index -->
++* [ideas](/recipes/drafts/ideas.md) - Raw recipe ideas
++<!-- /okf:index -->
+M recipes/index.md
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,12 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Bread](/recipes/bread.md) - Bread with a long rise
+ * [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+ * [Salad](/recipes/salad.md) - A salad that was replaced
+ * [Soup](/recipes/soup.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->
+M recipes/seasonal/index.md
+--- a/recipes/seasonal/index.md
++++ b/recipes/seasonal/index.md
+@@ -1,9 +1,8 @@
+ # Seasonal
+ 
+-## Summer
++## Contents
+ 
++<!-- okf:index -->
+ * [Gazpacho](/recipes/seasonal/gazpacho.md) - Cold tomato soup
+-
+-## Winter
+-
+ * [Punch](/recipes/seasonal/punch.md) - Hot spiced drink
++<!-- /okf:index -->

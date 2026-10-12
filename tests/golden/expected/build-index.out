@@ -1,0 +1,8 @@
+$ okf build-index
+exit: 0
+--- stdout
+indexed 25 concept(s) -> <ROOT>/.fts/fts.sqlite
+--- stderr
+--- files
+A .fts/fts.sqlite
+  (binary)

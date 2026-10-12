@@ -1,0 +1,34 @@
+$ okf reindex recipes --init --json
+exit: 0
+--- stdout
+{"command": "reindex", "ok": true, "data": {"applied": true, "init": {"converted": ["recipes/drafts/index.md"], "skipped": [{"path": "recipes/seasonal/index.md", "reason": "skip-multi-section"}]}, "updated": ["recipes/index.md", "recipes/drafts/index.md"], "skipped": ["recipes/seasonal/index.md"], "stale": [], "uncovered": [], "unreadable": [], "files": [{"path": "recipes/drafts/index.md", "old_path": null, "diff": "--- a/recipes/drafts/index.md\n+++ b/recipes/drafts/index.md\n@@ -4,4 +4,6 @@\n \n ## Contents\n \n-* [Ideas](/recipes/drafts/ideas.md) - Raw recipe ideas\n+<!-- okf:index -->\n+* [ideas](/recipes/drafts/ideas.md) - Raw recipe ideas\n+<!-- /okf:index -->\n"}, {"path": "recipes/index.md", "old_path": null, "diff": "--- a/recipes/index.md\n+++ b/recipes/index.md\n@@ -7,10 +7,12 @@\n ## Contents\n \n <!-- okf:index -->\n-* [Drafts](/recipes/drafts/index.md)\n+* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.\n+* [Seasonal](/recipes/seasonal/index.md)\n * [Bread](/recipes/bread.md) - Bread with a long rise\n * [Pasta](/recipes/pasta.md) - Spaghetti, simple\n * [Recipes overview](/recipes/overview.md) - Overview of the recipes\n * [Salad](/recipes/salad.md) - A salad that was replaced\n * [Soup](/recipes/soup.md) - Tomatensuppe\n+* [stew](/recipes/stew.md)\n <!-- /okf:index -->\n"}]}, "warnings": [], "error": null}
+--- stderr
+--- files
+M recipes/drafts/index.md
+--- a/recipes/drafts/index.md
++++ b/recipes/drafts/index.md
+@@ -4,4 +4,6 @@
+ 
+ ## Contents
+ 
+-* [Ideas](/recipes/drafts/ideas.md) - Raw recipe ideas
++<!-- okf:index -->
++* [ideas](/recipes/drafts/ideas.md) - Raw recipe ideas
++<!-- /okf:index -->
+M recipes/index.md
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,12 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Bread](/recipes/bread.md) - Bread with a long rise
+ * [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+ * [Salad](/recipes/salad.md) - A salad that was replaced
+ * [Soup](/recipes/soup.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->

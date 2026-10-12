@@ -1,0 +1,6 @@
+$ okf sync-status --block nope
+exit: 0
+--- stdout
+sync-status: 0 synced, 0 source-changed, 0 consumer-modified, 0 both-changed, 0 source-missing, 0 malformed
+--- stderr
+--- files

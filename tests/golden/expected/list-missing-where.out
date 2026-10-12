@@ -1,0 +1,6 @@
+$ okf list
+exit: 2
+--- stdout
+--- stderr
+(error: pass --where, e.g. --where 'type = Runbook')
+--- files

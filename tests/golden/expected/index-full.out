@@ -1,0 +1,34 @@
+$ okf index --full
+exit: 0
+--- stdout
+bundle: _ctx
+description: Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.
+concepts: 3
+types: Context
+tags: 
+-----
+bundle: handbook
+description: Welcome to the handbook.
+concepts: 10
+directories:
+- ops
+types: Concept, Gadget, Guide, Note, Runbook
+tags: deploy, glossary, incident, onboarding, ops, security, x-experimental
+-----
+bundle: kc-gov
+description: 
+concepts: 2
+types: Rule
+tags: governance
+-----
+bundle: recipes
+description: 
+concepts: 9
+directories:
+- drafts
+- seasonal
+types: Concept, Note, Recipe
+tags: bread, food, misc, pasta, soup
+-----
+--- stderr
+--- files

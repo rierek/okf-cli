@@ -1,0 +1,8 @@
+$ okf find zzzzqqqq
+exit: 0
+--- stdout
+(no matches for: zzzzqqqq)
+--- stderr
+note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking
+note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only
+--- files

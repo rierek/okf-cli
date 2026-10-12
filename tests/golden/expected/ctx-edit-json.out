@@ -1,0 +1,7 @@
+$ okf ctx edit cooking --json
+env: EDITOR=true
+exit: 0
+--- stdout
+{"command": "ctx edit", "ok": true, "data": {"findings": []}, "warnings": [], "error": null}
+--- stderr
+--- files

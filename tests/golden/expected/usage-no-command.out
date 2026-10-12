@@ -1,0 +1,6 @@
+$ okf 
+exit: 2
+--- stdout
+--- stderr
+<usage error>
+--- files

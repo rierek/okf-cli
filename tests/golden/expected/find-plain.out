@@ -1,0 +1,40 @@
+$ okf find pasta
+exit: 0
+--- stdout
+------
+rank: 1
+title: Pasta
+type: Recipe
+path: recipes/pasta
+description: Spaghetti, simple
+body-snippet: # Pasta ## Zutaten Nudeln, Salz, Wasser. ## Quellen - [Pasta basics](https://example.org/pasta)…
+provenance: lexical
+------
+rank: 2
+title: cooking
+type: Context
+path: _ctx/cooking
+description: Cooking basics
+body-snippet: …ead](/recipes/bread.md) | | | 2 | pflicht | [pasta](/recipes/pasta.md) | | | 3 | pflicht | [soup](/recipes/soup.md) | |…
+provenance: lexical
+------
+rank: 3
+title: Bread
+type: Recipe
+path: recipes/bread
+description: Bread with a long rise
+body-snippet: …# Bread ## Steps Mix, rise, bake. Related: [pasta](pasta.md).…
+provenance: lexical
+------
+rank: 4
+title: Recipes overview
+type: Concept
+path: recipes/overview
+description: Overview of the recipes
+body-snippet: # Overview See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…
+provenance: lexical
+------
+--- stderr
+note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking
+note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only
+--- files

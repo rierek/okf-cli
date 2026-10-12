@@ -1,0 +1,6 @@
+$ okf fix-xml-tags --check --json
+exit: 0
+--- stdout
+{"command": "fix-xml-tags", "ok": true, "data": {"applied": false, "files": [{"path": "recipes/soup.md", "old_path": null, "diff": "--- a/recipes/soup.md\n+++ b/recipes/soup.md\n@@ -14,4 +14,4 @@\n \n ## Hinweis\n \n-Use a pot <size>. Compare with [bread](/recipes/bread.md).\n+Use a pot `<size>`. Compare with [bread](/recipes/bread.md).\n"}], "skipped": []}, "warnings": [], "error": null}
+--- stderr
+--- files

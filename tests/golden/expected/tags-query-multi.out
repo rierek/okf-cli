@@ -1,0 +1,11 @@
+$ okf tags pasta bread
+exit: 0
+--- stdout
+== searched: pasta ==
+  - pasta  (1)
+
+== searched: bread ==
+  - bread  (1)
+
+--- stderr
+--- files

@@ -1,0 +1,6 @@
+$ okf rename recipes/salad.md recipes/drafts/pasta.md --apply
+exit: 2
+--- stdout
+--- stderr
+rename: this move leaves 1 inbound wikilink(s) ambiguous: recipes/overview.md — the same corruption `skipped-ambiguous` declines to commit, so it may not happen by accident either (use --force to proceed)
+--- files

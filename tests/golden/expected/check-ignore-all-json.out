@@ -1,0 +1,6 @@
+$ okf check --ignore 'kc/*' --ignore 'okf/*' --json
+exit: 0
+--- stdout
+{"command": "check", "ok": true, "data": {"findings": []}, "warnings": [], "error": null}
+--- stderr
+--- files

@@ -1,0 +1,9 @@
+$ okf ctx check
+exit: 4
+--- stdout
+ERROR    kc/ctx/dead-entry    _ctx/legacy.md  (dead entry: handbook/ops/gone.md)
+WARNING  kc/ctx/empty-description _ctx/legacy.md  (empty description)
+WARNING  kc/ctx/archived-entry _ctx/legacy.md  (entry under _archive/: _archive/handbook/old-process.md)
+1 VIOLATIONS
+--- stderr
+--- files

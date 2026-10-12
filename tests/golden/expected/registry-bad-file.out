@@ -1,0 +1,6 @@
+$ okf registry convert PROPERTIES.md --to block
+exit: 2
+--- stdout
+--- stderr
+<usage error>
+--- files

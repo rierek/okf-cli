@@ -1,0 +1,52 @@
+$ okf rewrite-path /kc-gov/ownership.md /kc-gov/owner.md --check
+exit: 0
+--- stdout
+--- a/handbook/ops/deploy.md
++++ b/handbook/ops/deploy.md
+@@ -27,4 +27,4 @@
+ ## Links
+ 
+ Back to [getting started](../getting-started.md).
+-Compare [setup](setup.md) and the [rule](/kc-gov/ownership.md).
++Compare [setup](setup.md) and the [rule](/kc-gov/owner.md).
+--- a/handbook/ops/setup.md
++++ b/handbook/ops/setup.md
+@@ -11,8 +11,8 @@
+ 
+ Install the tools. Plain `old-host.example.org` is the old status host.
+ 
+-<!-- okf:sync id=ownership-rule source=/kc-gov/ownership.md hash=594970cbf139 -->
+-> [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.
++<!-- okf:sync id=ownership-rule source=/kc-gov/owner.md hash=594970cbf139 -->
++> [!quote] Synchronisiert aus `/kc-gov/owner.md` — Canon-Owner, hier nicht bearbeiten.
+ <!-- okf:sync-body -->
+ Every normative statement has exactly one owner.
+ <!-- /okf:sync -->
+--- a/kc-gov/index.md
++++ b/kc-gov/index.md
+@@ -8,5 +8,5 @@
+ 
+ <!-- okf:index -->
+ * [naming](/kc-gov/naming.md) - Naming conventions
+-* [Ownership](/kc-gov/ownership.md) - Every normative statement has exactly one owner
++* [Ownership](/kc-gov/owner.md) - Every normative statement has exactly one owner
+ <!-- /okf:index -->
+--- a/kc-gov/naming.md
++++ b/kc-gov/naming.md
+@@ -7,10 +7,10 @@
+ 
+ # Naming
+ 
+-Refer to [ownership](/kc-gov/ownership.md).
++Refer to [ownership](/kc-gov/owner.md).
+ 
+-<!-- okf:sync id=naming-rule source=/kc-gov/ownership.md hash=68dca574d22c -->
+-> [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.
++<!-- okf:sync id=naming-rule source=/kc-gov/owner.md hash=68dca574d22c -->
++> [!quote] Synchronisiert aus `/kc-gov/owner.md` — Canon-Owner, hier nicht bearbeiten.
+ <!-- okf:sync-body -->
+ Names are lowercase, hyphenated and stable.
+ <!-- /okf:sync -->
+4 file(s) affected (dry-run)
+--- stderr
+--- files

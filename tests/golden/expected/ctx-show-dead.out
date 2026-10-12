@@ -1,0 +1,21 @@
+$ okf ctx show legacy
+exit: 4
+--- stdout
+ctx legacy
+
+required — read in this order:
+  1. <ROOT>/handbook/ops/retired-tool.md  [Concept] Retired tool  ~46 tok
+     A tool nobody uses any more
+  2. <ROOT>/handbook/ops/setup.md  [Runbook] Setup  ~109 tok
+     Local setup
+  3. [DEAD] <ROOT>/handbook/ops/gone.md
+     why: removed long ago
+reference — query when needed:
+  - <ROOT>/_archive/handbook/old-process.md  [Concept] Old process  ~32 tok
+  - <ROOT>/handbook/ops/incident-2026.md  [Note] Incident 2026  ~43 tok
+     why: stale page
+
+5 entries (3 required, 2 reference), ~155 tokens for the required set
+WARNING: 1 dead entry — this list is incomplete; fix with `ctx edit legacy`
+--- stderr
+--- files

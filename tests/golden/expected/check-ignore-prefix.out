@@ -1,0 +1,6 @@
+$ okf check --ignore 'kc/*' --ignore 'okf/*'
+exit: 0
+--- stdout
+OK — 0 violations
+--- stderr
+--- files

@@ -1,0 +1,14 @@
+$ okf ctx add cooking recipes/salad --json
+exit: 0
+--- stdout
+{"command": "ctx add", "ok": true, "data": {"applied": true, "slug": "cooking", "path": "recipes/salad.md", "where": "pos 4"}, "warnings": [], "error": null}
+--- stderr
+--- files
+M _ctx/cooking.md
+--- a/_ctx/cooking.md
++++ b/_ctx/cooking.md
+@@ -10,3 +10,4 @@
+ | 1 | pflicht | [bread](/recipes/bread.md) |  |
+ | 2 | pflicht | [pasta](/recipes/pasta.md) |  |
+ | 3 | pflicht | [soup](/recipes/soup.md) |  |
++| 4 | pflicht | [salad](/recipes/salad.md) |  |

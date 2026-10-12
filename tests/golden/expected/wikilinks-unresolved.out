@@ -1,0 +1,8 @@
+$ okf wikilinks --unresolved
+exit: 0
+--- stdout
+unresolved body        handbook/getting-started.md  [[does-not-exist]]
+unresolved body        handbook/wiki-notes.md  [[nowhere]]
+wikilinks: 13 link(s), 11 resolved, 0 ambiguous, 2 unresolved
+--- stderr
+--- files

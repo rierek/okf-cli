@@ -1,0 +1,22 @@
+$ okf list --where '(type = Guide or type = Rule) and tag != draft'
+exit: 0
+--- stdout
+------
+title: Getting started
+type: Guide
+path: handbook/getting-started
+description: First steps: accounts, tools, and where to find things
+------
+title: naming
+type: Rule
+path: kc-gov/naming
+description: Naming conventions
+------
+title: Ownership
+type: Rule
+path: kc-gov/ownership
+description: Every normative statement has exactly one owner
+------
+list: 3 concept(s)
+--- stderr
+--- files

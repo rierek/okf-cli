@@ -1,0 +1,12 @@
+$ okf list --where 'stale = true'
+exit: 0
+--- stdout
+------
+title: Incident 2026
+type: Note
+path: handbook/ops/incident-2026
+description: A past incident
+------
+list: 1 concept(s)
+--- stderr
+--- files

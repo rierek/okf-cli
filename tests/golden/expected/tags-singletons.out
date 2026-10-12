@@ -1,0 +1,12 @@
+$ okf tags --singletons
+exit: 0
+--- stdout
+  bread           1
+  deploy          1
+  incident        1
+  misc            1
+  pasta           1
+  security        1
+  x-experimental  1
+--- stderr
+--- files
