@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "okf-cli"
-version = "0.2.1"
+version = "0.2.3"
 description = "CLI and MCP server for Open Knowledge Format (OKF) v0.2 catalogues"
 readme = "README.md"
 license = "Apache-2.0"

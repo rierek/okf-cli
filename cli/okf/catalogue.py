@@ -70,9 +70,11 @@ def configured_root():
     return root
 
 
-def catalogue_root(explicit):
-    """Resolve the catalogue root. Explicit --root wins unchanged (abspath,
-    even if nonexistent — main() validates that). Absent --root, auto-detect
+def catalogue_root(explicit, use_global=False):
+    """Resolve the catalogue root. use_global (--global): the `root` of the user
+    config, whatever sits above cwd; none configured is not_found, together with an
+    explicit root invalid_input. Explicit --root wins otherwise (`~` expanded, then
+    abspath, even if nonexistent — main() validates that). Absent --root, auto-detect
     by walking cwd upward for a catalogue marker (.okf.toml, or SPEC.md +
     TYPES.md together) either IN the candidate directory or in its `docs/`
     child. No marker anywhere up to the filesystem root: the `root` of the
@@ -87,8 +89,15 @@ def catalogue_root(explicit):
     for a marker one level up from every candidate, never IN one — the
     marker sits one level BELOW `<hull>`, not beside any ancestor of a
     worktree — and reach the filesystem root without ever finding it."""
+    if use_global:
+        if explicit:
+            raise OkfError("invalid_input", "ERROR: --global and --root exclude each other")
+        root = configured_root()
+        if root is None:
+            raise OkfError("not_found", "ERROR: --global needs a `root` in {}".format(user_config_path()))
+        return root
     if explicit:
-        return os.path.abspath(explicit)
+        return os.path.abspath(os.path.expanduser(explicit))
     d = os.getcwd()
     while True:
         if os.path.isfile(os.path.join(d, ".okf.toml")) or (

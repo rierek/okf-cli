@@ -27,7 +27,7 @@ okf install
 okf install --apply
 ```
 
-Then use it from any directory. Without `--root` it takes the nearest catalogue above the current directory, else the `root` in `~/.config/okf/config.toml` (`$XDG_CONFIG_HOME/okf/config.toml`):
+Then use it from any directory. Without `--root` it takes the nearest catalogue above the current directory, else the `root` in `~/.config/okf/config.toml` (`$XDG_CONFIG_HOME/okf/config.toml`). `--global` takes that configured root even when a catalogue lies above the current directory (not together with `--root`). A `~` in `--root` is expanded:
 
 ```toml
 root = "~/path/to/catalogue"
@@ -377,7 +377,7 @@ Git is the recommended way to distribute OKF bundles: markdown gives clean diffs
 | OpenClaw | shared | `openclaw mcp set` |
 | Hermes | `~/.hermes/skills/okf` | marked block in `~/.hermes/config.yaml` |
 
-The shared copy in `~/.agents/skills/okf` is read by Codex, opencode, Kimi Code, omp and OpenClaw, so it is installed once. The MCP server is registered as `uv run --with "mcp<2" <install dir>/mcp/okf_mcp.py`: `uv` must be on `PATH`, otherwise only the MCP step is blocked and the plan says how to fix it. The server offers 21 tools, each with `root` as first argument: `okf_find`, `okf_read` (with `section`, `follow`, `inbound` and `max_tokens`), `okf_toc`, `okf_index`, `okf_list`, `okf_check`, `okf_refs`, `okf_wikilinks`, `okf_tags`, `okf_prime`, `okf_info`, `okf_ctx_list`, `okf_ctx_show`, `okf_rename`, `okf_reindex`, `okf_build_index`, `okf_build_semantic_index` and the four `okf_sync_*` tools. Verbs not listed (`verify`, `migrate`, `archive`, the tag and repair verbs, `install`) stay CLI-only. The server is a thin subprocess wrapper that starts the CLI through `uv run --script` and returns its `--json` envelope as `{data, warnings}`, plus `error` when a failure still carries a result; all logic stays in the CLI. To register it by hand in any MCP client:
+The shared copy in `~/.agents/skills/okf` is read by Codex, opencode, Kimi Code, omp and OpenClaw, so it is installed once. The MCP server is registered as `uv run --with "mcp<2" <install dir>/mcp/okf_mcp.py`: `uv` must be on `PATH`, otherwise only the MCP step is blocked and the plan says how to fix it. The server offers 21 tools, each with `root` as first argument and `use_global` (the MCP form of `--global`; `global` is a Python keyword): `okf_find`, `okf_read` (with `section`, `follow`, `inbound` and `max_tokens`), `okf_toc`, `okf_index`, `okf_list`, `okf_check`, `okf_refs`, `okf_wikilinks`, `okf_tags`, `okf_prime`, `okf_info`, `okf_ctx_list`, `okf_ctx_show`, `okf_rename`, `okf_reindex`, `okf_build_index`, `okf_build_semantic_index` and the four `okf_sync_*` tools. Verbs not listed (`verify`, `migrate`, `archive`, the tag and repair verbs, `install`) stay CLI-only. The server is a thin subprocess wrapper that starts the CLI through `uv run --script` and returns its `--json` envelope as `{data, warnings}`, plus `error` when a failure still carries a result; all logic stays in the CLI. To register it by hand in any MCP client:
 
 ```json
 {

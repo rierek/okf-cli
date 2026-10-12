@@ -18,9 +18,10 @@ Run `okf --help` for the command directory (flat + grouped by purpose),
 and `okf <command> --help` for one command's options. Both are generated
 from the parser — this file documents no command list by hand.
 
-Catalogue root: --root, else the nearest catalogue above cwd (.okf.toml, or SPEC.md plus
-TYPES.md, also in a docs/ child), else `root` in $XDG_CONFIG_HOME/okf/config.toml
-(default ~/.config/okf/config.toml).
+Catalogue root: --root (a `~` is expanded), else the nearest catalogue above cwd (.okf.toml,
+or SPEC.md plus TYPES.md, also in a docs/ child), else `root` in $XDG_CONFIG_HOME/okf/config.toml
+(default ~/.config/okf/config.toml). --global takes that configured root and skips the search
+above cwd; it excludes --root.
 """
 import os
 import sys
@@ -38,7 +39,7 @@ def _dispatch(args):
     """The call proper: root checks, the marker note, then the command's handler."""
     if args.cmd in CATALOGUE_FREE:
         return COMMAND_DISPATCH[args.cmd](None, args)
-    root = catalogue_root(args.root)
+    root = catalogue_root(args.root, args.use_global)
     if root is None:
         raise OkfError("not_found",
                        "ERROR: no catalogue found in cwd or its ancestors and no root in {}; "

@@ -29,6 +29,9 @@ def build_parser(description=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="catalogue root (default: the nearest catalogue above cwd, "
                     "else root in ~/.config/okf/config.toml; hard-fails if neither)").completer = _complete_dirs
+    ap.add_argument("--global", dest="use_global", action="store_true",
+                    help="use the root in ~/.config/okf/config.toml, even when a catalogue lies above cwd "
+                    "(not with --root)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in sorted(COMMAND_TABLE):
         COMMAND_TABLE[name][1](sub)
