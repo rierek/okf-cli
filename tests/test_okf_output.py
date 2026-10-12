@@ -35,6 +35,7 @@ def _probe_parser(description=None):
     whose verb lands in `ctx_verb`."""
     ap = argparse.ArgumentParser(prog="okf-cli.py")
     ap.add_argument("--root")
+    ap.add_argument("--global", dest="use_global", action="store_true")
     sub = ap.add_subparsers(dest="cmd", required=True)
     output._add_output(sub.add_parser("probe"))
     verbs = sub.add_parser("ctx").add_subparsers(dest="ctx_verb", required=True)

@@ -172,6 +172,57 @@ class ConfiguredRoot(unittest.TestCase):
         self.config('root = "{}"\n'.format(self.cat))
         self.assertEqual(okf_catalogue.catalogue_root(self.bare), self.bare)
 
+    def test_explicit_root_expands_tilde(self):
+        os.makedirs(os.path.join(self.tmp, "kat"))
+        with mock.patch.dict(os.environ, {"HOME": self.tmp}):
+            self.assertEqual(okf_catalogue.catalogue_root("~/kat"), os.path.join(self.tmp, "kat"))
+
+    def test_global_beats_marker_above_cwd(self):
+        self.config('root = "{}"\n'.format(self.cat))
+        open(os.path.join(self.bare, ".okf.toml"), "w", encoding="utf-8").close()
+        self.assertEqual(okf_catalogue.catalogue_root(None), self.bare)
+        self.assertEqual(okf_catalogue.catalogue_root(None, use_global=True), self.cat)
+
+    def test_global_without_config_root_is_not_found(self):
+        for text in (None, "other = 1\n"):
+            if text:
+                self.config(text)
+            with self.assertRaises(okf_errors.OkfError) as ctx:
+                okf_catalogue.catalogue_root(None, use_global=True)
+            self.assertEqual(ctx.exception.kind, "not_found")
+            self.assertIn(os.path.join(self.cfg, "okf", "config.toml"), str(ctx.exception))
+
+    def test_global_with_explicit_root_is_invalid_input(self):
+        self.config('root = "{}"\n'.format(self.cat))
+        with self.assertRaises(okf_errors.OkfError) as ctx:
+            okf_catalogue.catalogue_root(self.bare, use_global=True)
+        self.assertEqual(ctx.exception.kind, "invalid_input")
+
+    def run_main(self, *argv):
+        old_argv, old_stdout, old_stderr = sys.argv, sys.stdout, sys.stderr
+        sys.argv = ["okf-cli.py", *argv]
+        sys.stdout, sys.stderr = out, _ = io.StringIO(), io.StringIO()
+        code = 0
+        try:
+            okf.main()
+        except SystemExit as e:
+            code = e.code or 0
+        finally:
+            sys.argv, sys.stdout, sys.stderr = old_argv, old_stdout, old_stderr
+        return code, out.getvalue()
+
+    def test_main_global_reads_config_catalogue_despite_local_marker(self):
+        self.config('root = "{}"\n'.format(self.cat))
+        open(os.path.join(self.bare, ".okf.toml"), "w", encoding="utf-8").close()
+        code, out = self.run_main("--global", "index")
+        self.assertEqual(code, 0)
+        self.assertTrue(out.startswith("b:"), out)
+
+    def test_main_global_with_root_exits_invalid_input(self):
+        self.config('root = "{}"\n'.format(self.cat))
+        code, _ = self.run_main("--global", "--root", self.cat, "index")
+        self.assertEqual(code, okf_errors.EXIT_CODES["invalid_input"])
+
     def test_config_without_root_or_missing_config_is_none(self):
         self.assertIsNone(okf_catalogue.catalogue_root(None))
         self.config("other = 1\n")
