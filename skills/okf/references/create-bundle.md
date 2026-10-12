@@ -59,7 +59,7 @@ Skip when `<catalogue>` exists. Otherwise create it:
    # okf catalogue marker
    ```
 
-3. Write `<catalogue>/TYPES.md`. `check` reads the first backticked cell of each table row as a registered type:
+3. Write `<catalogue>/TYPES.md`. `check` reads each table row with a backticked first cell, or a ``### `Type` `` block (README: Registry format), as a registered type:
 
    ```markdown
    # Types

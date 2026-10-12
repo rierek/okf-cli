@@ -33,8 +33,8 @@ def _note(message):
 
 
 def command_name(args):
-    """The subcommand as typed; a ctx verb is `ctx <verb>`."""
-    verb = getattr(args, "ctx_verb", None)
+    """The subcommand as typed; a ctx or registry verb is `<command> <verb>`."""
+    verb = getattr(args, "ctx_verb", None) or getattr(args, "registry_verb", None)
     return "{} {}".format(args.cmd, verb) if verb else args.cmd
 
 
