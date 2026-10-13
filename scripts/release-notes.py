@@ -3,7 +3,7 @@
 
 usage: scripts/release-notes.py <milestone-bean-id> > releases/RELEASE-<version>.md
 
-Source: the `beans` CLI. The milestone carries the tag rel-<x-y-z>; epics and features
+Source: the `lif` CLI. The milestone carries the tag rel-<x-y-z>; epics and features
 below it are "Changes"; bugs directly below it (no epic/feature parent) are "Fixes".
 Each line is "[bean-id] summary"; without a summary the title stands in.
 """
@@ -12,8 +12,8 @@ import subprocess
 import sys
 
 
-def beans(*args):
-    out = subprocess.run(["beans", *args, "--json"], check=True, capture_output=True, text=True).stdout
+def lif(*args):
+    out = subprocess.run(["lif", *args, "--json"], check=True, capture_output=True, text=True).stdout
     return json.loads(out) or []
 
 
@@ -22,10 +22,10 @@ def summary(b):
 
 
 def main(milestone):
-    m = beans("show", milestone)
+    m = lif("show", milestone)
     if m["type"] != "milestone":
         sys.exit(f"{milestone} is a {m['type']}, not a milestone")
-    kids = [b for b in beans("list", "--parent", milestone) if b["status"] in ("completed", "to-review")]
+    kids = [b for b in lif("list", "--parent", milestone) if b["status"] in ("completed", "to-review")]
     changes = [b for b in kids if b["type"] in ("epic", "feature")]
     fixes = [b for b in kids if b["type"] == "bug"]
     print(f"## Summary\n\n{summary(m)}\n")
