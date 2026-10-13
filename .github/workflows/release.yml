@@ -80,7 +80,7 @@ jobs:
             TAG="$GITHUB_REF_NAME"
             VERSION="$(echo "${TAG#rel-}" | tr - .)"
             gh release create "$TAG" --draft --verify-tag --title "okf-cli $VERSION" \
-              --notes-file "RELEASE-$VERSION.md"
+              --notes-file "releases/RELEASE-$VERSION.md"
           else
             TAG="dry-run-${GITHUB_SHA::7}"
             gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "dry run" --notes "dry run"
