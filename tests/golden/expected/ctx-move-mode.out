@@ -1,0 +1,15 @@
+$ okf ctx move cooking recipes/soup --mode nachschlag
+exit: 0
+--- stdout
+moved recipes/soup.md in cooking to reference
+--- stderr
+--- files
+M _ctx/cooking.md
+--- a/_ctx/cooking.md
++++ b/_ctx/cooking.md
+@@ -9,4 +9,4 @@
+ |---|---|---|---|
+ | 1 | pflicht | [bread](/recipes/bread.md) |  |
+ | 2 | pflicht | [pasta](/recipes/pasta.md) |  |
+-| 3 | pflicht | [soup](/recipes/soup.md) |  |
++| - | nachschlag | [soup](/recipes/soup.md) |  |

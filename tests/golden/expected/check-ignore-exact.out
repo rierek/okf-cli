@@ -1,0 +1,30 @@
+$ okf check --ignore kc/link/crosslink-format
+exit: 4
+--- stdout
+ERROR    kc/ctx/dead-entry    _ctx/legacy.md  (dead entry: handbook/ops/gone.md)
+ERROR    okf/frontmatter/parseable handbook/broken-yaml.md  (no parseable frontmatter: expected ',' or ']', but got ':' (line 4, column 12))
+ERROR    okf/trust/generated  handbook/wiki-notes.md  (`generated` has no non-empty `by`)
+ERROR    okf/lifecycle/status handbook/wiki-notes.md  (`status` is `maybe-later`, not draft, stable or deprecated)
+ERROR    okf/type/reserved-no-type recipes/readme.md  (reserved file must not carry `type`)
+ERROR    kc/supersede/resolves recipes/salad.md  (superseded_by target does not resolve: recipes/soup)
+ERROR    kc/asset/placement   recipes/shopping.txt  (non-md file outside assets/)
+ERROR    kc/supersede/resolves recipes/stew.md  (superseded_by target does not resolve: handbook/ops/deploy)
+WARNING  kc/ctx/empty-description _ctx/legacy.md  (empty description)
+WARNING  kc/ctx/archived-entry _ctx/legacy.md  (entry under _archive/: _archive/handbook/old-process.md)
+WARNING  kc/link/wikilink-resolvable handbook/getting-started.md  (unresolved wikilink target(s): [[does-not-exist]])
+WARNING  kc/frontmatter/tags-block-form handbook/glossary.md  (tags field uses inline form — local convention requires YAML block-list)
+WARNING  okf/lifecycle/stale-after handbook/ops/incident-2026.md  (`stale_after` 2026-01-05T00:00:00Z has passed)
+WARNING  kc/type/registered   handbook/security.md  (type `Gadget` not registered in TYPES.md)
+WARNING  kc/tag/registered    handbook/security.md  (tag `x-experimental` not registered in TAGS.md)
+WARNING  kc/link/wikilink-resolvable handbook/wiki-notes.md  (unresolved wikilink target(s): [[nowhere]])
+WARNING  kc/sync/stale        kc-gov/naming.md  (sync block `naming-rule` from /kc-gov/ownership.md is outdated — run sync-update)
+WARNING  kc/frontmatter/tags-block-form recipes/overview.md  (tags field uses inline form — local convention requires YAML block-list)
+WARNING  kc/supersede/scope   recipes/salad.md  (superseded_by used on non-Decision concept (type=Recipe))
+WARNING  kc/frontmatter/tags-block-form recipes/soup.md  (tags field uses inline form — local convention requires YAML block-list)
+WARNING  kc/markup/xml-like-tags recipes/soup.md  (angle-bracket placeholder(s) not in code-fence: <size>)
+WARNING  kc/tag/registered    recipes/stew.md  (tag `misc` not registered in TAGS.md)
+WARNING  kc/frontmatter/english-keys recipes/stew.md  (German frontmatter key(s): beschreibung, titel)
+WARNING  kc/supersede/scope   recipes/stew.md  (superseded_by used on non-Decision concept (type=Recipe))
+8 VIOLATIONS
+--- stderr
+--- files

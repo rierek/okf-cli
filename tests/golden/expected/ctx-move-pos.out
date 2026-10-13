@@ -1,0 +1,19 @@
+$ okf ctx move cooking recipes/soup --pos 1
+exit: 0
+--- stdout
+moved recipes/soup.md in cooking to pos 1
+--- stderr
+--- files
+M _ctx/cooking.md
+--- a/_ctx/cooking.md
++++ b/_ctx/cooking.md
+@@ -7,6 +7,6 @@
+ 
+ | pos | mode | path | comment |
+ |---|---|---|---|
+-| 1 | pflicht | [bread](/recipes/bread.md) |  |
+-| 2 | pflicht | [pasta](/recipes/pasta.md) |  |
+-| 3 | pflicht | [soup](/recipes/soup.md) |  |
++| 1 | pflicht | [soup](/recipes/soup.md) |  |
++| 2 | pflicht | [bread](/recipes/bread.md) |  |
++| 3 | pflicht | [pasta](/recipes/pasta.md) |  |

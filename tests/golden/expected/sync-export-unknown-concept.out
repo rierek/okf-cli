@@ -1,0 +1,6 @@
+$ okf sync-export kc-gov/nope ownership-rule
+exit: 3
+--- stdout
+--- stderr
+not found: kc-gov/nope
+--- files

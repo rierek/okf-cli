@@ -1,0 +1,6 @@
+$ okf tags --validate food bogus --json
+exit: 4
+--- stdout
+{"command": "tags", "ok": false, "data": {"closed_vocabulary": true, "unknown": ["bogus"]}, "warnings": [], "error": {"kind": "non_conformant", "code": 4, "message": "non_conformant"}}
+--- stderr
+--- files

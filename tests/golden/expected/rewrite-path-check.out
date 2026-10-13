@@ -1,0 +1,17 @@
+$ okf rewrite-path old-host.example.org new-host.example.org --check
+exit: 0
+--- stdout
+--- a/handbook/ops/setup.md
++++ b/handbook/ops/setup.md
+@@ -9,7 +9,7 @@
+ 
+ # Setup
+ 
+-Install the tools. Plain `old-host.example.org` is the old status host.
++Install the tools. Plain `new-host.example.org` is the old status host.
+ 
+ <!-- okf:sync id=ownership-rule source=/kc-gov/ownership.md hash=594970cbf139 -->
+ > [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.
+1 file(s) affected (dry-run)
+--- stderr
+--- files

@@ -1,0 +1,19 @@
+$ okf ctx onboarding
+exit: 0
+--- stdout
+ctx onboarding — Read this first on day one
+
+required — read in this order:
+  1. <ROOT>/handbook/getting-started.md  [Guide] Getting started  ~158 tok
+     First steps: accounts, tools, and where to find things
+  2. <ROOT>/handbook/glossary.md  [Concept] Glossary  ~62 tok
+     Terms used here: "bundle" and "concept"
+  3. <ROOT>/handbook/ops/deploy.md  [Runbook] Deploy  ~150 tok
+     How to deploy: build, ship, verify
+reference — query when needed:
+  - <ROOT>/handbook/security.md  [Gadget] Security basics  ~55 tok
+     why: Background on passwords
+
+4 entries (3 required, 1 reference), ~370 tokens for the required set
+--- stderr
+--- files

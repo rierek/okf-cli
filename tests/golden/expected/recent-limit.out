@@ -1,0 +1,9 @@
+$ okf recent --limit 3
+exit: 0
+--- stdout
+2026-02-11 00:00  Recipe  recipes/stew
+2026-02-10 00:00  Recipe  recipes/soup
+2026-02-08 00:00  Recipe  recipes/seasonal/punch
+recent: 3 of 24 concept(s)
+--- stderr
+--- files

@@ -1,0 +1,6 @@
+$ okf verify handbook/nope --by human:golden
+exit: 3
+--- stdout
+--- stderr
+not found: handbook/nope
+--- files

@@ -1,0 +1,6 @@
+$ okf sync-export kc-gov/ownership ownership-rule
+exit: 0
+--- stdout
+Every normative statement has exactly one owner.
+--- stderr
+--- files

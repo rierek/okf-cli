@@ -1,0 +1,45 @@
+$ okf visualize recipes --out '{ROOT}/out.html'
+exit: 0
+--- stdout
+wrote <ROOT>/out.html (9 nodes, 6 edges)
+--- stderr
+--- files
+A out.html
+--- a/out.html
++++ b/out.html
+@@ -0,0 +1,34 @@
++<!doctype html><html><head><meta charset="utf-8">
++<title>OKF — recipes</title>
++<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
++<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
++<style>
++ body{margin:0;font:14px/1.5 system-ui,sans-serif;display:flex;height:100vh}
++ #g{flex:1;background:#0d1117}
++ #p{width:38%;max-width:560px;overflow:auto;padding:16px 22px;border-left:1px solid #30363d;background:#161b22;color:#c9d1d9}
++ #p h1,#p h2,#p h3{color:#e6edf3} #p a{color:#58a6ff} #p code,#p pre{background:#0d1117;border-radius:6px}
++ #p pre{padding:12px;overflow:auto} #bar{padding:8px 12px;background:#161b22;color:#c9d1d9;border-bottom:1px solid #30363d}
++ #s{width:220px} .meta{color:#8b949e;font-size:12px;margin-bottom:10px}
++</style></head><body>
++<div style="flex:1;display:flex;flex-direction:column">
++ <div id="bar"><b>recipes</b> &nbsp; <input id="s" placeholder="filter title/type…"></div>
++ <div id="g"></div>
++</div>
++<div id="p"><div class="meta">Klick auf einen Knoten.</div></div>
++<script>
++const D={"name": "recipes", "nodes": [{"id": "bread", "title": "Bread", "type": "Recipe", "body": "\n\n# Bread\n\n## Steps\n\nMix, rise, bake. Related: [pasta](pasta.md).\n"}, {"id": "drafts/ideas", "title": "drafts/ideas", "type": "Note", "body": "\n\n# Ideas\n\nMaybe a [pie](pie.md).\n"}, {"id": "overview", "title": "Recipes overview", "type": "Concept", "body": "\n\n# Overview\n\nSee [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].\n"}, {"id": "pasta", "title": "Pasta", "type": "Recipe", "body": "\n\n# Pasta\n\n## Zutaten\n\nNudeln, Salz, Wasser.\n\n## Quellen\n\n- [Pasta basics](https://example.org/pasta)\n"}, {"id": "salad", "title": "Salad", "type": "Recipe", "body": "\n\n# Salad\n\nSuperseded by [soup](soup.md).\n"}, {"id": "seasonal/gazpacho", "title": "Gazpacho", "type": "Recipe", "body": "\n\n# Gazpacho\n\nBlend tomatoes, cucumber and peppers.\n"}, {"id": "seasonal/punch", "title": "Punch", "type": "Recipe", "body": "\n\n# Punch\n\nWarm the juice with spices.\n"}, {"id": "soup", "title": "Soup", "type": "Recipe", "body": "\n\n# Suppe\n\n## Zutaten\n\nTomaten, Zwiebeln.\n\n## Hinweis\n\nUse a pot <size>. Compare with [bread](/recipes/bread.md).\n"}, {"id": "stew", "title": "stew", "type": "Recipe", "body": "\n\n# Eintopf\n\nEin Eintopf mit Gem\u00fcse.\n"}], "edges": [{"source": "bread", "target": "pasta"}, {"source": "overview", "target": "pasta"}, {"source": "overview", "target": "bread"}, {"source": "overview", "target": "soup"}, {"source": "salad", "target": "soup"}, {"source": "soup", "target": "bread"}]};
++const COL={ADR:'#f78166',Service:'#3fb950',Component:'#a371f7',Template:'#d29922',Reference:'#58a6ff',Guide:'#39c5cf',Concept:'#8b949e',Pattern:'#db61a2',SOP:'#e3b341',Playbook:'#ff7b72',LessonLearned:'#7ee787',ChangeNote:'#6e7681',Decision:'#bc8cff'};
++const cy=cytoscape({container:document.getElementById('g'),
++ elements:[...D.nodes.map(n=>({data:{id:n.id,label:n.title,type:n.type}})),
++           ...D.edges.map(e=>({data:{source:e.source,target:e.target}}))],
++ style:[{selector:'node',style:{'background-color':n=>COL[n.data('type')]||'#8b949e','width':10,'height':10,'label':'data(label)','font-size':6,'color':'#8b949e','min-zoomed-font-size':7}},
++        {selector:'edge',style:{'width':.6,'line-color':'#30363d','curve-style':'haystack','target-arrow-shape':'none'}},
++        {selector:'.hl',style:{'background-color':'#e6edf3','width':16,'height':16}}],
++ layout:{name:'cose',animate:false,nodeRepulsion:8000,idealEdgeLength:60}});
++const body=Object.fromEntries(D.nodes.map(n=>[n.id,n]));
++cy.on('tap','node',e=>{const n=body[e.target.id()];
++ document.getElementById('p').innerHTML='<div class="meta">'+n.type+' · '+e.target.id()+'</div><h1>'+n.title+'</h1>'+marked.parse(n.body||'');
++ cy.elements().removeClass('hl');e.target.addClass('hl');});
++document.getElementById('s').addEventListener('input',ev=>{const q=ev.target.value.toLowerCase();
++ cy.nodes().forEach(n=>{const h=!q||n.data('label').toLowerCase().includes(q)||(n.data('type')||'').toLowerCase().includes(q);n.style('display',h?'element':'none');});});
++</script></body></html>
+\ No newline at end of file

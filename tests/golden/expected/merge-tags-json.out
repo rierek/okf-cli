@@ -1,0 +1,6 @@
+$ okf merge-tags misc --into food --json
+exit: 0
+--- stdout
+{"command": "merge-tags", "ok": true, "data": {"applied": false, "unparseable": ["handbook/broken-yaml.md"], "from": ["misc"], "into": "food", "files": [{"path": "recipes/stew.md", "old_path": null, "diff": "--- a/recipes/stew.md\n+++ b/recipes/stew.md\n@@ -4,7 +4,6 @@\n beschreibung: Deutscher Eintopf\n tags:\n   - food\n-  - misc\n superseded_by: handbook/ops/deploy\n ---\n \n"}]}, "warnings": [], "error": null}
+--- stderr
+--- files

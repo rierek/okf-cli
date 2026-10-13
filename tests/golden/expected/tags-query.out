@@ -1,0 +1,8 @@
+$ okf tags soup
+exit: 0
+--- stdout
+== searched: soup ==
+  - soup  (2)
+
+--- stderr
+--- files

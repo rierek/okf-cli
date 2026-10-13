@@ -1,0 +1,7 @@
+$ okf reindex kc-gov --check
+exit: 0
+--- stdout
+reindex --check: 0 stale, 0 uncovered, 0 without markers
+reindex: 0 updated, 0 skipped
+--- stderr
+--- files

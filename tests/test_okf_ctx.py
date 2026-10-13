@@ -673,11 +673,9 @@ class CtxNavigate(CtxFixtureMixin, unittest.TestCase):
     def test_inbound_external_only(self):
         r = self._cli("ctx", "inbound", "demo")
         self.assertEqual((r.returncode, r.stderr), (0, ""))
-        # scan order is directory order: compare the two source lines unordered
         head, *rest = r.stdout.splitlines()
         self.assertEqual(head, "inbound \u2014 ctx demo, 1 member(s), external sources only:")
-        self.assertEqual((rest[0], sorted(rest[1:])), ("b/two.md", [
-            "  <- b/one.md  (/b/two.md)", "  <- b/three.md  (/b/two.md)"]))
+        self.assertEqual(rest, ["b/two.md", "  <- b/one.md  (/b/two.md)", "  <- b/three.md  (/b/two.md)"])
 
     def test_inbound_internal(self):
         self._set("b/one.md", "b/two.md")

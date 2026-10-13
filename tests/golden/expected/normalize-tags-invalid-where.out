@@ -1,0 +1,6 @@
+$ okf normalize-tags --where '(('
+exit: 2
+--- stdout
+--- stderr
+--where: expected a field name or '(', found end of expression at position 3
+--- files

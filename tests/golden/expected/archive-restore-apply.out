@@ -1,0 +1,35 @@
+$ okf archive --restore _archive/handbook/old-process --apply
+exit: 0
+--- stdout
+1 active concept(s) still link to this concept
+moved (git mv)  _archive/handbook/old-process.md  ->  handbook/old-process.md
+rewrote 1 inbound link(s) in 1 file(s), 0 outbound link(s)
+rewrote 0 wikilink(s) in 0 file(s)
+rewrote 0 sync source(s) in 0 file(s)
+listed in 1 ctx bundle(s): legacy (reference)
+reindexed 1 index file(s) across: _archive, handbook
+staged for commit — run `okf check` before committing.
+--- stderr
+--- files
+R _archive/handbook/old-process.md -> handbook/old-process.md
+M _ctx/legacy.md
+--- a/_ctx/legacy.md
++++ b/_ctx/legacy.md
+@@ -10,5 +10,5 @@
+ | 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |
+ | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |
+ | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |
+-| - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |
++| - | nachschlag | [old-process](/handbook/old-process.md) |  |
+ | - | nachschlag | [incident-2026](/handbook/ops/incident-2026.md) | stale page |
+M handbook/index.md
+--- a/handbook/index.md
++++ b/handbook/index.md
+@@ -15,6 +15,7 @@
+ * [Getting started](/handbook/getting-started.md) - First steps: accounts, tools, and where to find things
+ * [Glossary](/handbook/glossary.md) - Terms used here: "bundle" and "concept"
+ * [Handbook overview](/handbook/overview.md) - Overview of the handbook
++* [Old process](/handbook/old-process.md) - A process from the past
+ * [Security basics](/handbook/security.md)
+ * [wiki-notes](/handbook/wiki-notes.md) - Loose notes with many wikilinks
+ <!-- /okf:index -->

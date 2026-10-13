@@ -1,0 +1,7 @@
+$ okf archive handbook/index
+exit: 2
+--- stdout
+0 active concept(s) still link to this concept
+--- stderr
+archive: refusing to move a reserved file (index.md)
+--- files

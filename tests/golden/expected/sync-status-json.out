@@ -1,0 +1,6 @@
+$ okf sync-status --json
+exit: 5
+--- stdout
+{"command": "sync-status", "ok": false, "data": {"blocks": [{"consumer": "handbook/ops/setup.md", "id": "ownership-rule", "source": "/kc-gov/ownership.md", "status": "synced"}, {"consumer": "kc-gov/naming.md", "id": "naming-rule", "source": "/kc-gov/ownership.md", "status": "source-changed"}], "totals": {"synced": 1, "source-changed": 1, "consumer-modified": 0, "both-changed": 0, "source-missing": 0, "malformed": 0}}, "warnings": [], "error": {"kind": "drift", "code": 5, "message": "drift"}}
+--- stderr
+--- files

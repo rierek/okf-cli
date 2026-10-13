@@ -1,0 +1,7 @@
+$ okf check kc-gov --strict
+exit: 4
+--- stdout
+WARNING  kc/sync/stale        kc-gov/naming.md  (sync block `naming-rule` from /kc-gov/ownership.md is outdated — run sync-update)
+1 VIOLATIONS
+--- stderr
+--- files

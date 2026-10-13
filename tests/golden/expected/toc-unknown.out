@@ -1,0 +1,6 @@
+$ okf toc handbook/nope
+exit: 3
+--- stdout
+--- stderr
+not found: handbook/nope
+--- files

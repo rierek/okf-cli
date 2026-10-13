@@ -1,0 +1,6 @@
+$ okf registry convert TAGS.md --to table
+exit: 0
+--- stdout
+registry convert: 0 entries in TAGS.md would rewrite as table
+--- stderr
+--- files

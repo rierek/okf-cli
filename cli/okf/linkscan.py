@@ -6,7 +6,7 @@ import os
 import re
 
 from okf.catalogue import (
-    SYNC_SPAN_RE, _prune_walk_dirs, fence_line_spans, list_bundles, read_file, read_frontmatter,
+    SYNC_SPAN_RE, _prune_walk_dirs, fence_line_spans, list_bundles, read_file, read_frontmatter, sorted_walk,
 )
 
 
@@ -233,7 +233,7 @@ def iter_rename_scan_md(root):
     starts = [root] + [os.path.join(root, b) for b in list_bundles(root)
                        if os.path.islink(os.path.join(root, b))]
     for start in starts:
-        for dirpath, dirnames, filenames in os.walk(start):
+        for dirpath, dirnames, filenames in sorted_walk(start):
             _prune_walk_dirs(dirnames)
             for fn in filenames:
                 if not fn.endswith(".md"):

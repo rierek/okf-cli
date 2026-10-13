@@ -1,0 +1,6 @@
+$ okf tags --validate food ops
+exit: 0
+--- stdout
+OK — all 2 known
+--- stderr
+--- files

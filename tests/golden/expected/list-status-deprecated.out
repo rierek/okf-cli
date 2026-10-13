@@ -1,0 +1,12 @@
+$ okf list --where 'status = deprecated'
+exit: 0
+--- stdout
+------
+title: Retired tool
+type: Concept
+path: handbook/ops/retired-tool
+description: A tool nobody uses any more
+------
+list: 1 concept(s)
+--- stderr
+--- files

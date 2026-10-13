@@ -1,0 +1,40 @@
+$ okf ctx rename cooking kitchen
+exit: 0
+--- stdout
+moved (git mv)  _ctx/cooking.md  ->  _ctx/kitchen.md
+rewrote 1 inbound link(s) in 1 file(s), 0 outbound link(s)
+rewrote 0 wikilink(s) in 0 file(s)
+rewrote 0 sync source(s) in 0 file(s)
+reindexed 1 index file(s) across: _ctx
+staged for commit — run `okf check` before committing.
+--- stderr
+--- files
+D _ctx/cooking.md
+M _ctx/index.md
+--- a/_ctx/index.md
++++ b/_ctx/index.md
+@@ -5,7 +5,7 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [cooking](/_ctx/cooking.md) - Cooking basics
++* [kitchen](/_ctx/kitchen.md) - Cooking basics
+ * [legacy](/_ctx/legacy.md)
+ * [onboarding](/_ctx/onboarding.md) - Read this first on day one
+ <!-- /okf:index -->
+A _ctx/kitchen.md
+--- a/_ctx/kitchen.md
++++ b/_ctx/kitchen.md
+@@ -0,0 +1,12 @@
++---
++type: Context
++description: Cooking basics
++---
++
++# kitchen
++
++| pos | mode | path | comment |
++|---|---|---|---|
++| 1 | pflicht | [bread](/recipes/bread.md) |  |
++| 2 | pflicht | [pasta](/recipes/pasta.md) |  |
++| 3 | pflicht | [soup](/recipes/soup.md) |  |

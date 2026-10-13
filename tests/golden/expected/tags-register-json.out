@@ -1,0 +1,18 @@
+$ okf tags --register newtag 'A brand new tag' --json
+exit: 0
+--- stdout
+{"command": "tags", "ok": true, "data": {"registered": ["newtag"], "already_registered": []}, "warnings": [], "error": null}
+--- stderr
+warning: auto-embed skipped for new tag(s) (URLError: <urlopen error [Errno ECONNREFUSED] Connection refused>) — run cli/embeddings/build_tagvec.py --produce manually later
+--- files
+M TAGS.md
+--- a/TAGS.md
++++ b/TAGS.md
+@@ -10,6 +10,7 @@
+ | `glossary` | Term definitions |
+ | `governance` | Rules and ownership |
+ | `incident` | Incident reports |
++| `newtag` | A brand new tag |
+ | `ops` | Operations |
+ | `onboarding` | First-day material |
+ | `pasta` | Pasta dishes |

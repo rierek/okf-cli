@@ -1,0 +1,6 @@
+$ okf rename recipes/soup.md recipes/soup.md
+exit: 2
+--- stdout
+--- stderr
+rename: source and destination are identical
+--- files

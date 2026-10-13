@@ -1,0 +1,64 @@
+$ okf archive handbook/ops/retired-tool --apply --force
+exit: 0
+--- stdout
+3 active concept(s) still link to this concept
+moved (git mv)  handbook/ops/retired-tool.md  ->  _archive/handbook/ops/retired-tool.md
+rewrote 3 inbound link(s) in 3 file(s), 1 outbound link(s)
+rewrote 0 wikilink(s) in 0 file(s)
+rewrote 0 sync source(s) in 0 file(s)
+listed in 1 ctx bundle(s): legacy (pos 1)
+reindexed 1 index file(s) across: _archive, handbook
+staged for commit — run `okf check` before committing.
+--- stderr
+--- files
+D handbook/ops/retired-tool.md
+A _archive/handbook/ops/retired-tool.md
+--- a/_archive/handbook/ops/retired-tool.md
++++ b/_archive/handbook/ops/retired-tool.md
+@@ -0,0 +1,12 @@
++---
++type: Concept
++title: Retired tool
++description: A tool nobody uses any more
++tags:
++  - ops
++status: deprecated
++---
++
++# Retired tool
++
++Replaced by [deploy](/handbook/ops/deploy.md). See [[deploy]].
+M _ctx/legacy.md
+--- a/_ctx/legacy.md
++++ b/_ctx/legacy.md
+@@ -7,7 +7,7 @@
+ 
+ | pos | mode | path | comment |
+ |---|---|---|---|
+-| 1 | pflicht | [retired-tool](/handbook/ops/retired-tool.md) |  |
++| 1 | pflicht | [retired-tool](/_archive/handbook/ops/retired-tool.md) |  |
+ | 2 | pflicht | [setup](/handbook/ops/setup.md) |  |
+ | 3 | pflicht | [gone](/handbook/ops/gone.md) | removed long ago |
+ | - | nachschlag | [old-process](/_archive/handbook/old-process.md) |  |
+M handbook/getting-started.md
+--- a/handbook/getting-started.md
++++ b/handbook/getting-started.md
+@@ -16,7 +16,7 @@
+ ## Tools
+ 
+ Read the [deploy runbook](ops/deploy.md) and the [security page](security.md).
+-The old tool is described in [retired tool](ops/retired-tool.md).
++The old tool is described in [retired tool](/_archive/handbook/ops/retired-tool.md).
+ Download the [diagram](assets/diagram.svg). A [missing page](/handbook/ops/missing.md) is dead.
+ 
+ ### Wikilinks
+M handbook/ops/index.md
+--- a/handbook/ops/index.md
++++ b/handbook/ops/index.md
+@@ -7,6 +7,5 @@
+ <!-- okf:index -->
+ * [Deploy](/handbook/ops/deploy.md) - How to deploy: build, ship, verify
+ * [Incident 2026](/handbook/ops/incident-2026.md) - A past incident
+-* [Retired tool](/handbook/ops/retired-tool.md) - A tool nobody uses any more
+ * [Setup](/handbook/ops/setup.md) - Local setup
+ <!-- /okf:index -->

@@ -1,0 +1,6 @@
+$ okf tags --register food 'Duplicate of an existing tag'
+exit: 0
+--- stdout
+already registered: food
+--- stderr
+--- files

@@ -1,0 +1,31 @@
+$ okf fix-crosslinks recipes --check
+exit: 0
+--- stdout
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -13,4 +13,4 @@
+ 
+ ## Steps
+ 
+-Mix, rise, bake. Related: [pasta](pasta.md).
++Mix, rise, bake. Related: [pasta](/recipes/pasta.md).
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -7,4 +7,4 @@
+ 
+ # Overview
+ 
+-See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].
++See [pasta](/recipes/pasta.md), [bread](/recipes/bread.md), [soup](/recipes/soup.md) and [[salad]].
+--- a/recipes/salad.md
++++ b/recipes/salad.md
+@@ -9,4 +9,4 @@
+ 
+ # Salad
+ 
+-Superseded by [soup](soup.md).
++Superseded by [soup](/recipes/soup.md).
+unresolved     recipes/drafts/ideas.md  -> pie.md
+fix-crosslinks: 3 file(s) would rewrite, 1 unresolved link(s)
+--- stderr
+--- files

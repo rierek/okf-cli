@@ -1,0 +1,6 @@
+$ okf verify handbook/index --by human:golden
+exit: 2
+--- stdout
+--- stderr
+handbook/index is a reserved file; verify takes a concept
+--- files

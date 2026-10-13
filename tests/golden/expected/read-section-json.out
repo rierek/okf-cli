@@ -1,0 +1,6 @@
+$ okf read handbook/glossary --section bundle --json
+exit: 0
+--- stdout
+{"command": "read", "ok": true, "data": {"path": "handbook/glossary", "text": "## Bundle\n\nA top-level directory of concepts.\n\n", "tier": "unverified", "stale": false}, "warnings": [], "error": null}
+--- stderr
+--- files

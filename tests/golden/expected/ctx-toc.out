@@ -1,0 +1,26 @@
+$ okf ctx toc onboarding
+exit: 0
+--- stdout
+# handbook/getting-started.md
+## Getting started
+### Accounts
+### Tools
+#### Wikilinks
+### Next
+
+# handbook/glossary.md
+## Glossary
+### Bundle
+### Concept
+
+# handbook/ops/deploy.md
+## Deploy
+### Steps
+### Links
+
+# handbook/security.md
+## Security basics
+### Passwords
+### Reporting
+--- stderr
+--- files

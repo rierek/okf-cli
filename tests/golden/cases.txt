@@ -1,0 +1,365 @@
+# Golden case matrix. Format: <name> [KEY=VALUE ...] <args...> ; each case runs on a fresh copy of tests/golden/catalogue.
+
+# --- info / index / prime
+info-text info
+info-json info --json
+index-text index
+index-full index --full
+index-json index --json
+index-bundle index handbook
+index-bundle-full index handbook --full
+index-bundle-json index handbook --json
+index-bundle-unknown index nope
+prime-text prime
+prime-full prime --full
+prime-compact prime --compact
+prime-json prime --json
+prime-check-semantic prime --check-semantic
+
+# --- read
+read-text read handbook/getting-started
+read-json read handbook/getting-started --json
+read-section read handbook/getting-started --section Tools
+read-section-nested read handbook/getting-started --section "Tools > Wikilinks"
+read-section-json read handbook/glossary --section bundle --json
+read-section-missing read handbook/getting-started --section Nope
+read-frontmatter-only read handbook/ops/deploy --frontmatter-only
+read-body-only read handbook/ops/deploy --body-only
+read-follow-1 read handbook/getting-started --follow 1
+read-follow-2-inbound read handbook/ops/deploy --follow 2 --inbound
+read-follow-max-tokens read handbook/getting-started --follow 2 --max-tokens 120
+read-follow-json read recipes/overview --follow 1 --json
+read-follow-with-frontmatter-only read handbook/getting-started --follow 1 --frontmatter-only
+read-unknown read handbook/nope
+read-unknown-bundle read nope/nope
+read-broken-yaml read handbook/broken-yaml
+read-reserved-index read handbook/index
+read-missing-arg read
+read-section-and-body-only read handbook/glossary --section Bundle --body-only
+
+# --- toc
+toc-text toc handbook/getting-started
+toc-level-3 toc handbook/getting-started --level 3
+toc-json toc handbook/getting-started --json
+toc-unknown toc handbook/nope
+
+# --- refs
+refs-text refs handbook/getting-started.md
+refs-in refs handbook/ops/deploy.md --in
+refs-out refs handbook/ops/deploy.md --out
+refs-json refs handbook/ops/deploy.md --json
+refs-asset refs handbook/assets/diagram.svg
+refs-in-and-out refs handbook/ops/deploy.md --in --out
+refs-scan-root refs handbook/ops/deploy.md --scan-root {ROOT}/recipes
+refs-unknown refs handbook/nope.md
+
+# --- wikilinks
+wikilinks-all wikilinks
+wikilinks-unresolved wikilinks --unresolved
+wikilinks-json wikilinks --json
+wikilinks-bundle wikilinks handbook
+wikilinks-subdir wikilinks handbook/ops
+wikilinks-unknown wikilinks nope
+
+# --- list
+list-type list --where "type = Recipe"
+list-type-json list --where "type = Recipe" --json
+list-tag list --where "tag = ops"
+list-tag-in list --where "tag in (soup, bread)"
+list-path-contains list --where "path ~ handbook/ops/"
+list-and-not list --where "type = Recipe and not tag = bread"
+list-or-parens list --where "(type = Guide or type = Rule) and tag != draft"
+list-status list --where "status = stable"
+list-status-deprecated list --where "status = deprecated"
+list-stale list --where "stale = true"
+list-stale-after list --where "stale_after < 2026-06-01T00:00:00Z"
+list-archived list --where "archived = true"
+list-tier list --where "tier = unverified and path ~ kc-gov"
+list-nested-key list --where "verified.by = human:golden"
+list-frontmatter-key list --where "superseded_by ~ recipes"
+list-quoted list --where "title = 'Handbook overview'"
+list-invalid-where list --where "type =="
+list-unknown-op list --where "type ?? Recipe"
+list-missing-where list
+list-invalid-timestamp list --where "stale_after < yesterday"
+
+# --- find (no .fts index exists in a fresh copy; see build-index cases)
+find-plain find pasta
+find-json find pasta --json
+find-limit find recipe --limit 2
+find-where find soup --where "type = Recipe"
+find-breakdown find tomaten --breakdown
+find-expand-tags find soup --expand-tags
+find-include-topics find handbook --include-topics
+find-no-match find zzzzqqqq
+find-missing-arg find
+
+# --- recent
+recent-text recent
+recent-limit recent --limit 3
+recent-where recent --where "type = Recipe"
+recent-json recent --json
+recent-invalid-where recent --where "(("
+
+# --- tags (read)
+tags-list tags
+tags-json tags --json
+tags-limit tags --limit 3
+tags-singletons tags --singletons
+tags-query tags soup
+tags-query-multi tags pasta bread
+tags-validate tags --validate food bogus
+tags-validate-ok tags --validate food ops
+tags-validate-json tags --validate food bogus --json
+
+# --- tags (register)
+tags-register tags --register newtag "A brand new tag"
+tags-register-json tags --register newtag "A brand new tag" --json
+tags-register-twice tags --register food "Duplicate of an existing tag"
+tags-register-bad-description tags --register newtag "has|pipe"
+
+# --- ctx (read)
+ctx-list ctx list
+ctx-bare ctx
+ctx-list-json ctx list --json
+ctx-list-for ctx list --for handbook/ops/deploy
+ctx-show ctx show onboarding
+ctx-shorthand ctx onboarding
+ctx-show-json ctx show cooking --json
+ctx-show-dead ctx show legacy
+ctx-show-unknown ctx show nope
+ctx-check-all ctx check
+ctx-check-json ctx check --json
+ctx-check-stale ctx check --stale
+ctx-check-one ctx check legacy
+ctx-check-unknown ctx check nope
+ctx-read ctx read cooking
+ctx-read-json ctx read cooking --json
+ctx-toc ctx toc onboarding
+ctx-toc-depth ctx toc onboarding --depth 1
+ctx-toc-json ctx toc onboarding --json
+ctx-outbound ctx outbound onboarding
+ctx-outbound-file ctx outbound onboarding --file handbook/ops/deploy.md
+ctx-outbound-internal ctx outbound onboarding --include-internal
+ctx-inbound ctx inbound onboarding
+ctx-inbound-json ctx inbound onboarding --json
+ctx-inbound-internal ctx inbound cooking --include-internal
+
+# --- ctx (write)
+ctx-create ctx create reading --description "A new reading list" handbook/glossary recipes/pasta
+ctx-create-json ctx create reading handbook/glossary --description "A new reading list" --json
+ctx-create-import ctx create imported --import {ROOT}/handbook/assets/import-list.txt
+ctx-create-existing ctx create onboarding handbook/glossary
+ctx-create-bad-slug ctx create Bad_Slug handbook/glossary
+ctx-create-reserved-slug ctx create list handbook/glossary
+ctx-create-dead-path ctx create reading handbook/ops/gone
+ctx-add ctx add cooking recipes/salad --comment "Fresh option"
+ctx-add-pos ctx add cooking handbook/glossary --pos 1
+ctx-add-reference ctx add cooking recipes/stew --mode nachschlag
+ctx-add-json ctx add cooking recipes/salad --json
+ctx-add-dead ctx add cooking recipes/nope
+ctx-add-duplicate ctx add cooking recipes/pasta
+ctx-drop ctx drop cooking recipes/bread
+ctx-drop-dead ctx drop legacy handbook/ops/gone
+ctx-drop-json ctx drop cooking recipes/bread --json
+ctx-drop-unknown-entry ctx drop cooking recipes/stew
+ctx-move-pos ctx move cooking recipes/soup --pos 1
+ctx-move-mode ctx move cooking recipes/soup --mode nachschlag
+ctx-move-json ctx move cooking recipes/soup --pos 1 --json
+ctx-move-unknown-entry ctx move cooking recipes/stew --pos 1
+ctx-edit EDITOR=true ctx edit cooking
+ctx-edit-json EDITOR=true ctx edit cooking --json
+ctx-edit-broken EDITOR=false ctx edit cooking
+ctx-edit-dead EDITOR=true ctx edit legacy
+ctx-rename ctx rename cooking kitchen
+ctx-rename-json ctx rename cooking kitchen --json
+ctx-rename-existing ctx rename cooking onboarding
+ctx-remove ctx remove onboarding
+ctx-remove-json ctx remove cooking --json
+ctx-remove-unknown ctx remove nope
+ctx-unknown-verb ctx frobnicate
+
+# --- sync
+sync-status sync-status
+sync-status-json sync-status --json
+sync-status-target sync-status kc-gov
+sync-status-source sync-status --source /kc-gov/ownership.md
+sync-status-block sync-status --block naming-rule
+sync-status-block-synced sync-status --block ownership-rule
+sync-status-unknown-block sync-status --block nope
+sync-export sync-export kc-gov/ownership ownership-rule
+sync-export-json sync-export kc-gov/ownership naming-rule --json
+sync-export-unknown-block sync-export kc-gov/ownership nope
+sync-export-unknown-concept sync-export kc-gov/nope ownership-rule
+sync-insert-dry sync-insert recipes/soup kc-gov/ownership ownership-rule
+sync-insert-apply sync-insert recipes/soup kc-gov/ownership ownership-rule --apply
+sync-insert-json sync-insert recipes/soup kc-gov/ownership ownership-rule --json
+sync-insert-apply-json sync-insert recipes/soup kc-gov/ownership ownership-rule --apply --json
+sync-insert-twice sync-insert handbook/ops/setup kc-gov/ownership ownership-rule --apply
+sync-insert-unknown-block sync-insert recipes/soup kc-gov/ownership nope --apply
+sync-insert-unknown-consumer sync-insert recipes/nope kc-gov/ownership ownership-rule
+sync-update-dry sync-update
+sync-update-apply sync-update --apply
+sync-update-json sync-update --json
+sync-update-apply-json sync-update --apply --json
+sync-update-target sync-update kc-gov --apply
+sync-update-source sync-update --source /kc-gov/ownership.md
+sync-update-block sync-update --block naming-rule --apply
+sync-update-block-synced sync-update --block ownership-rule
+sync-update-force sync-update --apply --force
+
+# --- check
+check-all check
+check-strict check --strict
+check-json check --json
+check-strict-json check --strict --json
+check-bundle check handbook
+check-subdir check handbook/ops
+check-bundle-warnings-only check kc-gov
+check-bundle-warnings-strict check kc-gov --strict
+check-ignore-exact check --ignore kc/link/crosslink-format
+check-ignore-prefix check --ignore "kc/*" --ignore "okf/*"
+check-ignore-all-json check --ignore "kc/*" --ignore "okf/*" --json
+check-types check --types {ROOT}/TYPES.md
+check-types-registry-other check --types {ROOT}/PROPERTIES.md
+check-types-missing check --types {ROOT}/nope.md
+check-unknown-bundle check nope
+check-unknown-subdir check handbook/nope
+
+# --- fix-crosslinks / fix-xml-tags
+fix-crosslinks-check fix-crosslinks --check
+fix-crosslinks-apply fix-crosslinks
+fix-crosslinks-json fix-crosslinks --check --json
+fix-crosslinks-target fix-crosslinks recipes --check
+fix-crosslinks-target-apply fix-crosslinks handbook/ops
+fix-crosslinks-reserved-check fix-crosslinks --include-reserved --check
+fix-crosslinks-reserved-apply fix-crosslinks --include-reserved
+fix-crosslinks-unknown fix-crosslinks nope
+fix-xml-tags-check fix-xml-tags --check
+fix-xml-tags-apply fix-xml-tags
+fix-xml-tags-json fix-xml-tags --check --json
+fix-xml-tags-target fix-xml-tags handbook
+fix-xml-tags-unknown fix-xml-tags nope
+
+# --- tags (write)
+merge-tags-dry merge-tags misc --into food
+merge-tags-apply merge-tags misc --into food --apply
+merge-tags-json merge-tags misc --into food --json
+merge-tags-multi merge-tags misc x-experimental --into security --apply
+merge-tags-where merge-tags food --into onboarding --where "type = Recipe" --apply
+merge-tags-unregistered-target merge-tags misc --into brand-new
+merge-tags-no-match merge-tags nothing-has-this --into food
+merge-tags-missing-into merge-tags misc
+remove-tags-dry remove-tags misc
+remove-tags-apply remove-tags misc --apply
+remove-tags-json remove-tags misc --json
+remove-tags-multi remove-tags misc x-experimental --apply
+remove-tags-where remove-tags food --where "path ~ recipes/" --apply
+remove-tags-no-match remove-tags nothing-has-this
+normalize-tags-dry normalize-tags
+normalize-tags-apply normalize-tags --apply
+normalize-tags-json normalize-tags --json
+normalize-tags-where normalize-tags --where "path ~ recipes/" --apply
+normalize-tags-invalid-where normalize-tags --where "((" 
+
+# --- rename / archive
+rename-dry rename handbook/ops/retired-tool.md handbook/ops/legacy-tool.md
+rename-apply rename handbook/ops/retired-tool.md handbook/ops/legacy-tool.md --apply
+rename-json rename handbook/ops/retired-tool.md handbook/ops/legacy-tool.md --json
+rename-apply-json rename handbook/ops/retired-tool.md handbook/ops/legacy-tool.md --apply --json
+rename-cross-bundle rename recipes/soup.md handbook/soup.md --apply
+rename-glossary-wikilinks rename handbook/glossary.md handbook/terms.md --apply
+rename-ctx-member rename handbook/ops/deploy.md handbook/ops/release.md --apply
+rename-existing-destination-dry rename recipes/soup.md recipes/bread.md
+rename-existing-destination-force rename recipes/soup.md recipes/bread.md --apply --force
+rename-destination-exists rename recipes/stew.md handbook/overview.md --apply
+rename-wikilink-ambiguous rename recipes/salad.md recipes/drafts/pasta.md
+rename-wikilink-ambiguous-apply rename recipes/salad.md recipes/drafts/pasta.md --apply
+rename-wikilink-ambiguous-force rename recipes/salad.md recipes/drafts/pasta.md --apply --force
+rename-unknown rename handbook/nope.md handbook/other.md
+rename-same rename recipes/soup.md recipes/soup.md
+archive-dry archive handbook/ops/retired-tool
+archive-apply archive handbook/ops/retired-tool --apply
+archive-json archive handbook/ops/retired-tool --json
+archive-apply-json archive handbook/ops/retired-tool --apply --json
+archive-ctx-member archive recipes/pasta --apply
+archive-restore-dry archive --restore _archive/handbook/old-process
+archive-restore-apply archive --restore _archive/handbook/old-process --apply
+archive-restore-json archive --restore _archive/handbook/old-process --apply --json
+archive-unknown archive handbook/nope
+archive-restore-unknown archive --restore _archive/handbook/nope
+archive-restore-not-archived archive --restore handbook/glossary
+archive-force archive handbook/ops/retired-tool --apply --force
+archive-index-reserved archive handbook/index
+
+# --- reindex
+reindex-bundle reindex recipes
+reindex-check reindex recipes --check
+reindex-check-clean reindex kc-gov --check
+reindex-json reindex recipes --json
+reindex-check-json reindex recipes --check --json
+reindex-subdir reindex handbook/ops
+reindex-init-check reindex recipes --init --check
+reindex-init reindex recipes --init
+reindex-init-force-check reindex recipes --init --force --check
+reindex-init-force reindex recipes --init --force
+reindex-init-json reindex recipes --init --json
+reindex-unknown reindex nope
+reindex-missing-arg reindex
+
+# --- rewrite-path
+rewrite-path-check rewrite-path old-host.example.org new-host.example.org --check
+rewrite-path-apply rewrite-path old-host.example.org new-host.example.org
+rewrite-path-json rewrite-path old-host.example.org new-host.example.org --check --json
+rewrite-path-scan-root rewrite-path old-host.example.org new-host.example.org --scan-root {ROOT}/handbook/ops
+rewrite-path-no-match rewrite-path not-in-any-file.example replacement
+rewrite-path-link-target rewrite-path /kc-gov/ownership.md /kc-gov/owner.md --check
+rewrite-path-missing-arg rewrite-path onlyone
+
+# --- migrate
+migrate-dry migrate
+migrate-apply migrate --apply
+migrate-json migrate --json
+migrate-bundle migrate recipes
+migrate-bundle-apply migrate recipes --apply
+migrate-clean-bundle migrate kc-gov
+migrate-unresolved-status migrate handbook
+migrate-unknown migrate nope
+
+# --- registry
+registry-tags-block registry convert TAGS.md --to block
+registry-tags-block-apply registry convert TAGS.md --to block --apply
+registry-tags-block-json registry convert TAGS.md --to block --json
+registry-tags-table-noop registry convert TAGS.md --to table
+registry-types-block registry convert TYPES.md --to block
+registry-types-block-apply registry convert TYPES.md --to block --apply
+registry-bad-file registry convert PROPERTIES.md --to block
+registry-missing-to registry convert TAGS.md
+
+# --- verify
+verify-human verify handbook/ops/setup --by human:golden
+verify-json verify handbook/ops/setup --by process:nightly --json
+verify-bad-actor verify handbook/ops/setup --by nobody
+verify-reserved verify handbook/index --by human:golden
+verify-unknown verify handbook/nope --by human:golden
+verify-broken-yaml verify handbook/broken-yaml --by human:golden
+verify-missing-by verify handbook/ops/setup
+
+# --- build-index (the index is built per case, so find after it is not covered by one case)
+build-index build-index
+build-index-json build-index --json
+build-index-topics build-index --include-topics
+build-index-if-stale build-index --if-stale
+
+# --- visualize
+visualize visualize handbook
+visualize-out visualize recipes --out {ROOT}/out.html
+visualize-json visualize handbook --json
+visualize-unknown visualize nope
+
+# --- global / usage errors
+usage-no-command
+usage-unknown-command frobnicate
+usage-bad-flag read handbook/glossary --nope
+usage-root-not-catalogue --root /nonexistent info
+usage-help-subcommand-missing-verb registry

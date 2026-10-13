@@ -1,0 +1,167 @@
+$ okf merge-tags food --into onboarding --where 'type = Recipe' --apply
+exit: 0
+--- stdout
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -3,7 +3,7 @@
+ title: Bread
+ description: Bread with a long rise
+ tags:
+-  - food
++  - onboarding
+   - bread
+ timestamp: 2025-12-02T08:00:00Z
+ status: todo
+--- a/recipes/pasta.md
++++ b/recipes/pasta.md
+@@ -3,7 +3,7 @@
+ title: Pasta
+ description: "Spaghetti, simple"
+ tags:
+-  - food
++  - onboarding
+   - pasta
+ timestamp: 2025-12-01T08:00:00Z
+ status: active
+--- a/recipes/salad.md
++++ b/recipes/salad.md
+@@ -3,7 +3,7 @@
+ title: Salad
+ description: A salad that was replaced
+ tags:
+-  - food
++  - onboarding
+ superseded_by: recipes/soup
+ ---
+ 
+--- a/recipes/seasonal/gazpacho.md
++++ b/recipes/seasonal/gazpacho.md
+@@ -3,7 +3,7 @@
+ title: Gazpacho
+ description: Cold tomato soup
+ tags:
+-  - food
++  - onboarding
+   - soup
+ ---
+ 
+--- a/recipes/seasonal/punch.md
++++ b/recipes/seasonal/punch.md
+@@ -3,7 +3,7 @@
+ title: Punch
+ description: Hot spiced drink
+ tags:
+-  - food
++  - onboarding
+ ---
+ 
+ # Punch
+--- a/recipes/soup.md
++++ b/recipes/soup.md
+@@ -2,7 +2,7 @@
+ type: Recipe
+ title: Soup
+ description: Tomatensuppe
+-tags: [food, soup]
++tags: [onboarding, soup]
+ status: obsolete
+ ---
+ 
+--- a/recipes/stew.md
++++ b/recipes/stew.md
+@@ -3,7 +3,7 @@
+ titel: Eintopf
+ beschreibung: Deutscher Eintopf
+ tags:
+-  - food
++  - onboarding
+   - misc
+ superseded_by: handbook/ops/deploy
+ ---
+merge-tags: 7 file(s) rewrote, 0 unparseable — food -> onboarding
+--- stderr
+--- files
+M recipes/bread.md
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -3,7 +3,7 @@
+ title: Bread
+ description: Bread with a long rise
+ tags:
+-  - food
++  - onboarding
+   - bread
+ timestamp: 2025-12-02T08:00:00Z
+ status: todo
+M recipes/pasta.md
+--- a/recipes/pasta.md
++++ b/recipes/pasta.md
+@@ -3,7 +3,7 @@
+ title: Pasta
+ description: "Spaghetti, simple"
+ tags:
+-  - food
++  - onboarding
+   - pasta
+ timestamp: 2025-12-01T08:00:00Z
+ status: active
+M recipes/salad.md
+--- a/recipes/salad.md
++++ b/recipes/salad.md
+@@ -3,7 +3,7 @@
+ title: Salad
+ description: A salad that was replaced
+ tags:
+-  - food
++  - onboarding
+ superseded_by: recipes/soup
+ ---
+ 
+M recipes/seasonal/gazpacho.md
+--- a/recipes/seasonal/gazpacho.md
++++ b/recipes/seasonal/gazpacho.md
+@@ -3,7 +3,7 @@
+ title: Gazpacho
+ description: Cold tomato soup
+ tags:
+-  - food
++  - onboarding
+   - soup
+ ---
+ 
+M recipes/seasonal/punch.md
+--- a/recipes/seasonal/punch.md
++++ b/recipes/seasonal/punch.md
+@@ -3,7 +3,7 @@
+ title: Punch
+ description: Hot spiced drink
+ tags:
+-  - food
++  - onboarding
+ ---
+ 
+ # Punch
+M recipes/soup.md
+--- a/recipes/soup.md
++++ b/recipes/soup.md
+@@ -2,7 +2,7 @@
+ type: Recipe
+ title: Soup
+ description: Tomatensuppe
+-tags: [food, soup]
++tags: [onboarding, soup]
+ status: obsolete
+ ---
+ 
+M recipes/stew.md
+--- a/recipes/stew.md
++++ b/recipes/stew.md
+@@ -3,7 +3,7 @@
+ titel: Eintopf
+ beschreibung: Deutscher Eintopf
+ tags:
+-  - food
++  - onboarding
+   - misc
+ superseded_by: handbook/ops/deploy
+ ---

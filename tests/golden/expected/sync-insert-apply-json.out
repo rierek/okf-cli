@@ -1,0 +1,19 @@
+$ okf sync-insert recipes/soup kc-gov/ownership ownership-rule --apply --json
+exit: 0
+--- stdout
+{"command": "sync-insert", "ok": true, "data": {"applied": true, "consumer": "recipes/soup.md", "source": "/kc-gov/ownership.md", "id": "ownership-rule", "files": [{"path": "recipes/soup.md", "old_path": null, "diff": "--- a/recipes/soup.md\n+++ b/recipes/soup.md\n@@ -15,3 +15,9 @@\n ## Hinweis\n \n Use a pot <size>. Compare with [bread](/recipes/bread.md).\n+\n+<!-- okf:sync id=ownership-rule source=/kc-gov/ownership.md hash=594970cbf139 -->\n+> [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.\n+<!-- okf:sync-body -->\n+Every normative statement has exactly one owner.\n+<!-- /okf:sync -->\n"}]}, "warnings": [], "error": null}
+--- stderr
+--- files
+M recipes/soup.md
+--- a/recipes/soup.md
++++ b/recipes/soup.md
+@@ -15,3 +15,9 @@
+ ## Hinweis
+ 
+ Use a pot <size>. Compare with [bread](/recipes/bread.md).
++
++<!-- okf:sync id=ownership-rule source=/kc-gov/ownership.md hash=594970cbf139 -->
++> [!quote] Synchronisiert aus `/kc-gov/ownership.md` — Canon-Owner, hier nicht bearbeiten.
++<!-- okf:sync-body -->
++Every normative statement has exactly one owner.
++<!-- /okf:sync -->

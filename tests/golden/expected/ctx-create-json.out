@@ -1,0 +1,29 @@
+$ okf ctx create reading handbook/glossary --description 'A new reading list' --json
+exit: 0
+--- stdout
+{"command": "ctx create", "ok": true, "data": {"applied": true, "slug": "reading", "path": "_ctx/reading.md", "entries": 1}, "warnings": [], "error": null}
+--- stderr
+--- files
+M _ctx/index.md
+--- a/_ctx/index.md
++++ b/_ctx/index.md
+@@ -8,4 +8,5 @@
+ * [cooking](/_ctx/cooking.md) - Cooking basics
+ * [legacy](/_ctx/legacy.md)
+ * [onboarding](/_ctx/onboarding.md) - Read this first on day one
++* [reading](/_ctx/reading.md) - A new reading list
+ <!-- /okf:index -->
+A _ctx/reading.md
+--- a/_ctx/reading.md
++++ b/_ctx/reading.md
+@@ -0,0 +1,10 @@
++---
++type: Context
++description: A new reading list
++---
++
++# reading
++
++| pos | mode | path | comment |
++|---|---|---|---|
++| 1 | pflicht | [glossary](/handbook/glossary.md) |  |

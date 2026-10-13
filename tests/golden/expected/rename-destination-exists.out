@@ -1,0 +1,6 @@
+$ okf rename recipes/stew.md handbook/overview.md --apply
+exit: 2
+--- stdout
+--- stderr
+rename: destination exists (use --force to overwrite): <ROOT>/handbook/overview.md
+--- files

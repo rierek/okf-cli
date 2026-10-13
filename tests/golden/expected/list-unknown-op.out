@@ -1,0 +1,6 @@
+$ okf list --where 'type ?? Recipe'
+exit: 2
+--- stdout
+--- stderr
+--where: unexpected character '?' at position 6
+--- files

@@ -1,0 +1,34 @@
+$ okf reindex recipes --init --check
+exit: 0
+--- stdout
+--- a/recipes/drafts/index.md
++++ b/recipes/drafts/index.md
+@@ -4,4 +4,6 @@
+ 
+ ## Contents
+ 
+-* [Ideas](/recipes/drafts/ideas.md) - Raw recipe ideas
++<!-- okf:index -->
++* [ideas](/recipes/drafts/ideas.md) - Raw recipe ideas
++<!-- /okf:index -->
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,12 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Bread](/recipes/bread.md) - Bread with a long rise
+ * [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+ * [Salad](/recipes/salad.md) - A salad that was replaced
+ * [Soup](/recipes/soup.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->
+would convert  recipes/drafts/index.md
+skipped        recipes/seasonal/index.md  (skip-multi-section)
+init: 1 would convert, 1 skipped
+--- stderr
+--- files

@@ -1,0 +1,6 @@
+$ okf verify handbook/broken-yaml --by human:golden
+exit: 2
+--- stdout
+--- stderr
+frontmatter does not parse: expected ',' or ']', but got ':' (line 4, column 12)
+--- files

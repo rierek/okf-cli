@@ -1,0 +1,6 @@
+$ okf refs handbook/ops/deploy.md --json
+exit: 0
+--- stdout
+{"command": "refs", "ok": true, "data": {"target": "handbook/ops/deploy.md", "inbound": [{"source": "_ctx/onboarding.md", "link": "/handbook/ops/deploy.md"}, {"source": "handbook/getting-started.md", "link": "ops/deploy.md"}, {"source": "handbook/ops/index.md", "link": "/handbook/ops/deploy.md"}, {"source": "handbook/ops/retired-tool.md", "link": "deploy.md"}], "outbound": [{"link": "../getting-started.md", "target": "handbook/getting-started.md", "exists": true}, {"link": "setup.md", "target": "handbook/ops/setup.md", "exists": true}, {"link": "/kc-gov/ownership.md", "target": "kc-gov/ownership.md", "exists": true}]}, "warnings": [], "error": null}
+--- stderr
+--- files

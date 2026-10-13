@@ -1,0 +1,45 @@
+$ okf normalize-tags
+exit: 0
+--- stdout
+--- a/handbook/glossary.md
++++ b/handbook/glossary.md
+@@ -2,7 +2,9 @@
+ type: Concept
+ title: Glossary
+ description: 'Terms used here: "bundle" and "concept"'
+-tags: [glossary, ops]   # flow form on purpose
++tags:                   # flow form on purpose
++  - glossary
++  - ops
+ ---
+ 
+ # Glossary
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -2,7 +2,8 @@
+ type: Concept
+ title: Recipes overview
+ description: Overview of the recipes
+-tags: [food]
++tags:
++  - food
+ ---
+ 
+ # Overview
+--- a/recipes/soup.md
++++ b/recipes/soup.md
+@@ -2,7 +2,9 @@
+ type: Recipe
+ title: Soup
+ description: Tomatensuppe
+-tags: [food, soup]
++tags:
++  - food
++  - soup
+ status: obsolete
+ ---
+ 
+unparseable    handbook/broken-yaml.md  (frontmatter does not parse: expected ',' or ']', but got ':' (line 4, column 12) — skipped)
+normalize-tags: 3 file(s) would rewrite, 1 unparseable
+--- stderr
+--- files

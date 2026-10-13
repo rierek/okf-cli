@@ -1,0 +1,6 @@
+$ okf ctx add cooking recipes/pasta
+exit: 2
+--- stdout
+--- stderr
+ctx: recipes/pasta.md is already in cooking (pos 2)
+--- files

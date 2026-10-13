@@ -1,0 +1,14 @@
+$ okf fix-xml-tags --check
+exit: 0
+--- stdout
+--- a/recipes/soup.md
++++ b/recipes/soup.md
+@@ -14,4 +14,4 @@
+ 
+ ## Hinweis
+ 
+-Use a pot <size>. Compare with [bread](/recipes/bread.md).
++Use a pot `<size>`. Compare with [bread](/recipes/bread.md).
+fix-xml-tags: 1 file(s) would wrap, 1 chain(s) total
+--- stderr
+--- files

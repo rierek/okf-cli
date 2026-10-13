@@ -1,0 +1,7 @@
+$ okf remove-tags nothing-has-this
+exit: 0
+--- stdout
+unparseable    handbook/broken-yaml.md  (frontmatter does not parse: expected ',' or ']', but got ':' (line 4, column 12) — skipped)
+remove-tags: 0 file(s) would rewrite, 0 emptied, 1 unparseable — removed nothing-has-this
+--- stderr
+--- files

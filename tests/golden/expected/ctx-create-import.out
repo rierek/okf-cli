@@ -1,0 +1,33 @@
+$ okf ctx create imported --import '{ROOT}/handbook/assets/import-list.txt'
+exit: 0
+--- stdout
+created _ctx/imported.md (3 entries)
+--- stderr
+--- files
+A _ctx/imported.md
+--- a/_ctx/imported.md
++++ b/_ctx/imported.md
+@@ -0,0 +1,12 @@
++---
++type: Context
++description: ''
++---
++
++# imported
++
++| pos | mode | path | comment |
++|---|---|---|---|
++| 1 | pflicht | [getting-started](/handbook/getting-started.md) | handbook entry |
++| 2 | pflicht | [glossary](/handbook/glossary.md) |  |
++| 3 | pflicht | [pasta](/recipes/pasta.md) |  |
+M _ctx/index.md
+--- a/_ctx/index.md
++++ b/_ctx/index.md
+@@ -6,6 +6,7 @@
+ 
+ <!-- okf:index -->
+ * [cooking](/_ctx/cooking.md) - Cooking basics
++* [imported](/_ctx/imported.md)
+ * [legacy](/_ctx/legacy.md)
+ * [onboarding](/_ctx/onboarding.md) - Read this first on day one
+ <!-- /okf:index -->

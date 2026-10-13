@@ -1,0 +1,20 @@
+$ okf check handbook
+exit: 4
+--- stdout
+ERROR    okf/frontmatter/parseable handbook/broken-yaml.md  (no parseable frontmatter: expected ',' or ']', but got ':' (line 4, column 12))
+ERROR    okf/trust/generated  handbook/wiki-notes.md  (`generated` has no non-empty `by`)
+ERROR    okf/lifecycle/status handbook/wiki-notes.md  (`status` is `maybe-later`, not draft, stable or deprecated)
+WARNING  kc/link/crosslink-format handbook/getting-started.md  (non catalogue-absolute link(s) (use /bundle/…): ops/deploy.md, security.md, ops/retired-tool.md)
+WARNING  kc/link/crosslink-format handbook/getting-started.md  (catalogue-absolute link(s) not resolving from root: /handbook/ops/missing.md)
+WARNING  kc/link/wikilink-resolvable handbook/getting-started.md  (unresolved wikilink target(s): [[does-not-exist]])
+WARNING  kc/frontmatter/tags-block-form handbook/glossary.md  (tags field uses inline form — local convention requires YAML block-list)
+WARNING  kc/link/crosslink-format handbook/ops/deploy.md  (non catalogue-absolute link(s) (use /bundle/…): ../getting-started.md, setup.md)
+WARNING  okf/lifecycle/stale-after handbook/ops/incident-2026.md  (`stale_after` 2026-01-05T00:00:00Z has passed)
+WARNING  kc/link/crosslink-format handbook/ops/retired-tool.md  (non catalogue-absolute link(s) (use /bundle/…): deploy.md)
+WARNING  kc/link/crosslink-format handbook/overview.md  (non catalogue-absolute link(s) (use /bundle/…): getting-started.md)
+WARNING  kc/type/registered   handbook/security.md  (type `Gadget` not registered in TYPES.md)
+WARNING  kc/tag/registered    handbook/security.md  (tag `x-experimental` not registered in TAGS.md)
+WARNING  kc/link/wikilink-resolvable handbook/wiki-notes.md  (unresolved wikilink target(s): [[nowhere]])
+3 VIOLATIONS
+--- stderr
+--- files

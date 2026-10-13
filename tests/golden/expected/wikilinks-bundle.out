@@ -1,0 +1,18 @@
+$ okf wikilinks handbook
+exit: 0
+--- stdout
+resolved   body        handbook/getting-started.md  [[glossary]]
+resolved   body        handbook/getting-started.md  [[deploy|the deploy page]]
+unresolved body        handbook/getting-started.md  [[does-not-exist]]
+resolved   body        handbook/getting-started.md  [[overview]]
+resolved   body        handbook/security.md  [[wiki-notes]]
+resolved   body        handbook/wiki-notes.md  [[glossary]]
+resolved   body        handbook/wiki-notes.md  [[handbook/ops/deploy]]
+resolved   body        handbook/wiki-notes.md  [[retired-tool|old tool]]
+resolved   body        handbook/wiki-notes.md  [[glossary#Bundle]]
+resolved   body        handbook/wiki-notes.md  [[overview]]
+unresolved body        handbook/wiki-notes.md  [[nowhere]]
+resolved   body        handbook/ops/retired-tool.md  [[deploy]]
+wikilinks: 12 link(s), 10 resolved, 0 ambiguous, 2 unresolved
+--- stderr
+--- files

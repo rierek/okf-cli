@@ -1,0 +1,90 @@
+$ okf rename recipes/soup.md recipes/bread.md --apply --force
+exit: 0
+--- stdout
+overwrote      recipes/bread.md  (4 inbound markdown reference(s) now point at different content)
+moved (git mv)  recipes/soup.md  ->  recipes/bread.md
+rewrote 4 inbound link(s) in 4 file(s), 0 outbound link(s)
+rewrote 0 wikilink(s) in 0 file(s)
+rewrote 0 sync source(s) in 0 file(s)
+listed in 1 ctx bundle(s): cooking (pos 3)
+reindexed 1 index file(s) across: recipes
+staged for commit — run `okf check` before committing.
+--- stderr
+--- files
+D recipes/soup.md
+M _ctx/cooking.md
+--- a/_ctx/cooking.md
++++ b/_ctx/cooking.md
+@@ -9,4 +9,4 @@
+ |---|---|---|---|
+ | 1 | pflicht | [bread](/recipes/bread.md) |  |
+ | 2 | pflicht | [pasta](/recipes/pasta.md) |  |
+-| 3 | pflicht | [soup](/recipes/soup.md) |  |
++| 3 | pflicht | [bread](/recipes/bread.md) |  |
+M recipes/bread.md
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -1,16 +1,17 @@
+ ---
+ type: Recipe
+-title: Bread
+-description: Bread with a long rise
+-tags:
+-  - food
+-  - bread
+-timestamp: 2025-12-02T08:00:00Z
+-status: todo
++title: Soup
++description: Tomatensuppe
++tags: [food, soup]
++status: obsolete
+ ---
+ 
+-# Bread
++# Suppe
+ 
+-## Steps
++## Zutaten
+ 
+-Mix, rise, bake. Related: [pasta](pasta.md).
++Tomaten, Zwiebeln.
++
++## Hinweis
++
++Use a pot <size>. Compare with [bread](/recipes/bread.md).
+M recipes/index.md
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,11 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
+-* [Bread](/recipes/bread.md) - Bread with a long rise
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+ * [Salad](/recipes/salad.md) - A salad that was replaced
+-* [Soup](/recipes/soup.md) - Tomatensuppe
++* [Soup](/recipes/bread.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->
+M recipes/overview.md
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -7,4 +7,4 @@
+ 
+ # Overview
+ 
+-See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].
++See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](/recipes/bread.md) and [[salad]].
+M recipes/salad.md
+--- a/recipes/salad.md
++++ b/recipes/salad.md
+@@ -9,4 +9,4 @@
+ 
+ # Salad
+ 
+-Superseded by [soup](soup.md).
++Superseded by [soup](/recipes/bread.md).

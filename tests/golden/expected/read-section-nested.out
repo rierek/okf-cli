@@ -1,0 +1,9 @@
+$ okf read handbook/getting-started --section 'Tools > Wikilinks'
+exit: 0
+--- stdout
+### Wikilinks
+
+Also see [[glossary]], [[deploy|the deploy page]] and [[does-not-exist]].
+
+--- stderr
+--- files

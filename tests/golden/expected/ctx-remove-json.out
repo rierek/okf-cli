@@ -1,0 +1,18 @@
+$ okf ctx remove cooking --json
+exit: 0
+--- stdout
+{"command": "ctx remove", "ok": true, "data": {"applied": true, "slug": "cooking", "path": "_ctx/cooking.md", "entries": 3, "linked_from": []}, "warnings": [], "error": null}
+--- stderr
+--- files
+D _ctx/cooking.md
+M _ctx/index.md
+--- a/_ctx/index.md
++++ b/_ctx/index.md
+@@ -5,7 +5,6 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [cooking](/_ctx/cooking.md) - Cooking basics
+ * [legacy](/_ctx/legacy.md)
+ * [onboarding](/_ctx/onboarding.md) - Read this first on day one
+ <!-- /okf:index -->

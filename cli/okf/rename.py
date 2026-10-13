@@ -13,7 +13,7 @@ from okf import catalogue, check, linkscan, wikilinks
 from okf.catalogue import (
     _CTX_INDEX_SKELETON, CROSSLINK_RE, CTX_DIR, RESERVED, SYNC_OPEN_LIT, SYNC_OPEN_RE, RealFs, _prune_walk_dirs,
     ctx_dir, ctx_memberships, ctx_text, iter_all_md, parse_ctx, read_file, read_file_verbatim, read_frontmatter,
-    resolve_scopes,
+    resolve_scopes, sorted_walk,
 )
 from okf.index import plan_reindex
 from okf.linkscan import iter_rename_scan_md, wikilink_scan_text
@@ -33,7 +33,7 @@ def rewrite_path(scan_root, old, new):
     skipped = [rel_path, ...] of files that are not valid UTF-8."""
     touched, plan, skipped = [], [], []
     pat = re.compile(r"(?<![\w./-])" + re.escape(old) + r"(?![\w./-])")
-    for dirpath, dirnames, filenames in os.walk(scan_root):
+    for dirpath, dirnames, filenames in sorted_walk(scan_root):
         _prune_walk_dirs(dirnames)
         for fn in filenames:
             if not fn.endswith(REWRITE_EXTS):

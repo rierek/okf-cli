@@ -1,0 +1,12 @@
+$ okf list --where 'verified.by = human:golden'
+exit: 0
+--- stdout
+------
+title: Deploy
+type: Runbook
+path: handbook/ops/deploy
+description: How to deploy: build, ship, verify
+------
+list: 1 concept(s)
+--- stderr
+--- files

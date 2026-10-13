@@ -1,0 +1,18 @@
+$ okf find tomaten --breakdown
+exit: 0
+--- stdout
+------
+rank: 1
+title: Soup
+type: Recipe
+path: recipes/soup
+description: Tomatensuppe
+body-snippet: # Suppe ## Zutaten Tomaten, Zwiebeln. ## Hinweis Use a pot <size>. Compare with [bread](/recipes/bread.md).…
+provenance: lexical
+score: 1/6
+contrib: body=[tomaten]
+------
+--- stderr
+note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking
+note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only
+--- files

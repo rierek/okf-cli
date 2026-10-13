@@ -1,0 +1,6 @@
+$ okf registry convert TAGS.md
+exit: 2
+--- stdout
+--- stderr
+<usage error>
+--- files

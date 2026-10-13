@@ -1,0 +1,6 @@
+$ okf rewrite-path not-in-any-file.example replacement
+exit: 0
+--- stdout
+0 file(s) written
+--- stderr
+--- files

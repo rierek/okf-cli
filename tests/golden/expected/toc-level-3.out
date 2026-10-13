@@ -1,0 +1,7 @@
+$ okf toc handbook/getting-started --level 3
+exit: 0
+--- stdout
+# Getting started  [Guide]
+- Wikilinks
+--- stderr
+--- files

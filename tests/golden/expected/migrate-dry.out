@@ -1,0 +1,65 @@
+$ okf migrate
+exit: 0
+--- stdout
+status mapping:
+  active -> stable (1 concept(s))
+  deprecated -> deprecated (1 concept(s))
+  maybe-later -> (no decision) (1 concept(s))
+  obsolete -> deprecated (1 concept(s))
+  stable -> stable (1 concept(s))
+  todo -> draft (1 concept(s))
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -5,8 +5,10 @@
+ tags:
+   - food
+   - bread
+-timestamp: 2025-12-02T08:00:00Z
+-status: todo
++generated:
++  by: human:golden
++  at: '2026-01-29T00:00:00+00:00'
++status: draft
+ ---
+ 
+ # Bread
+--- a/recipes/pasta.md
++++ b/recipes/pasta.md
+@@ -5,8 +5,13 @@
+ tags:
+   - food
+   - pasta
+-timestamp: 2025-12-01T08:00:00Z
+-status: active
++generated:
++  by: human:golden
++  at: '2026-02-03T00:00:00+00:00'
++status: stable
++sources:
++  - resource: https://example.org/pasta
++    title: '[Pasta basics](https://example.org/pasta)'
+ ---
+ 
+ # Pasta
+@@ -15,6 +20,3 @@
+ 
+ Nudeln, Salz, Wasser.
+ 
+-## Quellen
+-
+-- [Pasta basics](https://example.org/pasta)
+--- a/recipes/soup.md
++++ b/recipes/soup.md
+@@ -3,7 +3,7 @@
+ title: Soup
+ description: Tomatensuppe
+ tags: [food, soup]
+-status: obsolete
++status: deprecated
+ ---
+ 
+ # Suppe
+unresolved handbook/wiki-notes.md: no recorded decision for status value 'maybe-later'
+migrate: would migrate 3 file(s), 1 unresolved; dry-run: re-run with --apply
+--- stderr
+--- files

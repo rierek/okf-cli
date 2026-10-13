@@ -1,0 +1,7 @@
+$ okf merge-tags nothing-has-this --into food
+exit: 0
+--- stdout
+unparseable    handbook/broken-yaml.md  (frontmatter does not parse: expected ',' or ']', but got ':' (line 4, column 12) — skipped)
+merge-tags: 0 file(s) would rewrite, 1 unparseable — nothing-has-this -> food
+--- stderr
+--- files

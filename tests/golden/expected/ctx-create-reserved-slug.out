@@ -1,0 +1,6 @@
+$ okf ctx create list handbook/glossary
+exit: 2
+--- stdout
+--- stderr
+ctx: invalid slug "list": "list" is a reserved name
+--- files

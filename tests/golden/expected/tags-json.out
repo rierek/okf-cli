@@ -1,0 +1,6 @@
+$ okf tags --json
+exit: 0
+--- stdout
+{"command": "tags", "ok": true, "data": {"tags": [{"tag": "food", "count": 9}, {"tag": "ops", "count": 5}, {"tag": "glossary", "count": 2}, {"tag": "governance", "count": 2}, {"tag": "onboarding", "count": 2}, {"tag": "soup", "count": 2}, {"tag": "bread", "count": 1}, {"tag": "deploy", "count": 1}, {"tag": "incident", "count": 1}, {"tag": "misc", "count": 1}, {"tag": "pasta", "count": 1}, {"tag": "security", "count": 1}, {"tag": "x-experimental", "count": 1}]}, "warnings": [], "error": null}
+--- stderr
+--- files

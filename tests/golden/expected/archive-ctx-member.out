@@ -1,0 +1,59 @@
+$ okf archive recipes/pasta --apply
+exit: 0
+--- stdout
+4 active concept(s) still link to this concept
+moved (git mv)  recipes/pasta.md  ->  _archive/recipes/pasta.md
+rewrote 4 inbound link(s) in 4 file(s), 0 outbound link(s)
+rewrote 0 wikilink(s) in 0 file(s)
+rewrote 0 sync source(s) in 0 file(s)
+listed in 1 ctx bundle(s): cooking (pos 2)
+reindexed 1 index file(s) across: _archive, recipes
+staged for commit — run `okf check` before committing.
+--- stderr
+--- files
+R recipes/pasta.md -> _archive/recipes/pasta.md
+M _ctx/cooking.md
+--- a/_ctx/cooking.md
++++ b/_ctx/cooking.md
+@@ -8,5 +8,5 @@
+ | pos | mode | path | comment |
+ |---|---|---|---|
+ | 1 | pflicht | [bread](/recipes/bread.md) |  |
+-| 2 | pflicht | [pasta](/recipes/pasta.md) |  |
++| 2 | pflicht | [pasta](/_archive/recipes/pasta.md) |  |
+ | 3 | pflicht | [soup](/recipes/soup.md) |  |
+M recipes/bread.md
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -13,4 +13,4 @@
+ 
+ ## Steps
+ 
+-Mix, rise, bake. Related: [pasta](pasta.md).
++Mix, rise, bake. Related: [pasta](/_archive/recipes/pasta.md).
+M recipes/index.md
+--- a/recipes/index.md
++++ b/recipes/index.md
+@@ -7,10 +7,11 @@
+ ## Contents
+ 
+ <!-- okf:index -->
+-* [Drafts](/recipes/drafts/index.md)
++* [Drafts](/recipes/drafts/index.md) - Unfinished ideas.
++* [Seasonal](/recipes/seasonal/index.md)
+ * [Bread](/recipes/bread.md) - Bread with a long rise
+-* [Pasta](/recipes/pasta.md) - Spaghetti, simple
+ * [Recipes overview](/recipes/overview.md) - Overview of the recipes
+ * [Salad](/recipes/salad.md) - A salad that was replaced
+ * [Soup](/recipes/soup.md) - Tomatensuppe
++* [stew](/recipes/stew.md)
+ <!-- /okf:index -->
+M recipes/overview.md
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -7,4 +7,4 @@
+ 
+ # Overview
+ 
+-See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].
++See [pasta](/_archive/recipes/pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].

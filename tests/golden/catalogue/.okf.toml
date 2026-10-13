@@ -1,0 +1,7 @@
+# Synthetic fixture catalogue for the golden suite.
+registry_format = "table"
+wikilink_checked_bundles = ["handbook"]
+ignore_rules = ["kc/asset/entry-file-description"]
+
+[git_authors]
+"golden@example.org" = "human:golden"

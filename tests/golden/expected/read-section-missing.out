@@ -1,0 +1,6 @@
+$ okf read handbook/getting-started --section Nope
+exit: 3
+--- stdout
+--- stderr
+section not found: Nope
+--- files

@@ -1,0 +1,102 @@
+$ okf list --where 'status = stable'
+exit: 0
+--- stdout
+------
+title: broken-yaml
+type: 
+path: handbook/broken-yaml
+description: 
+------
+title: cooking
+type: Context
+path: _ctx/cooking
+description: Cooking basics
+------
+title: Deploy
+type: Runbook
+path: handbook/ops/deploy
+description: How to deploy: build, ship, verify
+------
+title: Gazpacho
+type: Recipe
+path: recipes/seasonal/gazpacho
+description: Cold tomato soup
+------
+title: Getting started
+type: Guide
+path: handbook/getting-started
+description: First steps: accounts, tools, and where to find things
+------
+title: Glossary
+type: Concept
+path: handbook/glossary
+description: Terms used here: "bundle" and "concept"
+------
+title: Handbook overview
+type: Concept
+path: handbook/overview
+description: Overview of the handbook
+------
+title: ideas
+type: Note
+path: recipes/drafts/ideas
+description: Raw recipe ideas
+------
+title: Incident 2026
+type: Note
+path: handbook/ops/incident-2026
+description: A past incident
+------
+title: legacy
+type: Context
+path: _ctx/legacy
+description: 
+------
+title: naming
+type: Rule
+path: kc-gov/naming
+description: Naming conventions
+------
+title: onboarding
+type: Context
+path: _ctx/onboarding
+description: Read this first on day one
+------
+title: Ownership
+type: Rule
+path: kc-gov/ownership
+description: Every normative statement has exactly one owner
+------
+title: Punch
+type: Recipe
+path: recipes/seasonal/punch
+description: Hot spiced drink
+------
+title: Recipes overview
+type: Concept
+path: recipes/overview
+description: Overview of the recipes
+------
+title: Salad
+type: Recipe
+path: recipes/salad
+description: A salad that was replaced
+------
+title: Security basics
+type: Gadget
+path: handbook/security
+description: 
+------
+title: Setup
+type: Runbook
+path: handbook/ops/setup
+description: Local setup
+------
+title: stew
+type: Recipe
+path: recipes/stew
+description: 
+------
+list: 19 concept(s)
+--- stderr
+--- files

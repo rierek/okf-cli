@@ -1,0 +1,58 @@
+$ okf normalize-tags --where 'path ~ recipes/' --apply
+exit: 0
+--- stdout
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -2,7 +2,8 @@
+ type: Concept
+ title: Recipes overview
+ description: Overview of the recipes
+-tags: [food]
++tags:
++  - food
+ ---
+ 
+ # Overview
+--- a/recipes/soup.md
++++ b/recipes/soup.md
+@@ -2,7 +2,9 @@
+ type: Recipe
+ title: Soup
+ description: Tomatensuppe
+-tags: [food, soup]
++tags:
++  - food
++  - soup
+ status: obsolete
+ ---
+ 
+normalize-tags: 2 file(s) rewrote, 0 unparseable
+--- stderr
+--- files
+M recipes/overview.md
+--- a/recipes/overview.md
++++ b/recipes/overview.md
+@@ -2,7 +2,8 @@
+ type: Concept
+ title: Recipes overview
+ description: Overview of the recipes
+-tags: [food]
++tags:
++  - food
+ ---
+ 
+ # Overview
+M recipes/soup.md
+--- a/recipes/soup.md
++++ b/recipes/soup.md
+@@ -2,7 +2,9 @@
+ type: Recipe
+ title: Soup
+ description: Tomatensuppe
+-tags: [food, soup]
++tags:
++  - food
++  - soup
+ status: obsolete
+ ---
+ 

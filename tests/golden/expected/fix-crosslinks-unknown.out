@@ -1,0 +1,6 @@
+$ okf fix-crosslinks nope
+exit: 3
+--- stdout
+--- stderr
+not a directory: nope
+--- files

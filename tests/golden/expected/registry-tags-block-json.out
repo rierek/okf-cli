@@ -1,0 +1,6 @@
+$ okf registry convert TAGS.md --to block --json
+exit: 0
+--- stdout
+{"command": "registry convert", "ok": true, "data": {"file": "TAGS.md", "to": "block", "applied": false, "converted": 11, "files": [{"path": "TAGS.md", "old_path": null, "diff": "--- a/TAGS.md\n+++ b/TAGS.md\n@@ -2,16 +2,35 @@\n \n Closed vocabulary for concept `tags:`.\n \n-| Tag | Description |\n-|-----|-------------|\n-| `bread` | Bread and baking |\n-| `deploy` | Deployment procedures |\n-| `food` | Anything edible |\n-| `glossary` | Term definitions |\n-| `governance` | Rules and ownership |\n-| `incident` | Incident reports |\n-| `ops` | Operations |\n-| `onboarding` | First-day material |\n-| `pasta` | Pasta dishes |\n-| `security` | Security topics |\n-| `soup` | Soups and broths |\n+### `bread`\n+Bread and baking\n+\n+### `deploy`\n+Deployment procedures\n+\n+### `food`\n+Anything edible\n+\n+### `glossary`\n+Term definitions\n+\n+### `governance`\n+Rules and ownership\n+\n+### `incident`\n+Incident reports\n+\n+### `ops`\n+Operations\n+\n+### `onboarding`\n+First-day material\n+\n+### `pasta`\n+Pasta dishes\n+\n+### `security`\n+Security topics\n+\n+### `soup`\n+Soups and broths\n"}]}, "warnings": [], "error": null}
+--- stderr
+--- files

@@ -1,0 +1,6 @@
+$ okf ctx frobnicate
+exit: 3
+--- stdout
+--- stderr
+ctx: unknown slug: frobnicate
+--- files
