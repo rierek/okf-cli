@@ -28,6 +28,7 @@ func Register(app *cli.App) {
 	registerTags(app)
 	registerTagVerbs(app)
 	registerRegistry(app)
+	registerMigrate(app)
 	registerSync(app)
 }
 
