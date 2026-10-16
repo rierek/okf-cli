@@ -55,7 +55,12 @@ func Read(text string) Doc {
 	}
 	cut := end + len(Delim) + 1
 	doc := Doc{Head: text[:cut], Block: text[len(Delim) : end+1], Body: text[cut:]}
-	doc.Document, doc.Root, doc.Err = parseBlock(doc.Block)
+	block, swapped := swapBreaks(doc.Block)
+	doc.Document, doc.Root, doc.Err = parseBlock(block)
+	if swapped {
+		restoreBreaks(doc.Document)
+		doc.Err = breakRestore.Replace(doc.Err)
+	}
 	return doc
 }
 
