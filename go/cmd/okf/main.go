@@ -13,14 +13,19 @@ import (
 	"fmt"
 	"os"
 
+	"nas/volume1/data/git/okf-tools/go/internal/buildtagvec"
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/check"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/complete"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
+	"nas/volume1/data/git/okf-tools/go/internal/find"
+	"nas/volume1/data/git/okf-tools/go/internal/fts"
 	"nas/volume1/data/git/okf-tools/go/internal/info"
+	"nas/volume1/data/git/okf-tools/go/internal/install"
 	"nas/volume1/data/git/okf-tools/go/internal/navigation"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/semantic"
 	"nas/volume1/data/git/okf-tools/go/internal/wikisync"
 )
 
@@ -28,7 +33,12 @@ import (
 // package is not listed answers with a "not yet ported" error.
 var commands = []func(*cli.App){
 	check.Register,
+	buildtagvec.Register,
+	find.Register,
+	fts.Register,
 	info.Register,
+	install.Register,
+	semantic.Register,
 	navigation.Register,
 	wikisync.Register,
 }
