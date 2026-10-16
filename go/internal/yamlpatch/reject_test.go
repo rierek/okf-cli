@@ -75,6 +75,7 @@ func TestRejections(t *testing.T) {
 		{"a typed scalar with a line break", f("a: 1\n"), []Edit{NewKey("k", Plain("a\nb"))}, "not a writable plain scalar"},
 		{"an empty typed scalar", f("a: 1\n"), []Edit{NewKey("k", Plain(""))}, "not a writable plain scalar"},
 		{"a typed scalar with leading space", f("a: 1\n"), []Edit{NewKey("k", Plain(" x"))}, "not a writable plain scalar"},
+		{"a typed scalar with a tab", f("a: 1\n"), []Edit{NewKey("k", Plain("a\tb"))}, "not a writable plain scalar"},
 		{"a mapping with a key twice", f("a: 1\n"), []Edit{NewKey("k", Map("a", Str("x"), "a", Str("y")))}, "twice"},
 		{"a list inside a list", f("a: 1\n"), []Edit{NewKey("k", List(List(Str("x"))))}, "list inside a list"},
 		{"a string that is not UTF-8", f("a: 1\n"), []Edit{NewKey("k", Str("\xff"))}, "not valid UTF-8"},

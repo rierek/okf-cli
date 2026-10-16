@@ -103,6 +103,9 @@ func TestSetValue(t *testing.T) {
 		{"unicode before the scalar", f("title: éé\ndescription: 'ä ö'\n"), set("description", Str("ü")), f("title: éé\ndescription: 'ü'\n")},
 		{"single quotes with a doubled quote inside", f("description: 'it''s old'  # c\nz: 1\n"), set("description", Str("x")), f("description: 'x'  # c\nz: 1\n")},
 		{"plain value with a tab inside", f("description: a\tb  # c\nz: 1\n"), set("description", Str("new")), f("description: new  # c\nz: 1\n")},
+		{"a new text with a tab: double quotes, the comment stays", f("description: old  # c\nz: 1\n"), set("description", Str("a\tb")), f("description: \"a\\tb\"  # c\nz: 1\n")},
+		{"single quotes are not kept for a text with a tab", f("description: 'old'\nz: 1\n"), set("description", Str("a\tb")), f("description: \"a\\tb\"\nz: 1\n")},
+		{"a literal scalar becomes a double-quoted one for a text with a tab", f("description: |\n  old\nz: 1\n"), set("description", Str("a\tb")), f("description: \"a\\tb\"\nz: 1\n")},
 		{"double quotes with an escaped quote inside", f("description: \"say \\\"hi\\\"\"  # c\nz: 1\n"), set("description", Str("x")), f("description: \"x\"  # c\nz: 1\n")},
 		{"a comment inside the flow list of another key does not matter", f("tags: [a, # c\n  b]\nz: 1\n"), set("z", Str("2")), f("tags: [a, # c\n  b]\nz: '2'\n")},
 	})
@@ -130,6 +133,8 @@ func TestNewKey(t *testing.T) {
 		{"string with a line break", f("type: X\n"), newKey("d", Str("a\nb")), f("type: X\nd: \"a\\nb\"\n")},
 		{"a key of another type is another key", f("1: a\ntrue: b\n"), newKey("1", Str("x")), f("1: a\ntrue: b\n'1': x\n")},
 		{"a string key that reads as another type is quoted", f("a: 1\n"), newKey("true", Str("x")), f("a: 1\n'true': x\n")},
+		{"a string with a tab is double-quoted", f("a: 1\n"), newKey("title", Str("tab\tinside [A](https://a.org)")), f("a: 1\ntitle: \"tab\\tinside [A](https://a.org)\"\n")},
+		{"a mapping key with a tab is double-quoted", f("a: 1\n"), newKey("m", Map("a\tb", Str("v"))), f("a: 1\nm:\n  \"a\\tb\": v\n")},
 		{"into an empty block", "---\n---\n# Body", newKey("type", Str("X")), "---\ntype: X\n---\n# Body"},
 		{"into a comment-only block", "---\n# just a comment\n---\n# Body", newKey("type", Str("X")), "---\n# just a comment\ntype: X\n---\n# Body"},
 		{"into a block of blank lines", "---\n\n---\n# Body", newKey("type", Str("X")), "---\n\ntype: X\n---\n# Body"},
@@ -169,6 +174,8 @@ func TestAppendItem(t *testing.T) {
 		{"flow list item in quotes with a hash behind a space", f("tags: [\"a # b\", c]\n"), app("tags", Str("d")), f("tags: [\"a # b\", c, d]\n")},
 		{"flow list item with an apostrophe", f("tags: [it's, x]\n"), app("tags", Str("y")), f("tags: [it's, x, y]\n")},
 		{"flow list with nested brackets", f("tags: [a, [b, c]]\n"), app("tags", Str("d")), f("tags: [a, [b, c], d]\n")},
+		{"block list item with a tab is double-quoted", f("tags:\n  - a\n"), app("tags", Str("x\ty")), f("tags:\n  - a\n  - \"x\\ty\"\n")},
+		{"flow list item with a tab is double-quoted", f("tags: [a]\n"), app("tags", Str("x\ty")), f("tags: [a, \"x\\ty\"]\n")},
 		{"one block mapping becomes the first item", f("verified:\n  by: a/b\n  at: 2026-01-01\nz: 1\n"), app("verified", verified),
 			f("verified:\n  - by: a/b\n    at: 2026-01-01\n  - by: human:x\n    at: 2026-10-12T19:00:00Z\nz: 1\n")},
 		{"one block mapping with a comment line above its first key", f("verified:\n  # who\n  by: a/b\n  at: 2026-01-01\nz: 1\n"), app("verified", verified),
@@ -215,6 +222,8 @@ func TestRenameItem(t *testing.T) {
 		{"flow item over several lines", f("tags: [\n  a,\n  b\n]\n"), ren("tags", 1, "x"), f("tags: [\n  a,\n  x\n]\n")},
 		{"CRLF block", crlf(f("tags:\n  - a  # c\n  - b\n")), ren("tags", 0, "x"), crlf(f("tags:\n  - x  # c\n  - b\n"))},
 		{"unicode items", f("tags:\n  - ä\n  - ö\n"), ren("tags", 1, "ü"), f("tags:\n  - ä\n  - ü\n")},
+		{"block item renamed to a text with a tab", f("tags:\n  - a  # c\n  - b\n"), ren("tags", 0, "x\ty"), f("tags:\n  - \"x\\ty\"  # c\n  - b\n")},
+		{"flow item renamed to a text with a tab", f("tags: [a, b]\n"), ren("tags", 1, "x\ty"), f("tags: [a, \"x\\ty\"]\n")},
 	})
 }
 

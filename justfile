@@ -35,6 +35,9 @@ golden *ARGS:
 go-build:
     CGO_ENABLED=0 go build -C {{go_dir}} -o {{go_out}} ./cmd/okf
 
+# Paritaetsprobe von `okf install`: Python-CLI und Go-Binary Seite an Seite auf Wegwerf-HOMEs (--only NAME, --fast, --list)
+install-parity *ARGS: go-build
+    python3 scripts/install_parity.py {{ARGS}}
 # Die Completion-Skripte des Go-Binarys (go/internal/complete/okf.*) aus cli/_okf und argcomplete 3.7.2
 # neu schreiben; --check vergleicht nur und bricht bei Abweichung ab
 go-completion-scripts *ARGS:
