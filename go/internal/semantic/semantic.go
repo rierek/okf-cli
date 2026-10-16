@@ -53,6 +53,13 @@ func queryVector(text string) ([]float64, error) {
 	return v, nil
 }
 
+// raised reports an error that Python raises outside the try of the query embed (tagvec.Exception):
+// it ends the command instead of degrading the arm to lexical results.
+func raised(err error) bool {
+	var exception *tagvec.Exception
+	return errors.As(err, &exception)
+}
+
 // unpack is struct.unpack('<{dim}f', blob): the little-endian float32 values of a stored vector.
 func unpack(dim int64, blob []byte) ([]float32, error) {
 	if dim < 0 || int64(len(blob)) != 4*dim {
@@ -189,6 +196,9 @@ func ExpandQueryTags(root, query string) ([]string, error) {
 		return nil, err
 	}
 	qvec, err := queryVector(query)
+	if raised(err) {
+		return nil, err
+	}
 	if err != nil {
 		return nil, nil
 	}
@@ -211,6 +221,9 @@ func Ranking(root, query string, limit int, filters *where.FindFilters) ([]rank.
 		return []rank.Scored{}, nil
 	}
 	qvec, err := queryVector(query)
+	if raised(err) {
+		return nil, err
+	}
 	if err != nil {
 		envelope.Note(fmt.Sprintf("semantic arm skipped (embedding backend unavailable: %v) — lexical results only", err))
 		return []rank.Scored{}, nil
@@ -277,7 +290,12 @@ func build(root string, a *cli.Args) (any, error) {
 	written, left, err := fill(root, dbPath, progress)
 	if err != nil {
 		class, message, ok := sqlstore.PyError(err)
-		if !ok {
+		var exception *tagvec.Exception
+		switch {
+		case ok:
+		case errors.As(err, &exception):
+			class, message = exception.Class, exception.Message
+		default:
 			class, message = "Error", err.Error()
 		}
 		envelope.Note(fmt.Sprintf("semantic index build failed (%s: %s) -- lexical arm unaffected", class, message))
@@ -310,7 +328,10 @@ func fill(root, dbPath string, progress io.Writer) (written, left int, err error
 		for i, t := range batch {
 			texts[i] = t.Text
 		}
-		vectors := tagvec.EmbedResilient(tagvec.EmbedVoyage, texts, "voyage concepts "+batch[0].Item+"..", progress)
+		vectors, err := tagvec.EmbedResilient(tagvec.EmbedVoyage, texts, "voyage concepts "+batch[0].Item+"..", progress)
+		if err != nil {
+			return 0, 0, err
+		}
 		if vectors == nil {
 			incomplete = true
 			continue

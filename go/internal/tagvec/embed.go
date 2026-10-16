@@ -50,7 +50,7 @@ func BatchLimits(model string) (maxItems, maxChars int) {
 // input order. NETWORK.
 func EmbedBGEM3(texts []string) ([][]float32, error) {
 	var body struct {
-		Embeddings [][]float64 `json:"embeddings"`
+		Embeddings [][]*float64 `json:"embeddings"`
 	}
 	payload := map[string]any{"model": "bge-m3", "input": texts}
 	if err := post(models["bge-m3"].endpoint, "", 300*time.Second, payload, &body); err != nil {
@@ -68,7 +68,7 @@ func EmbedVoyage(texts []string) ([][]float32, error) {
 	}
 	var body struct {
 		Data []struct {
-			Embedding []float64 `json:"embedding"`
+			Embedding []*float64 `json:"embedding"`
 		} `json:"data"`
 	}
 	payload := map[string]any{"model": "voyage-3-large", "input": texts, "input_type": "document"}
@@ -78,7 +78,7 @@ func EmbedVoyage(texts []string) ([][]float32, error) {
 	if body.Data == nil {
 		return nil, errors.New("malformed response")
 	}
-	vecs := make([][]float64, len(body.Data))
+	vecs := make([][]*float64, len(body.Data))
 	for i, d := range body.Data {
 		vecs[i] = d.Embedding
 	}
@@ -95,7 +95,7 @@ func EmbedVoyageQuery(text string) ([]float64, error) {
 	}
 	var body struct {
 		Data []struct {
-			Embedding []float64 `json:"embedding"`
+			Embedding []*float64 `json:"embedding"`
 		} `json:"data"`
 	}
 	payload := map[string]any{"model": "voyage-3-large", "input": []string{text}, "input_type": "query"}
@@ -105,12 +105,30 @@ func EmbedVoyageQuery(text string) ([]float64, error) {
 	if len(body.Data) == 0 || body.Data[0].Embedding == nil {
 		return nil, errors.New("malformed response")
 	}
-	return body.Data[0].Embedding, nil
+	vec := make([]float64, len(body.Data[0].Embedding))
+	for i, f := range body.Data[0].Embedding {
+		if f == nil { // Python raises in the cosine of the semantic arm: None * float
+			return nil, &Exception{"TypeError", "unsupported operand type(s) for *: 'NoneType' and 'float'"}
+		}
+		vec[i] = *f
+	}
+	return vec, nil
 }
 
+// Exception is an error that Python raises after the embed call has returned: the response holds a
+// JSON null where a number belongs, json.loads keeps it as None and the code that uses the vector
+// (struct.pack in pack_vec, the arithmetic of the cosine) fails on it. embed_resilient never sees
+// it, so EmbedResilient does not retry it, and a query embed that fails so does not degrade the
+// semantic arm: it ends the command, as the exception does. Class and Message are the name and the
+// text of the Python exception.
+type Exception struct{ Class, Message string }
+
+func (e *Exception) Error() string { return e.Class + ": " + e.Message }
+
 // narrow checks the vectors of a response against the texts that were sent and rounds each
-// number to float32, as struct.pack('<f') does with the double that json.loads returns.
-func narrow(vecs [][]float64, texts int) ([][]float32, error) {
+// number to float32, as struct.pack('<f') does with the double that json.loads returns. A null
+// element is refused as struct.pack refuses None.
+func narrow(vecs [][]*float64, texts int) ([][]float32, error) {
 	if vecs == nil {
 		return nil, errors.New("malformed response")
 	}
@@ -124,7 +142,10 @@ func narrow(vecs [][]float64, texts int) ([][]float32, error) {
 		}
 		out[i] = make([]float32, len(v))
 		for j, f := range v {
-			out[i][j] = float32(f)
+			if f == nil {
+				return nil, &Exception{"error", "required argument is not a float"}
+			}
+			out[i][j] = float32(*f)
 		}
 	}
 	return out, nil
@@ -229,13 +250,18 @@ var sleep = time.Sleep
 // unrecoverable. Up to three attempts with an exponential backoff of 2, 4 and 8 seconds; from
 // the second failure on every text is cut to half its length (at least 500 code points), as a
 // 400 of these endpoints usually means an over-long input. Each failure and the final give-up
-// are reported on progress; the run goes on with the next batch.
-func EmbedResilient(embed func([]string) ([][]float32, error), texts []string, label string, progress io.Writer) [][]float32 {
+// are reported on progress; the run goes on with the next batch. An *Exception is none of these
+// failures: Python raises it after embed_resilient has returned, so it is returned at once, unretried.
+func EmbedResilient(embed func([]string) ([][]float32, error), texts []string, label string, progress io.Writer) ([][]float32, error) {
 	delay := 2 * time.Second
 	for attempt := range 3 {
 		vecs, err := embed(texts)
 		if err == nil {
-			return vecs
+			return vecs, nil
+		}
+		var exception *Exception
+		if errors.As(err, &exception) {
+			return nil, err
 		}
 		fmt.Fprintf(progress, "    retry %d (%d texts) %s: %s\n", attempt+1, len(texts), label, err)
 		sleep(delay)
@@ -249,7 +275,7 @@ func EmbedResilient(embed func([]string) ([][]float32, error), texts []string, l
 		}
 	}
 	fmt.Fprintf(progress, "    SKIPPED %s — %d text(s) left unembedded\n", label, len(texts))
-	return nil
+	return nil, nil
 }
 
 // head is the first n code points of s (Python s[:n]).

@@ -122,7 +122,8 @@ func run(root string, a *cli.Args) (any, error) {
 
 // embedAll is the produce loop of one model and one kind of row (noun is "tag" or "concept"): it
 // embeds delta batch by batch and hands each embedded batch to write at once, so a later failure
-// keeps what is done. A batch that cannot be embedded is skipped.
+// keeps what is done. A batch that cannot be embedded is skipped; a response that Python fails to
+// pack (a null element) ends the run, as the exception ends build_tagvec.py.
 func embedAll(model, noun string, delta []tagvec.Triple, write func(batch []tagvec.Triple, vectors [][]float32) error) error {
 	maxItems, maxChars := tagvec.BatchLimits(model)
 	written := 0
@@ -132,7 +133,10 @@ func embedAll(model, noun string, delta []tagvec.Triple, write func(batch []tagv
 			texts[i] = t.Text
 		}
 		label := fmt.Sprintf("%s %ss %s..", model, noun, batch[0].Item)
-		vectors := tagvec.EmbedResilient(embedder[model], texts, label, stdio.Writer)
+		vectors, err := tagvec.EmbedResilient(embedder[model], texts, label, stdio.Writer)
+		if err != nil {
+			return err
+		}
 		if vectors == nil {
 			continue
 		}
