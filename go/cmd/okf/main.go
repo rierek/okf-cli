@@ -21,6 +21,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/find"
 	"nas/volume1/data/git/okf-tools/go/internal/fts"
 	"nas/volume1/data/git/okf-tools/go/internal/info"
+	"nas/volume1/data/git/okf-tools/go/internal/install"
 	"nas/volume1/data/git/okf-tools/go/internal/navigation"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/semantic"
@@ -34,6 +35,7 @@ var commands = []func(*cli.App){
 	find.Register,
 	fts.Register,
 	info.Register,
+	install.Register,
 	semantic.Register,
 	navigation.Register,
 	wikisync.Register,
