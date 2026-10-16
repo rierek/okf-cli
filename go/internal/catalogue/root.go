@@ -19,31 +19,35 @@ import (
 var RegistryFormats = []string{"table", "block"}
 
 // ExpandUser is Python os.path.expanduser: a leading `~` or `~/` becomes the home directory
-// ($HOME, else the account's), `~name` the home of that account; anything else is unchanged.
+// ($HOME when it is set, even empty, else the account's), `~name` the home of that account;
+// anything else is unchanged. Trailing slashes of the home directory are dropped and a result
+// that would be empty is `/`, so HOME=/ gives `/` for `~` and `/x` for `~/x`.
 func ExpandUser(path string) string {
 	if !strings.HasPrefix(path, "~") {
 		return path
 	}
-	name, rest, _ := strings.Cut(path[1:], "/")
-	home := ""
-	if name == "" {
-		home = os.Getenv("HOME")
-		if home == "" {
-			if u, err := user.Current(); err == nil {
-				home = u.HomeDir
-			}
-		}
-	} else if u, err := user.Lookup(name); err == nil {
-		home = u.HomeDir
+	end := len(path) // the end of the user name: the first `/` behind the tilde
+	if i := strings.IndexByte(path[1:], '/'); i >= 0 {
+		end = i + 1
 	}
-	if home == "" {
+	var home string
+	if end == 1 {
+		if h, set := os.LookupEnv("HOME"); set {
+			home = h
+		} else if u, err := user.Current(); err == nil {
+			home = u.HomeDir
+		} else {
+			return path
+		}
+	} else if u, err := user.Lookup(path[1:end]); err == nil {
+		home = u.HomeDir
+	} else {
 		return path
 	}
-	home = strings.TrimRight(home, "/")
-	if rest == "" && !strings.Contains(path, "/") {
-		return home
+	if expanded := strings.TrimRight(home, "/") + path[end:]; expanded != "" {
+		return expanded
 	}
-	return home + "/" + rest
+	return "/"
 }
 
 // Getwd is Python os.getcwd: the physical working directory (Go's os.Getwd would answer with the
