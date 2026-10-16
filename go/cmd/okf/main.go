@@ -18,6 +18,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/complete"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/info"
+	"nas/volume1/data/git/okf-tools/go/internal/install"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 )
 
@@ -25,6 +26,7 @@ import (
 // package is not listed answers with a "not yet ported" error.
 var commands = []func(*cli.App){
 	info.Register,
+	install.Register,
 }
 
 func main() { os.Exit(run(os.Args[1:])) }
