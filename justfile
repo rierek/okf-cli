@@ -9,6 +9,10 @@ cli_dir := "cli"
 catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
 # Ruff-Version fuer den Lint-Gate (eine Quelle; Regelsatz steht in pyproject.toml)
 ruff_version := "0.17.0"
+# Verzeichnis des Go-Moduls (go.mod liegt dort) und Ausgabe des Builds relativ dazu; der Pfad
+# {{go_dir}}/{{go_out}} ist der eine Binary-Pfad fuer `just golden --cmd`
+go_dir := "go"
+go_out := "bin/okf"
 
 # Alle Rezepte auflisten
 default:
@@ -24,6 +28,10 @@ test *ARGS:
 [positional-arguments]
 golden *ARGS:
     uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py python tests/okf_golden.py "$@"
+
+# Go-Binary bauen (statisch, ohne cgo) nach go/bin/okf; Abnahme: just golden --cmd go/bin/okf
+go-build:
+    CGO_ENABLED=0 go build -C {{go_dir}} -o {{go_out}} ./cmd/okf
 
 # Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
 build:
