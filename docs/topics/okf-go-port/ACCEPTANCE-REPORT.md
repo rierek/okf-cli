@@ -16,13 +16,12 @@ K builds no port code; it measured the finished port at commit `e3305f2be4cf` of
 
 ### 0.1 Blocking findings (capability preserved: no)
 
-**22 of the 77 deviation entries answer `capability preserved: no`.** Per criterion 4 they are blocking for the PO decision; each names its owning item (cut table of OKFT-jyvt). Rule used for the answer: `no` means the Go binary cannot do something the Python CLI does correctly and without data damage, or Go loses or changes data silently. A refusal that is a deliberate design choice (R-04, D05) counts as `no` for the input shapes it refuses, because the PO decides under D02 whether that loss is acceptable. A refusal of input on which Python writes damaged data is `yes`. The column `kind` is K's triage aid, not a decision.
+**18 of the 77 deviation entries answer `capability preserved: no`** (22 at K's run; D-02, D-41, D-42 and D-61 were fixed afterwards, §0.4, and now answer `yes`). Per criterion 4 they are blocking for the PO decision; each names its owning item (cut table of OKFT-jyvt). Rule used for the answer: `no` means the Go binary cannot do something the Python CLI does correctly and without data damage, or Go loses or changes data silently. A refusal that is a deliberate design choice (R-04, D05) counts as `no` for the input shapes it refuses, because the PO decides under D02 whether that loss is acceptable. A refusal of input on which Python writes damaged data is `yes`. The column `kind` is K's triage aid, not a decision.
 
-Go writes wrong data or reports success wrongly (check first): D-02, D-41, D-61.
+Of the kind `Go writes wrong data or reports success wrongly` (D-02, D-41, D-61) and the exit status entry D-42 none is left in the table: they are fixed, see §0.4.
 
 | ID | Title | Channel | Owner | Kind |
 |---|---|---|---|---|
-| D-02 | `verify` writes a second frontmatter block (wrong data, exit 0) when the file has CR-only line breaks; the tag verbs refuse the same files | file-tree effect (verify exits 0 and prints its success line); exit code and stderr (merge | Go frontmatter writer (F: OKFT-5lq2) + Go check and verify (F: OKFT-agws) | Go writes wrong data or reports success wrongly |
 | D-03 | A lone CR that ends a line inside an LF frontmatter: Go refuses the edit, Python converts the CR to LF and writes | exit code, stderr, file-tree effect | Go frontmatter writer (F: OKFT-5lq2) | Go refuses or aborts valid work |
 | D-04 | A frontmatter whose root is a flow mapping (or `~`/`null`, `--- {}`, `{ }`): Go refuses, Python writes | exit code, stdout (empty in Go), stderr (with --json: the error envelope on stdout), file- | Go frontmatter writer (F: OKFT-5lq2) | Go refuses or aborts valid work |
 | D-05 | An anchor, alias or explicit tag on the edited value: Go refuses, Python writes | exit code, stderr, file-tree effect | Go frontmatter writer (F: OKFT-5lq2) | Go refuses or aborts valid work |
@@ -37,27 +36,24 @@ Go writes wrong data or reports success wrongly (check first): D-02, D-41, D-61.
 | D-28 | TOML integer above int64 aborts every command that reads the config | exit code, stderr | Go core and read side (F: OKFT-daut) | Go cannot read or process input Python handles |
 | D-29 | Load-time checks of ruamel that Go skips (equal duplicate keys, invalid tag values, merge-key misuse) | exit code, stdout | Go core and read side (F: OKFT-daut) | Go validates less than Python |
 | D-30 | Impossible dates and out-of-range timestamps in a custom key (`2026-02-30`, `T24:00:00Z`) | exit code, stdout, file-tree effect | Go core and read side (F: OKFT-daut) | Go validates less than Python |
-| D-41 | Go reports success when stdout cannot be written | exit code, stderr | Go core and read side (F: OKFT-daut) | Go writes wrong data or reports success wrongly |
-| D-42 | Go is killed by SIGPIPE when the reader of a pipe exits early | exit code | Go core and read side (F: OKFT-daut) | exit status or timing semantics |
 | D-43 | Go aborts normalize-tags and verify on a non-scalar frontmatter key | exit code, stdout, stderr, file-tree effect | Go frontmatter writer (F: OKFT-5lq2) | Go refuses or aborts valid work |
 | D-52 | `recent` prints UTC instead of local time when `TZ` is a POSIX rule string | stdout (clock time in text mode, the `created` offset in `--json`; `created_ts` is equal) | Go navigation commands (F: OKFT-se5f) | narrow: one display or ordering rule |
 | D-59 | Cherokee letters: Go case folding is not idempotent, so a heading typed in the other case is not found | exit code, stderr (read); stdout order (list); file-tree effect (reindex writes `docs/inde | Go core and read side (F: OKFT-daut) | Go cannot read or process input Python handles |
 | D-60 | Timeouts: Python limits each socket wait, Go limits the whole request | stdout, stderr, duration | Go find and FTS index (F: OKFT-y1zl) | exit status or timing semantics |
-| D-61 | A JSON `null` vector element is stored as 0.0 by Go and refused by Python | exit code, stdout, stderr, file-tree effect (stored vector) | Go find and FTS index (F: OKFT-y1zl) + Go tag and frontmatter writes (F: OKFT-dkdu) | Go writes wrong data or reports success wrongly |
 
 ### 0.2 Findings by owning item
 
 | Owning item | `no` entries | `yes` entries |
 |---|---|---|
-| Go check and verify (F: OKFT-agws) | D-02 | D-10, D-73, D-74 |
-| Go core and read side (F: OKFT-daut) | D-26, D-27, D-28, D-29, D-30, D-41, D-42, D-59 | D-01, D-23, D-24, D-31, D-32, D-33, D-34, D-35, D-36, D-37, D-38, D-39, D-40, D-44, D-45, D-46, D-47, D-54, D-55, D-56, D-57, D-62, D-63, D-76, D-77 |
+| Go check and verify (F: OKFT-agws) | – | D-02, D-10, D-73, D-74 |
+| Go core and read side (F: OKFT-daut) | D-26, D-27, D-28, D-29, D-30, D-59 | D-01, D-23, D-24, D-31, D-32, D-33, D-34, D-35, D-36, D-37, D-38, D-39, D-40, D-41, D-42, D-44, D-45, D-46, D-47, D-54, D-55, D-56, D-57, D-62, D-63, D-76, D-77 |
 | Go ctx bundles (F: OKFT-82n3) | – | D-22, D-23 |
-| Go find and FTS index (F: OKFT-y1zl) | D-60, D-61 | D-62, D-63, D-64, D-65, D-66, D-67, D-68, D-69, D-70 |
-| Go frontmatter writer (F: OKFT-5lq2) | D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-17, D-18, D-43 | D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-19, D-20, D-21, D-25, D-72, D-73, D-76 |
+| Go find and FTS index (F: OKFT-y1zl) | D-60 | D-61, D-62, D-63, D-64, D-65, D-66, D-67, D-68, D-69, D-70 |
+| Go frontmatter writer (F: OKFT-5lq2) | D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-17, D-18, D-43 | D-02, D-10, D-11, D-12, D-13, D-14, D-15, D-16, D-19, D-20, D-21, D-25, D-72, D-73, D-76 |
 | Go link rewriting writes (F: OKFT-cm5o) | – | D-47, D-75 |
 | Go navigation commands (F: OKFT-se5f) | D-52 | D-36, D-50, D-53, D-54, D-58 |
 | Go shell completion (F: OKFT-50ly) | – | D-48, D-49, D-51 |
-| Go tag and frontmatter writes (F: OKFT-dkdu) | D-08, D-09, D-61 | D-64, D-65, D-66, D-67, D-70, D-71, D-72, D-74, D-75 |
+| Go tag and frontmatter writes (F: OKFT-dkdu) | D-08, D-09 | D-61, D-64, D-65, D-66, D-67, D-70, D-71, D-72, D-74, D-75 |
 | Go wikilinks and sync blocks (F: OKFT-ca1y) | – | D-48 |
 
 ### 0.3 Criteria
@@ -67,7 +63,7 @@ Go writes wrong data or reports success wrongly (check first): D-02, D-41, D-61.
 | 1 | met | §2.1 harness lines; `21 of 314 cases differ` is the one grouped entry D-01 listing all 21 case names; every other deviation is an entry of §2.2 |
 | 2 | not applicable | the golden run has 21 deviating cases, not 0 |
 | 3 | met | every entry ends in an empty `PO decision:`; nothing is marked accepted |
-| 4 | met | 22 entries answer `no`, listed in §0.1 with owners |
+| 4 | met | 18 entries answer `no` (22 at K's run; D-02, D-41, D-42, D-61 fixed since, §0.4), listed in §0.1 with owners |
 | 5 | met | §2.3 matches the four deliberate deviations of OKFT-5lq2 to entries with direct Python-against-Go runs; further deviations of that area sit beside them |
 | 6 | met | Go run with `env PATH=<dir without python*/uv>`: same 21 deviating cases, byte-identical diff text (§2.1) |
 | 7 | met | Python CLI on the same 314 cases: `0 of 314 cases differ` |
@@ -84,9 +80,21 @@ Go writes wrong data or reports success wrongly (check first): D-02, D-41, D-61.
 | 18 | met | `env -i PATH=<dir without python or uv> okf --root <copy> find git`: exit 0, 10 hits (§5.1; argument-order note in §6) |
 | 19 | met | medians of 30 runs: `--help` 1.32 ms against 46.9 ms (Python direct) and 49.8 ms (`uv run --script`); `find git` 17.1 ms against 145.5 ms and 150.3 ms (§5) |
 | 20 | met | early number of OKFT-y1zl next to the final ones, with run counts, machine, build command and Python command lines (§5.2) |
-| 21 | met | this run adds no Go test file (one commit: this report) |
+| 21 | met | K's run adds no Go test file (one commit: this report); the fixes of §0.4 add 4 cases to the existing `go/internal/yamlpatch/reject_test.go` and no new test file |
 
 SC-01: D-01 and every further deviation carry case names, channel, difference, reason, answer, evidence and owner. SC-02 met (§3). SC-03 met (§4). SC-04 met (§5). R-01, R-02, R-03, R-13, R-15: evidence in §2, §3, §4, §5; R-02 stays open until the PO has decided the entries.
+
+### 0.4 Fixes after the run (OKFT-8dnw)
+
+The four entries that read as defects were fixed on `wt/OKFT-8dnw` after K's run. Each fix was shown by a Python-against-Go run before and after (private network namespace; stub servers answer the embed calls); the entries keep K's finding text and carry a `Fixed in` line with the evidence. The 18 other `no` entries and every PO decision are untouched.
+
+| Entry | Fix | Commit |
+|---|---|---|
+| D-02 | `yamlpatch` refuses a CR-only frontmatter instead of creating a second block (`verify` and every tag verb) | `0a14338` |
+| D-41, D-42 | package `stdio` is the one stdout of all commands: a failed write gives one stderr line and exit 120, a broken pipe is no failure (SIGPIPE no longer kills) | `bfaf900` |
+| D-61 | the embed decode refuses a JSON null element with the Python exception and no retry | `0bbdcac` |
+
+Checks on the fixed tree (`go/bin/okf` sha256 `290abe1aa47aa5f8b9f1229cacac7123e1d152a6827a31b97aa4a1825cbbd87b`): `go vet ./...` and `go test ./...` pass; `just golden --cmd go/bin/okf` gives `21 of 314 cases differ`, the same 21 case names and wording-only diffs as D-01; `just golden` (Python) gives `0 of 314 cases differ`; `tests.test_okf_mcp`, `tests.test_okf_install` and `tests.test_golden` (158 tests, 2 skipped), `just go-find-smoke` and `just completion-check` pass. Only the yamlpatch fix carries a Go test (R-05); the stdout and vector fixes are shown by the before/after runs in their entries.
 
 ## 1. Measured object, environment, method
 
@@ -120,7 +128,7 @@ The two Go logs are byte-identical after removing the recipe and time lines: the
 
 ### 2.2 Deviation entries
 
-77 entries: D-01 from the golden run, D-02 to D-77 found by direct runs of the Go binary against the Python CLI outside the golden cases (differential sweeps on constructed inputs and on production-data copies; sizes and matrices in §2.6). Within each area the `no` entries come first. Per entry: cases, channel, difference with a Python and a Go excerpt, reason, capability answer with evidence, owner, reproduce line, empty PO decision.
+77 entries: D-01 from the golden run, D-02 to D-77 found by direct runs of the Go binary against the Python CLI outside the golden cases (differential sweeps on constructed inputs and on production-data copies; sizes and matrices in §2.6). Within each area the `no` entries come first (the order of K's run: D-02, D-41, D-42 and D-61 were fixed afterwards, answer `yes`, and keep their place). Per entry: cases, channel, difference with a Python and a Go excerpt, reason, capability answer with evidence, owner, reproduce line, empty PO decision. A `Fixed in` line (OKFT-8dnw, after the run) follows the answer of the four fixed entries.
 
 ### Area G. Golden run
 
@@ -170,8 +178,14 @@ Go (exit 2): merge-tags a --into c --apply -> stderr: w/x.md: the key "tags" is 
   `frontmatter.Read(catalogue.DecodeText(stored))` but runs `yamlpatch.Apply` on the stored bytes, where `newPatcher` sees no block and takes its create-a-block path, so `AppendItem` writes a new block
   in front of the old text and the read-back guard accepts it. The tag verbs (tagwrite `patch`) also select on the decoded text and patch the stored text, so `yamlpatch.target` reports `tags` as
   missing.
-- **Capability preserved:** no. Python writes correct data (file converted to LF, `verified` appended to the original block). Go exits 0 and prints the success line, but afterwards the concept has no `type` and no `tags` for any
+- **Capability preserved:** yes, since `0a14338` (K's run: no). K's finding, kept: Python writes correct data (file converted to LF, `verified` appended to the original block). Go exits 0 and prints the success line, but afterwards the concept has no `type` and no `tags` for any
   reader (`list --where 'type = Concept'` finds nothing); the tag verbs exit 2 on files Python rewrites correctly. Only workaround: convert the line endings by hand first.
+- **Fixed in `0a14338` (2026-10-16):** `yamlpatch.newPatcher` (the one entry of every writer verb) no longer takes the create-a-block path when Python finds a block that `frontmatter.Read` (LF only) does not: a lone CR in front of the closing delimiter, which is every
+  line break of a CR-only file, now gives the refusal of the other lone-CR cases (R-04, same class as D-03). Fixture F, `w/x.md = '---\rtype: Concept\rtags: [a, b]\r---\r# T\rbody\r'`: `verify w/x --by human:me` before exit 0, `verified w/x by human:me at ...`, `w/x.md` =
+  `'---\nverified:\n  - by: human:me\n    at: 2026-10-16T16:35:35Z\n---\n---\rtype: Concept\r...'`, `list --where 'type = Concept' --json` `data: []`; after exit 2, stderr `the frontmatter holds a carriage return that does not end a line`, `w/x.md` byte-identical, `list` finds `w/x`.
+  The e8 file (`'---\ntype: Concept\ntags: [a, b]\r---\nbody\n'`) gives the same. `merge-tags a --into c --apply`, `remove-tags a --apply` and `normalize-tags --apply` on both files: exit 2 as before, stderr now `w/x.md: the frontmatter holds a carriage return that does not
+  end a line` (before: `the key "tags" is not in the frontmatter`), file byte-identical. `migrate --apply` skips a CR-only file in both Go builds, as Python's `migrate` does (it reads verbatim). Python still converts the file to LF and writes; Go refuses (R-04). Test: four cases of
+  `TestRejections` in `go/internal/yamlpatch/reject_test.go`, red on the old code, green now.
 - **Owner:** Go frontmatter writer (F: OKFT-5lq2) + Go check and verify (F: OKFT-agws)
 - **Reproduce:** printf -- '---\rtype: Concept\rtags: [a, b]\r---\r# T\rbody\r' > w/x.md && okf --root . verify w/x --by human:me && okf --root . list --where 'type = Concept' --json
   printf -- '---\ntype: Concept\ntags: [a, b]\r---\nbody\n' > w/x.md && okf --root . verify w/x --by human:me
@@ -1095,7 +1109,12 @@ Go (exit 0): >&-       (stderr empty)
 Go (exit 0): >/dev/full (stderr empty)
 ```
 - **Reason:** Python: `main` in `cli/okf-cli.py` flushes stdout inside its `try`, and the interpreter flushes again at exit. Go: `run` in `go/cmd/okf/main.go` and `envelope.Run` print with `fmt.Print` and `fmt.Fprintln(os.Stdout, ...)` and never check the returned error (the other text-mode handlers were not all read).
-- **Capability preserved:** no. A caller that writes to a full disk or a failing device gets exit 0 and lost output from Go, while Python reports the failure. Python's closed-stdout crash is not good behaviour either, but Go's silent success hides the lost output. There is no workaround except checking the output file afterwards.
+- **Capability preserved:** yes, since `bfaf900` (K's run: no). K's finding, kept: A caller that writes to a full disk or a failing device gets exit 0 and lost output from Go, while Python reports the failure. Python's closed-stdout crash is not good behaviour either, but Go's silent success hides the lost output. There is no workaround except checking the output file afterwards. Closed stdout is the one case that stays at exit 0 (see Fixed in).
+- **Fixed in `bfaf900` (2026-10-16):** all text of every command now goes through the new package `stdio` (`fmt.Print*` and `os.Stdout` replaced in every command package, in `envelope.Run` and in `main`): the first failed write is kept, the command runs on, and `main` ends with `stdio.Exit`,
+  which writes one line to stderr and ends with status 120, the one CPython ends with when the flush of stdout fails at exit. Fixture: copy of tests/golden/catalogue. `okf --root . read handbook/glossary >/dev/full`: before exit 0, stderr empty; after exit 120, stderr `ERROR: cannot write to stdout: no space left on device`
+  (Python: exit 120, `OSError: [Errno 28] No space left on device`); with `--json` the same in both. For a large answer (`handbook/big`, 400000 lines) Go gives 120 and Python 1 (its status depends on whether the error surfaces in `print` or in the final flush). A failing command that writes nothing keeps its own
+  status in Python and Go (`read handbook/nonexistent >/dev/full`: 3). Closed stdout (`>&-`) is not fixed, and cannot be: since Go 1.22 the runtime opens `/dev/null` read-write on a closed descriptor 0 to 2 before `main` (`runtime/fds_unix.go`), so every write succeeds, and that is the descriptor that
+  `subprocess.DEVNULL` (Python 3.14.6) and Node's `stdio: 'ignore'` hand to a child (checked: `/dev/null` with `O_RDWR`; a shell `>/dev/null` gives `O_WRONLY`). Treating it as closed would fail detached hook runs. No output is lost there, since no channel exists; Go exits 0 where Python crashes with exit 1 (`AttributeError`), the one difference left in this entry.
 - **Owner:** Go core and read side (F: OKFT-daut)
 - **Reproduce:** In a copy of tests/golden/catalogue: `okf --root . read handbook/glossary >/dev/full; echo $?` and `okf --root . read handbook/glossary >&-; echo $?`.
 - **PO decision:**
@@ -1112,7 +1131,11 @@ Go (exit 141): PIPESTATUS=141 0
 Go (exit 141): pipefail rc=141
 ```
 - **Reason:** Python: the entry point in `cli/okf-cli.py` catches `BrokenPipeError`, calls `_silence_broken_pipe_streams()` and exits 0. Go: `go/cmd/okf/main.go` has no SIGPIPE or EPIPE handling, so the Go runtime ends the process when stdout closes.
-- **Capability preserved:** no. A script that checks the status of `okf` inside a pipeline (`set -o pipefail`, `PIPESTATUS`) sees success from Python and 141 from Go for `okf read x | head -1`. Without pipefail the pipeline status is the one of `head` and nothing differs.
+- **Capability preserved:** yes, since `bfaf900` (K's run: no). K's finding, kept: A script that checks the status of `okf` inside a pipeline (`set -o pipefail`, `PIPESTATUS`) sees success from Python and 141 from Go for `okf read x | head -1`. Without pipefail the pipeline status is the one of `head` and nothing differs.
+- **Fixed in `bfaf900` (2026-10-16):** `stdio.Init` (the first call of `main`) replaces `os.Stdout` and `os.Stderr` by files on duplicates of the descriptors 1 and 2: the `os` package raises SIGPIPE on an EPIPE write for the numbers 1 and 2 only, so on the duplicates a broken pipe is an error of the write. `stdio.Exit` treats it as
+  no failure, as Python's caught `BrokenPipeError`, and keeps the status of the command. Same pipelines as above: before `PIPESTATUS=141 0` and `pipefail rc=141`; after `PIPESTATUS=0 0` and `pipefail rc=0` (Python the same). Also 0 (before 141) for a small answer (`read handbook/glossary | true`), for `read handbook/big --json | head -c 100` and for stderr
+  (`find zzzunknown 2>&1 | true`). A failing command keeps its own status through a closed pipe (`read handbook/nonexistent | true`: 3 before and after, Python 3); only `--json` differs there: Python ends with 120 and a flush warning, Go keeps the status of the command (3). No cost at startup: 300 runs of
+  `read handbook/glossary` take 1.26 to 1.27 ms each with the fix against 1.41 to 1.43 ms before (three rounds, devt).
 - **Owner:** Go core and read side (F: OKFT-daut)
 - **Reproduce:** Create a concept with 400000 body lines in a copy of tests/golden/catalogue, then: `bash -c 'set -o pipefail; okf --root . read handbook/big | head -c 100 >/dev/null; echo "${PIPESTATUS[*]} $?"'`
 - **PO decision:**
@@ -1514,7 +1537,12 @@ Go (exit 0): [stderr] note: semantic arm owns this ranking (lexical top-1 lacked
 Go stored vector of docs/c0, elements [0..5]: [0.554424, 0.793278, 0.238983, 0.0, 0.769076, 0.379168]
 ```
 - **Reason:** Go decodes the embeddings as `[]float64` in `go/internal/tagvec/embed.go` (`post`, `narrow`), so JSON `null` becomes 0.0 without an error. Python `json.loads` yields `None` and `struct.pack("<f", ...)` raises (`build_tagvec.py`, `semantic.py`, `tags.py:auto_embed_new_tags`); `find` raises in the cosine loop.
-- **Capability preserved:** no. A malformed backend answer changes a stored vector silently in Go, where Python refuses it; I use `no` by the rule that silent data change is `no`, and found no reason to keep `yes`. Well-formed answers are identical in both. Python's `find` crash is a separate Python defect.
+- **Capability preserved:** yes, since `0bbdcac` (K's run: no). K's finding, kept: A malformed backend answer changes a stored vector silently in Go, where Python refuses it; I use `no` by the rule that silent data change is `no`, and found no reason to keep `yes`. Well-formed answers are identical in both. Python's `find` crash is a separate Python defect.
+- **Fixed in `0bbdcac` (2026-10-16):** the embed decode (`tagvec` `EmbedBGEM3`, `EmbedVoyage`, `EmbedVoyageQuery`) reads the elements as `*float64`, keeps a null and refuses it with a `tagvec.Exception` that carries the class and text of the Python exception: `error: required argument is not a float` (`pack_vec`) for the document vectors,
+  `TypeError: unsupported operand type(s) for *: 'NoneType' and 'float'` (the cosine) for the query vector. `EmbedResilient` returns it at once without a retry, as Python raises after `embed_resilient`, and the consumers end like Python's. Stub as in Reproduce (null at element [3] of the first vector), Go before, then after (Python in brackets):
+  `tags --register newone ... --register newtwo ...`: `auto-embedded 2 new tag(s) (bge-m3)` and 2 stored rows, then `warning: auto-embed skipped for new tag(s) (error: required argument is not a float) ...` and no store (text identical to Python); `build-semantic-index`: `embedded 24 concept(s)` and 24 stored rows, then
+  `note: semantic index build failed (error: required argument is not a float) -- lexical arm unaffected`, exit 0, no store, in text and `--json` (identical to Python); `build-tagvec --produce --target both`: exit 0 and `wrote 13/13 tag row(s)`, then exit 1, `error: required argument is not a float` (Python `struct.error: ...`) and no stored row;
+  `find zzzunknown` and `find zzzunknown --expand-tags` on a built cache: exit 0, then exit 1 with `TypeError: unsupported operand type(s) for *: 'NoneType' and 'float'` (identical to Python). Well-formed answers and the HTTP 500 retry ladder give byte-identical output before and after (tags, 24 concepts, `find`).
 - **Owner:** Go find and FTS index (F: OKFT-y1zl) + Go tag and frontmatter writes (F: OKFT-dkdu)
 - **Reproduce:** stub that answers 200 with a normal body but `null` at `data[0].embedding[3]` (Voyage) or `embeddings[0][3]` (Ollama); `VOYAGE_API_KEY=stub-key okf --root <cat> build-semantic-index`.
 - **PO decision:**
