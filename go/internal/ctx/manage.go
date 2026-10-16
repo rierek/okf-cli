@@ -73,6 +73,9 @@ func runEdit(root string, a *cli.Args) (any, error) {
 	argv = append(argv, catalogue.Join(dir, slug+".md"))
 	// no shell, and the terminal of the caller
 	cmd := exec.Command(argv[0], argv[1:]...)
+	if errors.Is(cmd.Err, exec.ErrDot) {
+		cmd.Err = nil // execvp runs a program that a `.` or empty entry of PATH finds in the working directory
+	}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError
