@@ -21,8 +21,10 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/find"
 	"nas/volume1/data/git/okf-tools/go/internal/fts"
 	"nas/volume1/data/git/okf-tools/go/internal/info"
+	"nas/volume1/data/git/okf-tools/go/internal/navigation"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/semantic"
+	"nas/volume1/data/git/okf-tools/go/internal/wikisync"
 )
 
 // commands lists the command packages, each exporting Register(*cli.App). A directory command whose
@@ -33,6 +35,8 @@ var commands = []func(*cli.App){
 	fts.Register,
 	info.Register,
 	semantic.Register,
+	navigation.Register,
+	wikisync.Register,
 }
 
 func main() { os.Exit(run(os.Args[1:])) }
