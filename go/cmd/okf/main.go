@@ -4,7 +4,7 @@
 // Layout (binding for every command work package): the module is `go/` with its own go.mod; this
 // package is the entry point and the one place that wires things together; the shared core lives in
 // the packages under go/internal (okferr, pytext, frontmatter, catalogue, envelope, cli, where,
-// spec, history, linkscan, sqlstore, tagvec); each command owns one package under go/internal with
+// spec, history, linkscan, sqlstore, tagvec, complete); each command owns one package under go/internal with
 // one Register(app *cli.App) function. A new command package adds ONE entry to `commands` below,
 // the mirror of Python's COMMAND_MODULES; there is no discovery.
 package main
@@ -15,6 +15,7 @@ import (
 
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
+	"nas/volume1/data/git/okf-tools/go/internal/complete"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/info"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
@@ -35,7 +36,10 @@ func run(argv []string) int {
 		register(app)
 	}
 	// Steps that rewrite or answer before the parse are wired here, in this order: the shell
-	// completion protocol (_ARGCOMPLETE, work package J0) and the `ctx <slug>` shorthand (I).
+	// completion protocol (_ARGCOMPLETE) and the `ctx <slug>` shorthand (I).
+	if complete.Requested() {
+		return complete.Run(app)
+	}
 	parsed, err := app.Parse(argv)
 	switch e := err.(type) {
 	case nil:

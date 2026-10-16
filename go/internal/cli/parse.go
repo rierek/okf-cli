@@ -38,12 +38,20 @@ type run struct {
 	conflicts      map[*action][]*action
 	extras         []string
 	extrasPattern  []byte
-	unrecognized   []string // what the subparsers could not use
+	unrecognized   []string    // what the subparsers could not use
+	pr             *probeState // set only while the shell completion probes the line, see probe.go
+	active         []*action   // probe: Python IntrospectiveArgumentParser.active_actions
 }
 
 // parseKnown is parse_known_args: the values of the parser's arguments and the arguments left
 // over, or a *UsageError, or a *HelpOutput when -h ended the parse.
 func (p *parser) parseKnown(args []string) (map[string]any, []string, error) {
+	return p.parseKnownProbe(args, nil)
+}
+
+// parseKnownProbe is parseKnown that, with pr set, also records what the shell completion needs
+// and then returns the values read so far together with the error that ended the parse.
+func (p *parser) parseKnownProbe(args []string, pr *probeState) (map[string]any, []string, error) {
 	ns := map[string]any{}
 	for _, a := range p.actions {
 		if a.kind != kindHelp {
@@ -52,11 +60,16 @@ func (p *parser) parseKnown(args []string) (map[string]any, []string, error) {
 	}
 	r := &run{
 		p: p, args: args, ns: ns, seen: map[*action]bool{}, seenNonDefault: map[*action]bool{},
-		conflicts: map[*action][]*action{}, options: map[int][]optTuple{},
+		conflicts: map[*action][]*action{}, options: map[int][]optTuple{}, pr: pr,
+	}
+	if pr != nil {
+		pr.start(r)
 	}
 	extras, err := r.parse()
 	var ae *argError
 	switch {
+	case pr != nil:
+		return ns, nil, err
 	case errors.As(err, &ae):
 		return nil, nil, p.usageError(ae.Error())
 	case err != nil:
@@ -84,6 +97,7 @@ func (r *run) parse() ([]string, error) {
 		maxOption = max(maxOption, i)
 	}
 	start := 0
+	mixed := p.intermixed && r.pr == nil // argcomplete's copy of _parse_known_args ignores intermixed
 	for start <= maxOption {
 		next := start
 		for next <= maxOption {
@@ -92,7 +106,7 @@ func (r *run) parse() ([]string, error) {
 			}
 			next++
 		}
-		if !p.intermixed && start != next {
+		if !mixed && start != next {
 			end, err := r.consumePositionals(start)
 			if err != nil {
 				return nil, err
@@ -112,7 +126,7 @@ func (r *run) parse() ([]string, error) {
 			return nil, err
 		}
 	}
-	if !p.intermixed {
+	if !mixed {
 		stop, err := r.consumePositionals(start)
 		if err != nil {
 			return nil, err
@@ -120,6 +134,10 @@ func (r *run) parse() ([]string, error) {
 		r.extras = append(r.extras, r.args[stop:]...)
 	} else if err := r.consumeIntermixed(start); err != nil {
 		return nil, err
+	}
+	if r.pr != nil && len(r.positionals) > 0 { // argcomplete: a positional left over ends the parse here
+		r.active = append(r.active, r.positionals[0])
+		return nil, &argError{msg: "too few arguments"}
 	}
 	return r.extras, r.finish()
 }
@@ -203,6 +221,9 @@ func (r *run) finish() error {
 // them and returns the index after their arguments.
 func (r *run) consumePositionals(start int) (int, error) {
 	counts := matchPartial(r.positionals, r.pattern[start:])
+	if r.pr != nil {
+		r.active = append(r.active, r.positionals[:len(counts)]...)
+	}
 	for i, n := range counts {
 		a := r.positionals[i]
 		args := slices.Clone(r.args[start : start+n])
@@ -211,6 +232,9 @@ func (r *run) consumePositionals(start int) (int, error) {
 			args = slices.Delete(args, i, i+1)
 		}
 		start += n
+		if r.pr != nil {
+			r.pr.consumed[a] = n
+		}
 		if err := r.takeAction(a, args); err != nil {
 			return 0, err
 		}
@@ -244,9 +268,19 @@ func (r *run) consumeOptional(start int) (int, error) {
 		}
 		if !hasExp {
 			from := start + 1
+			if r.pr != nil {
+				r.active = []*action{act}
+				r.pr.consumed[act] = 0
+			}
 			n, err := matchArgument(act, r.pattern[from:])
 			if err != nil {
 				return 0, err
+			}
+			if r.pr != nil {
+				r.pr.consumed[act] = n
+				if !isOpen(act, n) {
+					r.active = nil
+				}
 			}
 			stop = from + n
 			takes = append(takes, taken{act, r.args[from:stop]})
@@ -311,6 +345,14 @@ func (r *run) takeAction(a *action, args []string) error {
 			}
 		}
 	}
+	if r.pr != nil { // argcomplete's IntrospectAction: help does nothing, a positional is "visited"
+		switch {
+		case a.kind == kindHelp:
+			return nil
+		case a.kind != kindParsers && !a.isOption():
+			r.pr.visited = append(r.pr.visited, visit{act: a})
+		}
+	}
 	switch a.kind {
 	case kindStore:
 		r.ns[a.dest] = value
@@ -347,7 +389,12 @@ func anyList(v any) []any {
 func (r *run) callParser(a *action, values []string) error {
 	r.ns[a.dest] = values[0]
 	child := a.sub.build(values[0])
-	ns, extras, err := child.parseKnown(values[1:])
+	ns, extras, err := child.parseKnownProbe(values[1:], r.pr)
+	if r.pr != nil { // the values of a failed sub-parse still reach the completers
+		for k, v := range ns {
+			r.ns[k] = v
+		}
+	}
 	if err != nil {
 		return err
 	}
