@@ -415,6 +415,8 @@ The shared copy in `~/.agents/skills/okf` is read by Codex, opencode, Kimi Code,
 }
 ```
 
+The server is a thin wrapper: every tool call starts the `okf` binary with `--json`. It takes the binary from `$OKF_BIN`, else from `bin/okf` or `go/bin/okf` next to `mcp/` (a Homebrew keg, a source checkout after `just go-build`), else `okf` from `PATH` (a wheel install).
+
 ### Shell PATH and completion
 
 | Shell | TAB completion | rc change |
@@ -457,8 +459,12 @@ Catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`. Relate
 ## Development
 
 ```bash
-just test     # unittest discovery over tests/test_*.py
+just test     # builds the Go binary (`just go-build`, needed by the MCP boundary tests), then unittest discovery over tests/test_*.py
 just golden   # golden-output comparison; --update rewrites the goldens, --cmd <binary> checks another implementation
+just golden-go          # builds go/bin/okf and runs the golden suite against it (CI runs this on Linux and macOS)
+just go-find-smoke      # `okf find` with a PATH that holds no python3 and no uv
+just completion-check   # zsh TAB completion end to end in a PTY: Go binary against the Python CLI, throwaway HOME
+just brew-local-check   # builds packaging/homebrew/okf-cli.rb from source in a throwaway local tap and runs `brew test`
 just build    # wheel and sdist into dist/ (uv build)
 just check    # conformance scan against a real catalogue
 just prime
