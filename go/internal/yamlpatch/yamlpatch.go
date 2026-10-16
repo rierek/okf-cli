@@ -114,6 +114,9 @@ func newPatcher(text string) (*patcher, error) {
 	doc := frontmatter.Read(text)
 	p := &patcher{doc: doc, eol: "\n", flowRoot: -1}
 	if doc.Head == "" {
+		if hidesBlock(text) {
+			return nil, reject("the frontmatter holds a carriage return that does not end a line")
+		}
 		p.created, p.body = true, text
 		p.wantBody = "\n" + text
 		if strings.Contains(text, "\r\n") {
@@ -135,6 +138,16 @@ func newPatcher(text string) (*patcher, error) {
 	}
 	p.want = buildDatum(doc.Root)
 	return p, nil
+}
+
+// hidesBlock reports a text that frontmatter.Read finds no block in but Python does. Python reads a
+// file through universal newlines, which turn a lone CR into an LF, so a lone CR in front of the
+// closing delimiter (every line break of a file with CR-only line endings) ends a block that the
+// reader, which splits at LF, does not see. The create-a-block path would put a new block in front
+// of it and turn the real one into body text.
+func hidesBlock(text string) bool {
+	rest, ok := strings.CutPrefix(text, frontmatter.Delim)
+	return ok && strings.Contains(rest, "\r"+frontmatter.Delim)
 }
 
 // hasBareCR reports a carriage return that is not part of CRLF: YAML counts it as a line break, the
