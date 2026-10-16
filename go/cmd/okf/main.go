@@ -18,6 +18,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/check"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/complete"
+	"nas/volume1/data/git/okf-tools/go/internal/ctx"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/find"
 	"nas/volume1/data/git/okf-tools/go/internal/fts"
@@ -37,6 +38,7 @@ import (
 // package is not listed answers with a "not yet ported" error.
 var commands = []func(*cli.App){
 	check.Register,
+	ctx.Register,
 	buildtagvec.Register,
 	find.Register,
 	fts.Register,
@@ -60,11 +62,12 @@ func run(argv []string) int {
 		register(app)
 	}
 	// Steps that rewrite or answer before the parse are wired here, in this order: the shell
-	// completion protocol (_ARGCOMPLETE) and the `ctx <slug>` shorthand (I).
+	// completion protocol (_ARGCOMPLETE), which sees the command line as typed, and the
+	// `ctx <slug>` shorthand.
 	if complete.Requested() {
 		return complete.Run(app)
 	}
-	parsed, err := app.Parse(argv)
+	parsed, err := app.Parse(ctx.Shorthand(argv))
 	switch e := err.(type) {
 	case nil:
 	case *cli.HelpOutput:
