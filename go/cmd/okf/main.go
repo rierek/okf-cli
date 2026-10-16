@@ -21,10 +21,13 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/find"
 	"nas/volume1/data/git/okf-tools/go/internal/fts"
+	"nas/volume1/data/git/okf-tools/go/internal/indexwrite"
 	"nas/volume1/data/git/okf-tools/go/internal/info"
 	"nas/volume1/data/git/okf-tools/go/internal/install"
+	"nas/volume1/data/git/okf-tools/go/internal/move"
 	"nas/volume1/data/git/okf-tools/go/internal/navigation"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/rewrite"
 	"nas/volume1/data/git/okf-tools/go/internal/semantic"
 	"nas/volume1/data/git/okf-tools/go/internal/wikisync"
 )
@@ -36,8 +39,11 @@ var commands = []func(*cli.App){
 	buildtagvec.Register,
 	find.Register,
 	fts.Register,
+	indexwrite.Register,
 	info.Register,
 	install.Register,
+	move.Register,
+	rewrite.Register,
 	semantic.Register,
 	navigation.Register,
 	wikisync.Register,
