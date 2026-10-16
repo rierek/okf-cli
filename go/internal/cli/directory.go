@@ -10,6 +10,7 @@ var directory = []Entry{
 	{Name: "archive", Group: "maintenance", Summary: "move a concept into _archive/<bundle>/, or back with --restore (dry-run default)"},
 	{Name: "build-index", Group: "search", Summary: "(re)build the FTS5 lexical search index at <root>/.fts/fts.sqlite (local only, no network)"},
 	{Name: "build-semantic-index", Group: "search", Summary: "fill <root>/.tagvec/tag_vectors.sqlite's concept_emb table for every concept still missing a voyage-3-large embedding (NETWORK, requires VOYAGE_API_KEY)"},
+	{Name: "build-tagvec", Group: "search", Summary: "offline producer for <root>/.tagvec/tag_vectors.sqlite (dry-run unless --produce)", Hidden: true},
 	{Name: "check", Group: "maintenance", Summary: "conformance scan: §9 hard rules + local invariants"},
 	{Name: "ctx", Group: "navigation", Summary: "context bundles: curated, ordered reading lists per topic (`ctx` lists them, `ctx <slug>` shows one)"},
 	{Name: "find", Group: "search", Summary: "hybrid ranked search: lexical FTS5/BM25 arm plus semantic arm"},
