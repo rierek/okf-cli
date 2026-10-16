@@ -29,6 +29,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/rewrite"
 	"nas/volume1/data/git/okf-tools/go/internal/semantic"
+	"nas/volume1/data/git/okf-tools/go/internal/tagwrite"
 	"nas/volume1/data/git/okf-tools/go/internal/wikisync"
 )
 
@@ -47,6 +48,7 @@ var commands = []func(*cli.App){
 	semantic.Register,
 	navigation.Register,
 	wikisync.Register,
+	tagwrite.Register,
 }
 
 func main() { os.Exit(run(os.Args[1:])) }
