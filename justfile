@@ -13,14 +13,16 @@ ruff_version := "0.17.0"
 # {{go_dir}}/{{go_out}} ist der eine Binary-Pfad fuer `just golden --cmd`
 go_dir := "go"
 go_out := "bin/okf"
+# Fixture-Catalogue der Golden-Faelle: Ziel der Go-Smoke-Laeufe und der Completion-Pruefung
+golden_catalogue := "tests/golden/catalogue"
 
 # Alle Rezepte auflisten
 default:
     @just --list
 
-# Testsuite (unittest discovery ueber tests/test_*.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
+# Testsuite (unittest discovery ueber tests/test_*.py); baut vorher das Go-Binary fuer die MCP-Grenztests (tests/test_okf_mcp.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
 # PEP-723-Header von cli/okf-cli.py; mcp ist ein reines Test-Extra. UV_PYTHON waehlt den Interpreter.
-test *ARGS:
+test *ARGS: go-build
     uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py --with mcp python -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
 
 # Golden-Output-Vergleich (tests/okf_golden.py): --update schreibt die Goldens neu, --cmd prueft eine
@@ -34,6 +36,26 @@ golden *ARGS:
 # Go-Binary bauen (statisch, ohne cgo) nach go/bin/okf; Abnahme: just golden --cmd go/bin/okf
 go-build:
     CGO_ENABLED=0 go build -C {{go_dir}} -o {{go_out}} ./cmd/okf
+
+# Golden-Vergleich gegen das gebaute Go-Binary ({{go_dir}}/{{go_out}}); ARGS wie bei `just golden` (z.B. --only <text>)
+golden-go *ARGS: go-build
+    just golden --cmd {{go_dir}}/{{go_out}} {{ARGS}}
+
+# `okf find` mit einem PATH ohne python3 und uv: das Binary braucht keine Laufzeitumgebung (R-01); verlangt Treffer
+go-find-smoke: go-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hits="$(env -i PATH="$(mktemp -d)" "$PWD/{{go_dir}}/{{go_out}}" --root {{golden_catalogue}} find recipe)"
+    grep -q "^rank: 1" <<<"$hits" || { echo "okf find printed no hits: $hits" >&2; exit 1; }
+    printf '%s\n' "$hits" | head -n 3
+
+# zsh-Completion Ende zu Ende im PTY: Go-Binary gegen Python-CLI auf Wegwerf-HOMEs (scripts/completion_check.py)
+completion-check: go-build
+    python3 scripts/completion_check.py --binary {{go_dir}}/{{go_out}} --fixture {{golden_catalogue}}
+
+# Homebrew-Formel lokal pruefen: aus den Quellen bauen und `brew test` in einem Wegwerf-Tap (scripts/brew-local-check.sh)
+brew-local-check:
+    scripts/brew-local-check.sh
 
 # Paritaetsprobe von `okf install`: Python-CLI und Go-Binary Seite an Seite auf Wegwerf-HOMEs (--only NAME, --fast, --list)
 install-parity *ARGS: go-build
