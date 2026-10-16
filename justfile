@@ -35,6 +35,11 @@ golden *ARGS:
 go-build:
     CGO_ENABLED=0 go build -C {{go_dir}} -o {{go_out}} ./cmd/okf
 
+# Die Completion-Skripte des Go-Binarys (go/internal/complete/okf.*) aus cli/_okf und argcomplete 3.7.2
+# neu schreiben; --check vergleicht nur und bricht bei Abweichung ab
+go-completion-scripts *ARGS:
+    uv run --no-project --with argcomplete==3.7.2 python scripts/go_completion_scripts.py {{ARGS}}
+
 # Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
 build:
     uv build
