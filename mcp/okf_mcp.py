@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """okf-MCP — mechanical okf verbs as MCP tools. Thin subprocess wrapper;
-all correctness logic lives in okf-cli.py.
+all correctness logic lives in the okf binary.
 
 `root` on every tool defaults to "" (omit it): okf then auto-detects the
 catalogue by walking this server process's own cwd upward for a `.okf.toml`/
@@ -104,9 +104,21 @@ def build_argv(root, command, params):
 import json
 import subprocess
 
-# Resolve the CLI relative to this file so a repo move cannot strand the server.
-OKF_CLI = os.environ.get("OKF_CLI",
-    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cli", "okf-cli.py"))
+
+def _okf_binary():
+    """The okf binary this server runs: $OKF_BIN, else the one beside this file's package root
+    (`bin/okf` of a Homebrew keg, `go/bin/okf` of a source checkout built by `just go-build`),
+    else `okf` on PATH (a wheel install ships no binary next to the script)."""
+    if os.environ.get("OKF_BIN"):
+        return os.environ["OKF_BIN"]
+    pkg = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for rel in ("bin/okf", "go/bin/okf"):
+        if os.path.isfile(os.path.join(pkg, rel)):
+            return os.path.join(pkg, rel)
+    return "okf"
+
+
+OKF_BIN = _okf_binary()
 
 # Ceiling on a single result (okf-cli-7u5z, D02). Beyond it the consumer drops
 # the call entirely, so returning the payload helps nobody -- an error naming the
@@ -116,7 +128,7 @@ MAX_OUTPUT_CHARS = int(os.environ.get("OKF_MCP_MAX_CHARS", "120000"))
 
 
 def run_okf(root, command, params):
-    """Invoke okf-cli.py through `uv run --script` with --json and read its one envelope
+    """Invoke the okf binary (OKF_BIN) with --json and read its one envelope
     {command, ok, data, warnings, error}. Success and failure come from the envelope
     alone, never from the exit code: `ok` true returns {"data", "warnings"}; `ok` false
     with a result (check findings, drift rows, ambiguous-section candidates) returns
@@ -124,7 +136,7 @@ def run_okf(root, command, params):
     one envelope, raises. The CLI's call notes arrive as `warnings`; nothing is read
     from stderr except to explain a stdout that is not an envelope."""
     argv = build_argv(root, command, params)
-    proc = subprocess.run(["uv", "run", "--script", OKF_CLI] + argv, capture_output=True, text=True)
+    proc = subprocess.run([OKF_BIN] + argv, capture_output=True, text=True)
     out = proc.stdout
     if len(out) > MAX_OUTPUT_CHARS:
         raise RuntimeError(

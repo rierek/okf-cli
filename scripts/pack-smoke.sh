@@ -28,7 +28,8 @@ HOME="$T/home" "$cli" install --json --only claude,zsh | python3 -c 'import json
 echo "ok   install plan"
 
 mcp="$(cd "$T" && "$T/venv/bin/python" -c 'import okf_cli,os; print(os.path.join(os.path.dirname(okf_cli.__file__), "mcp", "okf_mcp.py"))')"
-python3 - "$mcp" "$T/cat" <<'EOF'
+# the wheel ships no binary next to the server: point it at the wheel's own console script
+OKF_BIN="$cli" python3 - "$mcp" "$T/cat" <<'EOF'
 import json, subprocess, sys
 p = subprocess.Popen(["uv", "run", "--with", "mcp<2", sys.argv[1]], stdin=subprocess.PIPE,
                      stdout=subprocess.PIPE, text=True)

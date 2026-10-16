@@ -922,9 +922,9 @@ class Packaging(unittest.TestCase):
         self.assertIn(os.path.join(os.path.realpath(site), "okf_cli", "mcp", "okf_mcp.py"), plan.stdout)
         self.assertEqual(entry("install", "--only", "nope").returncode, 2, "exit codes pass through the entry")
         with mock.patch.dict(os.environ):
-            os.environ.pop("OKF_CLI", None)
+            os.environ.pop("OKF_BIN", None)
             mcp = _load("okf_mcp_wheel", os.path.join(site, "okf_cli", "mcp", "okf_mcp.py"))
-        self.assertTrue(os.path.isfile(mcp.OKF_CLI), mcp.OKF_CLI)
+        self.assertEqual(mcp.OKF_BIN, "okf", "a wheel ships no binary: the server calls `okf` on PATH")
         self.assertTrue(os.path.isfile(os.path.join(site, "okf_cli", "cli", "embeddings", "build_tagvec.py")))
 
 
