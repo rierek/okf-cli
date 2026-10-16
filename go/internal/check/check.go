@@ -36,6 +36,17 @@ func Register(app *cli.App) {
 	})
 	complete.Attach([]string{"check"}, "target", complete.Scopes)
 	complete.Attach([]string{"check"}, "types", complete.Files)
+
+	app.Attach("verify", cli.Spec{
+		Args: []cli.Arg{
+			{Dest: "concept", Help: "<bundle>/<concept-id> of the concept"},
+			{Flags: []string{"--by"}, Required: true, Metavar: []string{"ACTOR"},
+				Help: "who verified it: `human:<id>`, `process:<id>` or `<producer>/<version>`"},
+			cli.JSON(),
+		},
+		Handler: runVerify,
+	})
+	complete.Attach([]string{"verify"}, "concept", complete.Concepts)
 }
 
 // runCheck is Python cmd_check: the target gate, the suppression set, the engine run and the report.
