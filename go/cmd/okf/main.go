@@ -20,6 +20,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/info"
 	"nas/volume1/data/git/okf-tools/go/internal/navigation"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/wikisync"
 )
 
 // commands lists the command packages, each exporting Register(*cli.App). A directory command whose
@@ -27,6 +28,7 @@ import (
 var commands = []func(*cli.App){
 	info.Register,
 	navigation.Register,
+	wikisync.Register,
 }
 
 func main() { os.Exit(run(os.Args[1:])) }
