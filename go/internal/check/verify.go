@@ -1,7 +1,6 @@
 package check
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
 	"nas/volume1/data/git/okf-tools/go/internal/spec"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 	"nas/volume1/data/git/okf-tools/go/internal/yamlpatch"
 )
 
@@ -66,6 +66,6 @@ func runVerify(root string, a *cli.Args) (any, error) {
 	if a.JSON {
 		return envelope.O("path", path, "entry", envelope.O("by", by, "at", at)), nil
 	}
-	_, err = fmt.Printf("verified %s by %s at %s\n", path, by, at)
-	return nil, err
+	stdio.Printf("verified %s by %s at %s\n", path, by, at)
+	return nil, nil
 }

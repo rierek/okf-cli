@@ -46,7 +46,7 @@
 //
 // # Handlers
 //
-// A Handler reads the parsed arguments by dest and prints its own text to os.Stdout in text
+// A Handler reads the parsed arguments by dest and prints its own text through package stdio in text
 // mode; in --json mode (a.JSON) it prints nothing and returns the data of the envelope:
 //
 //	func read(root string, a *cli.Args) (any, error) {
@@ -55,7 +55,7 @@
 //		if a.JSON {
 //			return map[string]any{"path": path}, nil
 //		}
-//		fmt.Println(path)
+//		stdio.Println(path)
 //		return nil, nil
 //	}
 //

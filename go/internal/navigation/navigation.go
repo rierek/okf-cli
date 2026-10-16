@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -17,6 +16,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/complete"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // Register attaches the eight commands and the completers of their values.
@@ -42,7 +42,7 @@ func Register(app *cli.App) {
 }
 
 // newOut is the buffered text output of a handler; flush it before returning.
-func newOut() *bufio.Writer { return bufio.NewWriter(os.Stdout) }
+func newOut() *bufio.Writer { return bufio.NewWriter(stdio.Writer) }
 
 // printf is fmt.Fprintf on the handler's output.
 func printf(w io.Writer, format string, a ...any) { fmt.Fprintf(w, format, a...) }

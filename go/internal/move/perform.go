@@ -14,6 +14,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/linkscan"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // Record is the JSON object a move answers with: Python's keys in Python's order. Callers append
@@ -111,7 +112,7 @@ func PerformRename(root, oldAbs, newAbs string, apply, force bool, verb string, 
 	}
 	say := func(format string, args ...any) {
 		if !quiet {
-			fmt.Printf(format+"\n", args...)
+			stdio.Printf(format+"\n", args...)
 		}
 	}
 	oldRel, newRel := pyRelpath(oldAbs, root), pyRelpath(newAbs, root)
@@ -217,7 +218,7 @@ func PerformRename(root, oldAbs, newAbs string, apply, force bool, verb string, 
 
 	if !apply {
 		if !quiet {
-			diffs.PrintFiles(os.Stdout, files)
+			diffs.PrintFiles(stdio.Writer, files)
 		}
 		say("would move   %s  ->  %s", oldRel, newRel)
 		for _, in := range plan.Inbound {

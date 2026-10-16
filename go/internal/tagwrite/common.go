@@ -13,13 +13,13 @@ import (
 	"bufio"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/diffs"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 	"nas/volume1/data/git/okf-tools/go/internal/yamlpatch"
 )
 
@@ -33,7 +33,7 @@ func Register(app *cli.App) {
 }
 
 // newOut is the buffered text output of a handler; flush it before returning.
-func newOut() *bufio.Writer { return bufio.NewWriter(os.Stdout) }
+func newOut() *bufio.Writer { return bufio.NewWriter(stdio.Writer) }
 
 // relPath is os.path.relpath(ap, root).replace(os.sep, "/"): the catalogue-relative path of an
 // absolute file.

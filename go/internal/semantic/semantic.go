@@ -19,6 +19,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/rank"
 	"nas/volume1/data/git/okf-tools/go/internal/sqlstore"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 	"nas/volume1/data/git/okf-tools/go/internal/tagvec"
 	"nas/volume1/data/git/okf-tools/go/internal/where"
 )
@@ -257,7 +258,7 @@ func build(root string, a *cli.Args) (any, error) {
 		}
 		if ok && cov.Embedded >= cov.Total {
 			if !a.JSON {
-				fmt.Printf("semantic index is current, skipping rebuild -> %s\n", dbPath)
+				stdio.Printf("semantic index is current, skipping rebuild -> %s\n", dbPath)
 			}
 			return result, nil
 		}
@@ -269,7 +270,7 @@ func build(root string, a *cli.Args) (any, error) {
 	}
 	// The retry lines of embed_resilient are stdout in Python; under --json they would break the
 	// one-envelope contract, so they go to stderr there.
-	progress := io.Writer(os.Stdout)
+	progress := stdio.Writer
 	if a.JSON {
 		progress = os.Stderr
 	}
@@ -285,7 +286,7 @@ func build(root string, a *cli.Args) (any, error) {
 	result.Set("applied", written > 0)
 	result.Set("embedded", written)
 	if !a.JSON {
-		fmt.Printf("embedded %d concept(s) -> %s\n", written, dbPath)
+		stdio.Printf("embedded %d concept(s) -> %s\n", written, dbPath)
 	}
 	if left > 0 {
 		envelope.Note(fmt.Sprintf("semantic index build incomplete -- %d concept(s) left unembedded after retries; "+

@@ -14,6 +14,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/complete"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 	"nas/volume1/data/git/okf-tools/go/internal/tagvec"
 )
 
@@ -108,12 +109,12 @@ func tagsRegister(root string, a *cli.Args, entries [][]string) (any, error) {
 	}
 	if len(added) > 0 {
 		if !a.JSON {
-			fmt.Printf("registered %d new tag(s) in TAGS.md: %s\n", len(added), strings.Join(added, ", "))
+			stdio.Printf("registered %d new tag(s) in TAGS.md: %s\n", len(added), strings.Join(added, ", "))
 		}
 		autoEmbedNewTags(root, added)
 	}
 	if len(already) > 0 && !a.JSON {
-		fmt.Printf("already registered: %s\n", strings.Join(already, ", "))
+		stdio.Printf("already registered: %s\n", strings.Join(already, ", "))
 	}
 	return envelope.O("registered", added, "already_registered", already), nil
 }
@@ -170,7 +171,7 @@ func tagsValidate(root string, a *cli.Args) (any, error) {
 	}
 	if known == nil {
 		if !a.JSON {
-			fmt.Println("(no TAGS.md \u2014 closed vocabulary not enabled)")
+			stdio.Println("(no TAGS.md \u2014 closed vocabulary not enabled)")
 		}
 		return envelope.O("closed_vocabulary", false, "unknown", []string{}), nil
 	}
@@ -183,12 +184,12 @@ func tagsValidate(root string, a *cli.Args) (any, error) {
 	}
 	if !a.JSON {
 		for _, t := range unknown {
-			fmt.Printf("UNKNOWN  %s\n", t)
+			stdio.Printf("UNKNOWN  %s\n", t)
 		}
 		if len(unknown) == 0 {
-			fmt.Printf("OK \u2014 all %d known\n", len(checked))
+			stdio.Printf("OK \u2014 all %d known\n", len(checked))
 		} else {
-			fmt.Printf("%d UNKNOWN \u2014 register with: okf tags --register <tag> \"<description, max %d chars>\"\n",
+			stdio.Printf("%d UNKNOWN \u2014 register with: okf tags --register <tag> \"<description, max %d chars>\"\n",
 				len(unknown), tagDescMax)
 		}
 	}

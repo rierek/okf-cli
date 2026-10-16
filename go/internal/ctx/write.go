@@ -1,7 +1,6 @@
 package ctx
 
 import (
-	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/indexwrite"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // exists is Python os.path.exists: the path names something, symbolic links followed.
@@ -120,7 +120,7 @@ func runCreate(root string, a *cli.Args) (any, error) {
 	if a.JSON {
 		return envelope.O("applied", true, "slug", slug, "path", ctxRel(slug), "entries", len(entries)), nil
 	}
-	fmt.Printf("created %s (%d entries)\n", ctxRel(slug), len(entries))
+	stdio.Printf("created %s (%d entries)\n", ctxRel(slug), len(entries))
 	return nil, nil
 }
 
@@ -238,7 +238,7 @@ func runAdd(root string, a *cli.Args) (any, error) {
 	if a.JSON {
 		return envelope.O("applied", true, "slug", slug, "path", norm, "where", at), nil
 	}
-	fmt.Printf("added %s to %s (%s)\n", norm, slug, at)
+	stdio.Printf("added %s to %s (%s)\n", norm, slug, at)
 	return nil, nil
 }
 
@@ -260,7 +260,7 @@ func runDrop(root string, a *cli.Args) (any, error) {
 	if a.JSON {
 		return envelope.O("applied", true, "slug", slug, "path", norm), nil
 	}
-	fmt.Printf("dropped %s from %s\n", norm, slug)
+	stdio.Printf("dropped %s from %s\n", norm, slug)
 	return nil, nil
 }
 
@@ -295,6 +295,6 @@ func runMove(root string, a *cli.Args) (any, error) {
 	if a.JSON {
 		return envelope.O("applied", true, "slug", slug, "path", norm, "where", at), nil
 	}
-	fmt.Printf("moved %s in %s to %s\n", norm, slug, at)
+	stdio.Printf("moved %s in %s to %s\n", norm, slug, at)
 	return nil, nil
 }

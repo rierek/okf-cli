@@ -14,7 +14,6 @@
 package install
 
 import (
-	"fmt"
 	"runtime"
 	"slices"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // Register attaches the `install` command.
@@ -152,12 +152,12 @@ func render(c *ctx, steps []*step, apply, un bool) {
 	} else {
 		head += " - PLAN only, nothing is changed (add --apply to perform it)"
 	}
-	fmt.Println(head)
+	stdio.Println(head)
 	kind := "installed package, skills are copied"
 	if c.sourceTree() {
 		kind = "source tree, skills are linked"
 	}
-	fmt.Printf("source: %s (%s)\n", c.short(c.pkgRoot), kind)
+	stdio.Printf("source: %s (%s)\n", c.short(c.pkgRoot), kind)
 	group := ""
 	width := 8
 	for _, s := range steps {
@@ -170,16 +170,16 @@ func render(c *ctx, steps []*step, apply, un bool) {
 		}
 		if s.group != group {
 			group = s.group
-			fmt.Println("\n" + group)
+			stdio.Println("\n" + group)
 		}
 		verbs := planVerb
 		if s.done {
 			verbs = doneVerb
 		}
 		lines := strings.Split(s.detail, "\n")
-		fmt.Println(pytext.Rstrip("  " + pad(verbs[s.status], 10) + pad(s.subject, width) + lines[0]))
+		stdio.Println(pytext.Rstrip("  " + pad(verbs[s.status], 10) + pad(s.subject, width) + lines[0]))
 		for _, line := range lines[1:] {
-			fmt.Println(strings.Repeat(" ", 12+width) + line)
+			stdio.Println(strings.Repeat(" ", 12+width) + line)
 		}
 	}
 	changes, bad, done := 0, 0, 0
@@ -194,21 +194,21 @@ func render(c *ctx, steps []*step, apply, un bool) {
 			done++
 		}
 	}
-	fmt.Println()
+	stdio.Println()
 	if bad > 0 {
-		fmt.Printf("%d step(s) blocked or failed: read the marked lines above\n", bad)
+		stdio.Printf("%d step(s) blocked or failed: read the marked lines above\n", bad)
 	}
 	switch {
 	case apply && done > 0:
-		fmt.Printf("done: %d step(s) changed. Open a new shell and restart your agents to pick it up.\n", done)
+		stdio.Printf("done: %d step(s) changed. Open a new shell and restart your agents to pick it up.\n", done)
 	case changes > 0:
-		fmt.Printf("%d step(s) planned. Run again with --apply to perform them.\n", changes)
+		stdio.Printf("%d step(s) planned. Run again with --apply to perform them.\n", changes)
 	case bad == 0:
 		verb := "do"
 		if un {
 			verb = "remove"
 		}
-		fmt.Printf("nothing to %s: already up to date\n", verb)
+		stdio.Printf("nothing to %s: already up to date\n", verb)
 	}
 }
 

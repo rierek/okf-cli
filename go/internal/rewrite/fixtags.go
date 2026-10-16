@@ -108,8 +108,9 @@ func runFixXMLTags(root string, a *cli.Args) (any, error) {
 	if dry {
 		verb = "would wrap"
 	}
-	return nil, printFixReport(files, skipped,
+	printFixReport(files, skipped,
 		fmt.Sprintf("fix-xml-tags: %d file(s) %s, %d chain(s) total\n", touched, verb, chains))
+	return nil, nil
 }
 
 // registerFixXMLTags attaches fix-xml-tags and its completer.

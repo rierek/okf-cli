@@ -2,7 +2,6 @@ package wikisync
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/complete"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 const scopeHelp = "<bundle> or <bundle>/<subdir> (default: whole catalogue)"
@@ -89,8 +89,8 @@ func runSyncExport(root string, a *cli.Args) (any, error) {
 		return envelope.O("payload", payload), nil
 	}
 	// Payload only, nothing else, so the output pipes.
-	_, err = os.Stdout.WriteString(payload + "\n")
-	return nil, err
+	stdio.Print(payload + "\n")
+	return nil, nil
 }
 
 func runSyncStatus(root string, a *cli.Args) (any, error) {
@@ -133,7 +133,7 @@ func runSyncStatus(root string, a *cli.Args) (any, error) {
 		parts[i] = fmt.Sprintf("%d %s", totals[s], s)
 	}
 	sb.WriteString("sync-status: " + strings.Join(parts, ", ") + "\n")
-	fmt.Print(sb.String())
+	stdio.Print(sb.String())
 	if drift {
 		return nil, okferr.New(okferr.Drift, "")
 	}
@@ -217,7 +217,7 @@ func runWikilinks(root string, a *cli.Args) (any, error) {
 	}
 	fmt.Fprintf(&sb, "wikilinks: %d link(s), %d resolved, %d ambiguous, %d unresolved\n",
 		len(links), totals["resolved"], totals["ambiguous"], totals["unresolved"])
-	fmt.Print(sb.String())
+	stdio.Print(sb.String())
 	return nil, nil
 }
 

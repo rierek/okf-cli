@@ -1,7 +1,7 @@
 package cli
 
 // Handler runs one command. root is the resolved catalogue root ("" for a catalogue-free
-// command). In text mode the handler prints its own output to os.Stdout and returns nil data;
+// command). In text mode the handler prints its own output through package stdio and returns nil data;
 // in --json mode (a.JSON) it prints nothing and returns the envelope data. A returned error is
 // an *okferr.Error or any other error, which counts as internal.
 type Handler func(root string, a *Args) (any, error)

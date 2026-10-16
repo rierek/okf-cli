@@ -10,6 +10,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/linkscan"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 func runInbound(root string, a *cli.Args) (any, error)  { return nav(root, a, "inbound") }
@@ -211,6 +212,6 @@ func nav(root string, a *cli.Args, direction string) (any, error) {
 			out = append(out, "  (none)")
 		}
 	}
-	fmt.Println(strings.Join(out, "\n"))
+	stdio.Println(strings.Join(out, "\n"))
 	return nil, nil
 }

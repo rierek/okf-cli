@@ -17,6 +17,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/linkscan"
 	"nas/volume1/data/git/okf-tools/go/internal/move"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // report is Python _ctx_report: the findings of the given bundles through the finding report.
@@ -183,6 +184,6 @@ func runRemove(root string, a *cli.Args) (any, error) {
 			sb.WriteString("  " + s + "\n")
 		}
 	}
-	fmt.Print(sb.String())
+	stdio.Print(sb.String())
 	return nil, nil
 }

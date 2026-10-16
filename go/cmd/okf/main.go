@@ -3,7 +3,7 @@
 //
 // Layout (binding for every command work package): the module is `go/` with its own go.mod; this
 // package is the entry point and the one place that wires things together; the shared core lives in
-// the packages under go/internal (okferr, pytext, frontmatter, catalogue, envelope, cli, where,
+// the packages under go/internal (okferr, pytext, frontmatter, catalogue, envelope, stdio, cli, where,
 // spec, history, linkscan, sqlstore, tagvec, complete); each command owns one package under go/internal with
 // one Register(app *cli.App) function. A new command package adds ONE entry to `commands` below,
 // the mirror of Python's COMMAND_MODULES; there is no discovery.
@@ -30,6 +30,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/rewrite"
 	"nas/volume1/data/git/okf-tools/go/internal/semantic"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 	"nas/volume1/data/git/okf-tools/go/internal/tagwrite"
 	"nas/volume1/data/git/okf-tools/go/internal/wikisync"
 )
@@ -53,7 +54,12 @@ var commands = []func(*cli.App){
 	tagwrite.Register,
 }
 
-func main() { os.Exit(run(os.Args[1:])) }
+// main makes a broken pipe an error of the write (stdio.Init) and ends with the status that takes
+// a failed write of stdout into account (stdio.Exit).
+func main() {
+	stdio.Init()
+	os.Exit(stdio.Exit(run(os.Args[1:])))
+}
 
 // run parses argv, dispatches and returns the process exit code (Python main()).
 func run(argv []string) int {
@@ -71,7 +77,7 @@ func run(argv []string) int {
 	switch e := err.(type) {
 	case nil:
 	case *cli.HelpOutput:
-		fmt.Print(e.Text)
+		stdio.Print(e.Text)
 		return 0
 	case *cli.UsageError:
 		fmt.Fprint(os.Stderr, e.Text)

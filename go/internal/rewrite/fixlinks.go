@@ -201,7 +201,8 @@ func runFixCrosslinks(root string, a *cli.Args) (any, error) {
 		fmt.Fprintf(&tail, "unresolved     %s  -> %s\n", u.rel, u.target)
 	}
 	fmt.Fprintf(&tail, "fix-crosslinks: %d file(s) %s, %d unresolved link(s)\n", touched, verb, len(unresolved))
-	return nil, printFixReport(files, skipped, tail.String())
+	printFixReport(files, skipped, tail.String())
+	return nil, nil
 }
 
 // registerFixCrosslinks attaches fix-crosslinks and its completer.

@@ -162,7 +162,8 @@ func runRewritePath(root string, a *cli.Args) (any, error) {
 	if dry {
 		verb = "affected (dry-run)"
 	}
-	return nil, printFixReport(files, skipped, fmt.Sprintf("%d file(s) %s\n", touched, verb))
+	printFixReport(files, skipped, fmt.Sprintf("%d file(s) %s\n", touched, verb))
+	return nil, nil
 }
 
 // registerRewritePath attaches rewrite-path and its completer.

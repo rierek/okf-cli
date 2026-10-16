@@ -3,11 +3,10 @@
 package info
 
 import (
-	"fmt"
-
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // Register attaches the `info` command.
@@ -43,13 +42,13 @@ func run(root string, a *cli.Args) (any, error) {
 		return envelope.O("files", files), nil
 	}
 	for i, name := range names {
-		fmt.Println("------")
+		stdio.Println("------")
 		if texts[i] != nil {
-			fmt.Println(*texts[i])
+			stdio.Println(*texts[i])
 		} else {
-			fmt.Printf("(missing: %s)\n", name)
+			stdio.Printf("(missing: %s)\n", name)
 		}
 	}
-	fmt.Println("------")
+	stdio.Println("------")
 	return nil, nil
 }
