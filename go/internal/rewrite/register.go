@@ -7,4 +7,5 @@ import "nas/volume1/data/git/okf-tools/go/internal/cli"
 func Register(app *cli.App) {
 	registerRewritePath(app)
 	registerFixXMLTags(app)
+	registerFixCrosslinks(app)
 }
