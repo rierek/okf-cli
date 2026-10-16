@@ -17,6 +17,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/rank"
 	"nas/volume1/data/git/okf-tools/go/internal/semantic"
 	"nas/volume1/data/git/okf-tools/go/internal/spec"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 	"nas/volume1/data/git/okf-tools/go/internal/where"
 )
 
@@ -76,7 +77,7 @@ func run(root string, a *cli.Args) (any, error) {
 		if a.JSON {
 			return envelope.O("hits", []any{}, "nearest_tags", []any{}), nil
 		}
-		fmt.Println("(empty query)")
+		stdio.Println("(empty query)")
 		return nil, nil
 	}
 	breakdown := a.Bool("breakdown")
@@ -132,21 +133,21 @@ func run(root string, a *cli.Args) (any, error) {
 		return envelope.O("hits", records, "nearest_tags", nearest), nil
 	}
 	if len(all) == 0 {
-		fmt.Printf("(no matches for: %s)\n", query)
+		stdio.Printf("(no matches for: %s)\n", query)
 		near, err := zeroHitSuggestions(root, query)
 		if err != nil {
 			return nil, err
 		}
 		if len(near) > 0 {
-			fmt.Printf("nearest registered tags: %s\n", strings.Join(near, ", "))
-			fmt.Printf("try: okf find \"%s\"\n", strings.Join(rank.Cut(near, 2), " "))
+			stdio.Printf("nearest registered tags: %s\n", strings.Join(near, ", "))
+			stdio.Printf("try: okf find \"%s\"\n", strings.Join(rank.Cut(near, 2), " "))
 		}
 		return nil, nil
 	}
 	for i, h := range shown {
 		printHit(i+1, h, breakdown, maxScore)
 	}
-	fmt.Println("------")
+	stdio.Println("------")
 	return nil, nil
 }
 
@@ -171,30 +172,30 @@ func zeroHitSuggestions(root, query string) ([]string, error) {
 
 // printHit is one hit block of the text answer.
 func printHit(n int, h *rank.Hit, breakdown bool, maxScore int) {
-	fmt.Println("------")
-	fmt.Printf("rank: %d\n", n)
-	fmt.Printf("title: %s\n", h.Title)
-	fmt.Printf("type: %s\n", h.Type)
+	stdio.Println("------")
+	stdio.Printf("rank: %d\n", n)
+	stdio.Printf("title: %s\n", h.Title)
+	stdio.Printf("type: %s\n", h.Type)
 	if h.SupersededBy != "" {
-		fmt.Printf("superseded_by: %s\n", h.SupersededBy)
+		stdio.Printf("superseded_by: %s\n", h.SupersededBy)
 	}
-	fmt.Printf("path: %s\n", h.Path)
-	fmt.Printf("description: %s\n", h.Desc)
-	fmt.Printf("body-snippet: %s\n", h.Snip)
-	fmt.Printf("provenance: %s\n", provenance(h))
+	stdio.Printf("path: %s\n", h.Path)
+	stdio.Printf("description: %s\n", h.Desc)
+	stdio.Printf("body-snippet: %s\n", h.Snip)
+	stdio.Printf("provenance: %s\n", provenance(h))
 	if !breakdown {
 		return
 	}
 	switch {
 	case h.Provenance == "semantic":
-		fmt.Printf("score: cosine %.2f\n", h.Cosine)
-		fmt.Printf("contrib: semantic-only (cosine=%.2f, no keyword field match)\n", h.Cosine)
+		stdio.Printf("score: cosine %.2f\n", h.Cosine)
+		stdio.Printf("contrib: semantic-only (cosine=%.2f, no keyword field match)\n", h.Cosine)
 	default:
-		fmt.Printf("score: %d/%d\n", h.Score, maxScore)
+		stdio.Printf("score: %d/%d\n", h.Score, maxScore)
 		if h.Contrib != nil {
-			fmt.Printf("contrib: %s\n", formatContrib(h.Contrib))
+			stdio.Printf("contrib: %s\n", formatContrib(h.Contrib))
 		} else {
-			fmt.Println("contrib: bm25 (fts5 index; field-level breakdown not available)")
+			stdio.Println("contrib: bm25 (fts5 index; field-level breakdown not available)")
 		}
 	}
 }

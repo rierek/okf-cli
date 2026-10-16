@@ -1,8 +1,6 @@
 package indexwrite
 
 import (
-	"fmt"
-	"os"
 	"strings"
 
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
@@ -11,6 +9,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/diffs"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // Register attaches reindex with its completer.
@@ -82,21 +81,21 @@ func runReindex(root string, a *cli.Args) (any, error) {
 		result.Set("init", envelope.O("converted", converted, "skipped", skippedInit))
 	}
 	if !asJSON {
-		diffs.PrintFiles(os.Stdout, files)
+		diffs.PrintFiles(stdio.Writer, files)
 		for _, rel := range info.Unreadable {
-			fmt.Printf("skipped (not valid UTF-8)  %s\n", rel)
+			stdio.Printf("skipped (not valid UTF-8)  %s\n", rel)
 		}
 		if init {
 			for _, r := range info.Init {
 				switch r.Status {
 				case StatusConverted:
-					fmt.Printf("%-14s %s\n", verb, r.Rel)
+					stdio.Printf("%-14s %s\n", verb, r.Rel)
 				case StatusAlreadyManaged:
 				default:
-					fmt.Printf("%-14s %s  (%s)\n", "skipped", r.Rel, r.Status)
+					stdio.Printf("%-14s %s  (%s)\n", "skipped", r.Rel, r.Status)
 				}
 			}
-			fmt.Printf("init: %d %s, %d skipped\n", nConv, verb, nSkip)
+			stdio.Printf("init: %d %s, %d skipped\n", nConv, verb, nSkip)
 		}
 	}
 	if check {
@@ -110,12 +109,12 @@ func runReindex(root string, a *cli.Args) (any, error) {
 		result.Set("uncovered", uncovered)
 		if !asJSON {
 			for _, p := range stale {
-				fmt.Printf("STALE        %s\n", p)
+				stdio.Printf("STALE        %s\n", p)
 			}
 			for _, p := range uncovered {
-				fmt.Printf("UNCOVERED    %s\n", p)
+				stdio.Printf("UNCOVERED    %s\n", p)
 			}
-			fmt.Printf("reindex --check: %d stale, %d uncovered, %d without markers\n",
+			stdio.Printf("reindex --check: %d stale, %d uncovered, %d without markers\n",
 				len(stale), len(uncovered), len(skipped))
 		}
 		if len(stale) > 0 || len(uncovered) > 0 {
@@ -126,11 +125,11 @@ func runReindex(root string, a *cli.Args) (any, error) {
 		return result, nil
 	}
 	for _, p := range changed {
-		fmt.Printf("updated       %s\n", p)
+		stdio.Printf("updated       %s\n", p)
 	}
 	for _, p := range skipped {
-		fmt.Printf("skipped (no markers)  %s\n", p)
+		stdio.Printf("skipped (no markers)  %s\n", p)
 	}
-	fmt.Printf("reindex: %d updated, %d skipped\n", len(changed), len(skipped))
+	stdio.Printf("reindex: %d updated, %d skipped\n", len(changed), len(skipped))
 	return nil, nil
 }

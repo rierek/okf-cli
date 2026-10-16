@@ -1,13 +1,13 @@
 package move
 
 import (
-	"fmt"
 	"strings"
 	"syscall"
 
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // runRename is Python cmd_rename: the paths resolved against the root, the guard on a source under
@@ -125,7 +125,7 @@ func runArchive(root string, a *cli.Args) (any, error) {
 		}
 		nConcepts = len(sources)
 		if !a.JSON {
-			fmt.Printf("%d active concept(s) still link to this concept\n", len(sources))
+			stdio.Printf("%d active concept(s) still link to this concept\n", len(sources))
 		}
 	}
 

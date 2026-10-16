@@ -23,6 +23,10 @@ func TestRejections(t *testing.T) {
 	}{
 		{"not valid UTF-8", "---\nk: \xff\n---\n", []Edit{SetValue("k", Str("x"))}, "not valid UTF-8"},
 		{"a bare carriage return in the frontmatter", "---\na: 1\rb: 2\n---\n", []Edit{NewKey("c", Str("x"))}, "carriage return"},
+		{"CR-only line breaks: the block is not shadowed by a new one", "---\ra: 1\r---\rbody\r", []Edit{AppendItem("verified", Str("x"))}, "carriage return"},
+		{"CR-only line breaks: a key to add", "---\ra: 1\rtags: [a, b]\r---\r# T\rbody\r", []Edit{NewKey("c", Str("x"))}, "carriage return"},
+		{"a lone CR before the closing delimiter", "---\na: 1\r---\nbody\n", []Edit{AppendItem("verified", Str("x"))}, "carriage return"},
+		{"CRLF opening delimiter and a lone CR before the closing one", "---\r\na: 1\r---\r\nbody\r\n", []Edit{NewKey("c", Str("x"))}, "carriage return"},
 		{"a key on the opening delimiter line", "--- a: 1\n b: 2\n---\n", []Edit{NewKey("c", Str("x"))}, "opening delimiter"},
 		{"a root that is a non-empty flow mapping", f("{type: X, tags: [a]}\n"), []Edit{NewKey("c", Str("x"))}, "flow mapping"},
 		{"an empty flow root with a comment on its line", f("{}  # c\n"), []Edit{NewKey("c", Str("x"))}, "flow mapping"},

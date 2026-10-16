@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // warnings are the notes of the running envelope call; nil in text mode.
@@ -63,7 +64,7 @@ func Run(command string, call func() (any, error)) int {
 		failure = okferr.New(okferr.Internal, err.Error())
 		document, _ = render(command, nil, notes, failure)
 	}
-	fmt.Fprintln(os.Stdout, document)
+	stdio.Println(document)
 	if failure != nil {
 		return failure.Code()
 	}

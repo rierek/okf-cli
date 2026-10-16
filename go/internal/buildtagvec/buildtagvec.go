@@ -7,11 +7,11 @@ package buildtagvec
 
 import (
 	"fmt"
-	"os"
 
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/sqlstore"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 	"nas/volume1/data/git/okf-tools/go/internal/tagvec"
 )
 
@@ -77,7 +77,7 @@ func run(root string, a *cli.Args) (any, error) {
 				return nil, err
 			}
 			totalDelta += len(delta)
-			fmt.Printf("%s: %d tag(s) need embedding, %d already cached\n", model, len(delta), len(tags)-len(delta))
+			stdio.Printf("%s: %d tag(s) need embedding, %d already cached\n", model, len(delta), len(tags)-len(delta))
 			if produce && len(delta) > 0 {
 				err := embedAll(model, "tag", delta, func(batch []tagvec.Triple, vectors [][]float32) error {
 					rows := make([]tagvec.TagRow, len(batch))
@@ -98,7 +98,7 @@ func run(root string, a *cli.Args) (any, error) {
 				return nil, err
 			}
 			totalDelta += len(delta)
-			fmt.Printf("%s: %d concept(s) need title+body embedding\n", model, len(delta))
+			stdio.Printf("%s: %d concept(s) need title+body embedding\n", model, len(delta))
 			if produce && len(delta) > 0 {
 				err := embedAll(model, "concept", delta, func(batch []tagvec.Triple, vectors [][]float32) error {
 					rows := make([]tagvec.ConceptRow, len(batch))
@@ -115,14 +115,15 @@ func run(root string, a *cli.Args) (any, error) {
 		}
 	}
 	if !produce && totalDelta > 0 {
-		fmt.Println("(dry-run — no network calls, no writes. Re-run with --produce to embed.)")
+		stdio.Println("(dry-run — no network calls, no writes. Re-run with --produce to embed.)")
 	}
 	return nil, nil
 }
 
 // embedAll is the produce loop of one model and one kind of row (noun is "tag" or "concept"): it
 // embeds delta batch by batch and hands each embedded batch to write at once, so a later failure
-// keeps what is done. A batch that cannot be embedded is skipped.
+// keeps what is done. A batch that cannot be embedded is skipped; a response that Python fails to
+// pack (a null element) ends the run, as the exception ends build_tagvec.py.
 func embedAll(model, noun string, delta []tagvec.Triple, write func(batch []tagvec.Triple, vectors [][]float32) error) error {
 	maxItems, maxChars := tagvec.BatchLimits(model)
 	written := 0
@@ -132,7 +133,10 @@ func embedAll(model, noun string, delta []tagvec.Triple, write func(batch []tagv
 			texts[i] = t.Text
 		}
 		label := fmt.Sprintf("%s %ss %s..", model, noun, batch[0].Item)
-		vectors := tagvec.EmbedResilient(embedder[model], texts, label, os.Stdout)
+		vectors, err := tagvec.EmbedResilient(embedder[model], texts, label, stdio.Writer)
+		if err != nil {
+			return err
+		}
 		if vectors == nil {
 			continue
 		}
@@ -140,7 +144,7 @@ func embedAll(model, noun string, delta []tagvec.Triple, write func(batch []tagv
 			return err
 		}
 		written += len(batch)
-		fmt.Printf("%s: wrote %d/%d %s row(s)\n", model, written, len(delta), noun)
+		stdio.Printf("%s: wrote %d/%d %s row(s)\n", model, written, len(delta), noun)
 	}
 	return nil
 }

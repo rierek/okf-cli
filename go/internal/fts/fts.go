@@ -7,7 +7,6 @@ package fts
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -20,6 +19,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/frontmatter"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
 	"nas/volume1/data/git/okf-tools/go/internal/sqlstore"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // archiveDir is the directory of archived concepts under the root.
@@ -53,7 +53,7 @@ func run(root string, a *cli.Args) (any, error) {
 				if a.JSON {
 					return envelope.O("applied", false, "concepts", nil, "path", dbPath), nil
 				}
-				fmt.Printf("index is current, skipping rebuild -> %s\n", dbPath)
+				stdio.Printf("index is current, skipping rebuild -> %s\n", dbPath)
 				return nil, nil
 			}
 		}
@@ -65,7 +65,7 @@ func run(root string, a *cli.Args) (any, error) {
 	if a.JSON {
 		return envelope.O("applied", true, "concepts", n, "path", dbPath), nil
 	}
-	fmt.Printf("indexed %d concept(s) -> %s\n", n, dbPath)
+	stdio.Printf("indexed %d concept(s) -> %s\n", n, dbPath)
 	return nil, nil
 }
 

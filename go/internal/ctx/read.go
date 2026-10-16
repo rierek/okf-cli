@@ -14,6 +14,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/frontmatter"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // member is one entry of a ctx with the live metadata of its file (Python _ctx_members row).
@@ -180,7 +181,7 @@ func runList(root string, a *cli.Args) (any, error) {
 	}
 	if len(rows) == 0 {
 		if forPath == nil {
-			fmt.Printf("no ctx bundles under %s\n", catalogue.Join(root, catalogue.CtxDir))
+			stdio.Printf("no ctx bundles under %s\n", catalogue.Join(root, catalogue.CtxDir))
 		}
 		return nil, nil
 	}
@@ -192,7 +193,7 @@ func runList(root string, a *cli.Args) (any, error) {
 	for _, r := range rows {
 		fmt.Fprintf(&sb, "  %-*s  %s  (%d entries, %d required)\n", width, r.slug, r.description, r.entries, r.required)
 	}
-	fmt.Print(sb.String())
+	stdio.Print(sb.String())
 	return nil, nil
 }
 
@@ -285,7 +286,7 @@ func runShow(root string, a *cli.Args) (any, error) {
 	if dead > 0 {
 		out = append(out, deadWarning(slug, dead))
 	}
-	fmt.Println(strings.Join(out, "\n"))
+	stdio.Println(strings.Join(out, "\n"))
 	if dead > 0 {
 		return nil, okferr.New(okferr.NonConformant, "")
 	}
@@ -337,7 +338,7 @@ func runRead(root string, a *cli.Args) (any, error) {
 			}
 			fmt.Fprintf(&sb, "===== %d reference entr%s not printed — ctx show %s =====\n", refs, plural, slug)
 		}
-		fmt.Print(sb.String())
+		stdio.Print(sb.String())
 	}
 	if !allAlive {
 		return nil, okferr.WithResult(okferr.NonConformant, "", result)
@@ -401,6 +402,6 @@ func runToc(root string, a *cli.Args) (any, error) {
 		}
 		blocks[i] = strings.Join(lines, "\n")
 	}
-	fmt.Println(strings.Join(blocks, "\n\n"))
+	stdio.Println(strings.Join(blocks, "\n\n"))
 	return nil, nil
 }

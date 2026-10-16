@@ -2,13 +2,13 @@ package check
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
+	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
 // Finding is one violation of one rule: the rule ID, the severity the registry gives that rule, the
@@ -74,9 +74,7 @@ func ReportFindings(findings []Finding, strict, asJSON bool) (any, error) {
 	} else {
 		sb.WriteString("OK — 0 violations\n")
 	}
-	if _, err := os.Stdout.WriteString(sb.String()); err != nil {
-		return nil, err
-	}
+	stdio.Print(sb.String())
 	if counting > 0 {
 		return nil, okferr.New(okferr.NonConformant, "")
 	}
