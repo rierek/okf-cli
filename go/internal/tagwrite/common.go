@@ -28,6 +28,7 @@ func Register(app *cli.App) {
 	registerTags(app)
 	registerTagVerbs(app)
 	registerRegistry(app)
+	registerSync(app)
 }
 
 // newOut is the buffered text output of a handler; flush it before returning.
