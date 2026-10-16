@@ -1,6 +1,7 @@
 package rewrite
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -161,7 +162,7 @@ func runRewritePath(root string, a *cli.Args) (any, error) {
 	if dry {
 		verb = "affected (dry-run)"
 	}
-	return nil, printFixReport(files, skipped, "%d file(s) %s\n", touched, verb)
+	return nil, printFixReport(files, skipped, fmt.Sprintf("%d file(s) %s\n", touched, verb))
 }
 
 // registerRewritePath attaches rewrite-path and its completer.
