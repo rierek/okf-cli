@@ -19,8 +19,20 @@ func TestQuotingRuleExactText(t *testing.T) {
 		// plain
 		{"a", "a"}, {"a b", "a b"}, {"it's fine", "it's fine"}, {"-a", "-a"}, {"a#b", "a#b"}, {"a:b", "a:b"},
 		{"https://example.org/pasta", "https://example.org/pasta"}, {"human:golden", "human:golden"},
-		{"é", "é"}, {"日本語 😀", "日本語 😀"}, {"a\tb", "a\tb"}, {"yes", "yes"}, {"12:30", "12:30"}, {"a, b", "a, b"},
+		{"é", "é"}, {"日本語 😀", "日本語 😀"}, {"yes", "yes"}, {"12:30", "12:30"}, {"a, b", "a, b"},
 		{"a ---", "a ---"}, {"a\\b", "a\\b"}, {"a\"b", "a\"b"}, {":a", ":a"}, {"---", "---"}, {"--- a", "--- a"}, {"...", "..."},
+		// a tab is double-quoted: yaml.v3 reads it inside a plain scalar, ruamel (the Python CLI) cannot
+		{"a\tb", "\"a\\tb\""}, {"\ta", "\"\\ta\""}, {"a\t", "\"a\\t\""}, {"\t", "\"\\t\""}, {"a \tb", "\"a \\tb\""},
+		{"tab\tinside [A](https://a.org)", "\"tab\\tinside [A](https://a.org)\""}, {"it's\ta", "\"it's\\ta\""}, {"a\t: b", "\"a\\t: b\""},
+		// ruamel (the Python CLI) gives these plain strings another type, or fails on them, where yaml.v3 reads a string
+		{"=", "'='"}, {"2026-02-30", "'2026-02-30'"}, {"2026-13-45", "'2026-13-45'"}, {"1e400", "'1e400'"}, {"+_", "'+_'"}, {"-_", "'-_'"}, {"._", "'._'"},
+		{"2026-01-01T12:00:00", "'2026-01-01T12:00:00'"}, {"2026-01-01t12:00:00", "'2026-01-01t12:00:00'"}, {"2026-01-01T12:00:00+01", "'2026-01-01T12:00:00+01'"},
+		{"2026-01-01T12:00:00.123", "'2026-01-01T12:00:00.123'"}, {"2026-01-01T12:00:00.Z", "'2026-01-01T12:00:00.Z'"}, {"2026-01-01T1:00:00", "'2026-01-01T1:00:00'"},
+		{"0_", "'0_'"}, {"1_0", "'1_0'"}, {"0b101", "'0b101'"}, {"017", "'017'"}, {"-.INF", "'-.INF'"}, {"5.", "'5.'"}, {"1e-3", "'1e-3'"}, {"!", "'!'"}, {"&", "'&'"}, {"*", "'*'"},
+		// ... and these look like a number or a date to a human but are strings to both readers
+		{"_", "_"}, {"__", "__"}, {"inf", "inf"}, {"NaN", "NaN"}, {"0b2", "0b2"}, {"1e", "1e"}, {"0x", "0x"}, {"1.2.3", "1.2.3"}, {"2026-01-01 junk", "2026-01-01 junk"},
+		// yaml.v3 reads these as timestamps, ruamel as strings: they are quoted all the same
+		{"2026-1-1", "'2026-1-1'"}, {"2026-01-1", "'2026-01-1'"}, {"2026-1-01", "'2026-1-01'"},
 		// single quotes: the plain form reads back as something else, or not at all
 		{"", "''"}, {" ", "' '"}, {" a", "' a'"}, {"a ", "'a '"}, {"a: b", "'a: b'"}, {"a:", "'a:'"},
 		{"- a", "'- a'"}, {"-", "'-'"}, {"?", "'?'"}, {"? a", "'? a'"}, {"a #b", "'a #b'"}, {"#a", "'#a'"}, {"&a", "'&a'"}, {"*a", "'*a'"},
@@ -53,6 +65,7 @@ func TestQuotingRoundTrip(t *testing.T) {
 		"%a", "@a", "`a", "[a]", "[", "]", "{a}", "}", "a, b", "a,b", "true", "yes", "no", "on", "y", "null", "~", "0", "-1", "1.5", ".inf", ".nan", "0x1F",
 		"2026-01-01", "2026-10-12T19:00:00Z", "12:30", "<<", "=", "é", "日本語", "😀", "a\tb", "\t", "a\nb", "\n", "a\r\nb", "\r", "a\x00b", "a\x01b",
 		"\x7f", "a\u0085b", "a\u2028b", "a\u2029b", "\ufeffa", "a\\b", "a\"b", "it's", "---", "--- a", "...", "a ---", "key: value # c", "a\\nb",
+		"=", "2026-02-30", "1e400", "+_", "._", "2026-01-01T12:00:00", "tab\tinside [A](https://a.org)",
 		strings.Repeat("long text ", 300), "a" + strings.Repeat(" b", 500)}
 	check := func(t *testing.T, what, v string, n *yaml.Node) {
 		t.Helper()

@@ -19,13 +19,17 @@ const (
 	ctxKey                    // a mapping key: `s: x`
 )
 
-// The quoting rule for a new string scalar (one rule for every edit):
+// The quoting rule for a new string scalar (one rule for every edit). Two readers must read the written text
+// back as exactly this string: yaml.v3 (the self-check) and ruamel (the Python CLI), which do not agree on
+// every plain scalar. A parser decides for yaml.v3, ruamel's own resolver table (ruamel.go) for ruamel:
 //
-//  1. plain, when the plain form reads back as exactly this string (a parser, not a regexp, decides:
-//     `true`, `2026-01-29`, `[x]`, `a: b`, `a #b`, the empty string and the like fail);
+//  1. plain, when the plain form reads back as exactly this string through yaml.v3 (`true`, `2026-01-29`,
+//     `[x]`, `a: b`, `a #b`, the empty string and the like fail), ruamel's table gives it no other type
+//     (`=`, `2026-02-30`, `1e400`, `+_`, a time without a zone and the like fail), and it holds no tab,
+//     which ruamel cannot read inside a plain scalar;
 //  2. else single-quoted, as ruamel writes it (`'it''s'`);
-//  3. else double-quoted, only for a string with a line break or a character that single quotes cannot
-//     carry (a control character, NEL, LS, PS, ...).
+//  3. else double-quoted, only for a string with a line break, a tab (ruamel writes it so) or a character
+//     that single quotes cannot carry (a control character, NEL, LS, PS, ...).
 
 // quoteScalar writes s by the quoting rule for the context.
 func quoteScalar(s string, ctx scalarCtx) string {
@@ -38,9 +42,10 @@ func quoteScalar(s string, ctx scalarCtx) string {
 	return dquote(s)
 }
 
-// plainOK reports whether s, written plain in the context, reads back as the same plain string.
+// plainOK reports whether s, written plain in the context, reads back as the same plain string through
+// yaml.v3 and as a string through ruamel.
 func plainOK(s string, ctx scalarCtx) bool {
-	if s == "" || !singleOK(s) || s != trimSpaces(s) {
+	if s == "" || !singleOK(s) || s != trimSpaces(s) || resolvesToOtherType(s) {
 		return false
 	}
 	probe := map[scalarCtx]string{
@@ -70,7 +75,11 @@ func plainOK(s string, ctx scalarCtx) bool {
 		scalar.ShortTag() == "!!str" && scalar.Value == s
 }
 
-// singleOK reports whether single quotes carry s: every character printable, none a line break.
+// singleOK reports whether single quotes, and a plain scalar, can carry s: every character printable, none
+// a line break, no tab. The tab is the one printable character kept out: yaml.v3 reads it inside a plain
+// scalar, but PyYAML-family readers (ruamel, the Python CLI) end the scalar at it and fail with "found
+// character '\t' that cannot start any token". Their own writer puts such a string in double quotes, and so
+// does this one.
 func singleOK(s string) bool {
 	for _, r := range s {
 		if !printableRune(r) {
@@ -83,12 +92,10 @@ func singleOK(s string) bool {
 // printableLine reports whether s is one line of printable characters.
 func printableLine(s string) bool { return singleOK(s) }
 
-// printableRune is YAML's printable set minus NEL, LS and PS, which YAML 1.1 readers (yaml.v3) take for
-// line breaks, and minus the byte order mark.
+// printableRune is YAML's printable set minus the tab (see singleOK), minus NEL, LS and PS, which YAML 1.1
+// readers (yaml.v3) take for line breaks, and minus the byte order mark.
 func printableRune(r rune) bool {
 	switch {
-	case r == '\t':
-		return true
 	case r >= 0x20 && r <= 0x7e:
 		return true
 	case r >= 0xa0 && r <= 0xd7ff:
