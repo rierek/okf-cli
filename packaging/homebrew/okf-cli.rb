@@ -33,8 +33,9 @@ class OkfCli < Formula
 
   test do
     assert_match "usage:", shell_output("#{bin}/okf --help")
+    # the package root of the binary is the keg: skills/okf and mcp/okf_mcp.py sit next to bin/
     plan = shell_output("#{bin}/okf install --json --only claude")
-    assert_match "#{opt_prefix}/mcp/okf_mcp.py", plan
+    assert_match "\"source\": \"#{opt_prefix}\"", plan
     assert_path_exists prefix/"skills/okf/SKILL.md"
     assert_path_exists prefix/"mcp/okf_mcp.py"
   end
