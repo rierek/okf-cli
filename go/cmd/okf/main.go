@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 
+	"nas/volume1/data/git/okf-tools/go/internal/buildtagvec"
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/complete"
@@ -24,6 +25,7 @@ import (
 // commands lists the command packages, each exporting Register(*cli.App). A directory command whose
 // package is not listed answers with a "not yet ported" error.
 var commands = []func(*cli.App){
+	buildtagvec.Register,
 	info.Register,
 }
 

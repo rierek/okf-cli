@@ -1,7 +1,9 @@
-// Package tagvec is the offline half of the tag-vector store `<root>/.tagvec/tag_vectors.sqlite`
-// (Python cli/embeddings/build_tagvec.py and okf.semantic.semantic_coverage): the cache keys of
-// the two embedding scopes, the planners that decide which tags and concepts still lack an
-// embedding, and the coverage count. Nothing here embeds, writes a row or touches the network.
+// Package tagvec is the tag-vector store `<root>/.tagvec/tag_vectors.sqlite` (Python
+// cli/embeddings/build_tagvec.py and okf.semantic): the cache keys of the two embedding scopes,
+// the planners that decide which tags and concepts still lack an embedding, the coverage count,
+// and the write half: the embed calls of the two models (the only network code of the producer
+// and of the semantic query), the retry ladder, the request batching and the row writers. Only
+// the Embed functions touch the network; only the Write functions write a row.
 package tagvec
 
 import (
