@@ -45,6 +45,8 @@ jobs:
       # mcp ist das einzige Test-Extra (`just test`), nicht im Header deklariert.
       # Leeres HOME: beweist, dass die Suite keinen Live-Vault
       # (~/Obsidian/Knowledge-Catalogue) braucht oder beschreibt (CLAUDE.md Regel 1).
+      - name: Go-Binary bauen (Cache im echten HOME)
+        run: just go-build
       - name: just test (leeres HOME)
         run: HOME="$(mktemp -d)" just test
       - name: Arbeitsbaum sauber (Tests hinterlassen keine Reste)
