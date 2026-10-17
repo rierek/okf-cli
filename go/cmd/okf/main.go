@@ -90,7 +90,7 @@ func run(argv []string) int {
 	if parsed.Args.JSON {
 		return envelope.Run(parsed.Args.Name(), call)
 	}
-	if _, err := call(); err != nil {
+	if _, err := safeCall(call); err != nil {
 		failure := okferr.As(err)
 		if failure.Message != "" {
 			fmt.Fprintln(os.Stderr, failure.Message)
@@ -126,4 +126,15 @@ func dispatch(p *cli.Parsed) (any, error) {
 			"— if this is not the real catalogue root, write commands will silently emit wrong paths", root))
 	}
 	return p.Handler(root, p.Args)
+}
+
+// safeCall turns a panic of a text-mode command into exit 1 like Python's traceback, so it never
+// collides with the usage-error exit code 2 (Go's own panic exit). The JSON path recovers in envelope.Run.
+func safeCall(call func() (any, error)) (v any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("ERROR: internal error: %v", r)
+		}
+	}()
+	return call()
 }

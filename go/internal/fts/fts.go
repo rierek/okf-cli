@@ -142,6 +142,7 @@ func Build(root string, includeTopics bool) (int, string, error) {
 		err = cerr
 	}
 	if err != nil {
+		_ = os.Remove(tmp)
 		return 0, "", err
 	}
 	if err := os.Rename(tmp, dbPath); err != nil {

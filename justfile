@@ -35,7 +35,7 @@ golden *ARGS:
 
 # Go-Binary bauen (statisch, ohne cgo) nach go/bin/okf; Abnahme: just golden --cmd go/bin/okf
 go-build:
-    CGO_ENABLED=0 go build -C {{go_dir}} -o {{go_out}} ./cmd/okf
+    CGO_ENABLED=0 go build -C {{go_dir}} -trimpath -buildvcs=false -o {{go_out}} ./cmd/okf
 
 # Golden-Vergleich gegen das gebaute Go-Binary ({{go_dir}}/{{go_out}}); ARGS wie bei `just golden` (z.B. --only <text>)
 golden-go *ARGS: go-build
