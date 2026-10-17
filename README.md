@@ -13,25 +13,28 @@ Keywords: Open Knowledge Format, OKF v0.2, knowledge base CLI, markdown frontmat
 
 ## Install
 
-okf is a single-file script with inline dependencies ([PEP 723](https://peps.python.org/pep-0723/)): Python 3.11 or newer, `ruamel.yaml` and `argcomplete`. [`uv`](https://docs.astral.sh/uv/) reads that header and installs the packages on first use, so install `uv` first. Run it from a clone, or install it as a tool. Both end in the same step, `okf install`: it wires okf into your coding agents and shells, and previews before it writes anything.
+`okf` is a single binary written in Go (pure Go, no cgo). It needs no Python, no `uv` and no other runtime; it runs on macOS and Linux, on `amd64` and `arm64`. [`uv`](https://docs.astral.sh/uv/) is only needed for the MCP server (see [agents and shells](#use-with-ai-agents-and-shells)). Pick one way to get the binary, then run `okf install`: it wires okf into your coding agents and shells, and previews before it writes anything. Step by step per platform, with troubleshooting: [docs/install.md](docs/install.md).
 
 ```bash
-# From a clone: runs in place, `git pull` updates it
-git clone https://github.com/xRiErOS/okf-cli && cd okf-cli
-uv run --script cli/okf-cli.py install            # prints the plan, changes nothing
-uv run --script cli/okf-cli.py install --apply    # performs it
-
-# As a tool (Python >= 3.11)
-pipx install git+https://github.com/xRiErOS/okf-cli      # or: uv tool install git+https://github.com/xRiErOS/okf-cli
-okf install
-okf install --apply
-
-# Homebrew (macOS, Linuxbrew)
+# Homebrew (macOS, Linuxbrew): builds the binary from source; installs `uv` for the MCP server
 brew tap xRiErOS/tap
 brew trust xRiErOS/tap      # Homebrew 7 refuses formulae from untrusted taps
 brew install okf-cli
-okf install
+okf install                 # prints the plan, changes nothing
+okf install --apply         # performs it
+
+# Release binary: okf-darwin-arm64, okf-darwin-amd64, okf-linux-amd64, okf-linux-arm64
+curl -fsSL -o okf https://github.com/xRiErOS/okf-cli/releases/download/<tag>/okf-darwin-arm64
+mkdir -p ~/.local/bin && chmod +x okf && mv okf ~/.local/bin/okf
+okf install --only zsh --apply    # a lone binary installs shell completion only, see docs/install.md
+
+# From source (Go 1.26 or newer, plus `just`)
+git clone https://github.com/xRiErOS/okf-cli && cd okf-cli
+just go-build               # writes go/bin/okf; or: CGO_ENABLED=0 go build -C go -trimpath -buildvcs=false -o bin/okf ./cmd/okf
+go/bin/okf install          # from a clone, `install` also links the agent skill and MCP server
 ```
+
+The Python CLI of the earlier releases is still published as wheel and sdist (`pipx install git+https://github.com/xRiErOS/okf-cli`, `uv tool install …`, or `uv run --script cli/okf-cli.py` from a clone; Python 3.11 or newer). It offers the same commands; what differs is listed under [Differences from the Python CLI](#differences-from-the-python-cli).
 
 Then use it from any directory. Without `--root` it takes the nearest catalogue above the current directory, else the `root` in `~/.config/okf/config.toml` (`$XDG_CONFIG_HOME/okf/config.toml`). `--global` takes that configured root even when a catalogue lies above the current directory (not together with `--root`). A `~` in `--root` is expanded:
 
@@ -45,7 +48,7 @@ okf --root /path/to/catalogue find "query"   # ranked search
 okf --root /path/to/catalogue check          # conformance scan
 ```
 
-From a clone without `install`, `uv run --script cli/okf-cli.py --root … <command>` works the same. Details of what `install` writes, and how to undo it: [agents and shells](#use-with-ai-agents-and-shells).
+Without `install`, a binary works as it is: `okf --root … <command>`. Details of what `install` writes, and how to undo it: [agents and shells](#use-with-ai-agents-and-shells). Completion for the Go binary: [Shell PATH and completion](#shell-path-and-completion). Every command with its options and a real example: [docs/reference.md](docs/reference.md).
 
 ## What is OKF?
 
@@ -122,7 +125,7 @@ rename (dry-run): 1 inbound, 0 outbound link(s), 0 wikilink(s) (0 skipped-ambigu
 
 ## Commands
 
-`okf --help` lists all commands; `okf <command> --help` shows every option of one command. Both are generated from the parser, so this README carries no per-option reference: it names each command, then explains the modes you choose between. The table below uses the same four groups as `--help`.
+`okf --help` lists all commands; `okf <command> --help` shows every option of one command. Both are generated from the parser. [docs/reference.md](docs/reference.md) has one entry per command (all 33, the 14 `ctx` verbs and the hidden `build-tagvec`) with its options and a real example; this README names each command, then explains the modes you choose between. The table below uses the same four groups as `--help`.
 
 | group | command | what it does |
 |---|---|---|
@@ -154,6 +157,7 @@ rename (dry-run): 1 inbound, 0 outbound link(s), 0 wikilink(s) (0 skipped-ambigu
 | | `fix-xml-tags` | wrap `<tag>` placeholders in inline code |
 | | `rewrite-path` | literal path-string rewrite across text files |
 | | `wikilinks` | report Obsidian `[[wikilinks]]` and whether each resolves |
+| | `registry` | reformat the entries of `TAGS.md` or `TYPES.md` (table or block form) |
 | | `sync-status` | drift report for materialised canon blocks |
 | | `sync-insert` | materialise a canonical block in a consumer concept |
 | | `sync-update` | re-materialise outdated consumer blocks |
@@ -405,7 +409,7 @@ Git is the recommended way to distribute OKF bundles: markdown gives clean diffs
 | OpenClaw | shared | `openclaw mcp set` |
 | Hermes | `~/.hermes/skills/okf` | marked block in `~/.hermes/config.yaml` |
 
-The shared copy in `~/.agents/skills/okf` is read by Codex, opencode, Kimi Code, omp and OpenClaw, so it is installed once. The MCP server is registered as `uv run --with "mcp<2" <install dir>/mcp/okf_mcp.py`: `uv` must be on `PATH`, otherwise only the MCP step is blocked and the plan says how to fix it. The server offers 21 tools, each with `root` as first argument and `use_global` (the MCP form of `--global`; `global` is a Python keyword): `okf_find`, `okf_read` (with `section`, `follow`, `inbound` and `max_tokens`), `okf_toc`, `okf_index`, `okf_list`, `okf_check`, `okf_refs`, `okf_wikilinks`, `okf_tags`, `okf_prime`, `okf_info`, `okf_ctx_list`, `okf_ctx_show`, `okf_rename`, `okf_reindex`, `okf_build_index`, `okf_build_semantic_index` and the four `okf_sync_*` tools. Verbs not listed (`verify`, `migrate`, `archive`, the tag and repair verbs, `install`) stay CLI-only. The server is a thin subprocess wrapper that starts the CLI through `uv run --script` and returns its `--json` envelope as `{data, warnings}`, plus `error` when a failure still carries a result; all logic stays in the CLI. To register it by hand in any MCP client:
+The shared copy in `~/.agents/skills/okf` is read by Codex, opencode, Kimi Code, omp and OpenClaw, so it is installed once. The MCP server is registered as `uv run --with "mcp<2" <install dir>/mcp/okf_mcp.py`: `uv` must be on `PATH`, otherwise only the MCP step is blocked and the plan says how to fix it. The server offers 21 tools, each with `root` as first argument and `use_global` (the MCP form of `--global`; `global` is a Python keyword): `okf_find`, `okf_read` (with `section`, `follow`, `inbound` and `max_tokens`), `okf_toc`, `okf_index`, `okf_list`, `okf_check`, `okf_refs`, `okf_wikilinks`, `okf_tags`, `okf_prime`, `okf_info`, `okf_ctx_list`, `okf_ctx_show`, `okf_rename`, `okf_reindex`, `okf_build_index`, `okf_build_semantic_index` and the four `okf_sync_*` tools. Verbs not listed (`verify`, `migrate`, `archive`, the tag and repair verbs, `install`) stay CLI-only. The server is a thin subprocess wrapper that starts the `okf` binary with `--json` and returns its envelope as `{data, warnings}`, plus `error` when a failure still carries a result; all logic stays in the binary. To register it by hand in any MCP client:
 
 ```json
 {
@@ -425,17 +429,17 @@ The server is a thin wrapper: every tool call starts the `okf` binary with `--js
 | bash | `~/.local/share/bash-completion/completions/okf`, sourced from the rc block | `~/.bashrc`; on macOS the login file: the first of `~/.bash_profile`, `~/.bash_login`, `~/.profile` that exists, else `~/.bash_profile` |
 | fish | `~/.config/fish/completions/okf.fish` | `~/.config/fish/conf.d/okf.fish` |
 
-From a clone, `install` also creates `~/.local/bin/okf` and puts `~/.local/bin` on `PATH` in that rc block (skipped when `okf` is already on `PATH`, as after pipx or uv). Completion uses `argcomplete`, one of the script's declared dependencies; a normal run never imports it. TAB completes concept paths, bundles, tags and canon block ids from the catalogue (`okf read <TAB>`). An alias must start with `okf` (found via `PATH`), not an absolute path.
+From a clone, `install` also creates `~/.local/bin/okf`, a wrapper that runs the binary of the clone (`go/bin/okf`), and puts `~/.local/bin` on `PATH` in that rc block (skipped when an `okf` is already on `PATH`, as after Homebrew). The completion scripts are embedded in the binary and the binary answers the completion requests itself: no Python and no `argcomplete` are involved. TAB completes concept paths, bundles, tags and canon block ids from the catalogue (`okf read <TAB>`). An alias must start with `okf` (found via `PATH`), not an absolute path. After you upgrade the binary, run `okf install --apply` again to refresh the completion scripts.
 
 ### How `install` behaves
 
 - **Selection.** Agents and shells are detected by their binary on `PATH` or their config directory (shells: rc file, config directory or login shell; the login shell is `$SHELL`, or the passwd entry when `$SHELL` is unset, as under `env -i`, cron or zsh). `--only claude,codex,zsh` names them explicitly, detected or not: `claude omp codex opencode kimi openclaw hermes zsh bash fish`.
-- **Clone or tool.** A clone links the skills and the zsh glue, so `git pull` updates them. A pipx or uv install copies them: re-run `okf install --apply` after an upgrade. Hermes always gets a copy: it follows a symlinked skill but logs a security warning for a skill that resolves outside `~/.hermes/skills`. OpenClaw with a custom `OPENCLAW_STATE_DIR` gets a copy in `<state dir>/skills`, because that setting removes `~/.agents/skills` from its skill index.
+- **Clone, keg or lone binary.** A clone links the skills, so `git pull` updates them. A Homebrew keg, a pipx or uv install copies them: re-run `okf install --apply` after an upgrade. A release binary on its own has no `skills/okf` and no `mcp/okf_mcp.py` beside it: its skill and MCP steps are BLOCKED with `source not found`, and only the shell steps work. Hermes always gets a copy: it follows a symlinked skill but logs a security warning for a skill that resolves outside `~/.hermes/skills`. OpenClaw with a custom `OPENCLAW_STATE_DIR` gets a copy in `<state dir>/skills`, because that setting removes `~/.agents/skills` from its skill index.
 - **Safe edits.** JSON configs get a key-scoped merge; rc files, TOML and YAML get one block between `# >>> okf-cli >>>` and `# <<< okf-cli <<<`. Writes are atomic, symlinked dotfiles are written through, and the first edit of a file keeps `<file>.okf-cli.bak`. A config that cannot be edited safely (JSON with comments, unusual YAML, a foreign `okf` entry) is reported as BLOCKED with the exact manual edit; nothing is guessed.
 - **Uninstall.** `okf install --uninstall` previews, `--uninstall --apply` removes exactly what `install` created, plus the empty directories that leaves behind (never `$HOME` or an agent's own directory). The `<file>.okf-cli.bak` backups stay. If Hermes rewrites `config.yaml` (`hermes config set` drops comments, so the markers go too), uninstall still removes okf's own `mcp_servers.okf` entry. `claude`, `codex`, `openclaw` and `hermes` create their own state files when they run (for example `~/.claude/backups`, `~/.codex/tmp`, `~/.openclaw/state`); those are theirs and stay. `openclaw mcp set` rewrites `openclaw.json` as plain JSON (JSON5 comments are lost; OpenClaw keeps `openclaw.json.bak`).
 - **Locations.** `CLAUDE_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, `CODEX_HOME`, `OPENCODE_CONFIG`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `KIMI_CODE_HOME`, `OPENCLAW_STATE_DIR`, `HERMES_HOME` and `ZDOTDIR` are honoured.
 - **Scripting.** No prompts, no network, timeouts on every agent CLI call. `--json` prints one envelope `{command, ok, data, warnings, error}`; `data` holds a status per step. Exit code 0: done or nothing to do; 1: a step is blocked or failed; 2: usage error.
-- **Platforms.** macOS and Linux, Python 3.11 or newer.
+- **Platforms.** macOS and Linux (release binaries: `amd64` and `arm64`).
 - **Verified facts.** Checked against the real binaries in a throwaway HOME: Claude Code 2.1.288 (`CLAUDE_CONFIG_DIR/.claude.json`, `claude mcp add/list/remove` at user scope, symlinked skill), Codex 0.160.1 (`CODEX_HOME/config.toml` via `codex mcp add/list/remove`, `~/.agents/skills` read even with another `CODEX_HOME`, symlink followed), omp 18.9.1 (`PI_CODING_AGENT_DIR/mcp.json` loaded, `~/.agents/skills`, symlink followed), opencode 1.19.0 (`XDG_CONFIG_HOME/opencode/opencode.json` with `mcp.okf`, `~/.agents/skills`, symlink followed), Kimi Code 2.1.1 (`KIMI_CODE_HOME/mcp.json` and `KIMI_CODE_HOME/skills` loaded, `~/.agents/skills` under the real HOME, symlink followed), OpenClaw 2026.10.1 (`openclaw mcp set/unset`, `OPENCLAW_STATE_DIR/openclaw.json` and `<state dir>/skills`, `~/.agents/skills` with the default state dir, symlink followed) and Hermes 0.19.0 (`HERMES_HOME/skills` and `HERMES_HOME/config.yaml`: the `mcp_servers.okf` block connects and lists the 21 tools). opencode logs a `duplicate skill name` warning when `~/.claude/skills/okf` and `~/.agents/skills/okf` both exist (both are ours and identical); the later-scanned root wins and nothing fails. Doc-only, not run: OpenClaw drops `~/.agents/skills` under a custom `OPENCLAW_STATE_DIR` and watches `SKILL.md` for mid-session changes (a new session always sees it); Kimi Code reads skills at session start; the default MCP startup timeout of Codex versus a cold `uv run` (`codex mcp add` has no timeout option; the TOML fallback block sets `startup_timeout_sec = 30`).
 
 ## How it differs
@@ -448,6 +452,24 @@ From a clone, `install` also creates `~/.local/bin/okf` and puts `~/.local/bin` 
 | search | BM25 + semantic, local index | varies |
 
 Catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`. Related OKF projects: [open-knowledge-format](https://github.com/GoogleCloudPlatform/open-knowledge-format) (spec), [openknowledge-sh/openknowledge](https://github.com/openknowledge-sh/openknowledge), [okf-enforcer](https://github.com/MartinForReal/okf-enforcer) (Obsidian).
+
+## Differences from the Python CLI
+
+As of this release. The behaviour decisions below are still open for the product owner; the evidence is in [`docs/topics/okf-go-port/ACCEPTANCE-REPORT.md`](docs/topics/okf-go-port/ACCEPTANCE-REPORT.md).
+
+**Same:** the 33 commands, the 14 `ctx` verbs, their options, the `--json` envelope, the exit codes, the `--where` grammar, the output formats and the dry-run defaults. The golden suite of 314 cases runs both CLIs: the Go binary matches the Python CLI byte for byte in 293 cases; the 21 others differ only in the wording of one YAML parse error (see below). `--root` and `--global` go before the command in both CLIs (`okf --root /path find git`).
+
+**Different:**
+
+- **No Python.** The binary needs no Python and no `uv`; `okf find` runs with an empty `PATH`. Only the MCP server (`mcp/okf_mcp.py`) still runs through `uv`; it now calls the Go binary (`$OKF_BIN`, else the binary next to `mcp/`, else `okf` on `PATH`).
+- **Speed.** Median over 30 runs, Linux amd64, Knowledge-Catalogue with a 26 MB tag-vector file: `okf --help` 1.3 ms (Python: 47 ms), `okf find git` 17 ms (Python: 146 ms); peak memory of `find` 55 MiB (Python: 212 MiB).
+- **YAML parse errors read differently.** `check`, the tag verbs and `verify` name the same file under the same rule and exit with the same code, but the parser's own sentence and position differ: Python `expected ',' or ']', but got ':' (line 4, column 12)`, Go `did not find expected ',' or ']' (line 3, column 9)`.
+- **Frontmatter writes keep your formatting.** The Python CLI re-serialised the frontmatter it edited; the Go binary patches only the edited lines, so comments, quoting and indentation stay and the diff is minimal.
+- **Some frontmatter is refused instead of rewritten.** When the line patcher cannot patch a shape safely, the command exits 2 with `<path>: <reason>` and leaves the file untouched; the Python CLI writes such files. The shapes: a lone CR as line ending inside an LF frontmatter, a flow mapping or `null` as the frontmatter root, an anchor, alias or explicit tag on the edited value, a comment inside a multi-line flow list, and a few list layouts (null or folded item, value after the dash, complex key). One refused file ends the whole run of `merge-tags`, `remove-tags`, `normalize-tags` and `migrate` (a dry run too), and also a `ctx` edit of such a file. `verify` and `normalize-tags` stop on a frontmatter key that is not a scalar.
+- **Rare YAML and TOML edge cases are validated differently.** The Python parser reads some frontmatter that Go refuses (a `\/` escape, odd anchor names, empty keys) and the other way round (impossible dates in a custom key). The report lists them as D-26 to D-30; they are open for the product owner.
+- **Shell completion** is answered by the binary itself, without Python or `argcomplete`.
+
+The same report has the full list of 77 entries, each with a reproduction line.
 
 ## Learn more
 
@@ -465,6 +487,7 @@ just golden-go          # builds go/bin/okf and runs the golden suite against it
 just go-find-smoke      # `okf find` with a PATH that holds no python3 and no uv
 just completion-check   # zsh TAB completion end to end in a PTY: Go binary against the Python CLI, throwaway HOME
 just brew-local-check   # builds packaging/homebrew/okf-cli.rb from source in a throwaway local tap and runs `brew test`
+just install-parity     # `okf install` of the Python CLI and the Go binary side by side in throwaway HOMEs
 just build    # wheel and sdist into dist/ (uv build)
 just check    # conformance scan against a real catalogue
 just prime
@@ -475,7 +498,9 @@ just setup    # the okf install plan; add --apply to perform it
 
 The golden suite (`tests/okf_golden.py`, driven by `tests/test_golden.py` inside `just test`) runs every line of `tests/golden/cases.txt` against a fresh git copy of the fixture catalogue `tests/golden/catalogue/` and compares stdout, stderr, exit code and the changed files with `tests/golden/expected/<case>.out`. It treats the CLI as a black box, so a port of the CLI passes when `just golden --cmd <binary>` is green. Two parts are masked: an instant of the current day becomes `<NOW>`, and a usage error (stderr starting with `usage: okf`) pins only as `<usage error>` plus exit code 2, because argparse's wording changes between Python releases; a port must start such stderr with `usage: okf`. After an intended output change, run `just golden --update` and review the diff of `tests/golden/expected/`.
 
-`cli/okf-cli.py` is only the entry point: it carries the PEP 723 header, builds the parser, resolves the catalogue root and dispatches. The commands live in the `cli/okf/` package; tests live in `tests/`, and `tests/test_okf_cli.py` covers the entry itself. The `cli/_okf` file is the zsh completion glue installed by `okf install`; it stays beside the entry payload because packaging and installer tests verify that path.
+The Go module is `go/` (own `go.mod`, pure Go, no cgo; dependencies in `go/go.mod`). `go/cmd/okf/main.go` is the entry point and the one place that wires the commands together. The shared core lives in `go/internal/` (`okferr` exit codes, `envelope` the `--json` envelope, `catalogue`, `frontmatter`, `where` the `--where` grammar, `spec`, `linkscan`, `history`, `sqlstore`, `tagvec`, `stdio`, `complete` shell completion, `cli` the command table). Each command area owns one package there with one `Register` function, for example `find`, `check`, `ctx`, `move` (rename, archive), `indexwrite` (reindex), `tagwrite`, `wikisync`, `install` and `buildtagvec`. `yamlpatch` is the one writer of frontmatter: it patches the lines of the edited value and keeps everything else byte for byte. Run the Go unit tests with `go test ./...` in `go/`; the black-box proof is `just golden-go`. `okf install` writes the completion scripts embedded in the binary (`go/internal/complete/okf.{zsh,bash,fish}`); `just go-completion-scripts` regenerates them from the Python completion glue.
+
+The Python CLI is still in the repository, and the golden suite runs it as the reference. `cli/okf-cli.py` is only its entry point: it carries the PEP 723 header, builds the parser, resolves the catalogue root and dispatches. The commands live in the `cli/okf/` package; tests live in `tests/`, and `tests/test_okf_cli.py` covers the entry itself. The `cli/_okf` file is the zsh completion glue of the Python CLI; it stays beside the entry payload because packaging and installer tests verify that path.
 
 - Shared foundation: `catalogue` (root, bundles, concepts, tags, configuration), `linkscan` (link and reference scan), `parser_support` (command registration helpers), `errors` (the exit-code classes), `output` (the `--json` envelope), `diffs` (unified-diff previews), `history` (git lookups for `recent`, `migrate` and the drift rule), `spec` (trust tier and staleness).
 - Commands, each module defining its `COMMANDS`: `navigation` (list, read, info, toc, visualize, refs), `prime`, `index` (index, reindex), `ctx`, `recent`, `find` (with `find_filters`, the `--where` grammar), `fts` (build-index), `semantic` (build-semantic-index), `tags`, `check` (check, fix-crosslinks, fix-xml-tags; the v0.2 rules are in `spec_check`), `verify`, `migrate`, `wikilinks`, `sync`, `rename` (rename, archive, rewrite-path) and `install`.
