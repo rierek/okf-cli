@@ -1,40 +1,46 @@
 ---
 title: "Canon in the catalogue"
-description: "What a shared canon, such as an architecture bundle, gives you when it sits in the catalogue and serves as reference."
+description: "One truth in one place. A shared canon in the catalogue gives every project the same rules, and okf keeps the copies in step."
 date: 2026-10-18
 tags: [canon, architecture, okf]
 ---
 
-## Purpose
+**One truth, in one place. Everything else points at it.** A shared canon in the catalogue makes knowledge shareable, checkable and current.
 
-Show the strength of keeping canon knowledge in one catalogue, using the architecture bundle as the example.
+## The problem
 
-## Audience
+The same rule lives in many projects. The copies drift apart, and nobody knows which one holds.
 
-A user who repeats the same rules in many projects.
+## The idea
 
-## Visual elements
+Keep one shared bundle in the catalogue, for example an architecture canon: layers, naming, the ADR pattern. Projects refer to it. They do not copy it.
 
-Mermaid of canon owner and projects; screenshot of the architecture bundle (webp, alt, light and dark).
+## What it gives you
 
-## Search terms
+- One source of truth.
+- New projects start with a frame of reference.
+- Agents load the canon through `ctx` and get the same rules every time.
+- Reviews measure against a fixed yardstick.
 
-architecture canon knowledge base; single source of truth; reusable engineering rules; okf sync
+## How okf does it
 
-## Required sections
+A canon block has an owner. [`okf sync-insert`](/reference/commands/okf-sync-insert/) materialises it in the consumer, so the consumer stays readable even without the catalogue. [`okf sync-status`](/reference/commands/okf-sync-status/) shows drift. [`okf sync-update`](/reference/commands/okf-sync-update/) pulls outdated blocks up to date. [`okf sync-export`](/reference/commands/okf-sync-export/) prints a block's payload.
 
-### Result sentence
+Both writing commands print a diff first and write only with `--apply`.
 
-- Bold sentence: after reading, the reader sees why canon belongs in the catalogue and not in each project. Source: PO practice (author's experience); TODO: verify examples against the real catalogue before writing.
+```text
+okf sync-status
+okf sync-update --apply
+```
 
-### The example
+## Limits
 
-- Walk through the architecture bundle of the Knowledge-Catalogue: what it holds, how a project reads it. Source: PO practice (author's experience); TODO: verify examples against the real catalogue before writing.
+- A canon needs a keeper.
+- Too much canon sets hard. Only what is stable belongs in it.
+- Project-specific rules stay local.
 
-### Reuse through canon blocks
+## In short
 
-- `sync-export`, `sync-insert`, `sync-update` copy canon text into project concepts and keep it in sync. Source: FACTS §Topic: canon blocks (`sync-*`).
+The canon makes knowledge shareable, checkable and current. It is the base for [context management](/blog/context-management-with-work-in-progress/) and for a [controlled tag vocabulary](/blog/tag-hygiene/).
 
-### Reference
-
-- Links to Canon blocks and the use case "Define canon knowledge and use it in projects". Source: DESIGN D27.
+See also [Canon blocks](/features/canon-blocks/) and [Define canon knowledge](/use-cases/define-canon-knowledge/).

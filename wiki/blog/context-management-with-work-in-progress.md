@@ -1,45 +1,59 @@
 ---
 title: "Context management with work-in-progress"
-description: "Work in a topic folder, promote what lasts into the catalogue, and let agents read it through ctx."
+description: "An agent needs a small, targeted context, not a full dump. Work in a topic folder, promote what lasts into the catalogue and hand it over with ctx."
 date: 2026-10-18
 tags: [context-management, okf, ai-agents]
 ---
 
-## Purpose
+**An agent needs a small, targeted context. Never a full dump.** Keep the work in a topic folder, keep the lasting knowledge in the catalogue, and hand the agent a `ctx` bundle.
 
-Tell how project knowledge moves from a `work-in-progress/<topic-slug>` folder into the catalogue and becomes available to every project.
+## The problem
 
-## Audience
+An agent session starts empty. Load everything and the useful lines drown in noise. Load nothing and the agent guesses. It gets worse when notes, plans and lasting knowledge sit in the same place: nobody can tell what is still true.
 
-A user who runs agent sessions across projects and loses context between them.
+## One topic, one folder
 
-## Visual elements
+Give each topic its own folder: `work-in-progress/<topic-slug>/`. It holds the thinking and planning chain, drafts and intermediate results. It is short-lived, but fully traceable.
 
-Mermaid loop from topic folder to agent session; callout for the unsupported-symlink caveat.
+Every file in it carries OKF frontmatter, and `type` is never empty. That keeps the folder readable for `okf` and for agents.
 
-## Search terms
+## Promote what lasts
 
-context management for AI agents; work in progress to knowledge base; Obsidian vault agent context; okf ctx
+Ask one question of each statement: is it lasting and reusable?
 
-## Required sections
+- **Yes:** it moves into the catalogue.
+- **No:** it stays in the topic, or you discard it.
 
-### Result sentence
+Each claim gets exactly one home. After the move, the topic points at the catalogue instead of copying it. Two copies drift apart.
 
-- Bold sentence: after reading, the reader has a working loop from topic folder to catalogue to agent context. Source: PO practice (author's experience); TODO: verify examples against the real catalogue before writing.
+## Agents read through `ctx`
 
-### The loop
+A `ctx` bundle is a curated reading list in reading order. [`okf ctx show`](/reference/commands/okf-ctx-show/) prints it with the title and type of every entry, read live from the files, so the list does not go stale. Each entry has a mode:
 
-- Mermaid flow: topic folder, review, promote into a bundle, check, ctx bundle, agent session. Source: PO practice (author's experience); TODO: verify examples against the real catalogue before writing.
-- Promotion means moving a concept into a bundle and running `okf check`. Source: FACTS §okf check; FACTS §okf rename.
+| Mode | Meaning |
+|---|---|
+| `pflicht` | The agent must read it, in the given position. |
+| `nachschlag` | Reference: look it up when needed. |
 
-### Making it available elsewhere
+An example: load the Git canon before a hotfix, and nothing else. Put the bundle in the prompt instead of a list of paths.
 
-- A bundle linked into the catalogue by symlink is available to other projects. Whether okf tells linked bundles from local ones is not documented. TODO: verify symlinked bundles against the binary
+```text
+okf ctx show onboarding
+```
 
-### Reading it back
+## In practice
 
-- `okf ctx <slug>` gives an agent the right pages in order; `okf prime` gives the map. Source: FACTS §okf ctx show; FACTS §okf prime.
+1. Create the topic folder.
+2. Work in it.
+3. Move what lasts into the catalogue.
+4. Archive the topic.
 
-### Reference
+Hand over context with `ctx`, not with path lists in the prompt.
 
-- Links to Context bundles, Work with multiple bundles, `okf rename`. Source: FACTS §Section index of commands.
+## In short
+
+- The topic folder is the workbench.
+- The catalogue is the memory.
+- `ctx` is the interface to the agent.
+
+See also [Context bundles](/features/context-bundles/) and [Onboard agents](/use-cases/onboard-agents/).

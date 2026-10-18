@@ -1,46 +1,53 @@
 ---
 title: "Tag hygiene"
-description: "Keep a tag vocabulary small: register tags, validate against TAGS.md and block new tags that nobody approved."
+description: "Tags only help while the vocabulary stays small and controlled. Register tags in TAGS.md, validate them and block unregistered tags in CI."
 date: 2026-10-18
 tags: [tags, okf, knowledge-management]
 ---
 
-## Purpose
+**Tags only help while their number stays small and under control.** Register each tag, validate the catalogue, and let CI refuse tags nobody approved.
 
-Give best practices for tags so they do not grow wild, with the commands that enforce them today.
+## The problem
 
-## Audience
+Tags grow wild: `auth`, `authn`, `authentication`, `Auth`. Search fragments, and a filter returns random hits.
 
-A catalogue owner whose tag list keeps growing.
+## The rules
 
-## Visual elements
+- Keep tags few and give them on purpose.
+- Register every tag in `TAGS.md`, each with a description.
+- A description has at most 150 characters, one line and no `|`. `okf tags --register` refuses anything else.
 
-Code blocks with `tags --validate`; table of tag commands.
+```text
+okf tags --register operations "Running and operating services"
+```
 
-## Search terms
+## Check
 
-tag hygiene; tag registry markdown; stop tag sprawl; Obsidian tags cleanup
+`okf tags --validate` reports tags that are not in the registry and exits with a non-zero code, so a script can act on it. Test for non-zero rather than for one value: the exit code and the help text disagree today ([irxe], see [Known limitations](/known-limitations/)).
 
-## Required sections
+## A CI gate
 
-### Result sentence
+Let CI run `okf tags --validate` and fail on non-zero. A new, unregistered tag then blocks the merge. Whoever wants the tag adds it to `TAGS.md`, and the review shows that change on purpose.
 
-- Bold sentence: after reading, the reader can stop unregistered tags from entering the catalogue. Source: PO practice (author's experience); TODO: verify examples against the real catalogue before writing.
+## Clean up
 
-### Why tags drift
+| Command | Does |
+|---|---|
+| [`okf merge-tags`](/reference/commands/okf-merge-tags/) | Merge duplicates and synonyms into one tag. |
+| [`okf remove-tags`](/reference/commands/okf-remove-tags/) | Remove a tag. |
+| [`okf normalize-tags`](/reference/commands/okf-normalize-tags/) | Unify the spelling and list form. |
 
-- Short reasoning from experience. Source: PO practice (author's experience); TODO: verify examples against the real catalogue before writing.
+All three change many files at once. They print a diff first and write only with `--apply`. Read the diff, apply, then commit.
 
-### The practice
+```text
+okf merge-tags --into operations ops
+okf merge-tags --into operations ops --apply
+```
 
-- Register every tag in `TAGS.md`; `okf tags --validate` reports unregistered tags and exits 4 [irxe]. Source: FACTS §okf tags; FACTS §Defect list a.
-- Merge near-duplicates with `merge-tags`, remove with `remove-tags`, normalise the list form with `normalize-tags`. Source: FACTS §okf merge-tags; FACTS §okf remove-tags; FACTS §okf normalize-tags.
-- Blocking new tags in CI: run `okf tags --validate` and fail on non-zero. Source: FACTS §okf tags.
+## In short
 
-### Semantic tag search
+- A small, registered vocabulary.
+- A CI gate keeps it clean.
+- The tools repair what accumulated before.
 
-- Tag embeddings use a local model (`bge-m3` on Ollama) or Voyage; the endpoint is not configurable today. Source: FACTS §okf tags; FACTS §Topic: index and search artefacts. Planned: [76eb].
-
-### Reference
-
-- Links to Tags and registry and the tag command pages. Source: FACTS §Section index of commands.
+See also [Tags and registry](/features/tags-and-registry/).
