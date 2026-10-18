@@ -15,7 +15,7 @@ Draft of the release note for the release that ships the Go port of `okf`. The v
 - **MCP server** (`mcp/okf_mcp.py`, still run through `uv`) now calls the binary: `$OKF_BIN`, else `bin/okf` or `go/bin/okf` next to `mcp/`, else `okf` on `PATH`.
 - **New hidden command `okf build-tagvec`.** The tag-vector producer, formerly a Python script, is a command now (dry run unless `--produce`).
 - **Frontmatter edits keep your formatting.** The Python CLI re-serialised the frontmatter; the binary patches only the edited lines.
-- Docs: [docs/install.md](../docs/install.md) (per platform, troubleshooting), [docs/reference.md](../docs/reference.md) (every command with a real example), README sections Install and Differences from the Python CLI.
+- Docs: [docs/install.md](../docs/install.md) (per platform, troubleshooting), [command reference](https://xrieros.github.io/okf-cli/reference/commands/) (one page per command and verb), README sections Install and Differences from the Python CLI.
 
 The Python CLI is still published (wheel, sdist, `uv run --script cli/okf-cli.py`).
 

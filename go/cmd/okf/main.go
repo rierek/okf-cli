@@ -5,54 +5,23 @@
 // package is the entry point and the one place that wires things together; the shared core lives in
 // the packages under go/internal (okferr, pytext, frontmatter, catalogue, envelope, stdio, cli, where,
 // spec, history, linkscan, sqlstore, tagvec, complete); each command owns one package under go/internal with
-// one Register(app *cli.App) function. A new command package adds ONE entry to `commands` below,
-// the mirror of Python's COMMAND_MODULES; there is no discovery.
+// one Register(app *cli.App) function. A new command package adds ONE entry to `commands` in
+// go/internal/commands, the mirror of Python's COMMAND_MODULES; there is no discovery.
 package main
 
 import (
 	"fmt"
 	"os"
 
-	"nas/volume1/data/git/okf-tools/go/internal/buildtagvec"
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
-	"nas/volume1/data/git/okf-tools/go/internal/check"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
+	"nas/volume1/data/git/okf-tools/go/internal/commands"
 	"nas/volume1/data/git/okf-tools/go/internal/complete"
 	"nas/volume1/data/git/okf-tools/go/internal/ctx"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
-	"nas/volume1/data/git/okf-tools/go/internal/find"
-	"nas/volume1/data/git/okf-tools/go/internal/fts"
-	"nas/volume1/data/git/okf-tools/go/internal/indexwrite"
-	"nas/volume1/data/git/okf-tools/go/internal/info"
-	"nas/volume1/data/git/okf-tools/go/internal/install"
-	"nas/volume1/data/git/okf-tools/go/internal/move"
-	"nas/volume1/data/git/okf-tools/go/internal/navigation"
 	"nas/volume1/data/git/okf-tools/go/internal/okferr"
-	"nas/volume1/data/git/okf-tools/go/internal/rewrite"
-	"nas/volume1/data/git/okf-tools/go/internal/semantic"
 	"nas/volume1/data/git/okf-tools/go/internal/stdio"
-	"nas/volume1/data/git/okf-tools/go/internal/tagwrite"
-	"nas/volume1/data/git/okf-tools/go/internal/wikisync"
 )
-
-// commands lists the command packages, each exporting Register(*cli.App). A directory command whose
-// package is not listed answers with a "not yet ported" error.
-var commands = []func(*cli.App){
-	check.Register,
-	ctx.Register,
-	buildtagvec.Register,
-	find.Register,
-	fts.Register,
-	indexwrite.Register,
-	info.Register,
-	install.Register,
-	move.Register,
-	rewrite.Register,
-	semantic.Register,
-	navigation.Register,
-	wikisync.Register,
-	tagwrite.Register,
-}
 
 // main makes a broken pipe an error of the write (stdio.Init) and ends with the status that takes
 // a failed write of stdout into account (stdio.Exit).
@@ -64,9 +33,7 @@ func main() {
 // run parses argv, dispatches and returns the process exit code (Python main()).
 func run(argv []string) int {
 	app := cli.NewApp()
-	for _, register := range commands {
-		register(app)
-	}
+	commands.Register(app)
 	// Steps that rewrite or answer before the parse are wired here, in this order: the shell
 	// completion protocol (_ARGCOMPLETE), which sees the command line as typed, and the
 	// `ctx <slug>` shorthand.

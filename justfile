@@ -113,9 +113,9 @@ prime root=catalogue:
 # Port der Doku-Site-Vorschau (eine Quelle)
 docs_port := "4321"
 
-# Generierte Seiten der Doku erzeugen (Befehlsseiten folgen mit dem Generator)
+# Befehlsseiten der Doku aus dem Befehlsbaum erzeugen (go/cmd/okf-docgen; Ausgabe gitignored)
 docs-gen:
-    @true
+    go run -C go ./cmd/okf-docgen ../wiki/reference/commands
 
 # Doku-Site bauen (Starlight, site/dist); laeuft in CI und lokal gleich
 docs-build: docs-gen
