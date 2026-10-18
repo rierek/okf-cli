@@ -30,6 +30,7 @@ A new user on macOS or Linux (amd64 or arm64) with a shell; no catalogue needed 
 ### Build from source
 
 - Clone, `just go-build`, binary at `go/bin/okf`. Source: FACTS §Topic: install; justfile recipe go-build.
+- Clone URL and release URLs: the repo is `rierek/okf-cli`; older docs name `xRiErOS`. [zs6t]. Source: FACTS §Topic: install.
 
 ### Verify the install
 

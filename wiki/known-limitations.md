@@ -33,6 +33,7 @@ A user who hits unexpected behaviour; a maintainer who plans fixes.
 - [erpf] `tags --register` and `prime` name `build_tagvec.py`, which a Go install lacks. Workaround: ignore, or `okf build-tagvec --produce`. Source: FACTS §Defect list h.
 - [l2j0] `okf --help` describes the Python script. Workaround: ignore. Source: FACTS §Defect list i.
 - [fs8c] A blocked `install` plan exits 1 with a generic message. Workaround: read the plan, or use `--json`. Source: FACTS §Defect list j.
+- [zs6t] README, `docs/install.md`, `pyproject.toml` and the Homebrew formula still name the old GitHub owner `xRiErOS`; the repo and this site live under `rierek`. Workaround: use `rierek/okf-cli`; check the tap and release URLs before you copy a command. Source: FACTS §Topic: Homebrew formula; FACTS §Topic: install.
 
 ### Fixed
 
