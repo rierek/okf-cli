@@ -2,6 +2,8 @@
 
 Search, navigate, validate and refactor a **catalogue of [Open Knowledge Format (OKF) v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) bundles** — markdown files with YAML frontmatter, built for humans and AI agents.
 
+**Documentation:** <https://rierek.github.io/okf-cli/> — install, first steps, features, command reference and agent onboarding.
+
 - **Agent-ready.** `read` returns one section, or a page together with the pages it links to, in one call; one command registers an MCP server and an agent skill with Claude Code, Codex, opencode, omp, Kimi Code, OpenClaw and Hermes; `prime` onboards a fresh agent session in one call.
 - **Predictable.** Every command answers `--json` with one envelope, and every failure has an exit code that names its class.
 - **Hybrid search.** Local SQLite FTS5/BM25 plus optional semantic arm (Voyage embeddings), narrowed by one `--where` filter language.
