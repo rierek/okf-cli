@@ -3,7 +3,7 @@
 // default slot is the body (browser mock). Caption = `title` (directory) plus `command` when given, so two
 // windows on a page never share a caption. `label` is the accessible description of what the output shows.
 // The font shrinks so `cols` columns fit the container; `narrowHtml` (captured at `narrowCols`) replaces the
-// wide capture when the container is narrower than 80 columns need. Output never wraps, it scrolls inside the window.
+// wide capture when the container is narrower than 80 columns need. Output wraps inside the window and never scrolls.
 interface Props {
 	title?: string;
 	command?: string;
@@ -27,8 +27,8 @@ const screens = html === undefined ? [] : narrowHtml === undefined ? [{ html, co
 	</figcaption>
 	{screens.length ? screens.map((s) => (
 		<div class:list={['body', s.kind]}>
-			{/* role=img: screen readers read the label instead of box-drawing glyphs; the pre stays focusable for scrolling */}
-			<pre class="screen" tabindex="0" role={label ? 'img' : undefined} aria-label={label} style={`--cols: ${s.cols}`}><code><Fragment set:html={prompt} /><span class="out"><Fragment set:html={s.html} /></span></code></pre>
+			{/* role=img: screen readers read the label instead of box-drawing glyphs. */}
+			<pre class="screen" role={label ? 'img' : undefined} aria-label={label} style={`--cols: ${s.cols}`}><code><Fragment set:html={prompt} /><span class="out"><Fragment set:html={s.html} /></span></code></pre>
 		</div>
 	)) : (
 		<div class="screen"><slot /></div>
@@ -46,14 +46,11 @@ const screens = html === undefined ? [] : narrowHtml === undefined ? [{ html, co
 	.title { font-size: var(--sl-text-xs); color: var(--ctp-subtext0); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.browser .title { grid-column: 2; justify-self: center; min-width: min(18rem, 60cqw); max-width: 100%; padding: 0.2rem 1rem; border-radius: 0.4rem; background: var(--ctp-surface0); }
 	.body { position: relative; }
-	/* Scroll hint: the right edge fades into the surface. It covers the end padding only, so text stays clear at rest. */
-	.body::after { content: ''; position: absolute; inset-block: 0; inset-inline-end: 0; width: 1.1rem; background: linear-gradient(to right, transparent, var(--term-bg)); pointer-events: none; }
-	.screen { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; color: var(--ctp-text); }
-	pre.screen { font-family: var(--sl-font-mono); font-size: clamp(0.7rem, calc((100cqw - 2.2rem) / (var(--cols) * 0.6)), 0.8rem); line-height: 1.5; white-space: pre; font-variant-ligatures: none; tab-size: 4; background: none; }
+	.screen { margin: 0; padding: 1rem 1.1rem; color: var(--ctp-text); }
+	pre.screen { font-family: var(--sl-font-mono); font-size: clamp(0.7rem, calc((100cqw - 2.2rem) / (var(--cols) * 0.6)), 0.8rem); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; font-variant-ligatures: none; tab-size: 4; background: none; }
 	pre.screen code { font: inherit; background: none; padding: 0; border: 0; color: inherit; }
 	.prompt { color: var(--ctp-green); }
 	.cmd { color: var(--ctp-text); }
-	pre.screen:focus-visible { outline: 2px solid var(--ctp-teal); outline-offset: -2px; }
 	.body.narrow { display: none; }
 	/* 80 columns at the smallest font (0.7rem * 0.6) plus padding and border. */
 	@container (max-width: 36rem) {

@@ -1,8 +1,4 @@
 {
- "find": {
-  "command": "okf find recipe",
-  "html": "------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Recipes overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/overview\ndescription: Overview of the recipes\nbody-snippet: # Overview See [pasta](<span style=\"color:var(--ctp-sapphire)\">pasta.md</span>), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…\nprovenance: lexical\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 2\ntitle: cooking\ntype: Context\n<span style=\"color:var(--ctp-overlay1)\">path:</span> _ctx/cooking\ndescription: Cooking basics"
- },
  "ctx": {
   "command": "okf ctx show onboarding",
   "html": "ctx onboarding — Read this first on day one\n\nrequired — read in this order:\n  1. ~<span style=\"color:var(--ctp-sapphire)\">/kc/handbook/getting-started.md</span>  [Guide] Getting started  ~158 tok\n     First steps: accounts, tools, and where to find things\n  2. ~<span style=\"color:var(--ctp-sapphire)\">/kc/handbook/glossary.md</span>  [Concept] Glossary  ~62 tok\n     Terms used here: \"bundle\" and \"concept\"\n  3. ~<span style=\"color:var(--ctp-sapphire)\">/kc/handbook/ops/deploy.md</span>  [Runbook] Deploy  ~150 tok\n     How to deploy: build, ship, verify"
@@ -17,5 +13,21 @@
  },
  "generated": {
   "date": "2026-10-18"
+ },
+ "words": {
+  "command": "okf find 'kneading and proofing' --limit 2",
+  "html": "<span style=\"color:var(--ctp-overlay1)\">note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only</span>\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Gazpacho\ntype: Recipe\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/seasonal/gazpacho\ndescription: Cold tomato soup\nbody-snippet: # Gazpacho Blend tomatoes, cucumber and peppers.…\nprovenance: lexical\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 2\ntitle: Recipes overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/overview\ndescription: Overview of the recipes\nbody-snippet: …, [bread](<span style=\"color:var(--ctp-sapphire)\">/recipes/bread.md</span>), [soup](soup.md) and [[salad]].…\nprovenance: lexical\n------"
+ },
+ "meaning": {
+  "command": "okf find 'kneading and proofing' --limit 2",
+  "html": "<span style=\"color:var(--ctp-overlay1)\">note: semantic arm owns this ranking (lexical top-1 lacked a clear margin)</span>\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Bread\ntype: Recipe\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/bread\ndescription: Bread with a long rise\nbody-snippet: # Bread ## Steps Mix, rise, bake. Related: [pasta](<span style=\"color:var(--ctp-sapphire)\">pasta.md</span>).…\nprovenance: semantic\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 2\ntitle: cooking\ntype: Context\n<span style=\"color:var(--ctp-overlay1)\">path:</span> _ctx/cooking\ndescription: Cooking basics\nbody-snippet: # cooking | pos | mode | path | comment | |---|---|---|---| | 1 | pflicht | [bread](<span style=\"color:var(--ctp-sapphire)\">/recipes/bread.md</span>) | | | 2 | pflicht | [pasta](/reci…\nprovenance: semantic\n------"
+ },
+ "scopeAll": {
+  "command": "okf find overview --limit 2",
+  "html": "------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Handbook overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> handbook/overview\ndescription: Overview of the handbook\nbody-snippet: # Overview The handbook explains the [getting started guide](<span style=\"color:var(--ctp-sapphire)\">getting-started.md</span>).…\nprovenance: lexical\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 2\ntitle: Recipes overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/overview\ndescription: Overview of the recipes\nbody-snippet: # Overview See [pasta](<span style=\"color:var(--ctp-sapphire)\">pasta.md</span>), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…\nprovenance: lexical\n------"
+ },
+ "scopeOne": {
+  "command": "okf find overview --where 'path ~ recipes/' --limit 2",
+  "html": "------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Recipes overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/overview\ndescription: Overview of the recipes\nbody-snippet: # Overview See [pasta](<span style=\"color:var(--ctp-sapphire)\">pasta.md</span>), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…\nprovenance: lexical\n------"
  }
 }
