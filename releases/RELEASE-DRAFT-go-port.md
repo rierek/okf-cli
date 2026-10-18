@@ -15,7 +15,7 @@ Draft of the release note for the release that ships the Go port of `okf`. The v
 - **MCP server** (`mcp/okf_mcp.py`, still run through `uv`) now calls the binary: `$OKF_BIN`, else `bin/okf` or `go/bin/okf` next to `mcp/`, else `okf` on `PATH`.
 - **New hidden command `okf build-tagvec`.** The tag-vector producer, formerly a Python script, is a command now (dry run unless `--produce`).
 - **Frontmatter edits keep your formatting.** The Python CLI re-serialised the frontmatter; the binary patches only the edited lines.
-- Docs: [docs/install.md](../docs/install.md) (per platform, troubleshooting), [command reference](https://rierek.github.io/okf-cli/reference/commands/) (one page per command and verb), README sections Install and Differences from the Python CLI.
+- Docs: [Installation](https://rierek.github.io/okf-cli/overview/installation/) (per platform, troubleshooting), [command reference](https://rierek.github.io/okf-cli/reference/commands/) (one page per command and verb), README sections Install and Differences from the Python CLI.
 
 The Python CLI is still published (wheel, sdist, `uv run --script cli/okf-cli.py`).
 
@@ -25,7 +25,7 @@ Deviations from the Python CLI and other open findings are listed with a short I
 
 ## Upgrade steps
 
-1. Install the new binary: `brew upgrade okf-cli`, or download `okf-<os>-<arch>` from the release (see [docs/install.md](../docs/install.md)).
+1. Install the new binary: `brew upgrade okf-cli`, or download `okf-<os>-<arch>` from the release (see [Installation](https://rierek.github.io/okf-cli/overview/installation/)).
 2. Make sure the new binary is the first `okf` on `PATH`: `type -a okf` and `file "$(command -v okf)"`. Remove an old Python launcher (a Homebrew 0.2.x keg, a pipx or `uv tool` install, a wrapper `~/.local/bin/okf` that runs `uv run --script …`).
 3. Run `okf install --apply` again, so skills, the MCP entry and the completion scripts point at the new version. A release binary on its own installs completion only; use Homebrew or a clone for the skill and the MCP server.
 4. Restart your agent sessions.
