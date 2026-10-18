@@ -75,11 +75,11 @@ Files that carry `generated` (`by`, `at`) in place of `timestamp`, and `status` 
 
 ## Limits
 
-- Exit codes of `migrate` other than 0 (success) and 2 (a file the patcher refuses) are not verified. TODO: verify
+- `migrate` exits 0 on success and 2 for a file the patcher refuses. A path that is not a directory exits 3.
 - `okf check` can report findings unrelated to the migration. Read the rule names.
 
 ## Reference
 
 - [`okf migrate`](/okf-cli/reference/commands/okf-migrate/)
 - [`okf check`](/okf-cli/reference/commands/okf-check/)
-- [Troubleshooting](/okf-cli/troubleshooting/)
+- [Troubleshooting](/okf-cli/overview/troubleshooting/)

@@ -108,8 +108,8 @@ Frontmatter edits (`migrate` and the tag commands) patch single lines and keep y
 
 - Only `rename` and `archive` are shown with real output on this page. Run the other commands with `--check` or without `--apply` first.
 - A refused frontmatter ends the whole run of the tag commands and `migrate`. It does not skip the one file.
-- Over MCP, the tool `okf_reindex` has no `check` argument, so it writes. This comes from the tool signature and was not run over MCP. TODO: verify
-- Exit codes of the error paths are verified only for exit 0. For `rename` and `archive`, exit 3 (path not found) and exit 2 (bad path, destination exists) come from code, not from a run. TODO: verify
+- Over MCP, the tool `okf_reindex` has no `check` argument, so it writes. This comes from the tool signature in `mcp/okf_mcp.py`; no MCP call was run.
+- `rename` and `archive` exit 3 when the source is not found, and 2 for a path that is not a `.md` concept file or a reserved file such as `index.md`. `rename --apply` exits 2 when the destination exists, unless `--force` is given. A dry run of `rename` onto an existing destination exits 0.
 
 ## Reference
 

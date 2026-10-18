@@ -72,7 +72,7 @@ WARNING  kc/ctx/archived-entry _ctx/legacy.md  (entry under _archive/: _archive/
 
 ## Limits
 
-- A dead entry, a path that no longer exists, makes `ctx show` print `[DEAD]` and the warning `this list is incomplete`, and the exit code is 4. The `--help` text of `ctx show`, `ctx read`, `ctx check` and `ctx edit` says exit 1 [vf2r]. `TODO: finding`. Script against 4.
+- A dead entry, a path that no longer exists, makes `ctx show` print `[DEAD]` and the warning `this list is incomplete`, and the exit code is 4. The `--help` text of `ctx show`, `ctx read`, `ctx check` and `ctx edit` says exit 1 [vf2r]. Script against 4.
 
   ```text title="okf --root <catalogue> ctx show legacy (excerpt)"
     3. [DEAD] <catalogue>/handbook/ops/gone.md

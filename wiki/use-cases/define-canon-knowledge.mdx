@@ -135,7 +135,7 @@ Project concepts that carry the same canon text, and a drift report (`source-cha
 ## Limits
 
 - After `rename --apply` of a canon owner, the `> [!quote]` line in consumers keeps the old path and `sync-status` can still say `synced` [6peo]. Run `okf sync-update --apply`.
-- `sync-update` exits 5 when it refuses a block or cannot resolve one. The exit codes of `sync-insert` other than 0 and 3 are not verified. TODO: verify
+- `sync-update` exits 5 when it refuses a block or cannot resolve one. `sync-insert` exits 3 when the concept or the block does not exist.
 
 ## Reference
 

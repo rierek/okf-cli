@@ -65,7 +65,7 @@ The server is a thin wrapper: each tool runs the `okf` binary with `--json` and 
 - Binary lookup order: `$OKF_BIN`, then `bin/okf` or `go/bin/okf` next to `mcp/`, then `okf` on PATH.
 - A result longer than `OKF_MCP_MAX_CHARS` (default `120000`) is an error that asks the caller to narrow the call.
 - Not exposed as tools: `verify`, `migrate`, `archive`, `merge-tags`, `normalize-tags`, `remove-tags`, `registry convert`, `fix-*`, `rewrite-path`, `visualize`, `recent` and the `ctx` write verbs.
-- `okf_reindex` has no `check` argument, so the tool writes. TODO: verify by a run over MCP.
+- `okf_reindex` has no `check` argument, so the tool writes. This comes from the tool signature in `mcp/okf_mcp.py`; no MCP call was run.
 
 Where `okf install` puts the entry:
 
@@ -136,7 +136,7 @@ Where `okf install` puts the entry:
     ```
   </TabItem>
   <TabItem label="OpenClaw">
-    Install runs `openclaw mcp set okf …` and copies the skill to `~/.openclaw/skills/okf`. TODO: verify the written entry by a run with the `openclaw` CLI.
+    Install runs `openclaw mcp set okf …` and copies the skill to `~/.openclaw/skills/okf`. The entry itself was not checked: the `openclaw` CLI was not available.
   </TabItem>
   <TabItem label="Hermes">
     A managed block in `~/.hermes/config.yaml` (written in a throwaway home):
