@@ -23,7 +23,7 @@ const rows = walk(pages).map((file) => {
 		order: [chapters.indexOf(top) < 0 ? -1 : chapters.indexOf(top), rel.endsWith('index') ? 0 : 1, rel] };
 }).sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1] || a.order[2].localeCompare(b.order[2]));
 
-const head = '# okf\n\n> CLI and MCP server for Open Knowledge Format (OKF) catalogues.\n\n';
+const head = '# okf-cli\n\n> Command line and MCP server for working with Open Knowledge Format (OKF) catalogues. This is the documentation of the CLI, not of the OKF specification.\n\n';
 writeFileSync(out + 'llms.txt', head + rows.map((r) => `- [${r.title}](${r.url})${r.description ? ': ' + r.description : ''}`).join('\n') + '\n');
 writeFileSync(out + 'llms-full.txt', head + rows.map((r) => `# ${r.title}\n\nSource: ${r.url}\n\n${r.body}\n`).join('\n---\n\n'));
 console.log(`llms: ${rows.length} pages`);

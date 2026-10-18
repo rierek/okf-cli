@@ -22,8 +22,8 @@ export default defineConfig({
 	base: '/okf-cli',
 	integrations: [
 		starlight({
-			title: 'okf',
-			description: 'CLI and MCP server for Open Knowledge Format (OKF) catalogues',
+			title: 'okf-cli',
+			description: 'Command line and MCP server for working with Open Knowledge Format (OKF) catalogues',
 			components: { Header: './src/components/Header.astro' },
 			customCss: ['./src/styles/custom.css', './src/styles/elements.css'],
 			// Code blocks use the same Catppuccin flavours as the site. Expressive Code raises token
