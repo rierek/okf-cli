@@ -1,0 +1,29 @@
+---
+title: "Command overview"
+description: "All okf commands by purpose, global options and shared conventions."
+---
+
+import { Content as CommandTree } from './_command-tree.md';
+
+## Purpose
+
+Entry to the generated command pages: every visible command and every verb, grouped as in `okf --help`.
+
+## Audience
+
+A user who looks up the options of one command.
+
+## Required sections
+
+### Pages are generated
+
+- Command pages are generated from the command tree by `go/cmd/okf-docgen`; do not edit them. Hand-written supplements go in `_supplements/`. Source: FACTS §Section index of commands.
+- The text of `okf --help` still describes the Python script [l2j0]. Source: FACTS §Defect list i.
+
+### Global options
+
+- `--root` (catalogue root), `--global` (use the root in the config file; not with `--root`), `--json` (one JSON envelope per command; ctx verbs and most commands, not every command). They go before the command. Source: FACTS §Topic: config files and root resolution; FACTS §Topic: `--json` envelope. TODO: verify which commands accept `--json`
+
+### Commands by purpose
+
+<CommandTree />
