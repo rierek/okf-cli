@@ -1,37 +1,29 @@
 ---
-title: "Command overview"
-description: "All okf commands by purpose, global options and shared conventions."
+title: "okf commands list"
+description: "okf command reference: all okf commands by purpose, as in okf --help, with global options."
 ---
 
 import { Content as CommandTree } from './_command-tree.md';
 
-## Purpose
+Command pages are generated from the command tree by `okf-docgen`. This page lists every visible command and every ctx verb, grouped as in `okf --help`. Open a command to see its usage and options.
 
-Entry to the generated command pages: every visible command and every verb, grouped as in `okf --help`.
+:::note
+The text of `okf --help` still describes the Python script [l2j0]. The option lists are correct.
+:::
 
-## Audience
+## Global options
 
-A user who looks up the options of one command.
+`--root` and `--global` belong to `okf` itself and go before the command.
 
-## Visual elements
+| Option | Meaning |
+|---|---|
+| `--root ROOT` | Catalogue root. Default: the nearest catalogue above the current directory. |
+| `--global` | Use the root in `~/.config/okf/config.toml`, even when a catalogue lies above. Not allowed together with `--root` (exit 2). |
 
-Two lists: the generated tree and a note linking to the Features activities.
+`--json` is not global. Each command declares it and it goes after the command: `okf find git --json`. Every command except `okf registry` accepts it; each ctx verb accepts it, `okf ctx` alone does not. `okf --json list` fails with `unrecognized arguments: --json`. See [JSON output and exit codes](/reference/json-output-and-exit-codes/).
 
-## Search terms
+For the ctx workflow, see [Context bundles](/features/context-bundles/).
 
-okf command reference; okf commands list; okf --help
-
-## Required sections
-
-### Pages are generated
-
-- Command pages are generated from the command tree by `go/cmd/okf-docgen`; do not edit them. Hand-written supplements go in `_supplements/`. Source: FACTS §Section index of commands.
-- The text of `okf --help` still describes the Python script [l2j0]. Source: FACTS §Defect list i.
-
-### Global options
-
-- `--root` (catalogue root), `--global` (use the root in the config file; not with `--root`), `--json` (one JSON envelope per command; ctx verbs and most commands, not every command). They go before the command. Source: FACTS §Topic: config files and root resolution; FACTS §Topic: `--json` envelope. TODO: verify which commands accept `--json`
-
-### Commands by purpose
+## Commands by purpose
 
 <CommandTree />
