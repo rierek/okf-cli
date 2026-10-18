@@ -24,6 +24,15 @@ export default defineConfig({
 		starlight({
 			title: 'okf-cli',
 			description: 'Command line and MCP server for working with Open Knowledge Format (OKF) catalogues',
+			head: [
+				{ tag: 'meta', attrs: { property: 'og:site_name', content: 'okf-cli' } },
+				{ tag: 'meta', attrs: { property: 'og:type', content: 'website' } },
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://rierek.github.io/okf-cli/og.png' } },
+				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+				{ tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://rierek.github.io/okf-cli/og.png' } },
+			],
 			components: { Header: './src/components/Header.astro', Hero: './src/components/Hero.astro' },
 			customCss: ['./src/styles/custom.css', './src/styles/elements.css'],
 			// Code blocks use the same Catppuccin flavours as the site. Expressive Code raises token
