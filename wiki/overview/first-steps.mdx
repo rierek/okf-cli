@@ -1,0 +1,197 @@
+---
+title: "Getting started with okf: search a Markdown knowledge base"
+description: "okf getting started: point okf at a catalogue, list its bundles, build the index, run okf find, read one concept and run okf check. Five steps on a test catalogue."
+---
+
+import { Steps, LinkCard, CardGrid, Aside } from '@astrojs/starlight/components';
+
+## Getting started with okf: search a Markdown knowledge base
+
+**After these five steps you have found a concept with `okf find`, read it with `okf read` and run a conformance check with `okf check`.**
+
+The output below comes from okf 0.2.4 (`git describe`: `rel-0-2-4-119-gd75ad19`). It was run against a throwaway copy of the test catalogue of the okf repository (`tests/golden/catalogue`). Use that copy, or your own catalogue, so that you never run your first experiments on live content. Install okf first: see [Installation](/okf-cli/overview/installation/).
+
+<Steps>
+
+1. **Point okf at a catalogue.**
+
+   okf needs one catalogue root. It finds it in this order:
+
+   1. `--global`: the `root` key of `~/.config/okf/config.toml`.
+   2. `--root PATH`.
+   3. The nearest catalogue above the working directory. A directory counts as a catalogue when it holds `.okf.toml`, or `SPEC.md` together with `TYPES.md`.
+   4. The `root` key of the user config.
+
+   Copy the test catalogue and change into it. The copy holds `.okf.toml`, so okf finds it from there:
+
+   ```bash title="Make a throwaway catalogue"
+   cp -R tests/golden/catalogue /tmp/okf-try && cd /tmp/okf-try
+   ```
+
+   Details: [Configuration](/okf-cli/reference/configuration/).
+
+2. **List the bundles with `okf index`.**
+
+   A bundle is a top-level directory of the catalogue. `okf index` prints one line per bundle.
+
+   ```text title="okf index"
+   $ okf index
+   _ctx: Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.
+   handbook: Welcome to the handbook.
+   kc-gov:
+   recipes:
+   [exit 0]
+   ```
+
+   Three bundles hold concepts. `_ctx` holds [context bundles](/okf-cli/features/context-bundles/). Bundles with no description print an empty text after the colon.
+
+3. **Search with `okf build-index` and `okf find`.**
+
+   Ask first, without an index. `find` falls back to a substring scan and says so on stderr:
+
+   ```text title="okf find without an index"
+   $ okf find bread --limit 2
+   note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking
+   ------
+   rank: 1
+   title: Bread
+   type: Recipe
+   path: recipes/bread
+   description: Bread with a long rise
+   body-snippet: # Bread ## Steps Mix, rise, bake. Related: [pasta](pasta.md).…
+   provenance: lexical
+   ------
+   rank: 2
+   title: cooking
+   type: Context
+   path: _ctx/cooking
+   description: Cooking basics
+   body-snippet: …comment | |---|---|---|---| | 1 | pflicht | [bread](/okf-cli/recipes/bread.md) | | | 2 | pflicht | [pasta](/okf-cli/recipes/pasta.md) | | | 3 | pflicht |…
+   provenance: lexical
+   ------
+   [exit 0]
+   ```
+
+   Build the FTS5 index once. It lands in `.fts/fts.sqlite` inside the catalogue. Then ask again for BM25 ranking:
+
+   ```text title="okf build-index, then okf find"
+   $ okf build-index
+   indexed 25 concept(s) -> <catalogue>/.fts/fts.sqlite
+   [exit 0]
+   $ okf find bread --limit 2
+   note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only
+   ------
+   rank: 1
+   title: Bread
+   type: Recipe
+   path: recipes/bread
+   description: Bread with a long rise
+   body-snippet: # Bread ## Steps Mix, rise, bake. Related: [pasta](pasta.md).…
+   provenance: lexical
+   ------
+   rank: 2
+   title: Recipes overview
+   type: Concept
+   path: recipes/overview
+   description: Overview of the recipes
+   body-snippet: # Overview See [pasta](pasta.md), [bread](/okf-cli/recipes/bread.md), [soup](soup.md) and [[salad]].…
+   provenance: lexical
+   ------
+   [exit 0]
+   ```
+
+   Semantic search is optional. See [Markdown knowledge base search](/okf-cli/features/search/).
+
+4. **Read one concept with `okf read`.**
+
+   Pass the `path` value from the search result:
+
+   ```text title="okf read recipes/bread"
+   $ okf read recipes/bread
+   ---
+   type: Recipe
+   title: Bread
+   description: Bread with a long rise
+   tags:
+     - food
+     - bread
+   timestamp: 2025-12-02T08:00:00Z
+   status: todo
+   ---
+
+   # Bread
+
+   ## Steps
+
+   Mix, rise, bake. Related: [pasta](pasta.md).
+
+   [exit 0]
+   ```
+
+5. **Check the catalogue with `okf check`.**
+
+   `check` scans against the format rules. Name a bundle to narrow the scan. The test catalogue breaks rules on purpose, so the exit code is 4:
+
+   ```text title="okf check recipes"
+   $ okf check recipes
+   ERROR    okf/type/reserved-no-type recipes/readme.md  (reserved file must not carry `type`)
+   ERROR    kc/supersede/resolves recipes/salad.md  (superseded_by target does not resolve: recipes/soup)
+   ERROR    kc/asset/placement   recipes/shopping.txt  (non-md file outside assets/)
+   ERROR    kc/supersede/resolves recipes/stew.md  (superseded_by target does not resolve: handbook/ops/deploy)
+   WARNING  kc/link/crosslink-format recipes/bread.md  (non catalogue-absolute link(s) (use /bundle/…): pasta.md)
+   WARNING  kc/link/crosslink-format recipes/drafts/ideas.md  (non catalogue-absolute link(s) (use /bundle/…): pie.md)
+   WARNING  kc/link/crosslink-format recipes/overview.md  (non catalogue-absolute link(s) (use /bundle/…): pasta.md, soup.md)
+   WARNING  kc/frontmatter/tags-block-form recipes/overview.md  (tags field uses inline form — local convention requires YAML block-list)
+   WARNING  kc/link/crosslink-format recipes/salad.md  (non catalogue-absolute link(s) (use /bundle/…): soup.md)
+   WARNING  kc/supersede/scope   recipes/salad.md  (superseded_by used on non-Decision concept (type=Recipe))
+   WARNING  kc/frontmatter/tags-block-form recipes/soup.md  (tags field uses inline form — local convention requires YAML block-list)
+   WARNING  kc/markup/xml-like-tags recipes/soup.md  (angle-bracket placeholder(s) not in code-fence: <size>)
+   WARNING  kc/tag/registered    recipes/stew.md  (tag `misc` not registered in TAGS.md)
+   WARNING  kc/frontmatter/english-keys recipes/stew.md  (German frontmatter key(s): beschreibung, titel)
+   WARNING  kc/supersede/scope   recipes/stew.md  (superseded_by used on non-Decision concept (type=Recipe))
+   4 VIOLATIONS
+   [exit 4]
+   ```
+
+   The summary counts the `ERROR` lines. Warnings print but do not count, unless you add `--strict`. Exit codes: [JSON output and exit codes](/okf-cli/reference/json-output-and-exit-codes/).
+
+</Steps>
+
+## Where options go
+
+`--root` and `--global` are options of `okf` itself. Put them before the command. You can then run okf from any directory:
+
+```text title="--root before the command"
+$ cd /tmp
+$ okf --root /tmp/okf-try index
+_ctx: Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.
+handbook: Welcome to the handbook.
+kc-gov:
+recipes:
+[exit 0]
+```
+
+Without `--root`, a directory with no catalogue above it and no `root` in the user config fails:
+
+```text title="No catalogue found"
+$ okf index
+ERROR: no catalogue found in cwd or its ancestors and no root in ~/.config/okf/config.toml; pass --root <path>
+[exit 3]
+```
+
+<Aside type="note">
+`--json` is not global. Each command takes its own `--json` flag, after the command name: `okf check --json`.
+</Aside>
+
+## Result
+
+You have a catalogue root that okf resolves, a lexical index in `.fts/fts.sqlite`, and one real run each of `index`, `find`, `read` and `check`.
+
+## Go on
+
+<CardGrid>
+  <LinkCard title="Concepts" description="Catalogue, bundle, concept and type." href="/okf-cli/overview/concepts/" />
+  <LinkCard title="okf find" description="All options of the search command." href="/okf-cli/reference/commands/okf-find/" />
+  <LinkCard title="okf read" description="Print a concept, one section or its frontmatter." href="/okf-cli/reference/commands/okf-read/" />
+  <LinkCard title="okf check" description="Rules, severities and exit codes." href="/okf-cli/reference/commands/okf-check/" />
+</CardGrid>

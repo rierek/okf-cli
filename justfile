@@ -85,9 +85,9 @@ eval-gate:
 skill-eval *ARGS:
     python3 scripts/skill-eval.py {{ARGS}}
 
-# Release-Note-Entwurf aus den Beans eines Release-Meilensteins: just release-notes OKFT-xxxx > releases/RELEASE-x.y.z.md
-release-notes MILESTONE:
-    python3 scripts/release-notes.py {{MILESTONE}}
+# Changes/Fixes-Block einer Release-Seite aus den Beans eines Meilensteins: just release-notes OKFT-xxxx [--write wiki/releases/<v>.md]; ohne --write auf stdout, mit --write nur der Bereich zwischen den generated-Markern
+release-notes MILESTONE *ARGS:
+    python3 scripts/release-notes.py {{MILESTONE}} {{ARGS}}
 
 # Gate A (EARS-Form der Acceptance Criteria) gegen rohe .beans/-Dateien, z.B. `just gate-a ../.beans/OKFT-xxxx--slug.md`. Exit 0 = sauber, 1 = Befund, 2 = Fehlaufruf.
 gate-a *ARGS:
@@ -109,3 +109,22 @@ check root=catalogue:
 # Agent-Onboarding gegen den echten Catalogue ausgeben
 prime root=catalogue:
     uv run --script {{cli_dir}}/okf-cli.py --root {{root}} prime
+
+# Port der Doku-Site-Vorschau (eine Quelle)
+docs_port := "4321"
+
+# Befehlsseiten der Doku aus dem Befehlsbaum erzeugen (go/cmd/okf-docgen; Ausgabe gitignored)
+docs-gen:
+    go run -C go ./cmd/okf-docgen ../wiki/reference/commands
+
+# Doku-Site bauen (Starlight, site/dist); laeuft in CI und lokal gleich
+docs-build: docs-gen
+    cd site && npm ci && npm run build
+
+# Doku-Site im Dev-Server (Port: docs_port)
+docs-dev: docs-gen
+    cd site && npm run dev -- --port {{docs_port}}
+
+# Echte okf-Ausgabe fuer die Startseite neu aufnehmen (site/src/data/demo.json; braucht go/bin/okf)
+docs-capture: go-build
+    node site/scripts/capture-demo.mjs

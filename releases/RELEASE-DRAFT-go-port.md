@@ -15,28 +15,18 @@ Draft of the release note for the release that ships the Go port of `okf`. The v
 - **MCP server** (`mcp/okf_mcp.py`, still run through `uv`) now calls the binary: `$OKF_BIN`, else `bin/okf` or `go/bin/okf` next to `mcp/`, else `okf` on `PATH`.
 - **New hidden command `okf build-tagvec`.** The tag-vector producer, formerly a Python script, is a command now (dry run unless `--produce`).
 - **Frontmatter edits keep your formatting.** The Python CLI re-serialised the frontmatter; the binary patches only the edited lines.
-- Docs: [docs/install.md](../docs/install.md) (per platform, troubleshooting), [docs/reference.md](../docs/reference.md) (every command with a real example), README sections Install and Differences from the Python CLI.
+- Docs: [Installation](https://rierek.github.io/okf-cli/overview/installation/) (per platform, troubleshooting), [command reference](https://rierek.github.io/okf-cli/reference/commands/) (one page per command and verb), README sections Install and Differences from the Python CLI.
 
 The Python CLI is still published (wheel, sdist, `uv run --script cli/okf-cli.py`).
 
-## Known deviations from the Python CLI
+## Known limitations
 
-As of this release; the product owner has not yet decided them. Evidence: `docs/topics/okf-go-port/ACCEPTANCE-REPORT.md`.
-
-- A YAML parse error is worded and located by the Go parser: `did not find expected ',' or ']' (line 3, column 9)` where Python said `expected ',' or ']', but got ':' (line 4, column 12)`. Same file, same rule, same exit code.
-- A frontmatter shape the line patcher cannot patch is refused, not rewritten: exit 2 with `<path>: <reason>`, file untouched. Shapes: a lone CR as line ending, a flow-mapping or `null` root, an anchor, alias or explicit tag on the edited value, a comment inside a multi-line flow list, a few list layouts. One refused file ends the whole run of `merge-tags`, `remove-tags`, `normalize-tags` and `migrate`, a dry run too.
-- Rare YAML and TOML edge cases are validated differently (D-26 to D-30 of the report), and `recent` prints UTC where `TZ` is a POSIX rule string (D-52).
+Deviations from the Python CLI and other open findings are listed with a short ID on the [Known limitations](https://rierek.github.io/okf-cli/known-limitations/) page, for example `[cwyx]` (frontmatter shapes the writer refuses) and `[n760]` (one refused file ends a whole run).
 
 ## Upgrade steps
 
-1. Install the new binary: `brew upgrade okf-cli`, or download `okf-<os>-<arch>` from the release (see [docs/install.md](../docs/install.md)).
+1. Install the new binary: `brew upgrade okf-cli`, or download `okf-<os>-<arch>` from the release (see [Installation](https://rierek.github.io/okf-cli/overview/installation/)).
 2. Make sure the new binary is the first `okf` on `PATH`: `type -a okf` and `file "$(command -v okf)"`. Remove an old Python launcher (a Homebrew 0.2.x keg, a pipx or `uv tool` install, a wrapper `~/.local/bin/okf` that runs `uv run --script …`).
 3. Run `okf install --apply` again, so skills, the MCP entry and the completion scripts point at the new version. A release binary on its own installs completion only; use Homebrew or a clone for the skill and the MCP server.
 4. Restart your agent sessions.
 5. Existing indexes (`.fts/fts.sqlite`, `.tagvec/tag_vectors.sqlite`) built by the Python CLI keep working; no rebuild is needed.
-
-## Deploy steps after PO approval
-
-1. In `repo/` on `main`: merge the integration line `--no-ff`, check the diff against the line, run `just test` and `just golden-go`, then `git push origin main`.
-2. Tag the merge commit `rel-<x-y-z>` and push the tag. The release workflow builds the four binaries, the wheel and the sdist and attaches the provenance; verify the provenance with `slsa-verifier`.
-3. In `packaging/homebrew/okf-cli.rb` add `url`, `version` and `sha256` of that tag, then copy the formula to the tap (`xRiErOS/homebrew-tap`, `Formula/okf-cli.rb`). Check it first with `just brew-local-check`.

@@ -58,6 +58,9 @@ func NewApp() *App {
 // Directory is the command directory in name order, hidden entries included.
 func (a *App) Directory() []Entry { return slices.Clone(a.entries) }
 
+// Verbs is the verb table of command name in the order of its spec; nil for a command without verbs.
+func (a *App) Verbs(name string) []Verb { return slices.Clone(a.specs[name].Verbs) }
+
 // Attach gives the directory command name its arguments, verbs and handler. It panics, which
 // stops the binary at startup, when name is not in the directory, when the command already has
 // a spec or when the spec is malformed.

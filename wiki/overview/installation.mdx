@@ -1,0 +1,129 @@
+---
+title: "Install okf CLI: Homebrew, release binary or source build"
+description: "Install the okf CLI on macOS or Linux with Homebrew, a release binary or a source build, then check that it runs."
+---
+
+import { Tabs, TabItem, Steps, LinkCard } from '@astrojs/starlight/components';
+
+**After this page, `okf --help` runs on your machine.**
+
+`okf` is one binary written in Go. It needs no Python and no `uv`. It runs on macOS and Linux, on `amd64` and `arm64`. Only the MCP server that `okf install` registers needs `uv`.
+
+Pick one channel:
+
+<Tabs>
+  <TabItem label="Homebrew">
+    ```bash title="Terminal"
+    brew install okf-cli
+    ```
+
+    The formula builds `okf` from source with `just go-build`. `go` and `just` are build dependencies. `uv` is a runtime dependency for the MCP server only. The keg also holds the agent skill and the MCP server script.
+
+    :::caution
+    The formula in the repository declares only `head`: it has no `url`, `version` or `sha256`. With that copy a plain `brew install okf-cli` has no stable version. Use `brew install --HEAD okf-cli`. Whether the tap copy differs is not visible from the repository. See [71rn] in [Known limitations](/okf-cli/known-limitations/).
+    :::
+  </TabItem>
+  <TabItem label="Release binary">
+    A release carries one binary per platform: `okf-darwin-arm64`, `okf-darwin-amd64`, `okf-linux-amd64` and `okf-linux-arm64`. It also carries a wheel, an sdist and the provenance file `multiple.intoto.jsonl`. Replace `<tag>` with the release tag and pick your platform.
+
+    ```bash title="Terminal"
+    mkdir -p ~/.local/bin
+    curl -fsSL -o ~/.local/bin/okf \
+      https://github.com/rierek/okf-cli/releases/download/<tag>/okf-darwin-arm64
+    chmod +x ~/.local/bin/okf
+    ```
+
+    `~/.local/bin` must be on your `PATH`. If it is not, add `export PATH="$HOME/.local/bin:$PATH"` to your rc file.
+
+    :::caution
+    A lone release binary has no `skills/okf` and no `mcp/okf_mcp.py` next to it. The skill and MCP steps of `okf install` stay `BLOCKED`. Use Homebrew or a clone if you want them.
+    :::
+
+    :::caution
+    Nothing in the repository states that the macOS binaries are signed or notarised [c0mc]. The release workflow does not run a built binary before upload [dqq5]. Run `okf --help` on the downloaded file before you rely on it.
+    :::
+  </TabItem>
+  <TabItem label="Build from source">
+    You need Go 1.26 or newer and [`just`](https://github.com/casey/just). The build is pure Go: no cgo, no C compiler.
+
+    ```bash title="Terminal"
+    git clone https://github.com/rierek/okf-cli
+    cd okf-cli
+    just go-build            # writes go/bin/okf
+    ```
+
+    Run `go/bin/okf` in place, or put it on your `PATH`. The clone keeps `skills/okf` and `mcp/okf_mcp.py` next to the binary, so `okf install` finds them.
+  </TabItem>
+</Tabs>
+
+Some older files in the repository still name the owner `xRiErOS` in clone and release URLs. The repository is `rierek/okf-cli` [zs6t].
+
+## Verify the install
+
+There is no `okf --version` [i2ws]. Check the path, the file type and `--help`:
+
+```bash title="Terminal"
+command -v okf
+file "$(command -v okf)"
+okf --help
+```
+
+`file` must report a compiled executable (Mach-O on macOS, ELF on Linux), not a script. A script means the old Python CLI is first on your `PATH`: see [Troubleshooting](/okf-cli/overview/troubleshooting/).
+
+`okf --help` starts like this (okf 0.2.4 by `git describe`, macOS arm64):
+
+```text title="okf --help"
+usage: okf [-h] [--root ROOT] [--global]
+           {archive,build-index,build-semantic-index,check,ctx,find,...} ...
+
+okf — navigation, search and maintenance for an OKF Knowledge Catalogue.
+```
+
+## Register okf with agents and shells (optional)
+
+`okf install` prints a plan and changes nothing. `okf install --apply` performs it. `okf install --uninstall --apply` removes what `install` created. It covers the agent skill, the MCP server entry and TAB completion for zsh, bash and fish.
+
+<Steps>
+1. Preview: `okf install`
+2. Apply: `okf install --apply` (add `--only zsh,omp` to limit the targets)
+3. Open a new shell and restart your agents.
+</Steps>
+
+Plan from a lone binary with no skill next to it (okf 0.2.4):
+
+```text title="okf install --only zsh,claude"
+okf install - PLAN only, nothing is changed (add --apply to perform it)
+source: /private/tmp/ovit (installed package, skills are copied)
+
+skills
+  BLOCKED   claude          source not found: /private/tmp/ovit/skills/okf
+
+mcp
+  BLOCKED   claude          MCP server script not found: /private/tmp/ovit/mcp/okf_mcp.py
+
+shell
+  skip      PATH            okf is already on PATH: /opt/homebrew/bin/okf
+  create    zsh completion  ~/.zsh/completions/_okf
+  create    zsh rc          ~/.zshrc (managed block)
+
+2 step(s) blocked or failed: read the marked lines above
+2 step(s) planned. Run again with --apply to perform them.
+install failed with exit code 1
+```
+
+A blocked plan exits 1 and ends with only `install failed with exit code 1` [fs8c]. Read the plan above that line.
+
+## Update and uninstall
+
+- **Update.** Homebrew: `brew upgrade okf-cli`. Release binary: download the new asset over the old file. Clone: `git pull && just go-build`. Then run `okf install --apply` again: the installed skill copies and completion scripts refresh only then.
+- **Uninstall.** Run `okf install --uninstall --apply`, then remove the binary (`brew uninstall okf-cli`, or delete the file).
+
+## Existing indexes
+
+Indexes built earlier (`.fts/fts.sqlite`, `.tagvec/tag_vectors.sqlite`) keep working. You do not need to rebuild them.
+
+## Next
+
+<LinkCard title="First steps" description="Index, find, read and check a catalogue." href="/okf-cli/overview/first-steps/" />
+<LinkCard title="okf install" description="Every option of the install command." href="/okf-cli/reference/commands/okf-install/" />
+<LinkCard title="Troubleshooting" description="Fixes by symptom." href="/okf-cli/overview/troubleshooting/" />

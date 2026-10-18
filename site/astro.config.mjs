@@ -1,0 +1,119 @@
+// Scaffold copied from the Lif docs site (site/ in the Lif repo); see docs/topics/okf-docs-site/ERPROBUNG.md.
+// @ts-check
+import { defineConfig } from 'astro/config';
+import starlight from '@astrojs/starlight';
+import { fileURLToPath } from 'node:url';
+import catppuccin from '@catppuccin/starlight';
+import mermaid from 'astro-mermaid';
+
+export default defineConfig({
+	vite: {
+		plugins: [{
+			// Content lives in ../wiki: resolve its bare imports from site/node_modules.
+			name: 'wiki-resolve',
+			enforce: 'pre',
+			async resolveId(id, importer, opts) {
+				if (!importer || !/[\\/]wiki[\\/]/.test(importer) || !/^(@astrojs|@lucide)\//.test(id)) return null;
+				return this.resolve(id, fileURLToPath(new URL('./package.json', import.meta.url)), { ...opts, skipSelf: true });
+			},
+		}],
+	},
+	site: 'https://rierek.github.io',
+	base: '/okf-cli',
+	integrations: [
+		starlight({
+			title: 'okf-cli',
+			description: 'Command line and MCP server for working with Open Knowledge Format (OKF) catalogues',
+			head: [
+				{ tag: 'meta', attrs: { property: 'og:site_name', content: 'okf-cli' } },
+				{ tag: 'meta', attrs: { property: 'og:type', content: 'website' } },
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://rierek.github.io/okf-cli/og.png' } },
+				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+				{ tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://rierek.github.io/okf-cli/og.png' } },
+			],
+			components: { Header: './src/components/Header.astro', Hero: './src/components/Hero.astro' },
+			customCss: ['./src/styles/custom.css', './src/styles/elements.css'],
+			// Code blocks use the same Catppuccin flavours as the site. Expressive Code raises token
+			// contrast against the theme base; the panes sit on mantle (--okf-surface), so the floor is above 4.5:1 with
+			// room to spare. Options must stay serializable (a function here breaks the dev stylesheet route).
+			expressiveCode: {
+				themes: ['catppuccin-mocha', 'catppuccin-latte'],
+				minSyntaxHighlightingColorContrast: 6.5,
+				styleOverrides: {
+					borderRadius: '0.5rem',
+					borderWidth: '1px',
+					codeFontSize: '0.875rem',
+					codeLineHeight: '1.7',
+					textMarkers: { lineMarkerAccentWidth: '0px', backgroundOpacity: '35%' },
+				},
+			},
+			// D36/D51: sidebar mode (all chapters or current chapter only) is one switch in src/routeData.ts.
+			routeMiddleware: './src/routeData.ts',
+			// custom.css defines the --ctp-* tones for these two flavours; change both together.
+			plugins: [catppuccin({ dark: { flavor: 'mocha', accent: 'lavender' }, light: { flavor: 'latte', accent: 'lavender' } })],
+			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/rierek/okf-cli' }],
+			// Each top-level group is a chapter. Header chapters: Overview, Features, Use Cases, Reference, Resources
+			// (= Blog, Releases, Known limitations, Contribute, About); see src/components/nav.ts.
+			sidebar: [
+				{
+					label: 'Overview',
+					items: [
+						'overview',
+						'overview/installation',
+						'overview/first-steps',
+						'overview/concepts',
+						'overview/agent-onboarding',
+						'overview/troubleshooting',
+					],
+				},
+				{
+					label: 'Features',
+					items: [
+						'features',
+						'features/search',
+						'features/context-bundles',
+						'features/conformance-checks',
+						'features/safe-edits',
+						'features/tags-and-registry',
+						'features/canon-blocks',
+					],
+				},
+				{
+					label: 'Use Cases',
+					items: [
+						'use-cases',
+						'use-cases/onboard-agents',
+						'use-cases/organize-large-bundles',
+						'use-cases/migrate-to-okf-0-2',
+						'use-cases/work-with-multiple-bundles',
+						'use-cases/define-canon-knowledge',
+					],
+				},
+				{
+					label: 'Reference',
+					items: [
+						'reference',
+						{ label: 'Commands', items: [{ autogenerate: { directory: 'reference/commands' } }] },
+						'reference/where-filter',
+						'reference/json-output-and-exit-codes',
+						'reference/configuration',
+						'reference/frontmatter-and-types',
+						'reference/glossary',
+					],
+				},
+				{ label: 'Blog', items: [{ autogenerate: { directory: 'blog' } }] },
+				{
+					label: 'Resources',
+					items: [{ label: 'Releases', items: [{ autogenerate: { directory: 'releases' } }] }, 'known-limitations', 'contribute', 'about'],
+				},
+			],
+		}),
+
+		// ```mermaid fences become diagrams in the browser (theme follows data-theme, colours: custom.css).
+		// Must come after starlight(): astro-mermaid replaces markdown.processor with a copy, and Expressive Code hooks
+		// into the processor that is current when starlight() runs.
+		mermaid({ enableLog: false }),
+	],
+});

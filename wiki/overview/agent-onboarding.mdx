@@ -1,0 +1,215 @@
+---
+title: "Agent onboarding: MCP server, skill and okf prime"
+description: "Connect Claude Code, Codex, omp, opencode, Kimi Code, OpenClaw or Hermes to okf: okf install, MCP server, agent skill, okf prime, llms.txt."
+---
+
+import { Steps, Tabs, TabItem, Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+{/* Facts: FACTS §Topic: install, §Topic: MCP server and `OKF_BIN`, §Topic: agent skill, §okf prime, §Defect list h and j. Runs measured with okf 0.2.4 (git describe rel-0-2-4-119) in a throwaway HOME and a copy of the golden catalogue. */}
+
+**After this page your agent calls okf through MCP tools or the shell: one `okf install` registers the skill and the MCP server, and `okf prime` teaches the agent the catalogue in one call.**
+
+This page covers the MCP server for a markdown knowledge base, the Claude Code setup, `okf prime` and the agent skill. Output below comes from okf 0.2.4.
+
+## One command: okf install
+
+`okf install` registers okf with every agent and shell it finds on the machine. It needs no catalogue. Without flags it prints a plan and changes nothing.
+
+<Steps>
+
+1. Preview the plan.
+
+   ```bash title="Terminal"
+   okf install
+   ```
+
+2. Read the plan. A line marked `BLOCKED` stops the apply and makes the command exit 1, even for a plan.
+
+3. Apply it.
+
+   ```bash title="Terminal"
+   okf install --apply
+   ```
+
+4. Open a new shell and restart your agents.
+
+</Steps>
+
+A second `--apply` changes nothing. In a throwaway home directory:
+
+```text title="okf install --apply --only opencode,kimi,hermes (second run)"
+$ okf install --apply --only opencode,kimi,hermes | tail -3
+  unchanged hermes    mcp_servers.okf in ~/.hermes/config.yaml
+
+nothing to do: already up to date
+[exit 0]
+```
+
+`--only` narrows the run to a comma-separated list of agents (`claude`, `omp`, `codex`, `opencode`, `kimi`, `openclaw`, `hermes`) and shells (`zsh`, `bash`, `fish`). `--uninstall --apply` removes what install created. Details: [`okf install`](/okf-cli/reference/commands/okf-install/).
+
+An agent counts as detected when its binary is on PATH or its configuration directory exists.
+
+<Aside type="caution" title="Skill and MCP need a package root">
+A lone release binary installs shell completion only. The skill and the MCP server script live in `skills/okf` and `mcp/okf_mcp.py` beside the binary, so install from a Homebrew keg or a clone. Otherwise the plan says `BLOCKED claude  source not found: …/skills/okf` and exits 1 (known issue `fs8c`, see [known limitations](/okf-cli/known-limitations/)).
+</Aside>
+
+<Aside type="caution" title="uv is required for the MCP step">
+The MCP server runs as `uv run --with 'mcp<2' …/okf_mcp.py`. When `uv` is not on PATH, every MCP step is `BLOCKED  uv is not on PATH; install it (https://docs.astral.sh/uv/), then re-run`. The skill steps still apply. The `okf` binary itself never needs `uv`.
+</Aside>
+
+## MCP server
+
+The server is a thin wrapper: each tool runs the `okf` binary with `--json` and returns the `data` and `warnings` of the envelope. Correctness stays in the binary.
+
+- 21 tools. Every tool takes `root` (catalogue path; default: search upward from the server's working directory, then `~/.config/okf/config.toml`) and `use_global`. Passing both fails with `invalid_input`.
+- Binary lookup order: `$OKF_BIN`, then `bin/okf` or `go/bin/okf` next to `mcp/`, then `okf` on PATH.
+- A result longer than `OKF_MCP_MAX_CHARS` (default `120000`) is an error that asks the caller to narrow the call.
+- Not exposed as tools: `verify`, `migrate`, `archive`, `merge-tags`, `normalize-tags`, `remove-tags`, `registry convert`, `fix-*`, `rewrite-path`, `visualize`, `recent` and the `ctx` write verbs.
+- `okf_reindex` has no `check` argument, so the tool writes. This comes from the tool signature in `mcp/okf_mcp.py`; no MCP call was run.
+
+Where `okf install` puts the entry:
+
+<Tabs>
+  <TabItem label="Claude Code">
+    The plan runs the Claude Code CLI:
+
+    ```text title="okf install --only claude (plan line)"
+    create    claude          run: claude mcp add --scope user --transport stdio okf -- uv run --with 'mcp<2' <keg>/mcp/okf_mcp.py
+    ```
+
+    The skill goes to `~/.claude/skills/okf`. Without `claude` on PATH, install merges `mcpServers` into `~/.claude.json`.
+  </TabItem>
+  <TabItem label="Codex">
+    ```text title="okf install --only codex (plan line)"
+    create    codex           run: codex mcp add okf -- uv run --with 'mcp<2' <keg>/mcp/okf_mcp.py
+    ```
+
+    The skill goes to the shared `~/.agents/skills/okf`.
+  </TabItem>
+  <TabItem label="omp">
+    `mcpServers.okf` in `~/.omp/agent/mcp.json`:
+
+    ```json title="~/.omp/agent/mcp.json"
+    {
+      "mcpServers": {
+        "okf": {
+          "type": "stdio",
+          "command": "uv",
+          "args": ["run", "--with", "mcp<2", "<keg>/mcp/okf_mcp.py"],
+          "env": {}
+        }
+      }
+    }
+    ```
+
+    The skill goes to the shared `~/.agents/skills/okf`.
+  </TabItem>
+  <TabItem label="opencode">
+    `mcp.okf` in `~/.config/opencode/opencode.json` (written in a throwaway home with a stub `uv` on PATH):
+
+    ```json title="~/.config/opencode/opencode.json"
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "mcp": {
+        "okf": {
+          "type": "local",
+          "command": ["uv", "run", "--with", "mcp<2", "<keg>/mcp/okf_mcp.py"],
+          "enabled": true,
+          "timeout": 30000
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Kimi Code">
+    `mcpServers.okf` in `~/.kimi-code/mcp.json` (written in a throwaway home):
+
+    ```json title="~/.kimi-code/mcp.json"
+    {
+      "mcpServers": {
+        "okf": {
+          "command": "uv",
+          "args": ["run", "--with", "mcp<2", "<keg>/mcp/okf_mcp.py"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="OpenClaw">
+    Install runs `openclaw mcp set okf …` and copies the skill to `~/.openclaw/skills/okf`. The entry itself was not checked: the `openclaw` CLI was not available.
+  </TabItem>
+  <TabItem label="Hermes">
+    A managed block in `~/.hermes/config.yaml` (written in a throwaway home):
+
+    ```yaml title="~/.hermes/config.yaml"
+    # >>> okf-cli >>>
+    mcp_servers:
+      okf:
+        command: "uv"
+        args: ["run", "--with", "mcp<2", "<keg>/mcp/okf_mcp.py"]
+    # <<< okf-cli <<<
+    ```
+
+    The skill goes to `~/.hermes/skills/okf`.
+  </TabItem>
+</Tabs>
+
+`<keg>` is the package root: the Homebrew prefix or the clone. To register the server by hand, use the same `uv run --with 'mcp<2' <path>/okf_mcp.py` command in your agent's MCP configuration.
+
+## Skill
+
+The `okf` skill in `skills/okf` teaches an agent the commands and the OKF v0.2 rules. `SKILL.md` says it operates catalogues with the command line tool or its `okf_*` MCP tools. It alone is enough for search only. Flags, previews and provenance rules live in its `references/` files (context bundles, create a bundle, maintain a catalogue, migrate to v0.2, write concepts).
+
+`okf install` copies the skill from a package, or links it from a source tree:
+
+| Agent | Skill directory |
+|---|---|
+| Claude Code | `~/.claude/skills/okf` |
+| Codex, omp, opencode, Kimi Code | `~/.agents/skills/okf` (shared) |
+| Hermes | `~/.hermes/skills/okf` |
+| OpenClaw | `~/.openclaw/skills/okf` |
+
+`--uninstall` keeps the shared directory while another agent still reads it.
+
+## okf prime
+
+`okf prime` is the first call of an agent session. One call prints the usage guide, the command directory by purpose, and the state of the catalogue: root, bundle and concept counts, whether the search indexes exist, the tag vocabulary and the context bundles.
+
+```text title="okf --root <catalogue> prime --compact (excerpt)"
+## This catalogue
+
+root: <catalogue>
+bundles: 4 · concepts: 24
+fts index: absent — `find` degrades to a substring scan; run `build-index`
+semantic index: absent — `find` runs its lexical arm only
+tag vocabulary: closed — 11 tags in TAGS.md; check a new one with `tags --validate`, adopt it with `tags --register`
+ctx bundles: 3 — cooking · legacy · onboarding — `ctx show <slug>` lists one
+root docs: SPEC.md · TYPES.md · PROPERTIES.md · TAGS.md
+
+## Bundles
+
+- _ctx (3 concepts)
+- handbook (10 concepts)
+- kc-gov (2 concepts)
+- recipes (9 concepts)
+```
+
+- `--compact` lists bundles as name and count. `--full` adds types and tags per bundle. `--check-semantic` runs the exact semantic coverage check instead of only reporting whether the index exists.
+- `--json` prints an envelope whose `data` holds `guide`, `commands`, `find`, `state` and `bundles`. Over MCP the same call is `okf_prime`.
+- When the semantic index is partial, the state text names `cli/embeddings/build_tagvec.py`, which a Go install does not ship (known issue `erpf`). Ignore the script name; `okf build-tagvec --produce` is the Go command.
+
+## llms.txt and llms-full.txt
+
+The site publishes two plain-text files for agents that read the web:
+
+- [llms.txt](https://rierek.github.io/okf-cli/llms.txt): an index of all pages with title, URL and description.
+- [llms-full.txt](https://rierek.github.io/okf-cli/llms-full.txt): the text of every page in one file.
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="okf install" href="/okf-cli/reference/commands/okf-install/" description="Plan, apply, uninstall, --only." />
+  <LinkCard title="okf prime" href="/okf-cli/reference/commands/okf-prime/" description="Options and output shape." />
+  <LinkCard title="JSON output and exit codes" href="/okf-cli/reference/json-output-and-exit-codes/" description="The envelope the MCP tools return." />
+  <LinkCard title="Known limitations" href="/okf-cli/known-limitations/" description="fs8c, erpf and more." />
+</CardGrid>
