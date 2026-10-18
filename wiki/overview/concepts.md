@@ -52,7 +52,7 @@ Four file names are reserved and are not concepts: `index.md`, `log.md`, `readme
 okf implements the Open Knowledge Format (OKF) specification. okf-cli follows the specification and is adapted when it changes. This page promises no release date and no release for each specification version.
 :::
 
-The `okf_version` key in the `index.md` at the root of a bundle selects the rules. The test catalogue declares `okf_version: "0.2"`. Specification repository: TODO: verify (URL not in the sources of this documentation).
+The `okf_version` key in the `index.md` at the root of a bundle selects the rules. The test catalogue declares `okf_version: "0.2"`. The normative text is the [OKF specification](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md); [okf.md](https://okf.md/) is a community guide.
 
 ## Types and frontmatter
 
@@ -97,7 +97,7 @@ OKF v0.2 adds four provenance fields: `generated`, `sources`, `verified` and `st
 - `okf verify` records a review in `verified`. The reviewer is `human:<id>`, `process:<id>` or `<producer>/<version>`.
 - The trust tier follows from `verified` only: `unverified` (no entry with a `by`), `human-reviewed` (at least one `human:<id>`), otherwise `machine-confirmed`. The `--json` output of `list`, `find`, `read` and `recent` shows `tier` and `stale`.
 
-The v0.2 rules apply in bundles whose root `index.md` declares `okf_version: "0.2"`. TODO: verify what `okf check` does in a bundle without `okf_version`.
+The v0.2 rules apply in bundles whose root `index.md` declares `okf_version: "0.2"`. Without that key the v0.2 rule `okf/trust/generated` does not fire; see [Conformance checks](/okf-cli/features/conformance-checks/).
 
 ## Context bundles, tags, canon blocks
 
