@@ -1,47 +1,76 @@
 ---
-title: "Work with multiple bundles"
-description: "Point okf at different catalogues with --root, --global or a config file."
+title: "Work with multiple knowledge bases: okf --root and config"
+description: "Run one okf binary against several catalogues: pick one per call with --root, --global or a config file. Works for Obsidian vault folders too."
 ---
 
-## Purpose
+## Work with multiple knowledge bases
 
-Show how one binary serves several catalogues.
+**One binary, any number of catalogues, chosen per call.**
 
-## Audience
+Search terms covered: multiple knowledge bases CLI, `okf --root`, catalogue config, Obsidian vault CLI. Output below comes from okf 0.2.4 against two throwaway catalogues, `a` and `b`; `b` is a copy of `a` without the `recipes` and `kc-gov` bundles.
 
-A user with a private catalogue, project catalogues and shared bundles.
+## Set it up
 
-## Visual elements
+okf picks the catalogue in this order:
 
-Code blocks with two roots side by side; Mermaid of root resolution order.
+```mermaid
+flowchart TD
+    A[okf command] --> G{--global?}
+    G -- yes --> C[root from ~/.config/okf/config.toml]
+    G -- no --> R{--root?}
+    R -- yes --> D[that path]
+    R -- no --> W[nearest catalogue above the working directory]
+    W -- none found --> C
+```
 
-## Search terms
+1. `--root <path>` uses that catalogue.
+2. Otherwise okf walks up from the working directory and uses the nearest catalogue.
+3. Otherwise it reads `root` from `~/.config/okf/config.toml`.
+4. `--global` skips steps 1 and 2 and uses the config root.
 
-multiple knowledge bases CLI; okf --root; catalogue config; Obsidian vault CLI
+```toml title="~/.config/okf/config.toml"
+root = "~/knowledge"
+```
 
-## Required sections
+Details and the `.okf.toml` marker: [Configuration](/okf-cli/reference/configuration/).
 
-### Result sentence
+## Work through it
 
-- Bold sentence: one binary, any number of catalogues, chosen per call. Source: FACTS §Topic: config files and root resolution.
+Run the same command against two roots:
 
-### Set it up
+```text title="okf --root a index"
+_ctx: Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.
+handbook: Welcome to the handbook.
+kc-gov: 
+recipes: 
+```
 
-- Root resolution: `--root`, then the nearest catalogue above the working directory, then `~/.config/okf/config.toml`; `--global` uses the config root. Source: FACTS §Topic: config files and root resolution.
+```text title="okf --root b index"
+_ctx: Curated, ordered reading lists per topic — one file per ctx slug, managed by `okf ctx`.
+handbook: Welcome to the handbook.
+```
 
-### Work through it
+Inside a catalogue you need no flag. From `a/handbook/ops`, `okf index` prints the catalogue `a`. With `root = "<path to b>"` in the config, `okf --global index` run from inside `a` prints the catalogue `b`.
 
-- Run the same command against two roots: `okf --root A find x`, `okf --root B find x`. Source: FACTS §Topic: config files and root resolution.
-- Catalogue-wide commands work across all bundles of one root. Source: FACTS §Topic: catalogue, bundle, concept and type model.
+Catalogue-wide commands such as `find`, `list`, `check` and `tags` span all bundles of one root. Narrow to one bundle with `--where "path ~ handbook/"`. See [Where filter](/okf-cli/reference/where-filter/).
 
-### What you get
+## What you get
 
-- One command set across every catalogue. Source: FACTS §Topic: config files and root resolution.
+One command set across every catalogue: a private one, project ones and shared bundles. Agents use the same selection: the MCP tools take `root` and `use_global`, see [Agent onboarding](/okf-cli/overview/agent-onboarding/).
 
-### Limits
+## Limits
 
-- `--root` and `--global` go before the command and exclude each other. Source: FACTS §Topic: config files and root resolution.
+- `--root` and `--global` go before the command and exclude each other:
 
-### Reference
+  ```text title="okf --global --root b index"
+  ERROR: --global and --root exclude each other
+  [exit 2]
+  ```
 
-- Links to Configuration and Concepts. Source: FACTS §Section index of commands.
+- `--global` without a configured `root` exits 3.
+- One call uses one root. To search two catalogues, make two calls.
+
+## Reference
+
+- [Configuration](/okf-cli/reference/configuration/)
+- [Concepts](/okf-cli/overview/concepts/)
