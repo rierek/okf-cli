@@ -27,7 +27,7 @@ okf CLI overview; Open Knowledge Format; context management for AI agents; markd
 
 ### Specification-first
 
-- Prominent statement in the result block: okf follows the OKF specification and is updated when the specification changes; this separates it from CLIs that do not anchor to a specification. TODO: verify the exact commitment (Q01: a release per specification version, or softer)
+- Prominent statement in the result block: okf follows the OKF specification and is updated when the specification changes; this separates it from CLIs that do not anchor to a specification. Commitment (Q01, PO 2026-10-18): okf-cli follows the OKF specification and is adapted when it changes; no release date or per-version release is promised.
 - Bound to OKF v0.2; v0.2 rules run only in bundles whose root index declares `okf_version: "0.2"`. Source: FACTS §Topic: catalogue, bundle, concept and type model.
 
 ### What okf is

@@ -27,7 +27,7 @@ about okf; Open Knowledge Format tooling; okf origin
 
 ### Specification tool
 
-- One paragraph: okf exists to work with the OKF specification and is adapted when it changes. TODO: verify the exact commitment (Q01)
+- One paragraph: okf exists to work with the OKF specification and is adapted when it changes. Commitment (Q01, PO 2026-10-18): okf-cli follows the OKF specification and is adapted when it changes; no release date or per-version release is promised.
 
 ### Origin
 

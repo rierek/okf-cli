@@ -31,7 +31,7 @@ OKF catalogue bundle concept; Open Knowledge Format frontmatter; okf_version; kn
 
 ### Specification-first
 
-- okf implements the OKF specification and follows it when it changes. TODO: verify the exact commitment (Q01)
+- okf implements the OKF specification and follows it when it changes. Commitment (Q01, PO 2026-10-18): okf-cli follows the OKF specification and is adapted when it changes; no release date or per-version release is promised.
 - Version binding: `okf_version` in the root index selects the rules; link to the specification repository. Source: FACTS §Topic: catalogue, bundle, concept and type model; FACTS Nicht bestimmbar part 1.
 
 ### Types and frontmatter
