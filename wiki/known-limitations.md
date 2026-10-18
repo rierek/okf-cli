@@ -23,7 +23,7 @@ Measured on okf 0.2.4, 2026-10-18.
 - [erpf] `tags --register` and `prime` name `build_tagvec.py`, which a Go install lacks. Workaround: ignore, or `okf build-tagvec --produce`.
 - [l2j0] `okf --help` describes the Python script. Workaround: ignore.
 - [fs8c] A blocked `install` plan exits 1 with a generic message. Workaround: read the plan, or use `--json`.
-- [zs6t] README, `docs/install.md`, `pyproject.toml` and the Homebrew formula still name the old GitHub owner `xRiErOS`; the repo and this site live under `rierek`. Workaround: use `rierek/okf-cli`; check the tap and release URLs before you copy a command.
+- [zs6t] The README, `pyproject.toml` and the Homebrew formula still name the old GitHub owner `xRiErOS`; the repo and this site live under `rierek`. Workaround: use `rierek/okf-cli`; check the tap and release URLs before you copy a command.
 - [cwyx] The frontmatter writer refuses shapes it cannot patch (lone CR, flow-mapping or null root, anchor/alias/tag on the edited value, comment in a flow list, other shapes, ctx edits, huge ctx positions, non-scalar keys); Python wrote them. Exit 2 with `<path>: <reason>`, file untouched. Workaround: edit the file by hand.
 - [n760] One refused file ends the whole run of `merge-tags`, `remove-tags`, `normalize-tags` and `migrate`, a dry run too. Workaround: repair or move the file, then rerun.
 - [xhfi] The parser refuses frontmatter that Python reads (`\/` escape, unusual anchor names, empty keys, U+0085, U+2028, U+2029). Workaround: replace the character or form.
