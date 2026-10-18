@@ -1,57 +1,129 @@
 ---
-title: "Search"
-description: "Ranked search over a catalogue, narrowed by a single --where filter."
+title: "Markdown knowledge base search: okf find"
+description: "Ranked BM25 search over a Markdown knowledge base with okf find: FTS5 index, optional semantic search with embeddings, one --where filter."
 ---
 
-## Purpose
+## Markdown knowledge base search with `okf find`
 
-Describe the capability of finding concepts: lexical BM25, optional semantic arm, one filter language.
+**Run `okf find` and get ranked concepts from the shell, narrowed by one `--where` filter. Add the semantic arm when you want embeddings.**
 
-## Audience
+The output below comes from okf 0.2.4 (`git describe`: `0.2.4-115-g91f54bf`), run against a throwaway copy of the test catalogue.
 
-A user or agent who needs the right concept among many.
+## How it looks
 
-## Visual elements
+Without an index, `find` falls back to a substring scan and says so on stderr. Build the FTS5 index once, then ask again:
 
-Code block with real `okf find` output; Mermaid of the lexical and semantic arms.
+```text title="Build the index, then search"
+$ okf build-index
+indexed 25 concept(s) -> <catalogue>/.fts/fts.sqlite
+[exit 0]
+$ okf find recipe --limit 2
+note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only
+------
+rank: 1
+title: Recipes overview
+type: Concept
+path: recipes/overview
+description: Overview of the recipes
+body-snippet: # Overview See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…
+provenance: lexical
+------
+rank: 2
+title: cooking
+type: Context
+path: _ctx/cooking
+description: Cooking basics
+body-snippet: …| |---|---|---|---| | 1 | pflicht | [bread](/recipes/bread.md) | | | 2 | pflicht | [pasta](/recipes/pasta.md) | | | 3 | pflicht | [soup](…
+provenance: lexical
+------
+[exit 0]
+```
 
-## Search terms
+Every hit carries `rank`, its 1-based position in the list, and `provenance`, the arm that produced it. Add `--breakdown` to see the raw score per hit:
 
-markdown knowledge base search; BM25 FTS5 CLI; semantic search embeddings Voyage; okf find
+```text title="okf find recipe --limit 2 --breakdown (score lines only)"
+score: 100/100
+contrib: bm25 (fts5 index; field-level breakdown not available)
+score: 88/100
+contrib: bm25 (fts5 index; field-level breakdown not available)
+```
 
-## Required sections
+## Why it matters
 
-### Result sentence
+**You get ranked hits without leaving the shell, and the same `--where` filter selects the same concepts for [`okf list`](/reference/commands/okf-list/).**
 
-- Bold sentence, one or two lines: what the reader can do after reading this page. Source: FACTS §okf find.
+## What you get
 
-### How it looks
+- Ranked results from a SQLite FTS5 index with BM25 weights: title 3.0, tags 2.0, body 1.0.
+- An optional semantic arm that ranks by embedding similarity.
+- One `--where` expression that narrows by type, tag, path, archived state and any frontmatter key. See the [`--where` reference](/reference/where-filter/).
+- `okf list` returns the complete, unranked set that a `--where` selects.
 
-- Real output of `okf find recipe` on the golden catalogue, with rank lines. Source: FACTS §okf find.
+```text title="okf find recipe --where 'type = Recipe' --limit 1"
+------
+rank: 1
+title: Soup
+type: Recipe
+path: recipes/soup
+description: Tomatensuppe
+body-snippet: …weis Use a pot <size>. Compare with [bread](/recipes/bread.md).…
+provenance: lexical
+------
+[exit 0]
+```
 
-### Why it matters
+```text title="okf list --where 'tag = soup'"
+------
+title: Gazpacho
+type: Recipe
+path: recipes/seasonal/gazpacho
+description: Cold tomato soup
+------
+title: Soup
+type: Recipe
+path: recipes/soup
+description: Tomatensuppe
+------
+list: 2 concept(s)
+[exit 0]
+```
 
-- Bold sentence: you get ranked hits without leaving the shell, and the same filter works for `list`. Source: FACTS §okf find; FACTS §okf list.
+The filter applies before the cut to `--limit`. Archived concepts stay hidden unless the expression names `archived`.
 
-### What you get
+## How the two arms work
 
-- Ranked results from SQLite FTS5/BM25 plus an optional Voyage semantic arm. Source: FACTS §okf find; FACTS §Topic: index and search artefacts.
-- One `--where` expression narrows by type, tag, scope and more. Source: FACTS §Topic: `--where` filter language.
-- `okf list` returns the complete unranked set a `--where` selects. Source: FACTS §okf list.
+```mermaid
+flowchart LR
+  Q[query + --where] --> L[Lexical arm: FTS5 / BM25]
+  Q --> S[Semantic arm: embeddings]
+  L --> R[Ranked list]
+  S --> R
+  R --> O[rank 1..limit]
+```
 
-### Details
+The list order is the rank. The two arms never blend scores: the arm that owns the ranking hands over its order. Raw scores stay out of the default output. `--breakdown` prints them, one `score:` line per hit.
 
-- Build and refresh the index with `okf build-index`; `--if-stale` skips unchanged work. Source: FACTS §okf build-index.
-- Without the index `find` falls back to a substring scan and says so. Source: FACTS §okf find.
-- Semantic arm needs `VOYAGE_API_KEY`; without it the lexical result is complete. Source: FACTS §okf build-semantic-index; FACTS §Topic: index and search artefacts.
-- `okf recent` lists the newest concepts. Source: FACTS §okf recent.
+## Details
 
-- The semantic arm embeds with Voyage (`VOYAGE_API_KEY`); the endpoint and model are not configurable (planned: [76eb]). Source: FACTS §okf build-semantic-index.
+- `okf build-index` builds or refreshes `.fts/fts.sqlite`. `--if-stale` skips the rebuild when the index is current. The file shows as untracked in git.
+- Without the index, `find` scans substrings and prints `note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking`.
+- The semantic arm reads `.tagvec/tag_vectors.sqlite`. `okf build-semantic-index` fills it with `voyage-3-large` embeddings and needs `VOYAGE_API_KEY`. The tag commands use a local Ollama `bge-m3` at `localhost:11434` (see [Tags and registry](/features/tags-and-registry/)). The endpoint and model are fixed today; a configurable endpoint is planned [76eb].
+- When the semantic data is absent, `find` prints `note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only` and the lexical result stands alone. Degradation never changes the exit code.
+- `okf recent` lists the newest concepts and takes the same `--where`.
+- `--include-topics` widens the search from the `.okf.toml` bundle to topic folders.
+- `--json` prints one envelope. `data` holds `hits` and `nearest_tags`; degradation notes arrive in `warnings`.
 
-### Limits
+## Limits
 
-- `build-semantic-index` without `VOYAGE_API_KEY` exits 0 and writes nothing. Source: FACTS §Defect list, observations.
+- `build-semantic-index` without `VOYAGE_API_KEY` exits 0 and writes nothing. It prints `note: semantic index build skipped (VOYAGE_API_KEY not set)`. Check the exit code and the note, not only success.
+- `--expand-tags` is off by default. The project measured it as ineffective for the vocabulary mismatch it targets.
+- The semantic arm was not run for this page. Its behaviour with a key is read from the code, not from a run.
 
-### Reference
+## Reference
 
-- Links to `okf find`, `okf list`, `okf build-index`, `okf build-semantic-index` and the `--where` reference. Source: FACTS §Section index of commands.
+- [`okf find`](/reference/commands/okf-find/)
+- [`okf list`](/reference/commands/okf-list/)
+- [`okf recent`](/reference/commands/okf-recent/)
+- [`okf build-index`](/reference/commands/okf-build-index/)
+- [`okf build-semantic-index`](/reference/commands/okf-build-semantic-index/)
+- [`--where` filter](/reference/where-filter/)
