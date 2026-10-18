@@ -95,7 +95,7 @@ More runs, result as paths:
 
 ## Errors
 
-A malformed filter is exit 2, class `invalid_input` (see [JSON output and exit codes](/reference/json-output-and-exit-codes/)). The message names the problem and the position.
+A malformed filter is exit 2, class `invalid_input` (see [JSON output and exit codes](/okf-cli/reference/json-output-and-exit-codes/)). The message names the problem and the position.
 
 ```text
 $ okf list --where 'type ==' ; echo "[exit $?]"
@@ -125,9 +125,9 @@ The parser accepts about 247 nested parentheses or 989 `not` in a row.
 
 The same expression language works on six commands:
 
-- [`okf find`](/reference/commands/okf-find/): narrows the ranked hits.
-- [`okf list`](/reference/commands/okf-list/): the complete set the expression selects.
-- [`okf recent`](/reference/commands/okf-recent/)
-- [`okf merge-tags`](/reference/commands/okf-merge-tags/)
-- [`okf normalize-tags`](/reference/commands/okf-normalize-tags/)
-- [`okf remove-tags`](/reference/commands/okf-remove-tags/)
+- [`okf find`](/okf-cli/reference/commands/okf-find/): narrows the ranked hits.
+- [`okf list`](/okf-cli/reference/commands/okf-list/): the complete set the expression selects.
+- [`okf recent`](/okf-cli/reference/commands/okf-recent/)
+- [`okf merge-tags`](/okf-cli/reference/commands/okf-merge-tags/)
+- [`okf normalize-tags`](/okf-cli/reference/commands/okf-normalize-tags/)
+- [`okf remove-tags`](/okf-cli/reference/commands/okf-remove-tags/)

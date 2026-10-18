@@ -28,8 +28,8 @@ $ okf --root <catalogue> rename handbook/overview.md handbook/intro.md
 --- a/handbook/index.md
 +++ b/handbook/index.md
 @@ -14,7 +14,7 @@
--* [Handbook overview](/handbook/overview.md) - Overview of the handbook
-+* [Handbook overview](/handbook/intro.md) - Overview of the handbook
+-* [Handbook overview](/okf-cli/handbook/overview.md) - Overview of the handbook
++* [Handbook overview](/okf-cli/handbook/intro.md) - Overview of the handbook
 …
 rename (dry-run): 1 inbound, 0 outbound link(s), 2 wikilink(s) (0 skipped-ambiguous), 1 bundle(s), 0 sync source(s). Re-run with --apply.
 ```
@@ -55,7 +55,7 @@ R  handbook/overview.md -> handbook/intro.md
  M handbook/wiki-notes.md
 ```
 
-Run [`okf check`](/features/conformance-checks/) before you commit.
+Run [`okf check`](/okf-cli/features/conformance-checks/) before you commit.
 
 ## Why it matters
 
@@ -63,14 +63,14 @@ Run [`okf check`](/features/conformance-checks/) before you commit.
 
 ## What you get
 
-- **Move.** [`okf rename`](/reference/commands/okf-rename/) moves a concept to a new path. Inbound links, outbound links, wikilinks, `source=` of [canon blocks](/features/canon-blocks/) and ctx bundle entries follow.
-- **Archive.** [`okf archive`](/reference/commands/okf-archive/) moves a concept to `_archive/<bundle>/`. `okf archive --restore` moves it back. Links are rewritten both ways.
+- **Move.** [`okf rename`](/okf-cli/reference/commands/okf-rename/) moves a concept to a new path. Inbound links, outbound links, wikilinks, `source=` of [canon blocks](/okf-cli/features/canon-blocks/) and ctx bundle entries follow.
+- **Archive.** [`okf archive`](/okf-cli/reference/commands/okf-archive/) moves a concept to `_archive/<bundle>/`. `okf archive --restore` moves it back. Links are rewritten both ways.
 - **Bulk edits.**
-  - [`okf rewrite-path`](/reference/commands/okf-rewrite-path/) replaces a literal path string in text files.
-  - [`okf fix-crosslinks`](/reference/commands/okf-fix-crosslinks/) rewrites links to the catalogue-root-absolute form `/bundle/subdir/concept.md`.
-  - [`okf fix-xml-tags`](/reference/commands/okf-fix-xml-tags/) wraps `<tag>` placeholders in inline code.
-  - [`okf reindex`](/reference/commands/okf-reindex/) regenerates the marker-bounded index listings.
-  - [`okf migrate`](/reference/commands/okf-migrate/) migrates frontmatter to OKF 0.2.
+  - [`okf rewrite-path`](/okf-cli/reference/commands/okf-rewrite-path/) replaces a literal path string in text files.
+  - [`okf fix-crosslinks`](/okf-cli/reference/commands/okf-fix-crosslinks/) rewrites links to the catalogue-root-absolute form `/bundle/subdir/concept.md`.
+  - [`okf fix-xml-tags`](/okf-cli/reference/commands/okf-fix-xml-tags/) wraps `<tag>` placeholders in inline code.
+  - [`okf reindex`](/okf-cli/reference/commands/okf-reindex/) regenerates the marker-bounded index listings.
+  - [`okf migrate`](/okf-cli/reference/commands/okf-migrate/) migrates frontmatter to OKF 0.2.
 
 ## Details
 
@@ -113,7 +113,7 @@ Frontmatter edits (`migrate` and the tag commands) patch single lines and keep y
 
 ## Reference
 
-- [`okf rename`](/reference/commands/okf-rename/), [`okf archive`](/reference/commands/okf-archive/), [`okf rewrite-path`](/reference/commands/okf-rewrite-path/)
-- [`okf fix-crosslinks`](/reference/commands/okf-fix-crosslinks/), [`okf fix-xml-tags`](/reference/commands/okf-fix-xml-tags/)
-- [`okf reindex`](/reference/commands/okf-reindex/), [`okf migrate`](/reference/commands/okf-migrate/)
-- [Dry run](/reference/glossary/#dry-run) and [Apply](/reference/glossary/#apply) in the glossary
+- [`okf rename`](/okf-cli/reference/commands/okf-rename/), [`okf archive`](/okf-cli/reference/commands/okf-archive/), [`okf rewrite-path`](/okf-cli/reference/commands/okf-rewrite-path/)
+- [`okf fix-crosslinks`](/okf-cli/reference/commands/okf-fix-crosslinks/), [`okf fix-xml-tags`](/okf-cli/reference/commands/okf-fix-xml-tags/)
+- [`okf reindex`](/okf-cli/reference/commands/okf-reindex/), [`okf migrate`](/okf-cli/reference/commands/okf-migrate/)
+- [Dry run](/okf-cli/reference/glossary/#dry-run) and [Apply](/okf-cli/reference/glossary/#apply) in the glossary

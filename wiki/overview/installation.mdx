@@ -20,7 +20,7 @@ Pick one channel:
     The formula builds `okf` from source with `just go-build`. `go` and `just` are build dependencies. `uv` is a runtime dependency for the MCP server only. The keg also holds the agent skill and the MCP server script.
 
     :::caution
-    The formula in the repository declares only `head`: it has no `url`, `version` or `sha256`. With that copy a plain `brew install okf-cli` has no stable version. Use `brew install --HEAD okf-cli`. Whether the tap copy differs is not visible from the repository. See [71rn] in [Known limitations](/known-limitations/).
+    The formula in the repository declares only `head`: it has no `url`, `version` or `sha256`. With that copy a plain `brew install okf-cli` has no stable version. Use `brew install --HEAD okf-cli`. Whether the tap copy differs is not visible from the repository. See [71rn] in [Known limitations](/okf-cli/known-limitations/).
     :::
   </TabItem>
   <TabItem label="Release binary">
@@ -68,7 +68,7 @@ file "$(command -v okf)"
 okf --help
 ```
 
-`file` must report a compiled executable (Mach-O on macOS, ELF on Linux), not a script. A script means the old Python CLI is first on your `PATH`: see [Troubleshooting](/overview/troubleshooting/).
+`file` must report a compiled executable (Mach-O on macOS, ELF on Linux), not a script. A script means the old Python CLI is first on your `PATH`: see [Troubleshooting](/okf-cli/overview/troubleshooting/).
 
 `okf --help` starts like this (okf 0.2.4 by `git describe`, macOS arm64):
 
@@ -124,6 +124,6 @@ Indexes built earlier (`.fts/fts.sqlite`, `.tagvec/tag_vectors.sqlite`) keep wor
 
 ## Next
 
-<LinkCard title="First steps" description="Index, find, read and check a catalogue." href="/overview/first-steps/" />
-<LinkCard title="okf install" description="Every option of the install command." href="/reference/commands/okf-install/" />
-<LinkCard title="Troubleshooting" description="Fixes by symptom." href="/overview/troubleshooting/" />
+<LinkCard title="First steps" description="Index, find, read and check a catalogue." href="/okf-cli/overview/first-steps/" />
+<LinkCard title="okf install" description="Every option of the install command." href="/okf-cli/reference/commands/okf-install/" />
+<LinkCard title="Troubleshooting" description="Fixes by symptom." href="/okf-cli/overview/troubleshooting/" />

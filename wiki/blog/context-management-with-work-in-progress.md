@@ -28,7 +28,7 @@ Each claim gets exactly one home. After the move, the topic points at the catalo
 
 ## Agents read through `ctx`
 
-A `ctx` bundle is a curated reading list in reading order. [`okf ctx show`](/reference/commands/okf-ctx-show/) prints it with the title and type of every entry, read live from the files, so the list does not go stale. Each entry has a mode:
+A `ctx` bundle is a curated reading list in reading order. [`okf ctx show`](/okf-cli/reference/commands/okf-ctx-show/) prints it with the title and type of every entry, read live from the files, so the list does not go stale. Each entry has a mode:
 
 | Mode | Meaning |
 |---|---|
@@ -56,4 +56,4 @@ Hand over context with `ctx`, not with path lists in the prompt.
 - The catalogue is the memory.
 - `ctx` is the interface to the agent.
 
-See also [Context bundles](/features/context-bundles/) and [Onboard agents](/use-cases/onboard-agents/).
+See also [Context bundles](/okf-cli/features/context-bundles/) and [Onboard agents](/okf-cli/use-cases/onboard-agents/).

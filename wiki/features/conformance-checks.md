@@ -67,8 +67,8 @@ unresolved body        handbook/getting-started.md  [[does-not-exist]]
 
 - **Two rule families.** Rule IDs that start with `okf/` are the OKF hard rules (SPEC §9). IDs that start with `kc/` are local invariants of the catalogue, such as link format, registered tags and types, and ctx bundle health.
 - **Severity.** `ERROR` sets the exit code. `WARNING` prints, but changes the exit code only with `--strict`.
-- **Provenance fields.** The hard rules check the trust fields in the frontmatter: `generated`, `sources`, `verified` and `stale_after`. Example: `okf/trust/generated` reports a `generated` field without a non-empty `by`. See [Frontmatter and types](/reference/frontmatter-and-types/).
-- **Exit code.** Findings give exit 4 (`NonConformant`). A target that is not a directory gives exit 3. See [JSON output and exit codes](/reference/json-output-and-exit-codes/).
+- **Provenance fields.** The hard rules check the trust fields in the frontmatter: `generated`, `sources`, `verified` and `stale_after`. Example: `okf/trust/generated` reports a `generated` field without a non-empty `by`. See [Frontmatter and types](/okf-cli/reference/frontmatter-and-types/).
+- **Exit code.** Findings give exit 4 (`NonConformant`). A target that is not a directory gives exit 3. See [JSON output and exit codes](/okf-cli/reference/json-output-and-exit-codes/).
 - **No git, no drift check.** Outside a git repository, `okf check` prints `note: drift check skipped: the catalogue root is not inside a git repository` on stderr and runs the other rules.
 
 ## Limits
@@ -78,8 +78,8 @@ unresolved body        handbook/getting-started.md  [[does-not-exist]]
 
 ## Reference
 
-- [`okf check`](/reference/commands/okf-check/)
-- [`okf verify`](/reference/commands/okf-verify/)
-- [`okf wikilinks`](/reference/commands/okf-wikilinks/)
-- [`okf ctx check`](/reference/commands/okf-ctx-check/)
-- [JSON output and exit codes](/reference/json-output-and-exit-codes/)
+- [`okf check`](/okf-cli/reference/commands/okf-check/)
+- [`okf verify`](/okf-cli/reference/commands/okf-verify/)
+- [`okf wikilinks`](/okf-cli/reference/commands/okf-wikilinks/)
+- [`okf ctx check`](/okf-cli/reference/commands/okf-ctx-check/)
+- [JSON output and exit codes](/okf-cli/reference/json-output-and-exit-codes/)

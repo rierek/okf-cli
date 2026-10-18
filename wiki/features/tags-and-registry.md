@@ -105,7 +105,7 @@ The last line of the real run is `registry convert: 11 entries in TAGS.md would 
 
 - `merge-tags`, `remove-tags`, `normalize-tags` and `registry convert` preview a diff and need `--apply` to write.
 - `tags --register` writes `TAGS.md` immediately. It has no preview.
-- `--validate` and `--json` follow the [envelope and exit-code rules](/reference/json-output-and-exit-codes/). `--json` data is `{tags: [{tag, count}]}` for the list and `{closed_vocabulary, unknown}` for `--validate`.
+- `--validate` and `--json` follow the [envelope and exit-code rules](/okf-cli/reference/json-output-and-exit-codes/). `--json` data is `{tags: [{tag, count}]}` for the list and `{closed_vocabulary, unknown}` for `--validate`.
 
 :::tip[Tag hygiene]
 Register every tag in `TAGS.md`. Run `okf tags --validate` in CI: an unregistered tag exits 4 and fails the job. Run `okf tags --singletons` to find near-duplicates, then `okf merge-tags` them into one tag.
@@ -118,8 +118,8 @@ Register every tag in `TAGS.md`. Run `okf tags --validate` in CI: an unregistere
 
 ## Reference
 
-- [`okf tags`](/reference/commands/okf-tags/)
-- [`okf merge-tags`](/reference/commands/okf-merge-tags/)
-- [`okf remove-tags`](/reference/commands/okf-remove-tags/)
-- [`okf normalize-tags`](/reference/commands/okf-normalize-tags/)
-- [`okf registry convert`](/reference/commands/okf-registry-convert/)
+- [`okf tags`](/okf-cli/reference/commands/okf-tags/)
+- [`okf merge-tags`](/okf-cli/reference/commands/okf-merge-tags/)
+- [`okf remove-tags`](/okf-cli/reference/commands/okf-remove-tags/)
+- [`okf normalize-tags`](/okf-cli/reference/commands/okf-normalize-tags/)
+- [`okf registry convert`](/okf-cli/reference/commands/okf-registry-convert/)

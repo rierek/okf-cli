@@ -9,7 +9,7 @@ import { Steps, LinkCard, CardGrid, Aside } from '@astrojs/starlight/components'
 
 **After these five steps you have found a concept with `okf find`, read it with `okf read` and run a conformance check with `okf check`.**
 
-The output below comes from okf 0.2.4 (`git describe`: `rel-0-2-4-119-gd75ad19`). It was run against a throwaway copy of the test catalogue of the okf repository (`tests/golden/catalogue`). Use that copy, or your own catalogue, so that you never run your first experiments on live content. Install okf first: see [Installation](/overview/installation/).
+The output below comes from okf 0.2.4 (`git describe`: `rel-0-2-4-119-gd75ad19`). It was run against a throwaway copy of the test catalogue of the okf repository (`tests/golden/catalogue`). Use that copy, or your own catalogue, so that you never run your first experiments on live content. Install okf first: see [Installation](/okf-cli/overview/installation/).
 
 <Steps>
 
@@ -28,7 +28,7 @@ The output below comes from okf 0.2.4 (`git describe`: `rel-0-2-4-119-gd75ad19`)
    cp -R tests/golden/catalogue /tmp/okf-try && cd /tmp/okf-try
    ```
 
-   Details: [Configuration](/reference/configuration/).
+   Details: [Configuration](/okf-cli/reference/configuration/).
 
 2. **List the bundles with `okf index`.**
 
@@ -43,7 +43,7 @@ The output below comes from okf 0.2.4 (`git describe`: `rel-0-2-4-119-gd75ad19`)
    [exit 0]
    ```
 
-   Three bundles hold concepts. `_ctx` holds [context bundles](/features/context-bundles/). Bundles with no description print an empty text after the colon.
+   Three bundles hold concepts. `_ctx` holds [context bundles](/okf-cli/features/context-bundles/). Bundles with no description print an empty text after the colon.
 
 3. **Search with `okf build-index` and `okf find`.**
 
@@ -66,7 +66,7 @@ The output below comes from okf 0.2.4 (`git describe`: `rel-0-2-4-119-gd75ad19`)
    type: Context
    path: _ctx/cooking
    description: Cooking basics
-   body-snippet: …comment | |---|---|---|---| | 1 | pflicht | [bread](/recipes/bread.md) | | | 2 | pflicht | [pasta](/recipes/pasta.md) | | | 3 | pflicht |…
+   body-snippet: …comment | |---|---|---|---| | 1 | pflicht | [bread](/okf-cli/recipes/bread.md) | | | 2 | pflicht | [pasta](/okf-cli/recipes/pasta.md) | | | 3 | pflicht |…
    provenance: lexical
    ------
    [exit 0]
@@ -94,13 +94,13 @@ The output below comes from okf 0.2.4 (`git describe`: `rel-0-2-4-119-gd75ad19`)
    type: Concept
    path: recipes/overview
    description: Overview of the recipes
-   body-snippet: # Overview See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…
+   body-snippet: # Overview See [pasta](pasta.md), [bread](/okf-cli/recipes/bread.md), [soup](soup.md) and [[salad]].…
    provenance: lexical
    ------
    [exit 0]
    ```
 
-   Semantic search is optional. See [Markdown knowledge base search](/features/search/).
+   Semantic search is optional. See [Markdown knowledge base search](/okf-cli/features/search/).
 
 4. **Read one concept with `okf read`.**
 
@@ -153,7 +153,7 @@ The output below comes from okf 0.2.4 (`git describe`: `rel-0-2-4-119-gd75ad19`)
    [exit 4]
    ```
 
-   The summary counts the `ERROR` lines. Warnings print but do not count, unless you add `--strict`. Exit codes: [JSON output and exit codes](/reference/json-output-and-exit-codes/).
+   The summary counts the `ERROR` lines. Warnings print but do not count, unless you add `--strict`. Exit codes: [JSON output and exit codes](/okf-cli/reference/json-output-and-exit-codes/).
 
 </Steps>
 
@@ -190,8 +190,8 @@ You have a catalogue root that okf resolves, a lexical index in `.fts/fts.sqlite
 ## Go on
 
 <CardGrid>
-  <LinkCard title="Concepts" description="Catalogue, bundle, concept and type." href="/overview/concepts/" />
-  <LinkCard title="okf find" description="All options of the search command." href="/reference/commands/okf-find/" />
-  <LinkCard title="okf read" description="Print a concept, one section or its frontmatter." href="/reference/commands/okf-read/" />
-  <LinkCard title="okf check" description="Rules, severities and exit codes." href="/reference/commands/okf-check/" />
+  <LinkCard title="Concepts" description="Catalogue, bundle, concept and type." href="/okf-cli/overview/concepts/" />
+  <LinkCard title="okf find" description="All options of the search command." href="/okf-cli/reference/commands/okf-find/" />
+  <LinkCard title="okf read" description="Print a concept, one section or its frontmatter." href="/okf-cli/reference/commands/okf-read/" />
+  <LinkCard title="okf check" description="Rules, severities and exit codes." href="/okf-cli/reference/commands/okf-check/" />
 </CardGrid>

@@ -7,7 +7,7 @@ description: "How an Open Knowledge Format catalogue is built: catalogue, bundle
 
 **After this page you can tell a catalogue from a bundle from a concept, and you know which frontmatter fields okf reads.**
 
-Terms are defined once in the [glossary](/reference/glossary/). Examples come from the test catalogue of the okf repository, measured with okf 0.2.4.
+Terms are defined once in the [glossary](/okf-cli/reference/glossary/). Examples come from the test catalogue of the okf repository, measured with okf 0.2.4.
 
 ## Catalogue, bundle, concept
 
@@ -22,7 +22,7 @@ flowchart TD
 ```
 
 - A **catalogue** is a directory: the root. okf finds it by `.okf.toml`, or by `SPEC.md` together with `TYPES.md`.
-- A **bundle** is an immediate subdirectory of the root. Names that start with `.` or `_` are not bundles. `_ctx/` is the one exception: it holds the [context bundles](/features/context-bundles/). `_archive/` holds archived concepts and stays hidden from search and list unless you name it.
+- A **bundle** is an immediate subdirectory of the root. Names that start with `.` or `_` are not bundles. `_ctx/` is the one exception: it holds the [context bundles](/okf-cli/features/context-bundles/). `_archive/` holds archived concepts and stays hidden from search and list unless you name it.
 - A **concept** is a `.md` file in a bundle with YAML frontmatter. Its concept-id is its path below the bundle, without `.md`. The `path` in okf output is `<bundle>/<concept-id>`.
 
 ```text title="A catalogue on disk"
@@ -87,7 +87,7 @@ Short timeline.
 | `stale_after` | Instant after which the concept counts as stale. |
 | `superseded_by` | Replacement concept. For Decision concepts only. |
 
-The full field list with the check rule of each field is in [Frontmatter and types](/reference/frontmatter-and-types/).
+The full field list with the check rule of each field is in [Frontmatter and types](/okf-cli/reference/frontmatter-and-types/).
 
 ## Provenance and freshness
 
@@ -101,9 +101,9 @@ The v0.2 rules apply in bundles whose root `index.md` declares `okf_version: "0.
 
 ## Context bundles, tags, canon blocks
 
-- **Context bundle.** A file `_ctx/<slug>.md` with `type: Context`. It lists concepts in reading order, each one *required* or *reference*. See [Context bundles](/features/context-bundles/).
-- **Tags.** `TAGS.md` is the tag registry. `okf check` warns about a tag that is not registered. See [Tags and registry](/features/tags-and-registry/).
-- **Canon block.** A marked block in a concept that mirrors text owned by one other concept. `okf sync-*` keeps the copies equal. See [Canon blocks](/features/canon-blocks/).
+- **Context bundle.** A file `_ctx/<slug>.md` with `type: Context`. It lists concepts in reading order, each one *required* or *reference*. See [Context bundles](/okf-cli/features/context-bundles/).
+- **Tags.** `TAGS.md` is the tag registry. `okf check` warns about a tag that is not registered. See [Tags and registry](/okf-cli/features/tags-and-registry/).
+- **Canon block.** A marked block in a concept that mirrors text owned by one other concept. `okf sync-*` keeps the copies equal. See [Canon blocks](/okf-cli/features/canon-blocks/).
 
 ## Search and index artefacts
 
@@ -112,10 +112,10 @@ okf writes two optional caches inside the catalogue:
 - `.fts/fts.sqlite`: the lexical (BM25) index. `okf build-index` writes it. It holds title, tags and body of each concept.
 - `.tagvec/tag_vectors.sqlite`: tag and concept embeddings for the semantic arm. `okf build-semantic-index` writes it. Embeddings come from Voyage (needs `VOYAGE_API_KEY`) or from Ollama with `bge-m3` on `localhost:11434`.
 
-Neither file is part of your content. In a git repository both show as untracked. See [Search](/features/search/).
+Neither file is part of your content. In a git repository both show as untracked. See [Search](/okf-cli/features/search/).
 
 ## Reference
 
-- [Glossary](/reference/glossary/)
-- [Frontmatter and types](/reference/frontmatter-and-types/)
-- [First steps](/overview/first-steps/): run the commands on a test catalogue
+- [Glossary](/okf-cli/reference/glossary/)
+- [Frontmatter and types](/okf-cli/reference/frontmatter-and-types/)
+- [First steps](/okf-cli/overview/first-steps/): run the commands on a test catalogue

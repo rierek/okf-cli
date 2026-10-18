@@ -5,7 +5,7 @@ description: "How okf finds its catalogue, which keys .okf.toml and ~/.config/ok
 
 # okf configuration: `.okf.toml` and `config.toml`
 
-okf has two optional config files and a short list of environment variables. Both files are TOML. For terms such as *root* and *bundle* see the [Glossary](/reference/glossary/).
+okf has two optional config files and a short list of environment variables. Both files are TOML. For terms such as *root* and *bundle* see the [Glossary](/okf-cli/reference/glossary/).
 
 ## Root resolution order
 
@@ -58,7 +58,7 @@ ERROR: no catalogue found in cwd or its ancestors and no root in /tmp/okf-facts/
 | `ignore_rules` | list | Rule ids that `check` skips. An entry ending in `*` is a prefix. |
 | `registry_format` | `"table"` or `"block"` | Form that `okf tags --register` writes. Any other value is exit 2: `registry_format must be "table" or "block"`. |
 | `wikilink_checked_bundles` | list | Bundles in which wikilinks are checked. |
-| `[git_authors]` | table | Maps an e-mail address to an actor (`human:<id>`). [`okf migrate`](/reference/commands/okf-migrate/) uses it. |
+| `[git_authors]` | table | Maps an e-mail address to an actor (`human:<id>`). [`okf migrate`](/okf-cli/reference/commands/okf-migrate/) uses it. |
 
 Example:
 
@@ -116,4 +116,4 @@ Embeddings come from two places today: the Voyage API (`voyage-3-large`, needs `
 - shell completion: `~/.zsh/completions/_okf` plus a managed block in `.zshrc`; for bash `${XDG_DATA_HOME:-~/.local/share}/bash-completion/completions/okf`; for fish `$XDG_CONFIG_HOME/fish/completions/okf.fish`;
 - a wrapper `~/.local/bin/okf`, only for a source checkout when `okf` is not on `PATH`.
 
-`okf install --uninstall --apply` removes what install created. See [`okf install`](/reference/commands/okf-install/).
+`okf install --uninstall --apply` removes what install created. See [`okf install`](/okf-cli/reference/commands/okf-install/).

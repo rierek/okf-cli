@@ -5,7 +5,7 @@ description: "Definitions of the okf terms: catalogue, bundle, concept, type, fr
 
 # OKF glossary: catalogue, bundle, concept
 
-Every other page of this documentation uses these terms in exactly this meaning. For the file format itself see [Frontmatter and types](/reference/frontmatter-and-types/). For the settings that select a catalogue see [Configuration](/reference/configuration/).
+Every other page of this documentation uses these terms in exactly this meaning. For the file format itself see [Frontmatter and types](/okf-cli/reference/frontmatter-and-types/). For the settings that select a catalogue see [Configuration](/okf-cli/reference/configuration/).
 
 ## Terms
 
@@ -23,38 +23,38 @@ A `.md` file in a bundle that has YAML frontmatter. Its *concept-id* is its path
 
 ### Type
 
-The `type` frontmatter value of a concept, for example `Rule` or `Guide`. A type must be registered in `TYPES.md`. See [Types](/reference/frontmatter-and-types/#types).
+The `type` frontmatter value of a concept, for example `Rule` or `Guide`. A type must be registered in `TYPES.md`. See [Types](/okf-cli/reference/frontmatter-and-types/#types).
 
 ### Frontmatter
 
-The YAML block at the top of a concept, between two `---` lines. It carries `type`, `title`, `description`, `tags` and the provenance fields. See [Frontmatter fields](/reference/frontmatter-and-types/#frontmatter-fields).
+The YAML block at the top of a concept, between two `---` lines. It carries `type`, `title`, `description`, `tags` and the provenance fields. See [Frontmatter fields](/okf-cli/reference/frontmatter-and-types/#frontmatter-fields).
 
 ctx bundle
-:   A curated reading list in `_ctx/<slug>.md`: a table of entries in reading order. Each entry has a position and a mode, `pflicht` (read first) or `nachschlag` (look up when needed). Titles and types of the entries are read live from the concept files. Commands: [`okf ctx`](/reference/commands/okf-ctx/). See [Context bundles](/features/context-bundles/).
+:   A curated reading list in `_ctx/<slug>.md`: a table of entries in reading order. Each entry has a position and a mode, `pflicht` (read first) or `nachschlag` (look up when needed). Titles and types of the entries are read live from the concept files. Commands: [`okf ctx`](/okf-cli/reference/commands/okf-ctx/). See [Context bundles](/okf-cli/features/context-bundles/).
 
 ### Canon block
 
-Text with exactly one owner. The owner concept declares it between `<!-- okf:canon id=<block-id> -->` and `<!-- /okf:canon -->`. A consumer concept holds a *sync block*, a managed copy of the payload that carries `source=` and a hash. Do not edit a sync block by hand. Commands: `sync-export`, `sync-insert`, `sync-status`, `sync-update`. See [Canon blocks](/features/canon-blocks/).
+Text with exactly one owner. The owner concept declares it between `<!-- okf:canon id=<block-id> -->` and `<!-- /okf:canon -->`. A consumer concept holds a *sync block*, a managed copy of the payload that carries `source=` and a hash. Do not edit a sync block by hand. Commands: `sync-export`, `sync-insert`, `sync-status`, `sync-update`. See [Canon blocks](/okf-cli/features/canon-blocks/).
 
 ### Registry
 
-A closed vocabulary kept in a catalogue file. `TAGS.md` is the tag registry, `TYPES.md` is the type registry. Both are tables (`| Tag | Description |`, `| Type | Meaning |`), or block form. [`okf registry convert`](/reference/commands/okf-registry-convert/) switches between the two forms. See [Tags and the registry](/features/tags-and-registry/).
+A closed vocabulary kept in a catalogue file. `TAGS.md` is the tag registry, `TYPES.md` is the type registry. Both are tables (`| Tag | Description |`, `| Type | Meaning |`), or block form. [`okf registry convert`](/okf-cli/reference/commands/okf-registry-convert/) switches between the two forms. See [Tags and the registry](/okf-cli/features/tags-and-registry/).
 
 ### Envelope
 
-The JSON object that every command prints with `--json`: `{command, ok, data, warnings, error}`. See [JSON output and exit codes](/reference/json-output-and-exit-codes/).
+The JSON object that every command prints with `--json`: `{command, ok, data, warnings, error}`. See [JSON output and exit codes](/okf-cli/reference/json-output-and-exit-codes/).
 
 ### Root
 
-The catalogue directory a command works on. okf resolves it from `--root`, from the nearest catalogue above the working directory, or from the user config. See [Root resolution order](/reference/configuration/#root-resolution-order).
+The catalogue directory a command works on. okf resolves it from `--root`, from the nearest catalogue above the working directory, or from the user config. See [Root resolution order](/okf-cli/reference/configuration/#root-resolution-order).
 
 ### FTS index
 
-The lexical search index `.fts/fts.sqlite` (SQLite FTS5, ranked with bm25: title weighs 3.0, tags 2.0, body 1.0). [`okf build-index`](/reference/commands/okf-build-index/) writes it.
+The lexical search index `.fts/fts.sqlite` (SQLite FTS5, ranked with bm25: title weighs 3.0, tags 2.0, body 1.0). [`okf build-index`](/okf-cli/reference/commands/okf-build-index/) writes it.
 
 ### Semantic arm
 
-The embedding-based half of search. It uses vectors in `.tagvec/tag_vectors.sqlite`, written by [`okf build-semantic-index`](/reference/commands/okf-build-semantic-index/). Models: `voyage-3-large` (Voyage API, needs `VOYAGE_API_KEY`) and `bge-m3` (local server at `http://localhost:11434`). See [Search](/features/search/).
+The embedding-based half of search. It uses vectors in `.tagvec/tag_vectors.sqlite`, written by [`okf build-semantic-index`](/okf-cli/reference/commands/okf-build-semantic-index/). Models: `voyage-3-large` (Voyage API, needs `VOYAGE_API_KEY`) and `bge-m3` (local server at `http://localhost:11434`). See [Search](/okf-cli/features/search/).
 
 ### Dry run
 

@@ -25,7 +25,7 @@ title: Recipes overview
 type: Concept
 path: recipes/overview
 description: Overview of the recipes
-body-snippet: # Overview See [pasta](pasta.md), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…
+body-snippet: # Overview See [pasta](pasta.md), [bread](/okf-cli/recipes/bread.md), [soup](soup.md) and [[salad]].…
 provenance: lexical
 ------
 rank: 2
@@ -33,7 +33,7 @@ title: cooking
 type: Context
 path: _ctx/cooking
 description: Cooking basics
-body-snippet: …| |---|---|---|---| | 1 | pflicht | [bread](/recipes/bread.md) | | | 2 | pflicht | [pasta](/recipes/pasta.md) | | | 3 | pflicht | [soup](…
+body-snippet: …| |---|---|---|---| | 1 | pflicht | [bread](/okf-cli/recipes/bread.md) | | | 2 | pflicht | [pasta](/okf-cli/recipes/pasta.md) | | | 3 | pflicht | [soup](…
 provenance: lexical
 ------
 [exit 0]
@@ -50,13 +50,13 @@ contrib: bm25 (fts5 index; field-level breakdown not available)
 
 ## Why it matters
 
-**You get ranked hits without leaving the shell, and the same `--where` filter selects the same concepts for [`okf list`](/reference/commands/okf-list/).**
+**You get ranked hits without leaving the shell, and the same `--where` filter selects the same concepts for [`okf list`](/okf-cli/reference/commands/okf-list/).**
 
 ## What you get
 
 - Ranked results from a SQLite FTS5 index with BM25 weights: title 3.0, tags 2.0, body 1.0.
 - An optional semantic arm that ranks by embedding similarity.
-- One `--where` expression that narrows by type, tag, path, archived state and any frontmatter key. See the [`--where` reference](/reference/where-filter/).
+- One `--where` expression that narrows by type, tag, path, archived state and any frontmatter key. See the [`--where` reference](/okf-cli/reference/where-filter/).
 - `okf list` returns the complete, unranked set that a `--where` selects.
 
 ```text title="okf find recipe --where 'type = Recipe' --limit 1"
@@ -66,7 +66,7 @@ title: Soup
 type: Recipe
 path: recipes/soup
 description: Tomatensuppe
-body-snippet: …weis Use a pot <size>. Compare with [bread](/recipes/bread.md).…
+body-snippet: …weis Use a pot <size>. Compare with [bread](/okf-cli/recipes/bread.md).…
 provenance: lexical
 ------
 [exit 0]
@@ -107,7 +107,7 @@ The list order is the rank. The two arms never blend scores: the arm that owns t
 
 - `okf build-index` builds or refreshes `.fts/fts.sqlite`. `--if-stale` skips the rebuild when the index is current. The file shows as untracked in git.
 - Without the index, `find` scans substrings and prints `note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking`. Hits then print `provenance: lexical`, not `substring` as the help says [gnnc].
-- The semantic arm reads `.tagvec/tag_vectors.sqlite`. `okf build-semantic-index` fills it with `voyage-3-large` embeddings and needs `VOYAGE_API_KEY`. The tag commands use a local Ollama `bge-m3` at `localhost:11434` (see [Tags and registry](/features/tags-and-registry/)). The endpoint and model are fixed today; a configurable endpoint is planned [76eb].
+- The semantic arm reads `.tagvec/tag_vectors.sqlite`. `okf build-semantic-index` fills it with `voyage-3-large` embeddings and needs `VOYAGE_API_KEY`. The tag commands use a local Ollama `bge-m3` at `localhost:11434` (see [Tags and registry](/okf-cli/features/tags-and-registry/)). The endpoint and model are fixed today; a configurable endpoint is planned [76eb].
 - When the semantic data is absent, `find` prints `note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only` and the lexical result stands alone. Degradation never changes the exit code.
 - `okf recent` lists the newest concepts and takes the same `--where`.
 - `--include-topics` widens the search from the `.okf.toml` bundle to topic folders.
@@ -121,9 +121,9 @@ The list order is the rank. The two arms never blend scores: the arm that owns t
 
 ## Reference
 
-- [`okf find`](/reference/commands/okf-find/)
-- [`okf list`](/reference/commands/okf-list/)
-- [`okf recent`](/reference/commands/okf-recent/)
-- [`okf build-index`](/reference/commands/okf-build-index/)
-- [`okf build-semantic-index`](/reference/commands/okf-build-semantic-index/)
-- [`--where` filter](/reference/where-filter/)
+- [`okf find`](/okf-cli/reference/commands/okf-find/)
+- [`okf list`](/okf-cli/reference/commands/okf-list/)
+- [`okf recent`](/okf-cli/reference/commands/okf-recent/)
+- [`okf build-index`](/okf-cli/reference/commands/okf-build-index/)
+- [`okf build-semantic-index`](/okf-cli/reference/commands/okf-build-semantic-index/)
+- [`--where` filter](/okf-cli/reference/where-filter/)

@@ -46,8 +46,8 @@ flowchart LR
   ```markdown title="_ctx/onboarding.md (excerpt)"
   | pos | mode | path | comment |
   |---|---|---|---|
-  | 1 | pflicht | [getting-started](/handbook/getting-started.md) |  |
-  | - | nachschlag | [security](/handbook/security.md) | Background on passwords |
+  | 1 | pflicht | [getting-started](/okf-cli/handbook/getting-started.md) |  |
+  | - | nachschlag | [security](/okf-cli/handbook/security.md) | Background on passwords |
   ```
 
 - **A short form.** `okf ctx <slug>` means `okf ctx show <slug>`. `okf ctx list` lists all bundles with their entry counts.
@@ -68,7 +68,7 @@ WARNING  kc/ctx/archived-entry _ctx/legacy.md  (entry under _archive/: _archive/
 [exit 4]
 ```
 
-- `okf check` runs the same ctx rules, for example `kc/ctx/dead-entry`. See [Conformance checks](/features/conformance-checks/).
+- `okf check` runs the same ctx rules, for example `kc/ctx/dead-entry`. See [Conformance checks](/okf-cli/features/conformance-checks/).
 
 ## Limits
 
@@ -83,5 +83,5 @@ WARNING  kc/ctx/archived-entry _ctx/legacy.md  (entry under _archive/: _archive/
 
 ## Reference
 
-- [`okf ctx`](/reference/commands/okf-ctx/)
-- Verbs: [`show`](/reference/commands/okf-ctx-show/), [`list`](/reference/commands/okf-ctx-list/), [`read`](/reference/commands/okf-ctx-read/), [`toc`](/reference/commands/okf-ctx-toc/), [`inbound`](/reference/commands/okf-ctx-inbound/), [`outbound`](/reference/commands/okf-ctx-outbound/), [`check`](/reference/commands/okf-ctx-check/), [`create`](/reference/commands/okf-ctx-create/), [`add`](/reference/commands/okf-ctx-add/), [`drop`](/reference/commands/okf-ctx-drop/), [`move`](/reference/commands/okf-ctx-move/), [`rename`](/reference/commands/okf-ctx-rename/), [`edit`](/reference/commands/okf-ctx-edit/), [`remove`](/reference/commands/okf-ctx-remove/)
+- [`okf ctx`](/okf-cli/reference/commands/okf-ctx/)
+- Verbs: [`show`](/okf-cli/reference/commands/okf-ctx-show/), [`list`](/okf-cli/reference/commands/okf-ctx-list/), [`read`](/okf-cli/reference/commands/okf-ctx-read/), [`toc`](/okf-cli/reference/commands/okf-ctx-toc/), [`inbound`](/okf-cli/reference/commands/okf-ctx-inbound/), [`outbound`](/okf-cli/reference/commands/okf-ctx-outbound/), [`check`](/okf-cli/reference/commands/okf-ctx-check/), [`create`](/okf-cli/reference/commands/okf-ctx-create/), [`add`](/okf-cli/reference/commands/okf-ctx-add/), [`drop`](/okf-cli/reference/commands/okf-ctx-drop/), [`move`](/okf-cli/reference/commands/okf-ctx-move/), [`rename`](/okf-cli/reference/commands/okf-ctx-rename/), [`edit`](/okf-cli/reference/commands/okf-ctx-edit/), [`remove`](/okf-cli/reference/commands/okf-ctx-remove/)

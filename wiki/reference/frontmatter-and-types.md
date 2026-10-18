@@ -5,9 +5,9 @@ description: "Frontmatter fields, the TYPES.md type vocabulary and the OKF v0.2 
 
 # OKF frontmatter and Open Knowledge Format types
 
-A concept is a Markdown file that starts with a YAML block. This page lists the keys okf reads and writes, the type vocabulary, and the provenance fields (`generated`, `sources`, `verified`, `stale_after`). Terms are defined in the [Glossary](/reference/glossary/). The format itself is specified by the [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format).
+A concept is a Markdown file that starts with a YAML block. This page lists the keys okf reads and writes, the type vocabulary, and the provenance fields (`generated`, `sources`, `verified`, `stale_after`). Terms are defined in the [Glossary](/okf-cli/reference/glossary/). The format itself is specified by the [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format).
 
-A concept as okf reads it (output of [`okf read`](/reference/commands/okf-read/) on the test catalogue):
+A concept as okf reads it (output of [`okf read`](/okf-cli/reference/commands/okf-read/) on the test catalogue):
 
 ```yaml title="handbook/ops/deploy.md"
 ---
@@ -31,7 +31,7 @@ stale_after: 2099-01-01T00:00:00Z
 
 ## Frontmatter fields
 
-[`okf info`](/reference/commands/okf-info/) prints the `PROPERTIES.md` of your catalogue. The fields below are the ones `okf check` knows.
+[`okf info`](/okf-cli/reference/commands/okf-info/) prints the `PROPERTIES.md` of your catalogue. The fields below are the ones `okf check` knows.
 
 | Field | Required | Content | Check rule |
 |---|---|---|---|
@@ -64,15 +64,15 @@ An actor (`by`) is `human:<id>`, `process:<id>` or `<producer>/<version>`. An in
 | `Recipe` | Food preparation |
 | `Note` | Loose observation |
 
-[`okf check`](/reference/commands/okf-check/) reports a concept whose `type` is missing from this table (`kc/type/registered`). Set `types_source` in [`.okf.toml`](/reference/configuration/#okftoml), or pass `okf check --types`, to read the table from another file. `okf registry convert TYPES.md --to block` switches the file between table and block form.
+[`okf check`](/okf-cli/reference/commands/okf-check/) reports a concept whose `type` is missing from this table (`kc/type/registered`). Set `types_source` in [`.okf.toml`](/okf-cli/reference/configuration/#okftoml), or pass `okf check --types`, to read the table from another file. `okf registry convert TYPES.md --to block` switches the file between table and block form.
 
 ## Provenance
 
 OKF v0.2 adds fields that say where a concept came from and how far to trust it.
 
 - `generated`: `by` (required, non-empty) and `at`. Rule `okf/trust/generated` demands a `by`.
-- `sources`: a list of entries, each with a `resource`. `sources.last_modified` and `sources.usage_window.from` / `.to` are timestamp keys you can filter on with [`--where`](/reference/where-filter/).
-- `verified`: a list of `{by, at}`. [`okf verify`](/reference/commands/okf-verify/) writes an entry.
+- `sources`: a list of entries, each with a `resource`. `sources.last_modified` and `sources.usage_window.from` / `.to` are timestamp keys you can filter on with [`--where`](/okf-cli/reference/where-filter/).
+- `verified`: a list of `{by, at}`. [`okf verify`](/okf-cli/reference/commands/okf-verify/) writes an entry.
 - `stale_after`: an instant. A concept is **stale** once that instant has passed.
 
 okf derives a **trust tier** from `verified` only:
@@ -85,7 +85,7 @@ okf derives a **trust tier** from `verified` only:
 
 `--json` output of `list`, `find`, `read` and `recent` shows the tier as `tier` and the stale state as `stale`.
 
-The v0.2 rules of `check` run in bundles whose root `index.md` declares `okf_version: "0.2"`. [`okf migrate`](/reference/commands/okf-migrate/) moves a catalogue to 0.2. See [Migrate to OKF 0.2](/use-cases/migrate-to-okf-0-2/).
+The v0.2 rules of `check` run in bundles whose root `index.md` declares `okf_version: "0.2"`. [`okf migrate`](/okf-cli/reference/commands/okf-migrate/) moves a catalogue to 0.2. See [Migrate to OKF 0.2](/okf-cli/use-cases/migrate-to-okf-0-2/).
 
 ## Editing rules
 
@@ -105,4 +105,4 @@ A refused file ends the whole run with exit 2 and the message `<path>: <reason>`
 `okf check` reports invalid frontmatter as `okf/frontmatter/parseable`.
 :::
 
-Read next: [Conformance checks](/features/conformance-checks/), [Safe edits](/features/safe-edits/).
+Read next: [Conformance checks](/okf-cli/features/conformance-checks/), [Safe edits](/okf-cli/features/safe-edits/).

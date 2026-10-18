@@ -61,12 +61,12 @@ flowchart LR
     U --> C2
 ```
 
-- [`okf sync-export`](/reference/commands/okf-sync-export/) prints the payload of one canon block.
-- [`okf sync-insert`](/reference/commands/okf-sync-insert/) materialises a canon block in a consumer concept.
-- [`okf sync-status`](/reference/commands/okf-sync-status/) reports the state of every copy.
-- [`okf sync-update`](/reference/commands/okf-sync-update/) re-materialises outdated copies from their owner.
+- [`okf sync-export`](/okf-cli/reference/commands/okf-sync-export/) prints the payload of one canon block.
+- [`okf sync-insert`](/okf-cli/reference/commands/okf-sync-insert/) materialises a canon block in a consumer concept.
+- [`okf sync-status`](/okf-cli/reference/commands/okf-sync-status/) reports the state of every copy.
+- [`okf sync-update`](/okf-cli/reference/commands/okf-sync-update/) re-materialises outdated copies from their owner.
 
-`okf rename` and `okf archive` of an owner rewrite `source=` in all its sync blocks (see [Safe edits](/features/safe-edits/)).
+`okf rename` and `okf archive` of an owner rewrite `source=` in all its sync blocks (see [Safe edits](/okf-cli/features/safe-edits/)).
 
 ## Details
 
@@ -118,7 +118,7 @@ sync-insert (dry-run): re-run with --apply.
 
 ### Drift states
 
-`sync-status` reports one of: `synced`, `source-changed`, `consumer-modified`, `both-changed`, `source-missing`, `malformed`. The `okf check` rules `kc/sync/block`, `kc/sync/canon-block` and `kc/sync/stale` cover the same blocks (see [Conformance checks](/features/conformance-checks/)).
+`sync-status` reports one of: `synced`, `source-changed`, `consumer-modified`, `both-changed`, `source-missing`, `malformed`. The `okf check` rules `kc/sync/block`, `kc/sync/canon-block` and `kc/sync/stale` cover the same blocks (see [Conformance checks](/okf-cli/features/conformance-checks/)).
 
 ## Limits
 
@@ -128,6 +128,6 @@ sync-insert (dry-run): re-run with --apply.
 
 ## Reference
 
-- [`okf sync-export`](/reference/commands/okf-sync-export/), [`okf sync-insert`](/reference/commands/okf-sync-insert/)
-- [`okf sync-status`](/reference/commands/okf-sync-status/), [`okf sync-update`](/reference/commands/okf-sync-update/)
-- [Canon block](/reference/glossary/#canon-block) in the glossary
+- [`okf sync-export`](/okf-cli/reference/commands/okf-sync-export/), [`okf sync-insert`](/okf-cli/reference/commands/okf-sync-insert/)
+- [`okf sync-status`](/okf-cli/reference/commands/okf-sync-status/), [`okf sync-update`](/okf-cli/reference/commands/okf-sync-update/)
+- [Canon block](/okf-cli/reference/glossary/#canon-block) in the glossary

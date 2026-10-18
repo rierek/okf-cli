@@ -24,7 +24,7 @@ Keep one shared bundle in the catalogue, for example an architecture canon: laye
 
 ## How okf does it
 
-A canon block has an owner. [`okf sync-insert`](/reference/commands/okf-sync-insert/) materialises it in the consumer, so the consumer stays readable even without the catalogue. [`okf sync-status`](/reference/commands/okf-sync-status/) shows drift. [`okf sync-update`](/reference/commands/okf-sync-update/) pulls outdated blocks up to date. [`okf sync-export`](/reference/commands/okf-sync-export/) prints a block's payload.
+A canon block has an owner. [`okf sync-insert`](/okf-cli/reference/commands/okf-sync-insert/) materialises it in the consumer, so the consumer stays readable even without the catalogue. [`okf sync-status`](/okf-cli/reference/commands/okf-sync-status/) shows drift. [`okf sync-update`](/okf-cli/reference/commands/okf-sync-update/) pulls outdated blocks up to date. [`okf sync-export`](/okf-cli/reference/commands/okf-sync-export/) prints a block's payload.
 
 Both writing commands print a diff first and write only with `--apply`.
 
@@ -41,6 +41,6 @@ okf sync-update --apply
 
 ## In short
 
-The canon makes knowledge shareable, checkable and current. It is the base for [context management](/blog/context-management-with-work-in-progress/) and for a [controlled tag vocabulary](/blog/tag-hygiene/).
+The canon makes knowledge shareable, checkable and current. It is the base for [context management](/okf-cli/blog/context-management-with-work-in-progress/) and for a [controlled tag vocabulary](/okf-cli/blog/tag-hygiene/).
 
-See also [Canon blocks](/features/canon-blocks/) and [Define canon knowledge](/use-cases/define-canon-knowledge/).
+See also [Canon blocks](/okf-cli/features/canon-blocks/) and [Define canon knowledge](/okf-cli/use-cases/define-canon-knowledge/).

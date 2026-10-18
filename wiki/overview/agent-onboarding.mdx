@@ -45,12 +45,12 @@ nothing to do: already up to date
 [exit 0]
 ```
 
-`--only` narrows the run to a comma-separated list of agents (`claude`, `omp`, `codex`, `opencode`, `kimi`, `openclaw`, `hermes`) and shells (`zsh`, `bash`, `fish`). `--uninstall --apply` removes what install created. Details: [`okf install`](/reference/commands/okf-install/).
+`--only` narrows the run to a comma-separated list of agents (`claude`, `omp`, `codex`, `opencode`, `kimi`, `openclaw`, `hermes`) and shells (`zsh`, `bash`, `fish`). `--uninstall --apply` removes what install created. Details: [`okf install`](/okf-cli/reference/commands/okf-install/).
 
 An agent counts as detected when its binary is on PATH or its configuration directory exists.
 
 <Aside type="caution" title="Skill and MCP need a package root">
-A lone release binary installs shell completion only. The skill and the MCP server script live in `skills/okf` and `mcp/okf_mcp.py` beside the binary, so install from a Homebrew keg or a clone. Otherwise the plan says `BLOCKED claude  source not found: …/skills/okf` and exits 1 (known issue `fs8c`, see [known limitations](/known-limitations/)).
+A lone release binary installs shell completion only. The skill and the MCP server script live in `skills/okf` and `mcp/okf_mcp.py` beside the binary, so install from a Homebrew keg or a clone. Otherwise the plan says `BLOCKED claude  source not found: …/skills/okf` and exits 1 (known issue `fs8c`, see [known limitations](/okf-cli/known-limitations/)).
 </Aside>
 
 <Aside type="caution" title="uv is required for the MCP step">
@@ -208,8 +208,8 @@ The site publishes two plain-text files for agents that read the web:
 ## Reference
 
 <CardGrid>
-  <LinkCard title="okf install" href="/reference/commands/okf-install/" description="Plan, apply, uninstall, --only." />
-  <LinkCard title="okf prime" href="/reference/commands/okf-prime/" description="Options and output shape." />
-  <LinkCard title="JSON output and exit codes" href="/reference/json-output-and-exit-codes/" description="The envelope the MCP tools return." />
-  <LinkCard title="Known limitations" href="/known-limitations/" description="fs8c, erpf and more." />
+  <LinkCard title="okf install" href="/okf-cli/reference/commands/okf-install/" description="Plan, apply, uninstall, --only." />
+  <LinkCard title="okf prime" href="/okf-cli/reference/commands/okf-prime/" description="Options and output shape." />
+  <LinkCard title="JSON output and exit codes" href="/okf-cli/reference/json-output-and-exit-codes/" description="The envelope the MCP tools return." />
+  <LinkCard title="Known limitations" href="/okf-cli/known-limitations/" description="fs8c, erpf and more." />
 </CardGrid>

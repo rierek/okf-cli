@@ -5,7 +5,7 @@ description: "Fix okf command not found, TAB completion not working, MCP server 
 
 ## How to read this page
 
-Each entry has the symptom as heading, then the cause and the fix. Pick the heading that matches what you see. Short IDs such as [fs8c] point to [Known limitations](/known-limitations/).
+Each entry has the symptom as heading, then the cause and the fix. Pick the heading that matches what you see. Short IDs such as [fs8c] point to [Known limitations](/okf-cli/known-limitations/).
 
 ## `command not found: okf` and the old Python CLI first on PATH
 
@@ -44,7 +44,7 @@ A blocked plan exits 1 and prints only `install failed with exit code 1` [fs8c].
 
 ## The MCP server starts the wrong binary or none
 
-The server picks the binary in this order: `$OKF_BIN`, `<package>/bin/okf`, `<package>/go/bin/okf`, then `okf` on `PATH`. Set `OKF_BIN` to the binary you want, in the environment where the agent starts the server (the MCP entry can carry an `env` block). Or put the binary on the `PATH` of that agent. See [Configuration](/reference/configuration/).
+The server picks the binary in this order: `$OKF_BIN`, `<package>/bin/okf`, `<package>/go/bin/okf`, then `okf` on `PATH`. Set `OKF_BIN` to the binary you want, in the environment where the agent starts the server (the MCP entry can carry an `env` block). Or put the binary on the `PATH` of that agent. See [Configuration](/okf-cli/reference/configuration/).
 
 ## `find` prints `note: lexical index absent`
 
@@ -54,7 +54,7 @@ note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical
 (no matches for: git)
 ```
 
-**Fix.** Run `okf build-index` once. Run it again after the catalogue changes. `note: semantic arm skipped` is normal without an embedding setup: the lexical results are complete. See [Search](/features/search/).
+**Fix.** Run `okf build-index` once. Run it again after the catalogue changes. `note: semantic arm skipped` is normal without an embedding setup: the lexical results are complete. See [Search](/okf-cli/features/search/).
 
 ## `usage: okf ...` and exit 2 for `okf find git --root ...`
 
@@ -67,7 +67,7 @@ okf --root /path find git     # right
 
 ## A tag or `migrate` command exits 2 with `<path>: <reason>`
 
-The line patcher of the frontmatter writer refused a file it cannot patch safely. It wrote nothing, also in a dry run. Edit the file by hand or repair its frontmatter, then run the command again. See [Safe edits](/features/safe-edits/) and [Known limitations](/known-limitations/).
+The line patcher of the frontmatter writer refused a file it cannot patch safely. It wrote nothing, also in a dry run. Edit the file by hand or repair its frontmatter, then run the command again. See [Safe edits](/okf-cli/features/safe-edits/) and [Known limitations](/okf-cli/known-limitations/).
 
 ## A tag registration warns about `build_tagvec.py`
 

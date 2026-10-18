@@ -23,7 +23,7 @@ okf tags --register operations "Running and operating services"
 
 ## Check
 
-`okf tags --validate` reports tags that are not in the registry and exits with a non-zero code, so a script can act on it. Test for non-zero rather than for one value: the exit code and the help text disagree today ([irxe], see [Known limitations](/known-limitations/)).
+`okf tags --validate` reports tags that are not in the registry and exits with a non-zero code, so a script can act on it. Test for non-zero rather than for one value: the exit code and the help text disagree today ([irxe], see [Known limitations](/okf-cli/known-limitations/)).
 
 ## A CI gate
 
@@ -33,9 +33,9 @@ Let CI run `okf tags --validate` and fail on non-zero. A new, unregistered tag t
 
 | Command | Does |
 |---|---|
-| [`okf merge-tags`](/reference/commands/okf-merge-tags/) | Merge duplicates and synonyms into one tag. |
-| [`okf remove-tags`](/reference/commands/okf-remove-tags/) | Remove a tag. |
-| [`okf normalize-tags`](/reference/commands/okf-normalize-tags/) | Unify the spelling and list form. |
+| [`okf merge-tags`](/okf-cli/reference/commands/okf-merge-tags/) | Merge duplicates and synonyms into one tag. |
+| [`okf remove-tags`](/okf-cli/reference/commands/okf-remove-tags/) | Remove a tag. |
+| [`okf normalize-tags`](/okf-cli/reference/commands/okf-normalize-tags/) | Unify the spelling and list form. |
 
 All three change many files at once. They print a diff first and write only with `--apply`. Read the diff, apply, then commit.
 
@@ -50,4 +50,4 @@ okf merge-tags --into operations ops --apply
 - A CI gate keeps it clean.
 - The tools repair what accumulated before.
 
-See also [Tags and registry](/features/tags-and-registry/).
+See also [Tags and registry](/okf-cli/features/tags-and-registry/).
