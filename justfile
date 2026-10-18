@@ -109,3 +109,18 @@ check root=catalogue:
 # Agent-Onboarding gegen den echten Catalogue ausgeben
 prime root=catalogue:
     uv run --script {{cli_dir}}/okf-cli.py --root {{root}} prime
+
+# Port der Doku-Site-Vorschau (eine Quelle)
+docs_port := "4321"
+
+# Generierte Seiten der Doku erzeugen (Befehlsseiten folgen mit dem Generator)
+docs-gen:
+    @true
+
+# Doku-Site bauen (Starlight, site/dist); laeuft in CI und lokal gleich
+docs-build: docs-gen
+    cd site && npm ci && npm run build
+
+# Doku-Site im Dev-Server (Port: docs_port)
+docs-dev: docs-gen
+    cd site && npm run dev -- --port {{docs_port}}

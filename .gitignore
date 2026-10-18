@@ -4,3 +4,8 @@ __pycache__/
 dist/
 uv.lock
 go/bin/
+/site/node_modules/
+/site/dist/
+/site/.astro/
+/wiki/reference/commands/okf*.md
+/wiki/reference/commands/_command-tree.md
