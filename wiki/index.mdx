@@ -2,43 +2,73 @@
 title: "Command line and MCP server for OKF catalogues"
 description: Command line and MCP server for working with Open Knowledge Format (OKF) catalogues
 template: splash
-hero:
-  tagline: CLI and MCP server for Open Knowledge Format (OKF) v0.2 catalogues
-  actions:
-    - text: Install okf
-      link: /okf-cli/overview/installation/
-      icon: right-arrow
-    - text: Explore features
-      link: /okf-cli/features/
-      variant: minimal
+# `hero` (even empty) selects Starlight's hero layout without the page-title panel. The visible hero is HeroSplit below.
+hero: {}
 ---
 
-## Purpose
+import { FileSearch, ListOrdered, Pencil, ShieldCheck } from '@lucide/astro';
+import demo from '../site/src/data/demo.json';
+import AnnotatedTerminal from '../site/src/components/AnnotatedTerminal.astro';
+import FeatureTabs from '../site/src/components/FeatureTabs.astro';
+import HeroSplit from '../site/src/components/HeroSplit.astro';
+import KeyValueItem from '../site/src/components/KeyValueItem.astro';
+import KeyValueList from '../site/src/components/KeyValueList.astro';
+import Section from '../site/src/components/Section.astro';
+import TerminalWindow from '../site/src/components/TerminalWindow.astro';
 
-Landing page: say what okf is and send the reader to Installation or Features.
+{/* Facts: README intro and FACTS §okf find, §okf ctx show, §okf check, §okf rename, §Topic: --json envelope, §Topic: MCP server. Output in the windows is captured by site/scripts/capture-demo.mjs. TODO: verify the exact commitment on specification changes (Q01) before a sentence on it goes into the pitch. */}
 
-## Audience
+<HeroSplit
+  title="Search, check, refactor."
+  accent="Your OKF catalogue."
+  checks={['One static binary', 'CLI and MCP server', 'Made for AI agents']}
+  primary={{ text: 'Install okf-cli', href: '/overview/installation/' }}
+  secondary={{ text: 'Explore features', href: '/features/' }}
+>
 
-A first-time visitor: a developer or agent user deciding whether to try okf.
+okf-cli is the command line for catalogues of Open Knowledge Format (OKF) v0.2 bundles: Markdown files with YAML frontmatter. Humans read them, agents query them, scripts check them.
 
-## Visual elements
+<div slot="visual">
+  <TerminalWindow title="~/kc" command={demo.find.command} html={demo.find.html} cols={80} label="Ranked results of okf find recipe: rank, title, type, path and description of each hit." />
+</div>
 
-Hero with two actions; LinkCards to Installation, First steps, Agent onboarding, Reference.
+</HeroSplit>
 
-## Search terms
+<Section title="One catalogue, four jobs">
+  <FeatureTabs
+    label="What okf-cli does"
+    tabs={[
+      { id: 'search', label: 'Search', icon: FileSearch, caption: 'Ranked search with <code>okf find</code>, narrowed by one <code>--where</code> filter.' },
+      { id: 'context', label: 'Context', icon: ListOrdered, caption: 'A <code>ctx</code> bundle is a reading list in order. One command hands an agent the right pages.' },
+      { id: 'check', label: 'Check', icon: ShieldCheck, caption: '<code>okf check</code> scans the catalogue against the format rules and the local invariants.' },
+      { id: 'edit', label: 'Edit', icon: Pencil, caption: '<code>okf rename</code> moves a concept and rewrites every link. It shows a diff first.' },
+    ]}
+  >
+    <div slot="search"><TerminalWindow title="~/kc" command={demo.find.command} html={demo.find.html} cols={80} label="Ranked results of okf find recipe." /></div>
+    <div slot="context"><TerminalWindow title="~/kc" command={demo.ctx.command} html={demo.ctx.html} cols={80} label="The ctx bundle onboarding in reading order, with title, type and token estimate per entry." /></div>
+    <div slot="check"><TerminalWindow title="~/kc" command={demo.check.command} html={demo.check.html} cols={80} label="Findings of okf check on the fixture catalogue: rule, file and reason." /></div>
+    <div slot="edit"><TerminalWindow title="~/kc" command={demo.rename.command} html={demo.rename.html} cols={80} label="The diff okf rename shows before it writes: the ctx bundle and the links that change." /></div>
+  </FeatureTabs>
+</Section>
 
-Open Knowledge Format CLI; OKF v0.2 command line; markdown knowledge base CLI; MCP server for knowledge bases
+<Section title="Preview first, then write." link={{ text: 'Read about safe edits', href: '/features/safe-edits/' }}>
+  <AnnotatedTerminal
+    title="~/kc · okf rename"
+    label="Command that renames the concept recipes/soup.md to recipes/broth.md and previews the changes."
+    lines={['okf rename \\', '  recipes/soup.md \\', '  recipes/broth.md']}
+    notes={[
+      { line: 0, side: 'left', text: 'Moves a concept and its links' },
+      { line: 1, side: 'right', text: 'The concept to move' },
+      { line: 2, side: 'left', text: 'Prints a diff. --apply writes it' },
+    ]}
+  />
+</Section>
 
-## Required sections
-
-### Hero
-
-- Tagline and two actions: "Install okf" (primary), "Explore features" (secondary). Source: page-patterns, Startseite.
-
-### Result sentence
-
-- One bold sentence: okf searches, navigates, validates and refactors OKF v0.2 catalogues, and follows the specification when it changes. TODO: verify the exact commitment (Q01). Source: README intro.
-
-### Start here
-
-- Link cards to Installation, First steps, Agent onboarding, Reference. Source: CONCEPT D05.
+<Section title="Built for humans, agents and programs.">
+  <KeyValueList centered>
+    <KeyValueItem term="Markdown for humans">A catalogue is a folder of Markdown files. Read it, edit it, diff it like code.</KeyValueItem>
+    <KeyValueItem term="MCP and CLI for agents">`okf install` registers an MCP server and a skill. `okf prime` onboards a fresh session in one call.</KeyValueItem>
+    <KeyValueItem term="JSON for programs">Every command answers `--json` with one envelope, and every failure has an exit code that names its class.</KeyValueItem>
+    <KeyValueItem term="Your catalogues">`--root` points one binary at any catalogue, so private, project and shared bundles stay apart.</KeyValueItem>
+  </KeyValueList>
+</Section>

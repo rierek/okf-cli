@@ -24,7 +24,7 @@ export default defineConfig({
 		starlight({
 			title: 'okf-cli',
 			description: 'Command line and MCP server for working with Open Knowledge Format (OKF) catalogues',
-			components: { Header: './src/components/Header.astro' },
+			components: { Header: './src/components/Header.astro', Hero: './src/components/Hero.astro' },
 			customCss: ['./src/styles/custom.css', './src/styles/elements.css'],
 			// Code blocks use the same Catppuccin flavours as the site. Expressive Code raises token
 			// contrast against the theme base; the panes sit on mantle (--okf-surface), so the floor is above 4.5:1 with
@@ -43,7 +43,7 @@ export default defineConfig({
 			// D36/D51: sidebar mode (all chapters or current chapter only) is one switch in src/routeData.ts.
 			routeMiddleware: './src/routeData.ts',
 			// custom.css defines the --ctp-* tones for these two flavours; change both together.
-			plugins: [catppuccin({ dark: { flavor: 'mocha', accent: 'blue' }, light: { flavor: 'latte', accent: 'blue' } })],
+			plugins: [catppuccin({ dark: { flavor: 'mocha', accent: 'lavender' }, light: { flavor: 'latte', accent: 'lavender' } })],
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/rierek/okf-cli' }],
 			// Each top-level group is a chapter. Header chapters: Overview, Features, Use Cases, Reference, Resources
 			// (= Blog, Releases, Known limitations, Contribute, About); see src/components/nav.ts.

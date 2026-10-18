@@ -124,3 +124,7 @@ docs-build: docs-gen
 # Doku-Site im Dev-Server (Port: docs_port)
 docs-dev: docs-gen
     cd site && npm run dev -- --port {{docs_port}}
+
+# Echte okf-Ausgabe fuer die Startseite neu aufnehmen (site/src/data/demo.json; braucht go/bin/okf)
+docs-capture: go-build
+    node site/scripts/capture-demo.mjs

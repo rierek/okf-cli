@@ -6,12 +6,12 @@
 	--okf-ink: #cdd6f4;
 	--okf-ink-strong: #cdd6f4;
 	--okf-ink-muted: #a6adc8;
-	--okf-accent-ink: #89b4fa;
-	--okf-accent-fill: #89b4fa;
+	--okf-accent-ink: #b4befe;
+	--okf-accent-fill: #b4befe;
 	--okf-on-accent: #1e1e2e;
-	--okf-accent-tint: color-mix(in srgb, #89b4fa 12%, transparent);
+	--okf-accent-tint: color-mix(in srgb, #b4befe 12%, transparent);
 	--okf-em-ink: #cba6f7;
-	--okf-key-ink: #89b4fa;
+	--okf-key-ink: #b4befe;
 	--okf-ok-ink: #a6e3a1;
 	--okf-warn-ink: #f9e2af;
 	--okf-danger-ink: #f38ba8;
@@ -28,12 +28,12 @@
 	--okf-ink: #4c4f69;
 	--okf-ink-strong: #3a3d55;
 	--okf-ink-muted: #5c5f77;
-	--okf-accent-ink: #1a55c9;
-	--okf-accent-fill: #1a55c9;
+	--okf-accent-ink: #4253c9;
+	--okf-accent-fill: #4253c9;
 	--okf-on-accent: #eff1f5;
-	--okf-accent-tint: color-mix(in srgb, #1e66f5 10%, transparent);
+	--okf-accent-tint: color-mix(in srgb, #7287fd 10%, transparent);
 	--okf-em-ink: #7a2fd6;
-	--okf-key-ink: #1a55c9;
+	--okf-key-ink: #4253c9;
 	--okf-ok-ink: #2a701b;
 	--okf-warn-ink: #8a5a0b;
 	--okf-danger-ink: #b0102f;
@@ -68,7 +68,7 @@
 :root[data-theme='light'] {
 	--sl-color-text-accent: var(--okf-accent-ink);
 	--sl-color-accent-high: var(--okf-accent-ink);
-	--sl-color-accent-low: color-mix(in srgb, #1e66f5 14%, #eff1f5);
+	--sl-color-accent-low: color-mix(in srgb, #7287fd 14%, #eff1f5);
 	--sl-color-gray-2: var(--okf-ink-muted);
 	--sl-color-gray-3: var(--okf-ink-muted);
 }
