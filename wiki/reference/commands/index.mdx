@@ -20,7 +20,7 @@ The text of `okf --help` still describes the Python script [l2j0]. The option li
 | `--root ROOT` | Catalogue root. Default: the nearest catalogue above the current directory. |
 | `--global` | Use the root in `~/.config/okf/config.toml`, even when a catalogue lies above. Not allowed together with `--root` (exit 2). |
 
-`--json` is not global. Each command declares it and it goes after the command: `okf find git --json`. Every command except `okf registry` accepts it; each ctx verb accepts it, `okf ctx` alone does not. `okf --json list` fails with `unrecognized arguments: --json`. See [JSON output and exit codes](/reference/json-output-and-exit-codes/).
+`--json` is not global [oyw7]. Each command declares it and it goes after the command: `okf find git --json`. Every command except `okf registry` accepts it; each ctx verb accepts it, `okf ctx` alone does not. `okf --json list` fails with `unrecognized arguments: --json`. See [JSON output and exit codes](/reference/json-output-and-exit-codes/).
 
 For the ctx workflow, see [Context bundles](/features/context-bundles/).
 

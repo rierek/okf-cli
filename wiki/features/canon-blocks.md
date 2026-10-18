@@ -123,7 +123,7 @@ sync-insert (dry-run): re-run with --apply.
 ## Limits
 
 - The statuses `consumer-modified`, `both-changed`, `source-missing` and `malformed` are listed by okf; this page shows only runs with `synced` and `source-changed`.
-- After an owner `rename --apply`, the `> [!quote]` line of a consumer still names the old path until `sync-update` runs. Observed: `source=` is rewritten at once, the quote line is not. The status stays `synced` because the payload did not change.
+- After an owner `rename --apply`, the `> [!quote]` line of a consumer still names the old path until `sync-update` runs. Observed: `source=` is rewritten at once, the quote line is not. The status stays `synced` because the payload did not change [6peo].
 - Only one error path was run: `sync-insert` with a concept argument that does not exist prints `not found: naming-rule` and exits 3. Other exit codes of `sync-insert` and `sync-update` are not verified. TODO: verify
 
 ## Reference

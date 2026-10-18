@@ -50,6 +50,9 @@ okf known issues; okf limitations; okf bugs
 - [lazz] `okf recent` prints UTC when `TZ` is a POSIX rule string. Workaround: set `TZ` to an IANA name. Source: ACCEPTANCE-REPORT D-52.
 - [3hfd] Cherokee text: case folding is not idempotent, so a heading in the other case is not found. Workaround: type the stored case. Source: ACCEPTANCE-REPORT D-59.
 - [qo6x] Timeouts limit the whole request, not each socket wait as in Python. Workaround: retry. Source: ACCEPTANCE-REPORT D-60.
+- [6peo] After `rename --apply` of a canon owner, consumers keep the old path in the `> [!quote]` line and `sync-status` still says `synced`. Workaround: run `sync-update --apply`. Source: Findings after writing.
+- [gnnc] The substring fallback of `find` prints `provenance: lexical`, help says `substring`. Workaround: none needed, cosmetic. Source: Findings after writing.
+- [oyw7] `okf --help` does not say that `--json` is a per-command flag. Workaround: see the command pages. Source: Findings after writing.
 
 ### Fixed
 

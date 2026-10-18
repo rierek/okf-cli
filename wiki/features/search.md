@@ -106,7 +106,7 @@ The list order is the rank. The two arms never blend scores: the arm that owns t
 ## Details
 
 - `okf build-index` builds or refreshes `.fts/fts.sqlite`. `--if-stale` skips the rebuild when the index is current. The file shows as untracked in git.
-- Without the index, `find` scans substrings and prints `note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking`.
+- Without the index, `find` scans substrings and prints `note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking`. Hits then print `provenance: lexical`, not `substring` as the help says [gnnc].
 - The semantic arm reads `.tagvec/tag_vectors.sqlite`. `okf build-semantic-index` fills it with `voyage-3-large` embeddings and needs `VOYAGE_API_KEY`. The tag commands use a local Ollama `bge-m3` at `localhost:11434` (see [Tags and registry](/features/tags-and-registry/)). The endpoint and model are fixed today; a configurable endpoint is planned [76eb].
 - When the semantic data is absent, `find` prints `note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only` and the lexical result stands alone. Degradation never changes the exit code.
 - `okf recent` lists the newest concepts and takes the same `--where`.
