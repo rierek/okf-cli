@@ -1,53 +1,87 @@
 ---
 title: "Context bundles"
-description: "Curated, ordered reading lists per topic, stored as ctx files in the catalogue."
+description: "Context management for AI agents: a ctx bundle is a curated reading list in reading order, with live titles and token estimates."
 ---
 
-## Purpose
+## Context bundles: curated context for AI agents
 
-Describe ctx bundles: what they hold, how to read them, how to curate them.
+**Print the pages a topic needs, in reading order, with their real titles and a token estimate, and give them to a session or an agent.**
 
-## Audience
+All outputs on this page come from okf 0.2.4 (`rel-0-2-4-115-g91f54bf`), run against a copy of the test catalogue.
 
-A user or agent who wants the pages a topic needs, in reading order.
+## How it looks
 
-## Visual elements
+```text title="okf --root <catalogue> ctx show onboarding"
+ctx onboarding — Read this first on day one
 
-Mermaid flow of a ctx bundle in a session; code block with real `okf ctx show` output.
+required — read in this order:
+  1. <catalogue>/handbook/getting-started.md  [Guide] Getting started  ~158 tok
+     First steps: accounts, tools, and where to find things
+  2. <catalogue>/handbook/glossary.md  [Concept] Glossary  ~62 tok
+     Terms used here: "bundle" and "concept"
+  3. <catalogue>/handbook/ops/deploy.md  [Runbook] Deploy  ~150 tok
+     How to deploy: build, ship, verify
+reference — query when needed:
+  - <catalogue>/handbook/security.md  [Gadget] Security basics  ~55 tok
+     why: Background on passwords
 
-## Search terms
+4 entries (3 required, 1 reference), ~370 tokens for the required set
+```
 
-context management for AI agents; ctx bundle reading list; agent context okf; curated context
+```mermaid
+flowchart LR
+  A[Session starts] --> B["okf ctx show onboarding"]
+  B --> C[Read required entries in order]
+  C --> D[Query reference entries when needed]
+```
 
-## Required sections
+## Why it matters
 
-### Result sentence
+**A session starts with the right pages, in the right order, and you know the token cost of the required set before you read it.**
 
-- Bold sentence, one or two lines: what the reader can do after reading this page. Source: FACTS §okf ctx show.
+## What you get
 
-### How it looks
+- **A bundle is one file.** It lives at `_ctx/<slug>.md` in the catalogue. The file holds a table of entries: position, mode, path and comment. The mode is `pflicht` (shown as *required*) or `nachschlag` (shown as *reference*).
 
-- Real output of `okf ctx show <slug>`. Source: FACTS §okf ctx show.
+  ```markdown title="_ctx/onboarding.md (excerpt)"
+  | pos | mode | path | comment |
+  |---|---|---|---|
+  | 1 | pflicht | [getting-started](/handbook/getting-started.md) |  |
+  | - | nachschlag | [security](/handbook/security.md) | Background on passwords |
+  ```
 
-### Why it matters
+- **A short form.** `okf ctx <slug>` means `okf ctx show <slug>`. `okf ctx list` lists all bundles with their entry counts.
+- **Live metadata.** `show` reads title, type and description from each entry file when you run it. The bundle file holds only paths, so it does not go stale.
+- **Bulk verbs.** `read`, `toc`, `inbound` and `outbound` run over all entries of a bundle: print the full required entries, print all headings, list who links to each entry, list the links each entry points to.
+- **Curation verbs.** `create`, `add`, `drop`, `move` and `rename` change one bundle. `edit` opens it in `$VISUAL`, `$EDITOR` or `vi` and validates it. `remove` deletes a bundle and lists the files that still link to it.
 
-- Bold sentence: a session starts with the right pages, in the right order, within a token budget. Source: FACTS §okf ctx show.
+## Details
 
-### What you get
+- The write verbs `create`, `add`, `drop`, `move`, `rename` and `remove` write at once. They have no preview. Use git to review or undo a change.
+- `okf ctx check` validates all bundles. Findings use the same format as `okf check`:
 
-- Bundles are files `_ctx/<slug>.md` with a table of required and reference entries. Source: FACTS §Topic: ctx bundles.
-- `okf ctx <slug>` is short for `okf ctx show <slug>`. Source: FACTS §okf ctx.
-- `read`, `toc`, `inbound`, `outbound` run over all entries. Source: FACTS §okf ctx read; FACTS §okf ctx toc; FACTS §okf ctx inbound; FACTS §okf ctx outbound.
+```text title="okf --root <catalogue> ctx check"
+ERROR    kc/ctx/dead-entry    _ctx/legacy.md  (dead entry: handbook/ops/gone.md)
+WARNING  kc/ctx/empty-description _ctx/legacy.md  (empty description)
+WARNING  kc/ctx/archived-entry _ctx/legacy.md  (entry under _archive/: _archive/handbook/old-process.md)
+1 VIOLATIONS
+[exit 4]
+```
 
-### Details
+- `okf check` runs the same ctx rules, for example `kc/ctx/dead-entry`. See [Conformance checks](/features/conformance-checks/).
 
-- The write verbs `create`, `add`, `drop`, `move`, `rename`, `remove` write immediately, without preview. Source: FACTS §Defect list, observations; FACTS §okf ctx create.
-- `ctx check` validates all bundles. Source: FACTS §okf ctx check.
+## Limits
 
-### Limits
+- A dead entry, a path that no longer exists, makes `ctx show` print `[DEAD]` and the warning `this list is incomplete`, and the exit code is 4. The `--help` text of `ctx show`, `ctx read`, `ctx check` and `ctx edit` says exit 1 [vf2r]. `TODO: finding`. Script against 4.
 
-- A dead entry exits 4, while the help says exit 1 [vf2r]. Source: FACTS §Defect list g.
+  ```text title="okf --root <catalogue> ctx show legacy (excerpt)"
+    3. [DEAD] <catalogue>/handbook/ops/gone.md
+       why: removed long ago
+  WARNING: 1 dead entry — this list is incomplete; fix with `ctx edit legacy`
+  [exit 4]
+  ```
 
-### Reference
+## Reference
 
-- Links to the 14 `okf ctx` verb pages. Source: FACTS §Section index of commands.
+- [`okf ctx`](/reference/commands/okf-ctx/)
+- Verbs: [`show`](/reference/commands/okf-ctx-show/), [`list`](/reference/commands/okf-ctx-list/), [`read`](/reference/commands/okf-ctx-read/), [`toc`](/reference/commands/okf-ctx-toc/), [`inbound`](/reference/commands/okf-ctx-inbound/), [`outbound`](/reference/commands/okf-ctx-outbound/), [`check`](/reference/commands/okf-ctx-check/), [`create`](/reference/commands/okf-ctx-create/), [`add`](/reference/commands/okf-ctx-add/), [`drop`](/reference/commands/okf-ctx-drop/), [`move`](/reference/commands/okf-ctx-move/), [`rename`](/reference/commands/okf-ctx-rename/), [`edit`](/reference/commands/okf-ctx-edit/), [`remove`](/reference/commands/okf-ctx-remove/)
