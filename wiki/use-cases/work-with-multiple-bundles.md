@@ -7,7 +7,7 @@ description: "Run one okf binary against several catalogues: pick one per call w
 
 **One binary, any number of catalogues, chosen per call.**
 
-Search terms covered: multiple knowledge bases CLI, `okf --root`, catalogue config, Obsidian vault CLI. Output below comes from okf 0.2.4 against two throwaway catalogues, `a` and `b`; `b` is a copy of `a` without the `recipes` and `kc-gov` bundles.
+Search terms covered: multiple knowledge bases CLI, `okf --root`, catalogue config, Obsidian vault CLI. Output below comes from okf 0.2.5 against two throwaway catalogues, `a` and `b`; `b` is a copy of `a` without the `recipes` and `kc-gov` bundles.
 
 ## Set it up
 

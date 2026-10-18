@@ -7,7 +7,7 @@ description: "Canon blocks keep one text in sync across many concepts. Write a r
 
 **Write a rule once in its owner concept. okf copies it into other concepts and tells you when a copy drifts.**
 
-The measured version is okf 0.2.4 (`git describe`: `rel-0-2-4-115-g91f54bf`). The runs below use a throwaway copy of the test catalogue.
+The measured version is okf 0.2.5. The runs below use a throwaway copy of the test catalogue.
 
 ## How it looks
 

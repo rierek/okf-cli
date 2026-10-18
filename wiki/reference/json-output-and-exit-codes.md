@@ -3,7 +3,7 @@ title: "JSON output and exit codes (machine-readable okf)"
 description: "Reference for okf JSON output: the --json envelope, exit-code classes 0 to 5 and failure shapes for scripts, CI and agents that need a machine-readable CLI."
 ---
 
-Scripts, CI jobs and agents consume okf through the `--json` envelope and the exit code. Both are the same on every command. Runs on this page were measured with okf 0.2.4 on the golden test catalogue.
+Scripts, CI jobs and agents consume okf through the `--json` envelope and the exit code. Both are the same on every command. Runs on this page were measured with okf 0.2.5 on the golden test catalogue.
 
 ## Envelope
 

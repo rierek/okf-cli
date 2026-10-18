@@ -7,7 +7,7 @@ description: "Onboard an AI agent to your knowledge base: okf prime gives a fres
 
 **An agent starts with the map of your catalogue and the pages that matter, in two calls.**
 
-Search terms covered: onboard AI agent to knowledge base, `okf prime`, Claude Code context, MCP knowledge base. Output below comes from okf 0.2.4 against a copy of the golden test catalogue; `<catalogue>` replaces the real path.
+Search terms covered: onboard AI agent to knowledge base, `okf prime`, Claude Code context, MCP knowledge base. Output below comes from okf 0.2.5 against a copy of the golden test catalogue; `<catalogue>` replaces the real path.
 
 ## Set it up
 

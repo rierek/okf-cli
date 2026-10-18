@@ -11,7 +11,7 @@ Reorganising a knowledge base by hand breaks links. With `okf rename` and `okf a
 
 ## How it looks
 
-The measured version is okf 0.2.4 (`git describe`: `rel-0-2-4-115-g91f54bf`). The runs below use a throwaway copy of the test catalogue that is also a git repository.
+The measured version is okf 0.2.5. The runs below use a throwaway copy of the test catalogue that is also a git repository.
 
 Step 1: a dry run. okf prints a diff for each file it would change, then a summary.
 

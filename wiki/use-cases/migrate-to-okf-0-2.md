@@ -5,7 +5,7 @@ description: "Migrate a catalogue to OKF 0.2 frontmatter with okf migrate: times
 
 # Migrate to OKF 0.2: `okf migrate`
 
-**`okf migrate` turns `timestamp` into `generated` and maps old `status` values to the OKF 0.2 set, and it shows every change before it writes one.** The output below comes from okf 0.2.4 on a throwaway copy of the test catalogue.
+**`okf migrate` turns `timestamp` into `generated` and maps old `status` values to the OKF 0.2 set, and it shows every change before it writes one.** The output below comes from okf 0.2.5 on a throwaway copy of the test catalogue.
 
 ## Set it up
 

@@ -5,7 +5,7 @@ description: "Open defects and limits of okf, by short ID, with effect and worka
 
 Check an unexpected result against this list first. Each row names one open defect or limit, its effect and, where one exists, a workaround.
 
-Measured on okf 0.2.4, 2026-10-18.
+Measured on okf 0.2.5, 2026-10-18.
 
 ## How to read an ID
 

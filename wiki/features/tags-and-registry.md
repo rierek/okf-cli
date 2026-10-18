@@ -7,7 +7,7 @@ description: "Tag management for Markdown frontmatter: usage counts, fuzzy searc
 
 **List, check, merge and register the tags of a catalogue from the shell, against one closed vocabulary in `TAGS.md`.**
 
-Output below comes from okf 0.2.4 (`git describe`: `0.2.4-115-g91f54bf`), run against a throwaway copy of the test catalogue.
+Output below comes from okf 0.2.5, run against a throwaway copy of the test catalogue.
 
 ## How it looks
 

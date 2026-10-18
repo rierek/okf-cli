@@ -7,7 +7,7 @@ description: "How an Open Knowledge Format catalogue is built: catalogue, bundle
 
 **After this page you can tell a catalogue from a bundle from a concept, and you know which frontmatter fields okf reads.**
 
-Terms are defined once in the [glossary](/okf-cli/reference/glossary/). Examples come from the test catalogue of the okf repository, measured with okf 0.2.4.
+Terms are defined once in the [glossary](/okf-cli/reference/glossary/). Examples come from the test catalogue of the okf repository, measured with okf 0.2.5.
 
 ## Catalogue, bundle, concept
 

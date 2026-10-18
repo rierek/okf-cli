@@ -7,7 +7,7 @@ description: "Ranked BM25 search over a Markdown knowledge base with okf find: F
 
 **Run `okf find` and get ranked concepts from the shell, narrowed by one `--where` filter. Add the semantic arm when you want embeddings.**
 
-The output below comes from okf 0.2.4 (`git describe`: `0.2.4-115-g91f54bf`), run against a throwaway copy of the test catalogue.
+The output below comes from okf 0.2.5, run against a throwaway copy of the test catalogue.
 
 ## How it looks
 

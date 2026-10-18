@@ -7,7 +7,7 @@ description: "Validate markdown frontmatter and links: okf check scans a catalog
 
 **Run `okf check` to see which concepts break the OKF rules, then fix them before they reach readers or CI.**
 
-All outputs on this page come from okf 0.2.4 (`rel-0-2-4-115-g91f54bf`), run against a copy of the test catalogue.
+All outputs on this page come from okf 0.2.5 (`rel-0-2-4-115-g91f54bf`), run against a copy of the test catalogue.
 
 ## How it looks
 

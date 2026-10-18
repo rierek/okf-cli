@@ -48,7 +48,7 @@ The server picks the binary in this order: `$OKF_BIN`, `<package>/bin/okf`, `<pa
 
 ## `find` prints `note: lexical index absent`
 
-```text title="okf --root kc find git (okf 0.2.4, no index built)"
+```text title="okf --root kc find git (okf 0.2.5, no index built)"
 note: lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking
 note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only
 (no matches for: git)

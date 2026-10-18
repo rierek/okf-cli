@@ -3,7 +3,7 @@ title: "Where filter: the okf --where expression"
 description: "Reference for the okf where filter: grammar, fields, operators, precedence, errors and examples for filtering Markdown frontmatter with okf find and okf list."
 ---
 
-The `--where` option is the one filter language of okf. It selects concepts (Markdown files with frontmatter) by `type`, `tag`, `path`, status fields and any frontmatter key. This page is the reference for the okf where filter. Every `okf find` and `okf list` run on this page was measured with okf 0.2.4 on the golden test catalogue.
+The `--where` option is the one filter language of okf. It selects concepts (Markdown files with frontmatter) by `type`, `tag`, `path`, status fields and any frontmatter key. This page is the reference for the okf where filter. Every `okf find` and `okf list` run on this page was measured with okf 0.2.5 on the golden test catalogue.
 
 ## Grammar
 

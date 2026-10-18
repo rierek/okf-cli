@@ -7,7 +7,7 @@ description: "Context management for AI agents: a ctx bundle is a curated readin
 
 **Print the pages a topic needs, in reading order, with their real titles and a token estimate, and give them to a session or an agent.**
 
-All outputs on this page come from okf 0.2.4 (`rel-0-2-4-115-g91f54bf`), run against a copy of the test catalogue.
+All outputs on this page come from okf 0.2.5 (`rel-0-2-4-115-g91f54bf`), run against a copy of the test catalogue.
 
 ## How it looks
 
