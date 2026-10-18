@@ -1,42 +1,32 @@
 ---
-title: "About"
-description: "What okf is, where it comes from and how it relates to the OKF format."
+title: "About okf: Open Knowledge Format tooling"
+description: "What okf is, where it comes from and how it relates to the Open Knowledge Format (OKF) specification."
 ---
 
-## Purpose
+## About okf, an Open Knowledge Format tool
 
-Give origin, scope and attribution on one page.
+**okf is a command line tool and MCP server for catalogues of Open Knowledge Format (OKF) v0.2 bundles.** It searches, navigates, validates and refactors markdown files with YAML frontmatter, for people and for AI agents. It is a single Go binary.
 
-## Audience
+## Specification tool
 
-A reader who wants context before adopting okf.
+:::note[Specification first]
+okf exists to work with the OKF specification. okf follows the specification and is adapted when the specification changes. There is no release date and no release per specification version.
+:::
 
-## Visual elements
+## Origin
 
-Callout on specification-first.
+okf is a catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`. A Go port replaced the Python run time. The Go binary needs no Python. The [Known limitations](/okf-cli/known-limitations/) page lists where the port differs from the Python original.
 
-## Search terms
+## The OKF format
 
-about okf; Open Knowledge Format tooling; okf origin
+The normative text is the [OKF specification](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md). [okf.md](https://okf.md/) is a community guide. For the terms okf uses, see the [glossary](/okf-cli/reference/glossary/). For a short tour of the model, see [Concepts](/okf-cli/overview/concepts/).
 
-## Required sections
+## Scope
 
-### What okf is
+okf leaves version control to git. Git gives clean diffs for markdown, a commit log per concept, and branches and pull requests for proposed changes. okf reads and writes the files and never commits.
 
-- CLI and MCP server for OKF v0.2 catalogues. Source: README intro.
+## Where to go next
 
-### Specification tool
-
-- One paragraph: okf exists to work with the OKF specification and is adapted when it changes. Commitment (Q01, PO 2026-10-18): okf-cli follows the OKF specification and is adapted when it changes; no release date or per-version release is promised.
-
-### Origin
-
-- Catalogue-aware fork inspired by Cole Medin's single-bundle `okf-cli.py`; Go port replaces the Python run time. Source: FACTS §Defect list i; FACTS §Topic: upgrade from the Python CLI.
-
-### The OKF format
-
-- Link to the SPEC at `github.com/GoogleCloudPlatform/open-knowledge-format`. Source: FACTS Nicht bestimmbar part 1.
-
-### Scope
-
-- What okf does not do: it leaves version control to git. Source: README Works with git.
+- [Install okf](/okf-cli/overview/installation/)
+- [First steps](/okf-cli/overview/first-steps/)
+- [Contribute](/okf-cli/contribute/)

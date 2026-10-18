@@ -1,42 +1,49 @@
 ---
-title: "Contribute"
-description: "Report bugs, build okf from source, run the tests, license and credit."
+title: "Contribute to okf: build from source and run the tests"
+description: "Report bugs, build okf from source, run the tests, change the docs site, license and credit."
 ---
 
-## Purpose
+## Contribute to okf: report bugs, build from source, run the tests
 
-Tell a contributor how to report a problem and how to build and test okf.
+Issues and pull requests are welcome.
 
-## Audience
+## Report bugs and requests
 
-A user who found a bug; a developer who wants to change okf.
+1. Read [Known limitations](/okf-cli/known-limitations/). The problem may be listed with a workaround.
+2. Open an issue in [`rierek/okf-cli`](https://github.com/rierek/okf-cli/issues). Give the command, the catalogue layout (or a minimal one) and the output.
 
-## Visual elements
+## Build from source
 
-Table of just recipes; code blocks.
+The Go module is in `go/`. The binary is written to `go/bin/okf`.
 
-## Search terms
+```bash title="Build"
+just go-build
+```
 
-contribute okf; build okf from source; okf tests
+## Test
 
-## Required sections
+Run `just test` before a pull request. It must be green. Tests never write into a real catalogue and use their own temporary directory.
 
-### Report bugs and requests
+| Recipe | What it runs |
+|---|---|
+| `just test` | builds the binary, then runs the Python unit tests (needs `uv`) |
+| `just golden` | compares command output with the golden files, using the Python script |
+| `just golden-go` | the same comparison against the Go binary |
+| `just go-completion-scripts --check` | checks the generated completion scripts |
+| `just completion-check` | checks shell completion against the Go binary |
 
-- Read Known limitations first; then the issue tracker of `github.com/rierek/okf-cli`. Source: CONTRIBUTING.md:1-8.
+Commit titles use `<type>(<scope>): <subject>`, at most 72 bytes.
 
-### Build from source
+## Docs site
 
-- Go module in `go/`, `just go-build`, binary at `go/bin/okf`. Source: FACTS §Topic: install; justfile.
+Content is in `wiki/`, the site is in `site/`. The command pages are generated from the binary and are not checked in.
 
-### Test
+| Recipe | What it does |
+|---|---|
+| `just docs-gen` | generates the command pages |
+| `just docs-build` | builds the site into `site/dist` |
+| `just docs-dev` | starts the dev server |
 
-- `just test`, `just golden`, `just golden-go`, `just go-completion-scripts --check`, `just completion-check`. Source: justfile recipes.
+## License and credit
 
-### Docs site
-
-- `just docs-gen`, `just docs-build`, `just docs-dev`; content in `wiki/`, site in `site/`. Source: CONCEPT D01.
-
-### License and credit
-
-- Apache-2.0 (`LICENSE`); the CLI is inspired by Cole Medin's single-bundle `okf-cli.py`. Source: README License; FACTS §Defect list i.
+okf is licensed under [Apache-2.0](https://github.com/rierek/okf-cli/blob/main/LICENSE). It is inspired by Cole Medin's single-bundle `okf-cli.py`.
