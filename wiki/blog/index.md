@@ -1,34 +1,14 @@
 ---
-title: "Blog"
-description: "Field notes and recommendations around okf: context management, tags and canon knowledge."
+title: "okf blog"
+description: "okf blog: field notes on context management, tag hygiene and canon knowledge in a knowledge base."
 ---
 
-## Purpose
+**Use cases show what okf makes possible; a blog post is how it works for us.** On conflict the [reference](/okf-cli/reference/) wins.
 
-Separate the documentation of the CLI from general advice. A post tells one concrete experience and links the reference instead of repeating it.
+## Posts
 
-## Audience
+Newest first.
 
-A reader who wants to know how to work with okf, not what a flag does.
-
-## Visual elements
-
-Post list, newest first.
-
-## Search terms
-
-okf blog; context management articles; knowledge base practices
-
-## Required sections
-
-### Boundary
-
-- Use cases show what okf makes possible; a blog post is how it works for us. On conflict the reference wins. Source: CONCEPT D05 (amended), DESIGN D24.
-
-### Post list
-
-- Chronological, newest first: context management, tag hygiene, canon in the catalogue. Source: PO practice (author's experience); TODO: verify examples against the real catalogue before writing.
-
-### Experiments
-
-- Experimental posts carry the tag `experiment` and open with a caution box "not a supported way". Source: canon page-patterns, Blog.
+- [Context management with work-in-progress](/okf-cli/blog/context-management-with-work-in-progress/) (2026-10-18): hand an agent a small `ctx` bundle, keep lasting knowledge in the catalogue.
+- [Tag hygiene](/okf-cli/blog/tag-hygiene/) (2026-10-18): register tags, validate them, block unregistered tags in CI.
+- [Canon in the catalogue](/okf-cli/blog/canon-in-the-catalogue/) (2026-10-18): keep shared knowledge in one place.

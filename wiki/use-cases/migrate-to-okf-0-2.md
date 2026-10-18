@@ -1,47 +1,85 @@
 ---
 title: "Migrate to OKF 0.2"
-description: "Bring a catalogue to the OKF v0.2 frontmatter with okf migrate."
+description: "Migrate a catalogue to OKF 0.2 frontmatter with okf migrate: timestamp to generated, status rules, dry run first. Open Knowledge Format upgrade."
 ---
 
-## Purpose
+# Migrate to OKF 0.2: `okf migrate`
 
-Show a migration from `timestamp` to `generated` and the status rules.
+**`okf migrate` turns `timestamp` into `generated` and maps old `status` values to the OKF 0.2 set, and it shows every change before it writes one.** The output below comes from okf 0.2.4 on a throwaway copy of the test catalogue.
 
-## Audience
+## Set it up
 
-A catalogue owner on an older frontmatter shape.
+1. Put the catalogue under git and commit. `migrate` reads author and time for `generated` from git history, so the migration also lands as one reviewable diff.
+2. Optional: map author e-mail addresses to actors in `.okf.toml` under `[git_authors]`. See [Configuration](/okf-cli/reference/configuration/).
+3. Run `okf migrate` without `--apply`. It is a dry run.
 
-## Visual elements
+```text title="Dry run (first lines)"
+$ okf --root <catalogue> migrate recipes
+status mapping:
+  active -> stable (1 concept(s))
+  obsolete -> deprecated (1 concept(s))
+  todo -> draft (1 concept(s))
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -5,8 +5,10 @@
+ tags:
+   - food
+   - bread
+-timestamp: 2025-12-02T08:00:00Z
+-status: todo
++generated:
++  by: human:golden
++  at: '2026-10-18T22:07:21+02:00'
++status: draft
+ ---
+ 
+ # Bread
+```
 
-Steps; diff block of a migrated frontmatter.
+The dry run exits 0 and leaves the files untouched.
 
-## Search terms
+## Work through it
 
-migrate OKF 0.2; frontmatter timestamp to generated; okf migrate; Open Knowledge Format upgrade
+1. Read the status mapping table. It counts the concepts for each old value.
+2. Look for `unresolved` lines. A status value without a recorded decision is not changed:
 
-## Required sections
+   ```text title="Concept with no decision"
+   $ okf --root <catalogue> migrate handbook
+   status mapping:
+     deprecated -> deprecated (1 concept(s))
+     maybe-later -> (no decision) (1 concept(s))
+     stable -> stable (1 concept(s))
+   unresolved handbook/wiki-notes.md: no recorded decision for status value 'maybe-later'
+   migrate: would migrate 0 file(s), 1 unresolved; dry-run: re-run with --apply
+   ```
 
-### Result sentence
+   Edit such a file by hand to `draft`, `stable` or `deprecated`.
+3. Write the changes with `--apply`, then review `git diff`.
+4. Run `okf check`. The rules `okf/trust/generated` and `okf/lifecycle/status` report what is still wrong:
 
-- Bold sentence: problem and solution in one sentence. Source: FACTS §okf migrate.
+   ```text title="Remaining findings after the run"
+   $ okf --root <catalogue> check
+   ERROR    okf/trust/generated  handbook/wiki-notes.md  (`generated` has no non-empty `by`)
+   ERROR    okf/lifecycle/status handbook/wiki-notes.md  (`status` is `maybe-later`, not draft, stable or deprecated)
+   ```
 
-### Set it up
+:::caution
+`migrate` patches frontmatter line by line. A file it cannot patch ends the whole run with exit 2 and `<path>: <reason>`, and nothing is written, also in a dry run. Fix that file by hand and run again. See [known limitations](/okf-cli/known-limitations/).
+:::
 
-- Commit the catalogue; run `okf migrate` as a dry run. Source: FACTS §okf migrate.
+For scripts, `--json` prints the envelope with `data` = `{applied, files, unresolved, status_mapping}`.
 
-### Work through it
+## What you get
 
-- Read the plan, `--apply`, then `okf check`. Source: FACTS §okf migrate; FACTS §okf check.
-- A file the line patcher cannot patch ends the whole run with exit 2 and `<path>: <reason>`; fix it by hand and rerun. Source: FACTS §okf migrate; FACTS Nicht bestimmbar part 2 (D-09).
+Files that carry `generated` (`by`, `at`) in place of `timestamp`, and `status` values from the set `draft`, `stable`, `deprecated`. A file you fixed by hand after an `unresolved` line passes the same two rules.
 
-### What you get
+## Limits
 
-- A catalogue that passes the v0.2 rules. Source: FACTS §okf check.
+- Exit codes of `migrate` other than 0 (success) and 2 (a file the patcher refuses) are not verified. TODO: verify
+- `okf check` can report findings unrelated to the migration. Read the rule names.
 
-### Limits
+## Reference
 
-- Exit codes of `migrate` beyond the observed ones are not verified. TODO: verify
-
-### Reference
-
-- Links to `migrate`, `check`, Troubleshooting. Source: FACTS §Section index of commands.
+- [`okf migrate`](/okf-cli/reference/commands/okf-migrate/)
+- [`okf check`](/okf-cli/reference/commands/okf-check/)
+- [Troubleshooting](/okf-cli/troubleshooting/)
