@@ -15,7 +15,7 @@ A user who found a bug; a developer who wants to change okf.
 
 ### Report bugs and requests
 
-- Read Known limitations first; then the issue tracker of `github.com/xRiErOS/okf-cli`. Source: CONTRIBUTING.md:1-8.
+- Read Known limitations first; then the issue tracker of `github.com/rierek/okf-cli`. Source: CONTRIBUTING.md:1-8.
 
 ### Build from source
 

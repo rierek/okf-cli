@@ -17,7 +17,7 @@ export default defineConfig({
 			},
 		}],
 	},
-	site: 'https://xrieros.github.io',
+	site: 'https://rierek.github.io',
 	base: '/okf-cli',
 	integrations: [
 		starlight({
@@ -43,7 +43,7 @@ export default defineConfig({
 			routeMiddleware: './src/routeData.ts',
 			// custom.css defines the --ctp-* tones for these two flavours; change both together.
 			plugins: [catppuccin({ dark: { flavor: 'mocha', accent: 'blue' }, light: { flavor: 'latte', accent: 'blue' } })],
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/xRiErOS/okf-cli' }],
+			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/rierek/okf-cli' }],
 			// Each top-level group is a chapter. Header chapters: Overview, Features, Use Cases, Reference, Resources
 			// (= Releases, Known limitations, Contribute, About); see src/components/nav.ts.
 			sidebar: [

@@ -1,6 +1,6 @@
 # Installing okf
 
-`okf` is one binary written in Go. It needs no Python, no `uv` and no other runtime, and it runs on macOS and Linux (`amd64` and `arm64`). Only the MCP server of `okf install` needs `uv`. Every command and option: [command reference](https://xrieros.github.io/okf-cli/reference/commands/). Overview: [README](../README.md).
+`okf` is one binary written in Go. It needs no Python, no `uv` and no other runtime, and it runs on macOS and Linux (`amd64` and `arm64`). Only the MCP server of `okf install` needs `uv`. Every command and option: [command reference](https://rierek.github.io/okf-cli/reference/commands/). Overview: [README](../README.md).
 
 ## Choose a method
 

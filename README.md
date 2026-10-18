@@ -48,7 +48,7 @@ okf --root /path/to/catalogue find "query"   # ranked search
 okf --root /path/to/catalogue check          # conformance scan
 ```
 
-Without `install`, a binary works as it is: `okf --root … <command>`. Details of what `install` writes, and how to undo it: [agents and shells](#use-with-ai-agents-and-shells). Completion for the Go binary: [Shell PATH and completion](#shell-path-and-completion). Every command with its options: [command reference](https://xrieros.github.io/okf-cli/reference/commands/).
+Without `install`, a binary works as it is: `okf --root … <command>`. Details of what `install` writes, and how to undo it: [agents and shells](#use-with-ai-agents-and-shells). Completion for the Go binary: [Shell PATH and completion](#shell-path-and-completion). Every command with its options: [command reference](https://rierek.github.io/okf-cli/reference/commands/).
 
 ## What is OKF?
 
@@ -125,7 +125,7 @@ rename (dry-run): 1 inbound, 0 outbound link(s), 0 wikilink(s) (0 skipped-ambigu
 
 ## Commands
 
-`okf --help` lists all commands; `okf <command> --help` shows every option of one command. Both are generated from the parser. The [command reference](https://xrieros.github.io/okf-cli/reference/commands/) has one page per command and per verb with its options; this README names each command, then explains the modes you choose between. The table below uses the same four groups as `--help`.
+`okf --help` lists all commands; `okf <command> --help` shows every option of one command. Both are generated from the parser. The [command reference](https://rierek.github.io/okf-cli/reference/commands/) has one page per command and per verb with its options; this README names each command, then explains the modes you choose between. The table below uses the same four groups as `--help`.
 
 | group | command | what it does |
 |---|---|---|

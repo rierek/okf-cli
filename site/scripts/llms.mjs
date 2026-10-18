@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 
 const pages = new URL('../../wiki/', import.meta.url).pathname;
 const out = new URL('../dist/', import.meta.url).pathname;
-const site = 'https://xrieros.github.io/okf-cli/';
+const site = 'https://rierek.github.io/okf-cli/';
 const chapters = ['overview', 'features', 'use-cases', 'reference', 'releases', 'known-limitations', 'contribute', 'about'];
 
 const walk = (d) => readdirSync(d).flatMap((f) => {
