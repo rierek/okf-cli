@@ -11,6 +11,14 @@ Get a working `okf` on PATH on macOS or Linux and check that it runs.
 
 A new user on macOS or Linux (amd64 or arm64) with a shell; no catalogue needed yet.
 
+## Visual elements
+
+Tabs for Homebrew, release binary and source build; code blocks with titles; caution callout for the unsigned-binary finding.
+
+## Search terms
+
+install okf CLI; okf Homebrew; okf release binary macOS Linux; build okf from source
+
 ## Required sections
 
 ### Result sentence
@@ -43,6 +51,10 @@ A new user on macOS or Linux (amd64 or arm64) with a shell; no catalogue needed 
 ### Update and uninstall
 
 - Homebrew upgrade, new release asset over the old file, `git pull && just go-build`; then `okf install --apply` again. Source: FACTS §Topic: install.
+
+### Existing indexes
+
+- Indexes built earlier (`.fts/fts.sqlite`, `.tagvec/tag_vectors.sqlite`) keep working; no rebuild is needed. Source: FACTS §Topic: index and search artefacts.
 
 ### Reference
 

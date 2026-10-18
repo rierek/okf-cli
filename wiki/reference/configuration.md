@@ -11,6 +11,14 @@ Specify how okf finds its catalogue and which settings it reads.
 
 A user who works with several catalogues or runs okf in CI.
 
+## Visual elements
+
+Table of settings; Mermaid of root resolution order.
+
+## Search terms
+
+okf configuration; .okf.toml; okf config.toml; XDG config CLI
+
 ## Required sections
 
 ### Root resolution order

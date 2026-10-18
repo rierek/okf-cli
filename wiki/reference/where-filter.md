@@ -11,6 +11,14 @@ Specify the single filter language used by `find`, `list` and others.
 
 A user or agent who writes filters.
 
+## Visual elements
+
+Table of fields and operators; code blocks with real runs.
+
+## Search terms
+
+okf where filter; filter markdown frontmatter; okf find list filter
+
 ## Required sections
 
 ### Grammar

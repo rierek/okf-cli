@@ -11,6 +11,14 @@ Define each term once; other pages link here.
 
 Any reader who meets an unfamiliar term.
 
+## Visual elements
+
+Definition list.
+
+## Search terms
+
+OKF glossary; catalogue bundle concept definition
+
 ## Required sections
 
 ### Terms

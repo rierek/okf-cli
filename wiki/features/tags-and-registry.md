@@ -11,6 +11,14 @@ Describe tag management and the registry file.
 
 A catalogue owner who keeps a tag vocabulary consistent.
 
+## Visual elements
+
+Code blocks with real `okf tags` output; callout on tag hygiene.
+
+## Search terms
+
+tag management markdown frontmatter; TAGS.md registry; merge tags CLI; tag hygiene knowledge base
+
 ## Required sections
 
 ### Result sentence
@@ -34,6 +42,9 @@ A catalogue owner who keeps a tag vocabulary consistent.
 ### Details
 
 - The tag commands preview and need `--apply`; `tags --register` writes immediately. Source: FACTS §Defect list, observations.
+
+- Tag hygiene: register tags in `TAGS.md`, run `okf tags --validate` in CI to block unregistered tags (exit 4), merge near-duplicates. Source: FACTS §okf tags; FACTS §Topic: tag registry (TAGS.md) and `okf registry`.
+- Semantic tag search embeds with Ollama `bge-m3` on `localhost:11434` or Voyage; the endpoint is fixed today (planned: [76eb]). Source: FACTS §okf tags.
 
 ### Limits
 

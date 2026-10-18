@@ -11,6 +11,14 @@ Describe the capability of finding concepts: lexical BM25, optional semantic arm
 
 A user or agent who needs the right concept among many.
 
+## Visual elements
+
+Code block with real `okf find` output; Mermaid of the lexical and semantic arms.
+
+## Search terms
+
+markdown knowledge base search; BM25 FTS5 CLI; semantic search embeddings Voyage; okf find
+
 ## Required sections
 
 ### Result sentence
@@ -37,6 +45,8 @@ A user or agent who needs the right concept among many.
 - Without the index `find` falls back to a substring scan and says so. Source: FACTS §okf find.
 - Semantic arm needs `VOYAGE_API_KEY`; without it the lexical result is complete. Source: FACTS §okf build-semantic-index; FACTS §Topic: index and search artefacts.
 - `okf recent` lists the newest concepts. Source: FACTS §okf recent.
+
+- The semantic arm embeds with Voyage (`VOYAGE_API_KEY`); the endpoint and model are not configurable (planned: [76eb]). Source: FACTS §okf build-semantic-index.
 
 ### Limits
 

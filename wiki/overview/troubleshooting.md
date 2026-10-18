@@ -11,6 +11,14 @@ Let a stuck user find the fix by the symptom they see.
 
 A user whose command fails, prints a note, or whose agent cannot reach okf.
 
+## Visual elements
+
+One heading per symptom; callouts for causes; code blocks with the checks.
+
+## Search terms
+
+okf command not found; okf completion not working; okf MCP server error; okf troubleshooting
+
 ## Required sections
 
 ### How to read this page

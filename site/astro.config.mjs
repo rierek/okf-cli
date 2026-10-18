@@ -4,6 +4,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { fileURLToPath } from 'node:url';
 import catppuccin from '@catppuccin/starlight';
+import mermaid from 'astro-mermaid';
 
 export default defineConfig({
 	vite: {
@@ -45,7 +46,7 @@ export default defineConfig({
 			plugins: [catppuccin({ dark: { flavor: 'mocha', accent: 'blue' }, light: { flavor: 'latte', accent: 'blue' } })],
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/rierek/okf-cli' }],
 			// Each top-level group is a chapter. Header chapters: Overview, Features, Use Cases, Reference, Resources
-			// (= Releases, Known limitations, Contribute, About); see src/components/nav.ts.
+			// (= Blog, Releases, Known limitations, Contribute, About); see src/components/nav.ts.
 			sidebar: [
 				{
 					label: 'Overview',
@@ -55,7 +56,6 @@ export default defineConfig({
 						'overview/first-steps',
 						'overview/concepts',
 						'overview/agent-onboarding',
-						'overview/upgrading',
 						'overview/troubleshooting',
 					],
 				},
@@ -75,10 +75,11 @@ export default defineConfig({
 					label: 'Use Cases',
 					items: [
 						'use-cases',
-						'use-cases/onboard-an-agent',
-						'use-cases/reorganise-without-broken-links',
+						'use-cases/onboard-agents',
+						'use-cases/organize-large-bundles',
 						'use-cases/migrate-to-okf-0-2',
-						'use-cases/curate-a-reading-bundle',
+						'use-cases/work-with-multiple-bundles',
+						'use-cases/define-canon-knowledge',
 					],
 				},
 				{
@@ -93,11 +94,17 @@ export default defineConfig({
 						'reference/glossary',
 					],
 				},
+				{ label: 'Blog', items: [{ autogenerate: { directory: 'blog' } }] },
 				{
 					label: 'Resources',
 					items: [{ label: 'Releases', items: [{ autogenerate: { directory: 'releases' } }] }, 'known-limitations', 'contribute', 'about'],
 				},
 			],
 		}),
+
+		// ```mermaid fences become diagrams in the browser (theme follows data-theme, colours: custom.css).
+		// Must come after starlight(): astro-mermaid replaces markdown.processor with a copy, and Expressive Code hooks
+		// into the processor that is current when starlight() runs.
+		mermaid({ enableLog: false }),
 	],
 });

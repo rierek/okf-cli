@@ -11,6 +11,14 @@ Chapter entry: one line per reference page.
 
 A reader who knows what they look for.
 
+## Visual elements
+
+LinkCards to each reference page.
+
+## Search terms
+
+okf reference; okf command reference; where filter; exit codes
+
 ## Required sections
 
 ### Page list

@@ -11,6 +11,14 @@ Describe the sync-* commands: export, insert, status, update.
 
 A catalogue owner who repeats the same rule or table in several concepts.
 
+## Visual elements
+
+Mermaid of owner and consumer blocks; code block with real `okf sync-status` output.
+
+## Search terms
+
+canon blocks sync markdown; single source of truth knowledge base; okf sync-insert; shared rules across projects
+
 ## Required sections
 
 ### Result sentence

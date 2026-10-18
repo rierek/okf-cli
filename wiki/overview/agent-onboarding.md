@@ -11,6 +11,14 @@ Show the shortest path from a fresh agent session to an agent that finds and edi
 
 A user who runs Claude Code, Codex, opencode, omp, Kimi Code, OpenClaw or Hermes and wants okf available to it.
 
+## Visual elements
+
+Tabs per agent; Steps for okf install; code block with the MCP entry.
+
+## Search terms
+
+MCP server markdown knowledge base; Claude Code knowledge base; okf prime; agent skill; llms.txt
+
 ## Required sections
 
 ### Result sentence

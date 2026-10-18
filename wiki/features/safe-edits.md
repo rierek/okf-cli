@@ -11,6 +11,14 @@ Describe the preview-then-apply model and which commands follow it.
 
 A user who reorganises a catalogue and fears broken links.
 
+## Visual elements
+
+Tabs for dry run and apply; code blocks with diffs; callout on the dry-run asymmetry.
+
+## Search terms
+
+rename markdown file update links; refactor knowledge base; okf rename archive; safe edits dry run
+
 ## Required sections
 
 ### Result sentence

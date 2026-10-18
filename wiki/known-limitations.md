@@ -11,6 +11,14 @@ List every open finding with symptom, effect and workaround, so a user can check
 
 A user who hits unexpected behaviour; a maintainer who plans fixes.
 
+## Visual elements
+
+Table of open limitations; caution callout.
+
+## Search terms
+
+okf known issues; okf limitations; okf bugs
+
 ## Required sections
 
 ### How to read an ID
@@ -34,11 +42,15 @@ A user who hits unexpected behaviour; a maintainer who plans fixes.
 - [l2j0] `okf --help` describes the Python script. Workaround: ignore. Source: FACTS §Defect list i.
 - [fs8c] A blocked `install` plan exits 1 with a generic message. Workaround: read the plan, or use `--json`. Source: FACTS §Defect list j.
 - [zs6t] README, `docs/install.md`, `pyproject.toml` and the Homebrew formula still name the old GitHub owner `xRiErOS`; the repo and this site live under `rierek`. Workaround: use `rierek/okf-cli`; check the tap and release URLs before you copy a command. Source: FACTS §Topic: Homebrew formula; FACTS §Topic: install.
+- [cwyx] The frontmatter writer refuses shapes it cannot patch (lone CR, flow-mapping or null root, anchor/alias/tag on the edited value, comment in a flow list, other shapes, ctx edits, huge ctx positions, non-scalar keys); Python wrote them. Exit 2 with `<path>: <reason>`, file untouched. Workaround: edit the file by hand. Source: ACCEPTANCE-REPORT D-03 to D-07, D-17, D-18, D-43.
+- [n760] One refused file ends the whole run of `merge-tags`, `remove-tags`, `normalize-tags` and `migrate`, a dry run too. Workaround: repair or move the file, then rerun. Source: ACCEPTANCE-REPORT D-08, D-09.
+- [xhfi] The parser refuses frontmatter that Python reads (`\/` escape, unusual anchor names, empty keys, U+0085, U+2028, U+2029). Workaround: replace the character or form. Source: ACCEPTANCE-REPORT D-26, D-27.
+- [4752] Frontmatter is validated less strictly than in Python (equal duplicate keys, invalid tag values, merge-key misuse, impossible dates such as `2026-02-30`). Workaround: `okf check` and an external YAML linter. Source: ACCEPTANCE-REPORT D-29, D-30.
+- [6xot] A TOML integer above int64 in a config file aborts every command that reads the config. Workaround: remove the number. Source: ACCEPTANCE-REPORT D-28.
+- [lazz] `okf recent` prints UTC when `TZ` is a POSIX rule string. Workaround: set `TZ` to an IANA name. Source: ACCEPTANCE-REPORT D-52.
+- [3hfd] Cherokee text: case folding is not idempotent, so a heading in the other case is not found. Workaround: type the stored case. Source: ACCEPTANCE-REPORT D-59.
+- [qo6x] Timeouts limit the whole request, not each socket wait as in Python. Workaround: retry. Source: ACCEPTANCE-REPORT D-60.
 
 ### Fixed
 
 - Empty until the first fix release. Source: canon limitations/finding-traceability, step 7.
-
-### Decisions pending
-
-- Deviations from the Python CLI that await the product owner (D-03 to D-60 of the acceptance report) appear here only after the decision (CONCEPT D10). Source: FACTS Nicht bestimmbar part 2.

@@ -11,6 +11,14 @@ Describe ctx bundles: what they hold, how to read them, how to curate them.
 
 A user or agent who wants the pages a topic needs, in reading order.
 
+## Visual elements
+
+Mermaid flow of a ctx bundle in a session; code block with real `okf ctx show` output.
+
+## Search terms
+
+context management for AI agents; ctx bundle reading list; agent context okf; curated context
+
 ## Required sections
 
 ### Result sentence

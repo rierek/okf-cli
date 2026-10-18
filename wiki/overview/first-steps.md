@@ -11,6 +11,14 @@ Walk a new user from a catalogue on disk to a first search, a read of one concep
 
 A user who installed okf and has, or wants to try, a catalogue; the golden fixture catalogue works as a sandbox.
 
+## Visual elements
+
+Steps component with five steps; code blocks with real output.
+
+## Search terms
+
+okf getting started; search a markdown knowledge base; okf find read check; OKF catalogue tutorial
+
 ## Required sections
 
 ### Result sentence

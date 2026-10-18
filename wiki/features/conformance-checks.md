@@ -11,6 +11,14 @@ Describe `okf check` and `okf verify`: what is checked, how findings are reporte
 
 A catalogue owner or CI author who wants to keep a catalogue valid.
 
+## Visual elements
+
+Code block with a real finding; table of rule groups.
+
+## Search terms
+
+validate markdown frontmatter; OKF conformance check; link checker wikilinks; okf check
+
 ## Required sections
 
 ### Result sentence

@@ -11,6 +11,14 @@ Specify the file format that okf reads and writes.
 
 A catalogue author.
 
+## Visual elements
+
+Table of fields; code block with sample frontmatter.
+
+## Search terms
+
+OKF frontmatter; Open Knowledge Format types; generated sources verified stale_after
+
 ## Required sections
 
 ### Frontmatter fields

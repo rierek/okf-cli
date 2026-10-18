@@ -11,6 +11,14 @@ Specify machine-readable output and the meaning of each exit code.
 
 A script, CI or agent author who consumes okf output.
 
+## Visual elements
+
+Table of exit codes; code block with an envelope.
+
+## Search terms
+
+okf JSON output; CLI exit codes; machine-readable CLI; okf envelope
+
 ## Required sections
 
 ### Envelope

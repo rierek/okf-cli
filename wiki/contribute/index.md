@@ -11,6 +11,14 @@ Tell a contributor how to report a problem and how to build and test okf.
 
 A user who found a bug; a developer who wants to change okf.
 
+## Visual elements
+
+Table of just recipes; code blocks.
+
+## Search terms
+
+contribute okf; build okf from source; okf tests
+
 ## Required sections
 
 ### Report bugs and requests

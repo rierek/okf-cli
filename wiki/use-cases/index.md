@@ -1,6 +1,6 @@
 ---
 title: "Use Cases"
-description: "Real problems solved with okf, each as one worked example."
+description: "What okf makes possible, as five worked examples."
 ---
 
 ## Purpose
@@ -11,12 +11,20 @@ Chapter entry: one sentence per use case.
 
 A reader who starts from a problem, not from a command.
 
+## Visual elements
+
+CardGrid, one Card per use case.
+
+## Search terms
+
+okf use cases; knowledge base workflows; agent context workflows
+
 ## Required sections
 
 ### Use case list
 
-- One sentence each for Onboard an agent, Reorganise without broken links, Migrate to OKF 0.2, Curate a reading bundle. Source: page list of the Use Cases chapter.
+- One sentence each for Onboard Agents, Organize large Bundles, Migrate to OKF 0.2, Work with multiple bundles, Define canon knowledge and use it in projects. Source: DESIGN D27.
 
 ### Boundary
 
-- A use case is a general way to solve a problem; a private experiment belongs on a blog (none exists yet). Source: page-patterns, Use-Case-Seite.
+- A use case shows what okf makes possible; advice and experience belong to the Blog. Source: DESIGN D24.

@@ -11,6 +11,14 @@ Define the vocabulary of okf once, so every other page can use the terms without
 
 A user or agent who runs okf commands and needs the model behind the output.
 
+## Visual elements
+
+Mermaid diagram of catalogue, bundle and concept; table of frontmatter fields; callout for specification-first.
+
+## Search terms
+
+OKF catalogue bundle concept; Open Knowledge Format frontmatter; okf_version; knowledge base structure
+
 ## Required sections
 
 ### Result sentence
@@ -20,6 +28,11 @@ A user or agent who runs okf commands and needs the model behind the output.
 ### Catalogue, bundle, concept
 
 - Definitions and one directory tree example. Source: FACTS §Topic: catalogue, bundle, concept and type model.
+
+### Specification-first
+
+- okf implements the OKF specification and follows it when it changes. TODO: verify the exact commitment (Q01)
+- Version binding: `okf_version` in the root index selects the rules; link to the specification repository. Source: FACTS §Topic: catalogue, bundle, concept and type model; FACTS Nicht bestimmbar part 1.
 
 ### Types and frontmatter
 

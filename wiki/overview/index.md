@@ -11,11 +11,24 @@ Introduce okf in one screen: a CLI and MCP server that searches, navigates, vali
 
 Someone who has heard of okf, or an agent picking it up, who needs to decide in a minute whether okf fits and where to read next.
 
+## Visual elements
+
+CardGrid with one card per chapter; one callout stating that okf follows the specification.
+
+## Search terms
+
+okf CLI overview; Open Knowledge Format; context management for AI agents; markdown knowledge base
+
 ## Required sections
 
 ### Result sentence
 
 - Bold sentence: after reading, the reader knows what okf does and which chapter to open. Source: README intro; FACTS §Topic: catalogue, bundle, concept and type model.
+
+### Specification-first
+
+- Prominent statement in the result block: okf follows the OKF specification and is updated when the specification changes; this separates it from CLIs that do not anchor to a specification. TODO: verify the exact commitment (Q01: a release per specification version, or softer)
+- Bound to OKF v0.2; v0.2 rules run only in bundles whose root index declares `okf_version: "0.2"`. Source: FACTS §Topic: catalogue, bundle, concept and type model.
 
 ### What okf is
 

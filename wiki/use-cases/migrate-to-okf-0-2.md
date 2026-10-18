@@ -11,6 +11,14 @@ Show a migration from `timestamp` to `generated` and the status rules.
 
 A catalogue owner on an older frontmatter shape.
 
+## Visual elements
+
+Steps; diff block of a migrated frontmatter.
+
+## Search terms
+
+migrate OKF 0.2; frontmatter timestamp to generated; okf migrate; Open Knowledge Format upgrade
+
 ## Required sections
 
 ### Result sentence

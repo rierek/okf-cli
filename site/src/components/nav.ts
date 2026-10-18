@@ -1,6 +1,6 @@
 // Header navigation (usememos.com style). Groups with `items` become drop-downs with a one-line description per
 // entry. Hrefs are site-relative and must match page slugs in wiki (chapters: see sidebar in astro.config.mjs).
-// "Resources" lists Releases, Known limitations, Contribute and About; the sidebar chapter "Resources" holds the same.
+// "Resources" lists Blog, Releases, Known limitations, Contribute and About; the sidebar chapter "Resources" holds the same.
 export interface NavItem {
 	title: string;
 	description: string;
@@ -17,7 +17,6 @@ export const nav: NavEntry[] = [
 			{ title: 'First steps', description: 'Point okf at a catalogue and run your first commands', href: '/overview/first-steps/' },
 			{ title: 'Concepts', description: 'Catalogues, bundles, concepts and types', href: '/overview/concepts/' },
 			{ title: 'Agent onboarding', description: 'Teach a coding agent to use okf', href: '/overview/agent-onboarding/' },
-			{ title: 'Upgrading', description: 'Move from the Python CLI to the Go binary', href: '/overview/upgrading/' },
 			{ title: 'Troubleshooting', description: 'Symptom-first fixes for common problems', href: '/overview/troubleshooting/' },
 		],
 	},
@@ -37,16 +36,18 @@ export const nav: NavEntry[] = [
 		label: 'Use Cases',
 		items: [
 			{ title: 'All use cases', description: 'Real problems, solved with okf', href: '/use-cases/' },
-			{ title: 'Onboard an agent', description: 'Give a fresh session the catalogue map', href: '/use-cases/onboard-an-agent/' },
-			{ title: 'Reorganise without broken links', description: 'Rename and move concepts safely', href: '/use-cases/reorganise-without-broken-links/' },
+			{ title: 'Onboard Agents', description: 'Give a fresh session the catalogue map', href: '/use-cases/onboard-agents/' },
+			{ title: 'Organize large Bundles', description: 'Tags, links and canon drift under control', href: '/use-cases/organize-large-bundles/' },
 			{ title: 'Migrate to OKF 0.2', description: 'Bring a catalogue to the 0.2 format', href: '/use-cases/migrate-to-okf-0-2/' },
-			{ title: 'Curate a reading bundle', description: 'Collect the pages a topic needs', href: '/use-cases/curate-a-reading-bundle/' },
+			{ title: 'Work with multiple bundles', description: 'One binary, many catalogues, chosen per call', href: '/use-cases/work-with-multiple-bundles/' },
+			{ title: 'Define canon knowledge', description: 'Write a rule once, use it in projects', href: '/use-cases/define-canon-knowledge/' },
 		],
 	},
 	{ label: 'Reference', href: '/reference/' },
 	{
 		label: 'Resources',
 		items: [
+			{ title: 'Blog', description: 'Field notes: context management, tags, canon', href: '/blog/' },
 			{ title: 'Releases', description: 'What changed in each version', href: '/releases/' },
 			{ title: 'Known limitations', description: 'Open defects, by short ID', href: '/known-limitations/' },
 			{ title: 'Contribute', description: 'Report bugs, build from source', href: '/contribute/' },

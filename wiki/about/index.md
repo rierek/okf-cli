@@ -11,11 +11,23 @@ Give origin, scope and attribution on one page.
 
 A reader who wants context before adopting okf.
 
+## Visual elements
+
+Callout on specification-first.
+
+## Search terms
+
+about okf; Open Knowledge Format tooling; okf origin
+
 ## Required sections
 
 ### What okf is
 
 - CLI and MCP server for OKF v0.2 catalogues. Source: README intro.
+
+### Specification tool
+
+- One paragraph: okf exists to work with the OKF specification and is adapted when it changes. TODO: verify the exact commitment (Q01)
 
 ### Origin
 
