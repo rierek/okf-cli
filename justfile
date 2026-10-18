@@ -85,9 +85,9 @@ eval-gate:
 skill-eval *ARGS:
     python3 scripts/skill-eval.py {{ARGS}}
 
-# Release-Note-Entwurf aus den Beans eines Release-Meilensteins: just release-notes OKFT-xxxx > releases/RELEASE-x.y.z.md
-release-notes MILESTONE:
-    python3 scripts/release-notes.py {{MILESTONE}}
+# Changes/Fixes-Block einer Release-Seite aus den Beans eines Meilensteins: just release-notes OKFT-xxxx [--write wiki/releases/<v>.md]; ohne --write auf stdout, mit --write nur der Bereich zwischen den generated-Markern
+release-notes MILESTONE *ARGS:
+    python3 scripts/release-notes.py {{MILESTONE}} {{ARGS}}
 
 # Gate A (EARS-Form der Acceptance Criteria) gegen rohe .beans/-Dateien, z.B. `just gate-a ../.beans/OKFT-xxxx--slug.md`. Exit 0 = sauber, 1 = Befund, 2 = Fehlaufruf.
 gate-a *ARGS:
