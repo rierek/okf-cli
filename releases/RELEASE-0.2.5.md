@@ -1,6 +1,6 @@
-# okf-cli <version> — the Go binary (DRAFT)
+# okf-cli 0.2.5 — the Go binary
 
-Draft of the release note for the release that ships the Go port of `okf`. The version number is the product owner's decision. Rename this file to `releases/RELEASE-<version>.md` when it is known: `.github/workflows/release.yml` reads `releases/RELEASE-$VERSION.md`. Nothing here is tagged or published.
+Release 0.2.5 ships the Go port of `okf`. The documentation site is at <https://rierek.github.io/okf-cli/>.
 
 ## Why
 
