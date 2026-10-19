@@ -9,21 +9,61 @@ cli_dir := "cli"
 catalogue := env_var("HOME") + "/Obsidian/Knowledge-Catalogue"
 # Ruff-Version fuer den Lint-Gate (eine Quelle; Regelsatz steht in pyproject.toml)
 ruff_version := "0.17.0"
+# Verzeichnis des Go-Moduls (go.mod liegt dort) und Ausgabe des Builds relativ dazu; der Pfad
+# {{go_dir}}/{{go_out}} ist der eine Binary-Pfad fuer `just golden --cmd`
+go_dir := "go"
+go_out := "bin/okf"
+# Fixture-Catalogue der Golden-Faelle: Ziel der Go-Smoke-Laeufe und der Completion-Pruefung
+golden_catalogue := "tests/golden/catalogue"
 
 # Alle Rezepte auflisten
 default:
     @just --list
 
-# Testsuite (unittest discovery ueber tests/test_*.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
+# Testsuite (unittest discovery ueber tests/test_*.py); baut vorher das Go-Binary fuer die MCP-Grenztests (tests/test_okf_mcp.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
 # PEP-723-Header von cli/okf-cli.py; mcp ist ein reines Test-Extra. UV_PYTHON waehlt den Interpreter.
-test *ARGS:
+test *ARGS: go-build
     uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py --with mcp python -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
 
 # Golden-Output-Vergleich (tests/okf_golden.py): --update schreibt die Goldens neu, --cmd prueft eine
-# andere Implementierung (z.B. ein Port-Binary), --only <text> waehlt Faelle per Namensteil
+# andere Implementierung (z.B. ein Port-Binary), --only <text> waehlt Faelle per Namensteil.
+# Jeder Fall laeuft hinter einem Netzwerk-Block (macOS sandbox-exec, Linux seccomp), auch Loopback;
+# greift er nicht, bricht der Lauf vor dem ersten Fall ab.
 [positional-arguments]
 golden *ARGS:
     uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py python tests/okf_golden.py "$@"
+
+# Go-Binary bauen (statisch, ohne cgo) nach go/bin/okf; Abnahme: just golden --cmd go/bin/okf
+go-build:
+    CGO_ENABLED=0 go build -C {{go_dir}} -trimpath -buildvcs=false -o {{go_out}} ./cmd/okf
+
+# Golden-Vergleich gegen das gebaute Go-Binary ({{go_dir}}/{{go_out}}); ARGS wie bei `just golden` (z.B. --only <text>)
+golden-go *ARGS: go-build
+    just golden --cmd {{go_dir}}/{{go_out}} {{ARGS}}
+
+# `okf find` mit einem PATH ohne python3 und uv: das Binary braucht keine Laufzeitumgebung (R-01); verlangt Treffer
+go-find-smoke: go-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hits="$(env -i PATH="$(mktemp -d)" "$PWD/{{go_dir}}/{{go_out}}" --root {{golden_catalogue}} find recipe)"
+    grep -q "^rank: 1" <<<"$hits" || { echo "okf find printed no hits: $hits" >&2; exit 1; }
+    printf '%s\n' "$hits" | head -n 3
+
+# zsh-Completion Ende zu Ende im PTY: Go-Binary gegen Python-CLI auf Wegwerf-HOMEs (scripts/completion_check.py)
+completion-check: go-build
+    python3 scripts/completion_check.py --binary {{go_dir}}/{{go_out}} --fixture {{golden_catalogue}}
+
+# Homebrew-Formel lokal pruefen: aus den Quellen bauen und `brew test` in einem Wegwerf-Tap (scripts/brew-local-check.sh)
+brew-local-check:
+    scripts/brew-local-check.sh
+
+# Paritaetsprobe von `okf install`: Python-CLI und Go-Binary Seite an Seite auf Wegwerf-HOMEs (--only NAME, --fast, --list)
+install-parity *ARGS: go-build
+    python3 scripts/install_parity.py {{ARGS}}
+# Die Completion-Skripte des Go-Binarys (go/internal/complete/okf.*) aus cli/_okf und argcomplete 3.7.2
+# neu schreiben; --check vergleicht nur und bricht bei Abweichung ab
+go-completion-scripts *ARGS:
+    uv run --no-project --with argcomplete==3.7.2 python scripts/go_completion_scripts.py {{ARGS}}
 
 # Wheel und sdist nach dist/ bauen (uv build, Backend hatchling laut pyproject.toml)
 build:
@@ -45,6 +85,10 @@ eval-gate:
 skill-eval *ARGS:
     python3 scripts/skill-eval.py {{ARGS}}
 
+# Changes/Fixes-Block einer Release-Seite aus den Beans eines Meilensteins: just release-notes OKFT-xxxx [--write wiki/releases/<v>.md]; ohne --write auf stdout, mit --write nur der Bereich zwischen den generated-Markern
+release-notes MILESTONE *ARGS:
+    python3 scripts/release-notes.py {{MILESTONE}} {{ARGS}}
+
 # Gate A (EARS-Form der Acceptance Criteria) gegen rohe .beans/-Dateien, z.B. `just gate-a ../.beans/OKFT-xxxx--slug.md`. Exit 0 = sauber, 1 = Befund, 2 = Fehlaufruf.
 gate-a *ARGS:
     @test -n "{{ARGS}}" || { echo "just gate-a <bean-datei>... — kein Bean genannt" >&2; exit 2; }
@@ -65,3 +109,22 @@ check root=catalogue:
 # Agent-Onboarding gegen den echten Catalogue ausgeben
 prime root=catalogue:
     uv run --script {{cli_dir}}/okf-cli.py --root {{root}} prime
+
+# Port der Doku-Site-Vorschau (eine Quelle)
+docs_port := "4321"
+
+# Befehlsseiten der Doku aus dem Befehlsbaum erzeugen (go/cmd/okf-docgen; Ausgabe gitignored)
+docs-gen:
+    go run -C go ./cmd/okf-docgen ../wiki/reference/commands
+
+# Doku-Site bauen (Starlight, site/dist); laeuft in CI und lokal gleich
+docs-build: docs-gen
+    cd site && npm ci && npm run build
+
+# Doku-Site im Dev-Server (Port: docs_port)
+docs-dev: docs-gen
+    cd site && npm run dev -- --port {{docs_port}}
+
+# Echte okf-Ausgabe fuer die Startseite neu aufnehmen (site/src/data/demo.json; braucht go/bin/okf)
+docs-capture: go-build
+    node site/scripts/capture-demo.mjs

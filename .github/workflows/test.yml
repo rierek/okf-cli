@@ -35,16 +35,44 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
       - name: Interpreter dieser Matrix-Zeile
         run: uv run --no-project python -VV
       # Laufzeit-Abhaengigkeiten kommen aus dem PEP-723-Header von cli/okf-cli.py (just test);
       # mcp ist das einzige Test-Extra (`just test`), nicht im Header deklariert.
       # Leeres HOME: beweist, dass die Suite keinen Live-Vault
       # (~/Obsidian/Knowledge-Catalogue) braucht oder beschreibt (CLAUDE.md Regel 1).
+      - name: Go-Binary bauen (Cache im echten HOME)
+        run: just go-build
       - name: just test (leeres HOME)
         run: HOME="$(mktemp -d)" just test
       - name: Arbeitsbaum sauber (Tests hinterlassen keine Reste)
         run: git diff --exit-code && test -z "$(git status --porcelain)"
+
+  # The Go binary (OKFT-jyvt): the full golden suite runs against it on every OS the network block
+  # of tests/okf_golden.py supports (macOS sandbox-exec, Linux seccomp). A red run prints
+  # "N of M cases differ: <case names>". No case reaches the network; the okf find run has no Python.
+  golden-go:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+      - name: just golden --cmd <binary> (full suite)
+        run: just golden-go
+      - name: okf find without python3 and uv on PATH
+        run: just go-find-smoke
 
   lint:
     runs-on: ubuntu-latest

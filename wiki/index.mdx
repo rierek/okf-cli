@@ -1,0 +1,88 @@
+---
+title: "Command line and MCP server for OKF catalogues"
+description: Command line and MCP server for working with Open Knowledge Format (OKF) catalogues
+template: splash
+# `hero` (even empty) selects Starlight's hero layout without the page-title panel. The visible hero is HeroSplit below.
+hero: {}
+---
+
+import { Folder, Library, Sparkles, Type } from '@lucide/astro';
+import demo from '../site/src/data/demo.json';
+import AnnotatedTerminal from '../site/src/components/AnnotatedTerminal.astro';
+import FeatureTabs from '../site/src/components/FeatureTabs.astro';
+import HeroSplit from '../site/src/components/HeroSplit.astro';
+import KeyValueItem from '../site/src/components/KeyValueItem.astro';
+import KeyValueList from '../site/src/components/KeyValueList.astro';
+import Section from '../site/src/components/Section.astro';
+import TerminalWindow from '../site/src/components/TerminalWindow.astro';
+
+{/* Facts: README intro and FACTS §okf find (arms, --where), §okf check, §okf ctx show, §okf rename, §Topic: --json envelope, §Topic: MCP server. Output in the windows is captured by site/scripts/capture-demo.mjs (just docs-capture; the semantic window needs VOYAGE_API_KEY). The specification statement follows Q01 (closed 2026-10-18). */}
+
+<HeroSplit
+  title="Search, check, refactor."
+  accent="Your OKF catalogue."
+  checks={['One static binary', 'CLI and MCP server', 'Made for AI agents']}
+  primary={{ text: 'Install okf-cli', href: '/overview/installation/' }}
+  secondary={{ text: 'Explore features', href: '/features/' }}
+>
+
+okf-cli is the command line for catalogues of Open Knowledge Format (OKF) v0.2 bundles: Markdown files with YAML frontmatter. Humans read them, agents query them, scripts check them.
+
+<div slot="visual">
+  <TerminalWindow title="~/kc" command={demo.check.command} html={demo.check.html} cols={80} label="Findings of okf check on the fixture catalogue: rule, file and reason." />
+</div>
+
+</HeroSplit>
+
+<Section title="Words first. Meaning when words fail.">
+  <FeatureTabs
+    label="The two search arms of okf find"
+    tabs={[
+      { id: 'words', label: 'Words', icon: Type, caption: 'The lexical arm ranks by the words in your query. It runs locally on an FTS5 index and needs no network. No word of this query appears in the Bread page, so the top hit is Gazpacho.' },
+      { id: 'meaning', label: 'Meaning', icon: Sparkles, caption: 'With embeddings, the semantic arm takes over when the lexical top hit lacks a clear margin. It says so, and <code>provenance</code> names the arm of every hit.' },
+    ]}
+  >
+    <div slot="words"><TerminalWindow title="~/kc" command={demo.words.command} html={demo.words.html} cols={80} label="The same query on a catalogue without embeddings: the lexical arm ranks Gazpacho first." /></div>
+    <div slot="meaning"><TerminalWindow title="~/kc" command={demo.meaning.command} html={demo.meaning.html} cols={80} label="The same query on a catalogue with embeddings: the semantic arm ranks Bread first." /></div>
+  </FeatureTabs>
+</Section>
+
+<Section title="The whole catalogue. Or one bundle.">
+  <FeatureTabs
+    label="Search scope of okf find"
+    tabs={[
+      { id: 'all', label: 'All bundles', icon: Library, caption: '<code>okf find</code> searches every bundle under the catalogue root. Two bundles answer here.' },
+      { id: 'one', label: 'One bundle', icon: Folder, caption: 'One <code>--where</code> filter narrows the answer to a bundle, a type, a tag or a date. Every arm applies it before it ranks.' },
+    ]}
+  >
+    <div slot="all"><TerminalWindow title="~/kc" command={demo.scopeAll.command} html={demo.scopeAll.html} cols={80} label="Two hits for overview, one in the handbook bundle and one in the recipes bundle." /></div>
+    <div slot="one"><TerminalWindow title="~/kc" command={demo.scopeOne.command} html={demo.scopeOne.html} cols={80} label="The same query with the filter path ~ recipes/: only the recipes hit remains." /></div>
+  </FeatureTabs>
+</Section>
+
+<Section title="Hand agents the right pages.">
+  <TerminalWindow title="~/kc" command={demo.ctx.command} html={demo.ctx.html} cols={80} label="The ctx bundle onboarding in reading order, with title, type and token estimate per entry." />
+</Section>
+
+<Section title="Preview first, then write." link={{ text: 'Read about safe edits', href: '/features/safe-edits/' }}>
+  <AnnotatedTerminal
+    title="~/kc · okf rename"
+    label="Command that renames the concept recipes/soup.md to recipes/broth.md and previews the changes."
+    lines={['okf rename \\', '  recipes/soup.md \\', '  recipes/broth.md']}
+    notes={[
+      { line: 0, side: 'left', text: 'Moves a concept and its links' },
+      { line: 1, side: 'right', text: 'The concept to move' },
+      { line: 2, side: 'left', text: 'Prints a diff. --apply writes it' },
+    ]}
+  />
+</Section>
+
+<Section title="Built for humans, agents and programs.">
+  <KeyValueList centered>
+    <KeyValueItem term="Markdown for humans">A catalogue is a folder of Markdown files. Read it, edit it, diff it like code.</KeyValueItem>
+    <KeyValueItem term="MCP and CLI for agents">`okf install` registers an MCP server and a skill. `okf prime` onboards a fresh session in one call.</KeyValueItem>
+    <KeyValueItem term="JSON for programs">Every command answers `--json` with one envelope, and every failure has an exit code that names its class.</KeyValueItem>
+    <KeyValueItem term="Your catalogues">`--root` points one binary at any catalogue, so private, project and shared bundles stay apart.</KeyValueItem>
+    <KeyValueItem term="Anchored to the spec">okf-cli follows the OKF specification and is adapted when it changes.</KeyValueItem>
+  </KeyValueList>
+</Section>

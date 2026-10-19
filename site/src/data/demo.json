@@ -1,0 +1,33 @@
+{
+ "ctx": {
+  "command": "okf ctx show onboarding",
+  "html": "ctx onboarding — Read this first on day one\n\nrequired — read in this order:\n  1. ~<span style=\"color:var(--ctp-sapphire)\">/kc/handbook/getting-started.md</span>  [Guide] Getting started  ~158 tok\n     First steps: accounts, tools, and where to find things\n  2. ~<span style=\"color:var(--ctp-sapphire)\">/kc/handbook/glossary.md</span>  [Concept] Glossary  ~62 tok\n     Terms used here: \"bundle\" and \"concept\"\n  3. ~<span style=\"color:var(--ctp-sapphire)\">/kc/handbook/ops/deploy.md</span>  [Runbook] Deploy  ~150 tok\n     How to deploy: build, ship, verify"
+ },
+ "check": {
+  "command": "okf check",
+  "html": "ERROR    kc/ctx/dead-entry    <span style=\"color:var(--ctp-sapphire)\">_ctx/legacy.md</span>  (dead entry: handbook/ops/gone.md)\nERROR    okf/frontmatter/parseable <span style=\"color:var(--ctp-sapphire)\">handbook/broken-yaml.md</span>  (no parseable frontmatter: did not find expected ',' or ']' (line 3, column 9))\nERROR    okf/trust/generated  <span style=\"color:var(--ctp-sapphire)\">handbook/wiki-notes.md</span>  (`generated` has no non-empty `by`)\nERROR    okf/lifecycle/status <span style=\"color:var(--ctp-sapphire)\">handbook/wiki-notes.md</span>  (`status` is `maybe-later`, not draft, stable or deprecated)\nERROR    okf/type/reserved-no-type <span style=\"color:var(--ctp-sapphire)\">recipes/readme.md</span>  (reserved file must not carry `type`)\nERROR    kc/supersede/resolves <span style=\"color:var(--ctp-sapphire)\">recipes/salad.md</span>  (superseded_by target does not resolve: recipes/soup)"
+ },
+ "rename": {
+  "command": "okf rename recipes/soup.md recipes/broth.md",
+  "html": "--- <span style=\"color:var(--ctp-sapphire)\">a/_ctx/cooking.md</span>\n+++ <span style=\"color:var(--ctp-sapphire)\">b/_ctx/cooking.md</span>\n@@ -9,4 +9,4 @@\n |---|---|---|---|\n | 1 | pflicht | [bread](<span style=\"color:var(--ctp-sapphire)\">/recipes/bread.md</span>) |  |\n | 2 | pflicht | [pasta](<span style=\"color:var(--ctp-sapphire)\">/recipes/pasta.md</span>) |  |\n-| 3 | pflicht | [soup](<span style=\"color:var(--ctp-sapphire)\">/recipes/soup.md</span>) |  |\n+| 3 | pflicht | [broth](<span style=\"color:var(--ctp-sapphire)\">/recipes/broth.md</span>) |  |\nrename from <span style=\"color:var(--ctp-sapphire)\">recipes/soup.md</span>\nrename to <span style=\"color:var(--ctp-sapphire)\">recipes/broth.md</span>\n--- <span style=\"color:var(--ctp-sapphire)\">a/recipes/index.md</span>\n+++ <span style=\"color:var(--ctp-sapphire)\">b/recipes/index.md</span>"
+ },
+ "generated": {
+  "date": "2026-10-18"
+ },
+ "words": {
+  "command": "okf find 'kneading and proofing' --limit 2",
+  "html": "<span style=\"color:var(--ctp-overlay1)\">note: semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only</span>\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Gazpacho\ntype: Recipe\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/seasonal/gazpacho\ndescription: Cold tomato soup\nbody-snippet: # Gazpacho Blend tomatoes, cucumber and peppers.…\nprovenance: lexical\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 2\ntitle: Recipes overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/overview\ndescription: Overview of the recipes\nbody-snippet: …, [bread](<span style=\"color:var(--ctp-sapphire)\">/recipes/bread.md</span>), [soup](soup.md) and [[salad]].…\nprovenance: lexical\n------"
+ },
+ "meaning": {
+  "command": "okf find 'kneading and proofing' --limit 2",
+  "html": "<span style=\"color:var(--ctp-overlay1)\">note: semantic arm owns this ranking (lexical top-1 lacked a clear margin)</span>\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Bread\ntype: Recipe\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/bread\ndescription: Bread with a long rise\nbody-snippet: # Bread ## Steps Mix, rise, bake. Related: [pasta](<span style=\"color:var(--ctp-sapphire)\">pasta.md</span>).…\nprovenance: semantic\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 2\ntitle: cooking\ntype: Context\n<span style=\"color:var(--ctp-overlay1)\">path:</span> _ctx/cooking\ndescription: Cooking basics\nbody-snippet: # cooking | pos | mode | path | comment | |---|---|---|---| | 1 | pflicht | [bread](<span style=\"color:var(--ctp-sapphire)\">/recipes/bread.md</span>) | | | 2 | pflicht | [pasta](/reci…\nprovenance: semantic\n------"
+ },
+ "scopeAll": {
+  "command": "okf find overview --limit 2",
+  "html": "------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Handbook overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> handbook/overview\ndescription: Overview of the handbook\nbody-snippet: # Overview The handbook explains the [getting started guide](<span style=\"color:var(--ctp-sapphire)\">getting-started.md</span>).…\nprovenance: lexical\n------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 2\ntitle: Recipes overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/overview\ndescription: Overview of the recipes\nbody-snippet: # Overview See [pasta](<span style=\"color:var(--ctp-sapphire)\">pasta.md</span>), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…\nprovenance: lexical\n------"
+ },
+ "scopeOne": {
+  "command": "okf find overview --where 'path ~ recipes/' --limit 2",
+  "html": "------\n<span style=\"color:var(--ctp-overlay1)\">rank:</span> 1\ntitle: Recipes overview\ntype: Concept\n<span style=\"color:var(--ctp-overlay1)\">path:</span> recipes/overview\ndescription: Overview of the recipes\nbody-snippet: # Overview See [pasta](<span style=\"color:var(--ctp-sapphire)\">pasta.md</span>), [bread](/recipes/bread.md), [soup](soup.md) and [[salad]].…\nprovenance: lexical\n------"
+ }
+}

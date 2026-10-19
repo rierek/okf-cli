@@ -5,7 +5,7 @@ The per-module test files import the cli/okf/ modules and call their functions
 directly — they can never catch a B01-class break, which lives in argv
 marshalling across the process boundary (build_argv -> subprocess.run ->
 json.loads). These tests instead drive okf_mcp.run_okf, which shells out to
-the REAL cli/okf-cli.py, exactly as the MCP server does.
+the REAL okf binary (go/bin/okf from `just go-build`, or $OKF_BIN), exactly as the MCP server does.
 
 Run: just test tests.test_okf_mcp -v
 """
@@ -13,6 +13,7 @@ import importlib.util
 import inspect
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,9 @@ _spec = importlib.util.spec_from_file_location(
     "okf_mcp", os.path.join(_HERE, "..", "mcp", "okf_mcp.py"))
 mcp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mcp)
+# The binary under test: $OKF_BIN, else the build output of `just go-build`. `just test` builds it first;
+# a missing binary fails the boundary tests loudly, it never skips them.
+_BIN = os.path.realpath(os.environ.get("OKF_BIN") or os.path.join(_HERE, os.pardir, "go", "bin", "okf"))
 
 
 def _w(root, rel, text):
@@ -56,37 +60,58 @@ def _make_tmp_catalogue():
 
 class McpBoundaryTestBase(unittest.TestCase):
     """setUp/tearDown shared by both boundary suites: real tmp catalogue,
-    OKF_CLI pinned to this worktree's cli/okf-cli.py.
-
-    okf_mcp.OKF_CLI is bound from os.environ at IMPORT time (module-level
-    global in mcp/okf_mcp.py) and read as a plain global inside
-    run_okf() -- it is never re-read from os.environ afterwards. Since this
-    module's import (above) already ran before any setUp, setting
-    os.environ["OKF_CLI"] here would be a no-op. Patch the module attribute
-    directly instead."""
-
+    OKF_BIN pinned to the built okf binary. The module attribute is bound once at
+    import (the `OKF_BIN` global in mcp/okf_mcp.py) and read as a plain global inside
+    run_okf() -- it is never re-read from os.environ afterwards. Patch the module
+    attribute directly instead of the environment."""
     def setUp(self):
+        self.assertTrue(os.path.isfile(_BIN), "no okf binary at {}: run `just go-build`".format(_BIN))
         self.root = _make_tmp_catalogue()
-        self._prev_okf_cli = mcp.OKF_CLI
-        mcp.OKF_CLI = os.path.join(_HERE, "okf-cli.py")
-
+        self._prev_okf_bin = mcp.OKF_BIN
+        mcp.OKF_BIN = _BIN
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
-        mcp.OKF_CLI = self._prev_okf_cli
-
-
-class McpStartsTheCliThroughUv(McpBoundaryTestBase):
-    """R-11 — every okf_mcp call starts okf as `uv run --script <OKF_CLI>`, so the PEP 723
-    header of the script, not the Python on PATH, supplies the dependencies."""
-
-    def test_run_okf_starts_the_cli_with_uv_run_script_and_the_OKF_CLI_path(self):
-        calls = uv_start_log(self)
+        mcp.OKF_BIN = self._prev_okf_bin
+class McpStartsTheBinary(McpBoundaryTestBase):
+    """R-01, D12 — every okf_mcp call starts the okf binary itself: no `uv run --script`, no
+    cli/okf-cli.py. A shim in front of the binary logs each start; a shim `uv` on PATH proves none."""
+    def _binary_start_log(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        log = os.path.join(tmp, "okf.log")
+        shim = os.path.join(tmp, "okf")
+        with open(shim, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\nprintf '%s\\n' \"$*\" >> {}\nexec {} \"$@\"\n".format(
+                shlex.quote(log), shlex.quote(_BIN)))
+        os.chmod(shim, 0o755)
+        mcp.OKF_BIN = shim
+        def calls():
+            if not os.path.exists(log):
+                return []
+            with open(log, encoding="utf-8") as f:
+                return f.read().splitlines()
+        return calls
+    def test_run_okf_starts_the_binary_and_never_uv_or_the_python_cli(self):
+        uv_calls = uv_start_log(self)
+        calls = self._binary_start_log()
         self.assertIn("data", mcp.run_okf(self.root, "list", {"where": "type = Runbook"}))
         self.assertEqual(len(calls()), 1, calls())
-        self.assertTrue(calls()[0].startswith("run --script {} --root {} list".format(mcp.OKF_CLI, self.root)),
-                        calls()[0])
-
-
+        self.assertTrue(calls()[0].startswith("--root {} list".format(self.root)), calls()[0])
+        self.assertEqual(uv_calls(), [], "the MCP server must not start uv")
+    def test_the_default_target_is_a_binary_not_the_python_script(self):
+        with mock.patch.dict(os.environ, {"OKF_BIN": "/x/okf"}):
+            self.assertEqual(mcp._okf_binary(), "/x/okf")
+        self.assertFalse(mcp.OKF_BIN.endswith(".py"), mcp.OKF_BIN)
+class McpFindWithoutPython(McpBoundaryTestBase):
+    """R-01 — the okf_find call answers from the binary with no python3 and no uv on PATH."""
+    def test_find_returns_hits_with_an_empty_path(self):
+        empty = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, empty, ignore_errors=True)
+        with mock.patch.dict(os.environ, {"PATH": empty}):
+            self.assertIsNone(shutil.which("python3"))
+            self.assertIsNone(shutil.which("uv"))
+            out = mcp.run_okf(self.root, "find", {"query": "one"})
+        self.assertIn("b/one", [h["path"] for h in out["data"]["hits"]])
 class McpIndexListBoundary(McpBoundaryTestBase):
     """SC-001: run_okf(root, "index"/"list", ...) over the real subprocess
     returns parsed JSON without raising — the exact B01 failure, now guarded."""
@@ -333,25 +358,30 @@ class McpOutputCeiling(McpBoundaryTestBase):
         self.assertIn("bundles", out["data"])
 
 
-class McpDefaultCliPath(unittest.TestCase):
-    """The OKF_CLI fallback (no env override) must point at a CLI that exists.
-    Every boundary suite patches mcp.OKF_CLI, so the fallback was uncovered --
-    a repo move left it dangling at the old absolute path and every tool call
-    died with ENOENT before reaching the CLI."""
-
-    def test_default_resolves_next_to_this_repo(self):
-        env = dict(os.environ)
-        env.pop("OKF_CLI", None)
-        spec = importlib.util.spec_from_file_location(
-            "okf_mcp_fresh", os.path.join(_HERE, "..", "mcp", "okf_mcp.py"))
+class McpDefaultBinaryPath(unittest.TestCase):
+    """The OKF_BIN fallback (no env override) must point at a binary that exists, or name `okf`
+    for PATH. Every boundary suite patches mcp.OKF_BIN, so the fallback would be uncovered -- a
+    moved layout left it dangling and every tool call died with ENOENT before reaching okf."""
+    def _fresh(self, mcp_file):
+        spec = importlib.util.spec_from_file_location("okf_mcp_fresh", mcp_file)
         fresh = importlib.util.module_from_spec(spec)
+        env = {k: v for k, v in os.environ.items() if k != "OKF_BIN"}
         with mock.patch.dict(os.environ, env, clear=True):
             spec.loader.exec_module(fresh)
-        self.assertEqual(os.path.realpath(fresh.OKF_CLI),
-                         os.path.realpath(os.path.join(_HERE, "okf-cli.py")))
-        self.assertTrue(os.path.exists(fresh.OKF_CLI), fresh.OKF_CLI)
-
-
+        return fresh
+    def test_default_resolves_to_the_source_checkout_build(self):
+        fresh = self._fresh(os.path.join(_HERE, "..", "mcp", "okf_mcp.py"))
+        self.assertEqual(os.path.realpath(fresh.OKF_BIN), os.path.realpath(os.path.join(_HERE, "..", "go", "bin", "okf")))
+        self.assertTrue(os.path.exists(fresh.OKF_BIN), fresh.OKF_BIN)
+    def test_default_prefers_bin_okf_of_a_brew_keg_and_falls_back_to_path(self):
+        pkg = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, pkg, ignore_errors=True)
+        os.makedirs(os.path.join(pkg, "mcp"))
+        script = shutil.copy(os.path.join(_HERE, "..", "mcp", "okf_mcp.py"), os.path.join(pkg, "mcp"))
+        self.assertEqual(self._fresh(script).OKF_BIN, "okf")
+        os.makedirs(os.path.join(pkg, "bin"))
+        _w(pkg, "bin/okf", "#!/bin/sh\n")
+        self.assertEqual(os.path.realpath(self._fresh(script).OKF_BIN), os.path.realpath(os.path.join(pkg, "bin", "okf")))
 class _ToolCollector:
     """Minimal stand-in for the FastMCP server object. _register() only ever
     calls server.tool() as a decorator factory and returns the server, so
@@ -617,7 +647,7 @@ class McpCtxBoundary(McpBoundaryTestBase):
     """OKFT-eyhm — okf_ctx_list / okf_ctx_show over the real CLI."""
 
     def _ctx_create(self, slug, *paths):
-        subprocess.run([sys.executable, mcp.OKF_CLI, "--root", self.root, "ctx",
+        subprocess.run([mcp.OKF_BIN, "--root", self.root, "ctx",
                         "create", slug, *paths], check=True, capture_output=True)
 
     def _tool(self, name):
@@ -679,7 +709,7 @@ class McpEnvelopeHandling(unittest.TestCase):
 
     def _run(self, command, returncode, stdout="", stderr=""):
         stub = subprocess.CompletedProcess(
-            args=["python3", "okf-cli.py"], returncode=returncode,
+            args=["okf"], returncode=returncode,
             stdout=stdout, stderr=stderr)
         fake_subprocess = mock.Mock()
         fake_subprocess.run.return_value = stub

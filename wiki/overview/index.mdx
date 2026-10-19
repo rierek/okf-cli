@@ -1,0 +1,41 @@
+---
+title: "okf in brief: CLI and MCP server for OKF catalogues"
+description: "okf is a command line and MCP server that searches, checks and refactors a markdown knowledge base of Open Knowledge Format (OKF) v0.2 bundles, for people and AI agents."
+---
+
+import { Aside, Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+{/* Facts: README intro; FACTS §Topic: catalogue, bundle, concept and type model; §Topic: install; §Topic: MCP server and `OKF_BIN`; §Section index of commands. Specification statement per Q01 (PO 2026-10-18). */}
+
+**okf is one binary that searches, checks and edits a catalogue of OKF v0.2 bundles, so you can pick the chapter that matches your task: install it, try it, or connect an agent.**
+
+<Aside type="tip" title="Specification first">
+okf follows the Open Knowledge Format specification and is adapted when the specification changes. It is bound to OKF v0.2: the v0.2 rules run only in bundles whose root index declares `okf_version: "0.2"`. No release date is promised for a new specification version.
+</Aside>
+
+## What okf is
+
+- A single static Go binary named `okf`. It needs no Python and no `uv` at run time. `uv` is needed only by the MCP server that `okf install` registers.
+- It works on a *catalogue*: a directory whose subdirectories are OKF *bundles* of Markdown files with YAML frontmatter.
+- Four groups of commands, as in `okf --help`: navigation, search, tags and maintenance.
+
+## What you can do
+
+<CardGrid>
+  <LinkCard title="Search" href="/okf-cli/features/search/" description="Ranked search plus the --where filter." />
+  <LinkCard title="Context bundles" href="/okf-cli/features/context-bundles/" description="Curated reading lists per topic." />
+  <LinkCard title="Conformance checks" href="/okf-cli/features/conformance-checks/" description="Scan a catalogue against the format rules." />
+  <LinkCard title="Safe edits" href="/okf-cli/features/safe-edits/" description="Preview, then apply renames and fixes." />
+  <LinkCard title="Tags and registry" href="/okf-cli/features/tags-and-registry/" description="Keep tags consistent." />
+  <LinkCard title="Canon blocks" href="/okf-cli/features/canon-blocks/" description="One source of truth, copies that stay in sync." />
+</CardGrid>
+
+## Where to go next
+
+<CardGrid>
+  <LinkCard title="Installation" href="/okf-cli/overview/installation/" description="Get the okf binary." />
+  <LinkCard title="First steps" href="/okf-cli/overview/first-steps/" description="Index, find, read and check a catalogue." />
+  <LinkCard title="Concepts" href="/okf-cli/overview/concepts/" description="Catalogue, bundle, concept and type." />
+  <LinkCard title="Agent onboarding" href="/okf-cli/overview/agent-onboarding/" description="MCP server, skill and okf prime." />
+  <LinkCard title="Command reference" href="/okf-cli/reference/" description="Every command with its options." />
+</CardGrid>

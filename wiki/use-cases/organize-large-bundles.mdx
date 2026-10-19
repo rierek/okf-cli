@@ -1,0 +1,181 @@
+---
+title: "Organize large bundles: tags, renames, links, checks"
+description: "Keep a large markdown knowledge base consistent: tag cleanup, rename with link repair, fix broken links and run okf check. Every change shows a preview first."
+---
+
+import { Steps, Tabs, TabItem, Aside, LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+# Organize large bundles: tag cleanup, fix broken links, okf maintenance
+
+**Tags, links and drift stay under control as a bundle grows: each upkeep command previews its change first, and `okf check` reports what is left.** The output below comes from okf 0.2.5 on a throwaway copy of the test catalogue.
+
+## Set it up
+
+<Steps>
+
+1. Put the catalogue under git and commit. Every command below then lands as one reviewable diff. `rename` also stages its move with `git mv`.
+2. Run the command without `--apply`. The preview is a unified diff plus a summary line.
+3. Run it again with `--apply`, then review `git status` and `git diff`.
+
+</Steps>
+
+<Aside type="caution" title="Dry run is not uniform">
+`merge-tags`, `normalize-tags`, `rename` and `sync-update` write only with `--apply`. `fix-crosslinks` is the reverse: it writes by default and `--check` is the dry run. Read [Safe edits](/okf-cli/features/safe-edits/) before the first run.
+</Aside>
+
+## Work through it
+
+<Tabs>
+<TabItem label="Tags">
+
+List tags that occur once, then check a tag against the registry:
+
+```text title="Audit tags"
+$ okf tags --singletons
+  bread           1
+  deploy          1
+  incident        1
+  misc            1
+  pasta           1
+  security        1
+  x-experimental  1
+[exit 0]
+$ okf tags --validate misc governance
+UNKNOWN  misc
+1 UNKNOWN — register with: okf tags --register <tag> "<description, max 150 chars>"
+[exit 4]
+```
+
+Fold a stray tag into a registered one. This is the preview:
+
+```text title="okf merge-tags misc --into governance"
+$ okf merge-tags misc --into governance
+--- a/recipes/stew.md
++++ b/recipes/stew.md
+@@ -4,7 +4,7 @@
+ beschreibung: Deutscher Eintopf
+ tags:
+   - food
+-  - misc
++  - governance
+ superseded_by: handbook/ops/deploy
+ ---
+ 
+unparseable    handbook/broken-yaml.md  (frontmatter does not parse: did not find expected ',' or ']' (line 3, column 9) — skipped)
+merge-tags: 1 file(s) would rewrite, 1 unparseable — misc -> governance
+[exit 0]
+```
+
+Add `--apply` to write. `okf normalize-tags` converts inline `tags: [a, b]` to the block list in the same way; it lists the files it would rewrite and ends with `normalize-tags: 3 file(s) would rewrite, 1 unparseable` on the test catalogue.
+
+<Aside>
+A file with unparseable frontmatter is reported as `unparseable` and skipped in this run. A file the writer refuses ends a whole tag run, a dry run too [n760]. See [Known limitations](/okf-cli/known-limitations/).
+</Aside>
+
+Details: [Tags and registry](/okf-cli/features/tags-and-registry/), [`okf merge-tags`](/okf-cli/reference/commands/okf-merge-tags/), [`okf normalize-tags`](/okf-cli/reference/commands/okf-normalize-tags/).
+
+</TabItem>
+<TabItem label="Rename and links">
+
+`okf rename` moves a concept and rewrites every inbound link, ctx bundle entry and index listing. Both paths must end in `.md`.
+
+```text title="okf rename recipes/soup.md recipes/soups.md (dry run, listing only)"
+$ okf rename recipes/soup.md recipes/soups.md
+would move   recipes/soup.md  ->  recipes/soups.md
+  inbound    _ctx/cooking.md   /recipes/soup.md  ->  /recipes/soups.md
+  inbound    recipes/index.md   /recipes/soup.md  ->  /recipes/soups.md
+  inbound    recipes/overview.md   soup.md  ->  /recipes/soups.md
+  inbound    recipes/salad.md   soup.md  ->  /recipes/soups.md
+  ctx        cooking (pos 3)
+  reindex    recipes
+rename (dry-run): 4 inbound, 0 outbound link(s), 0 wikilink(s) (0 skipped-ambiguous), 1 bundle(s), 0 sync source(s). Re-run with --apply.
+[exit 0]
+```
+
+```text title="With --apply"
+$ okf rename --apply recipes/soup.md recipes/soups.md
+moved (git mv)  recipes/soup.md  ->  recipes/soups.md
+rewrote 4 inbound link(s) in 4 file(s), 0 outbound link(s)
+rewrote 0 wikilink(s) in 0 file(s)
+rewrote 0 sync source(s) in 0 file(s)
+listed in 1 ctx bundle(s): cooking (pos 3)
+reindexed 1 index file(s) across: recipes
+staged for commit — run `okf check` before committing.
+[exit 0]
+```
+
+Links that are not in the catalogue-absolute form `/bundle/concept.md` are a separate repair. `okf fix-crosslinks --check` previews it:
+
+```text title="okf fix-crosslinks --check recipes (listing only)"
+$ okf fix-crosslinks --check recipes
+--- a/recipes/bread.md
++++ b/recipes/bread.md
+@@ -13,4 +13,4 @@
+ 
+ ## Steps
+ 
+-Mix, rise, bake. Related: [pasta](pasta.md).
++Mix, rise, bake. Related: [pasta](/recipes/pasta.md).
+unresolved     recipes/drafts/ideas.md  -> pie.md
+fix-crosslinks: 2 file(s) would rewrite, 1 unresolved link(s)
+[exit 0]
+```
+
+A link whose target does not exist stays `unresolved`: `fix-crosslinks` does not guess. Without `--check` the command writes.
+
+Details: [Safe edits](/okf-cli/features/safe-edits/), [`okf rename`](/okf-cli/reference/commands/okf-rename/), [`okf fix-crosslinks`](/okf-cli/reference/commands/okf-fix-crosslinks/).
+
+</TabItem>
+<TabItem label="Check and drift">
+
+`okf check` reports conformance findings as `ERROR` or `WARNING` lines and a `N VIOLATIONS` total. Run it on the whole catalogue or on one bundle:
+
+```text title="okf check recipes (listing only)"
+$ okf check recipes
+ERROR    okf/type/reserved-no-type recipes/readme.md  (reserved file must not carry `type`)
+ERROR    kc/supersede/resolves recipes/salad.md  (superseded_by target does not resolve: recipes/soup)
+ERROR    kc/asset/placement   recipes/shopping.txt  (non-md file outside assets/)
+ERROR    kc/supersede/resolves recipes/stew.md  (superseded_by target does not resolve: handbook/ops/deploy)
+WARNING  kc/link/crosslink-format recipes/drafts/ideas.md  (non catalogue-absolute link(s) (use /bundle/…): pie.md)
+WARNING  kc/supersede/scope   recipes/salad.md  (superseded_by used on non-Decision concept (type=Recipe))
+WARNING  kc/markup/xml-like-tags recipes/soup.md  (angle-bracket placeholder(s) not in code-fence: <size>)
+WARNING  kc/frontmatter/english-keys recipes/stew.md  (German frontmatter key(s): beschreibung, titel)
+WARNING  kc/supersede/scope   recipes/stew.md  (superseded_by used on non-Decision concept (type=Recipe))
+4 VIOLATIONS
+[exit 4]
+```
+
+The test catalogue carries these findings on purpose. Findings exit with 4. The rules are listed in [Conformance checks](/okf-cli/features/conformance-checks/).
+
+If the bundle holds [canon blocks](/okf-cli/features/canon-blocks/), `okf sync-status` is a read-only drift check. It exits 5 when any copy is not `synced`:
+
+```text title="okf sync-status"
+$ okf sync-status
+synced             handbook/ops/setup.md            /kc-gov/ownership.md#ownership-rule
+source-changed     kc-gov/naming.md                 /kc-gov/ownership.md#naming-rule
+sync-status: 1 synced, 1 source-changed, 0 consumer-modified, 0 both-changed, 0 source-missing, 0 malformed
+[exit 5]
+```
+
+Repairing drift is covered in [Define canon knowledge](/okf-cli/use-cases/define-canon-knowledge/). Details: [`okf check`](/okf-cli/reference/commands/okf-check/), [`okf sync-status`](/okf-cli/reference/commands/okf-sync-status/).
+
+</TabItem>
+</Tabs>
+
+## What you get
+
+A bundle whose tags are registered and in block form, whose links use one form and point at existing concepts, and whose `okf check` run lists only the findings you decided to keep. Each step is one git diff.
+
+## Limits
+
+- Dry run differs per command: see the caution above and [Safe edits](/okf-cli/features/safe-edits/).
+- One refused file ends a whole tag run [n760].
+- After `rename --apply` of a canon owner, consumer copies keep the old path in the `> [!quote]` line and `sync-status` can still say `synced` [6peo]. Run `okf sync-update --apply`.
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Safe edits" href="/okf-cli/features/safe-edits/" />
+  <LinkCard title="Tags and registry" href="/okf-cli/features/tags-and-registry/" />
+  <LinkCard title="Conformance checks" href="/okf-cli/features/conformance-checks/" />
+</CardGrid>

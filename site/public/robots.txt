@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rierek.github.io/okf-cli/sitemap-index.xml

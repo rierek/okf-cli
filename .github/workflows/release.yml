@@ -4,6 +4,8 @@ name: release
 # workflow_dispatch is a dry run: it builds, makes provenance, creates a DRAFT release named
 # dry-run-<sha>, checks its assets and deletes it. It never publishes and never creates a tag,
 # also when started on a tag ref: only the push event publishes.
+# The assets are the wheel, the sdist and one okf binary per platform (okf-<os>-<arch>), all named in
+# the provenance subjects and in the allowlist of the release job.
 on:
   push:
     tags: ["rel-*"]
@@ -21,8 +23,22 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
       - name: Build wheel and sdist
         run: uv run --no-project --with build python -m build --outdir dist
+      # Pure Go (no cgo, modernc.org/sqlite): one runner cross-compiles every platform, always with the one
+      # build command of the Go module, `just go-build`.
+      - name: Build the okf binary for each release platform
+        run: |
+          set -euo pipefail
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" just go-build
+            cp go/bin/okf "dist/okf-${target%/*}-${target#*/}"
+          done
       # base64 of `sha256sum <file>` lines: the subjects of the provenance
       - name: Hash artifacts
         id: hash
@@ -75,12 +91,15 @@ jobs:
           ls -l release-files
           ls release-files/*.whl >/dev/null
           ls release-files/*.tar.gz >/dev/null
+          for binary in okf-darwin-arm64 okf-darwin-amd64 okf-linux-amd64 okf-linux-arm64; do
+            test -f "release-files/$binary"
+          done
           test -f "release-files/$PROVENANCE"
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             TAG="$GITHUB_REF_NAME"
             VERSION="$(echo "${TAG#rel-}" | tr - .)"
             gh release create "$TAG" --draft --verify-tag --title "okf-cli $VERSION" \
-              --notes-file "RELEASE-$VERSION.md"
+              --notes-file "releases/RELEASE-$VERSION.md"
           else
             TAG="dry-run-${GITHUB_SHA::7}"
             gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "dry run" --notes "dry run"
@@ -91,10 +110,10 @@ jobs:
         run: |
           set -euo pipefail
           gh release view "$TAG" --json isDraft,assets -q '{draft:.isDraft,assets:[.assets[].name]}'
-          # wheel, sdist, provenance: nothing else may ride along
+          # wheel, sdist, one binary per platform, provenance: nothing else may ride along
           names="$(gh release view "$TAG" --json assets -q '.assets|map(.name)|sort|join(" ")')"
           case "$names" in
-            "multiple.intoto.jsonl okf_cli-"*"-py3-none-any.whl okf_cli-"*".tar.gz") ;;
+            "multiple.intoto.jsonl okf-darwin-amd64 okf-darwin-arm64 okf-linux-amd64 okf-linux-arm64 okf_cli-"*"-py3-none-any.whl okf_cli-"*".tar.gz") ;;
             *) echo "unexpected assets: $names" >&2; exit 1 ;;
           esac
           if [ "$GITHUB_EVENT_NAME" = push ]; then
