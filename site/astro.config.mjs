@@ -25,6 +25,7 @@ export default defineConfig({
 			title: 'okf-cli',
 			description: 'Command line and MCP server for working with Open Knowledge Format (OKF) catalogues',
 			head: [
+				{ tag: 'meta', attrs: { name: 'google-site-verification', content: 'udSQx4uKNg2gBgB6k76G35e1JeIL90LEHUJ1PuspSZk' } },
 				{ tag: 'meta', attrs: { property: 'og:site_name', content: 'okf-cli' } },
 				{ tag: 'meta', attrs: { property: 'og:type', content: 'website' } },
 				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://rierek.github.io/okf-cli/og.png' } },
