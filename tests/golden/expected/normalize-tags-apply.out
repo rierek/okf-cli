@@ -39,7 +39,7 @@ exit: 0
  status: obsolete
  ---
  
-unparseable    handbook/broken-yaml.md  (frontmatter does not parse: expected ',' or ']', but got ':' (line 4, column 12) — skipped)
+unparseable    handbook/broken-yaml.md  (frontmatter does not parse: <yaml error> — skipped)
 normalize-tags: 3 file(s) rewrote, 1 unparseable
 --- stderr
 --- files

@@ -2,7 +2,7 @@ $ okf check --strict
 exit: 4
 --- stdout
 ERROR    kc/ctx/dead-entry    _ctx/legacy.md  (dead entry: handbook/ops/gone.md)
-ERROR    okf/frontmatter/parseable handbook/broken-yaml.md  (no parseable frontmatter: expected ',' or ']', but got ':' (line 4, column 12))
+ERROR    okf/frontmatter/parseable handbook/broken-yaml.md  (no parseable frontmatter: <yaml error>)
 ERROR    okf/trust/generated  handbook/wiki-notes.md  (`generated` has no non-empty `by`)
 ERROR    okf/lifecycle/status handbook/wiki-notes.md  (`status` is `maybe-later`, not draft, stable or deprecated)
 ERROR    okf/type/reserved-no-type recipes/readme.md  (reserved file must not carry `type`)

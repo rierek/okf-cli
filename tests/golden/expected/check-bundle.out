@@ -1,7 +1,7 @@
 $ okf check handbook
 exit: 4
 --- stdout
-ERROR    okf/frontmatter/parseable handbook/broken-yaml.md  (no parseable frontmatter: expected ',' or ']', but got ':' (line 4, column 12))
+ERROR    okf/frontmatter/parseable handbook/broken-yaml.md  (no parseable frontmatter: <yaml error>)
 ERROR    okf/trust/generated  handbook/wiki-notes.md  (`generated` has no non-empty `by`)
 ERROR    okf/lifecycle/status handbook/wiki-notes.md  (`status` is `maybe-later`, not draft, stable or deprecated)
 WARNING  kc/link/crosslink-format handbook/getting-started.md  (non catalogue-absolute link(s) (use /bundle/…): ops/deploy.md, security.md, ops/retired-tool.md)

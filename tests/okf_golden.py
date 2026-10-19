@@ -180,6 +180,11 @@ def _stderr(stderr):
     return "<usage error>\n" if re.match(r"usage: okf\b", stderr) else stderr
 
 
+# The YAML parser's error detail (wording, line and column) differs between the Python and the Go
+# parser (accepted deviation, ACCEPTANCE-REPORT); the golden pins only that the frontmatter fails.
+_YAML_ERROR = re.compile(r"(does not parse: |no parseable frontmatter: )[^\n\"]*?\(line \d+, column \d+\)")
+
+
 def run_case(case, cmd, template, workdir):
     """The golden record of one case: host paths become <ROOT> and <HOME>, an instant of the run's
     own day (e.g. `verify`'s `at`) becomes <NOW>; the fixture's dates lie in the past and stay."""
@@ -206,7 +211,7 @@ def run_case(case, cmd, template, workdir):
         for form in sorted({os.path.realpath(path), path}, key=len, reverse=True):
             record = record.replace(form, token)
     now = re.compile(r"(?:{})T\d\d:\d\d:\d\dZ".format("|".join(sorted(days))))
-    return now.sub("<NOW>", record)
+    return _YAML_ERROR.sub(r"\1<yaml error>", now.sub("<NOW>", record))
 
 
 def _seccomp_no_inet():

@@ -22,7 +22,7 @@ exit: 0
  superseded_by: handbook/ops/deploy
  ---
  
-unparseable    handbook/broken-yaml.md  (frontmatter does not parse: expected ',' or ']', but got ':' (line 4, column 12) — skipped)
+unparseable    handbook/broken-yaml.md  (frontmatter does not parse: <yaml error> — skipped)
 merge-tags: 2 file(s) rewrote, 1 unparseable — misc, x-experimental -> security
 --- stderr
 --- files
