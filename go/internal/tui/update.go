@@ -64,6 +64,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyHelp(msg)
 	case overlayRefresh:
 		return m.keyRefresh(msg)
+	case overlayFilterMenu:
+		return m.keyFilterMenu(msg)
+	case overlayRoot:
+		return m.keyRoot(msg)
 	}
 	if m.focus == focusQuery {
 		return m.keyQuery(msg)
@@ -76,6 +80,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, keys.Refresh):
 		m.overlay = overlayRefresh
 		return m, nil
+	case keybind.Matches(msg, keys.Filter):
+		m.filters.field = fieldRoot
+		return m.setFocus(focusFilter)
+	case keybind.Matches(msg, keys.FilterClear):
+		return m.clearFilters()
 	case keybind.Matches(msg, keys.FocusIn):
 		return m.stepFocus(1)
 	case keybind.Matches(msg, keys.FocusOut):
@@ -84,6 +93,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.setFocus(focusQuery)
 	case keybind.Matches(msg, keys.Back) && m.escDismissesToast():
 		return m.dismissToast()
+	}
+	if m.focus == focusFilter {
+		return m.keyFilterBar(msg)
 	}
 	if m.focus == focusList {
 		next, _ := m.keyList(msg)
@@ -124,8 +136,16 @@ func (m model) setFocus(target focusTarget) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// stepFocus moves the focus delta stops along the focus ring, wrapping at both ends.
+// stepFocus moves the focus delta stops along the focus ring, wrapping at both ends. Inside the
+// filter bar a step moves to the next field first and leaves the bar behind its last field; a
+// step into the bar lands on its first (or last) field.
 func (m model) stepFocus(delta int) (tea.Model, tea.Cmd) {
+	if m.focus == focusFilter {
+		if f := int(m.filters.field) + delta; f >= 0 && f < int(filterFieldCount) {
+			m.filters.field = filterField(f)
+			return m, nil
+		}
+	}
 	i := 0
 	for j, t := range focusRing {
 		if t == m.focus {
@@ -133,5 +153,12 @@ func (m model) stepFocus(delta int) (tea.Model, tea.Cmd) {
 		}
 	}
 	n := len(focusRing)
-	return m.setFocus(focusRing[((i+delta)%n+n)%n])
+	target := focusRing[((i+delta)%n+n)%n]
+	if target == focusFilter {
+		m.filters.field = fieldRoot
+		if delta < 0 {
+			m.filters.field = filterFieldCount - 1
+		}
+	}
+	return m.setFocus(target)
 }

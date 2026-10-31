@@ -8,7 +8,7 @@ description: "okf tui opens a keyboard-first terminal UI on the catalogue root: 
 `okf tui` opens a keyboard-first terminal UI on the catalogue. Look and keys follow `lif tui`. The command exists only in the Go binary; the Python CLI has no `tui`. It is hidden from `okf --help`, but `okf tui --help` and the call itself work.
 
 :::note
-This page describes the search screen. Filters, the session buffer and the hand-off to an agent pane come with later releases of the TUI.
+This page describes the search screen. The session buffer and the hand-off to an agent pane come with later releases of the TUI.
 :::
 
 ## Start
@@ -43,6 +43,44 @@ The result list shows title, type and bundle of every hit. The detail pane at th
 
 `v` cycles the body between list and detail side by side, the list alone and the detail alone; `V` cycles back. `ctrl+d` and `ctrl+u` scroll a detail pane that is taller than the screen.
 
+## Filters
+
+Below the query field a bar of six boxes narrows the search: **Root**, **Bundle**, **Type**, **Tag**, **Status** and **Tier**. You never write `--where` syntax. An empty box shows `(any)`. A box with values shows them (`<first> +N` when several), so the active filters are always on screen.
+
+Press `f` to focus the bar, or step into it with `tab`. `tab` and `shift+tab` walk through the fields and leave the bar behind the last or before the first field; `←`/`→` do the same without leaving it. `enter` opens the menu of the focused field. `esc` leaves the bar.
+
+### Value menus
+
+The menus of Bundle, Type, Tag, Status and Tier are multi-select. `↑`/`↓` move the cursor, `space` or `x` select or deselect a value, `X` clears all filters, and `esc` closes the menu. A search that already ran starts again on `esc` when the choice changed, so the list always shows the chosen filters. Before the first search the choice waits and applies to it.
+
+The menus list only values that exist in the active root:
+
+- Bundle: the bundles `okf find` searches (the one named by `bundle` in `.okf.toml`, if set).
+- Type: the types registered in the root's `TYPES.md`.
+- Tag: the tags the root's concepts use.
+- Status: `draft`, `stable`, `deprecated`. Tier: `unverified`, `machine-confirmed`, `human-reviewed`. These values are the same in every root.
+
+### How the choice becomes a filter
+
+The TUI builds a `--where` expression and compiles it with the compiler of [`--where`](/okf-cli/reference/where-filter/):
+
+- A bundle `B` is `path ~ B/`.
+- Values of one field are joined with `or`; different fields are joined with `and`.
+
+Bundle `handbook` and type `Runbook` give the hits of `okf find <query> --where "path ~ handbook/ and type = Runbook"`. The types `Recipe` and `Runbook` give `(type = Recipe or type = Runbook)`.
+
+`X` outside the query field clears all values of all fields at once and keeps the root.
+
+### Root
+
+The header and the Root box show the active root. `enter` on the Root box opens the root menu. It lists the active root, the root of `~/.config/okf/config.toml` and every root you used in earlier sessions, most recent first. Choose one with `↑`/`↓` and `enter`, or move below the list and type a path (`~` and relative paths work as for `--root`).
+
+- The TUI runs the current query again on the new root and resets the index dots. The list of the old root is dropped.
+- Filter values the new root does not hold are dropped. A message names them.
+- A path that is not a directory, or holds no catalogue (`.okf.toml`, or `SPEC.md` and `TYPES.md`), is refused. The root stays, the menu stays open and a red message shows the reason.
+
+The TUI remembers a root when it starts on it or switches to it. The list is in `tui.json` in `$XDG_STATE_HOME/okf/` (`~/.local/state/okf/` when the variable is unset), at most 20 roots. It is a state file of the TUI, outside every catalogue and outside the user config, which the TUI never writes.
+
 ## Keys
 
 Inside the query field the letter keys type, so `q` and `?` are text there; the header names `f1` for the help. Press `esc` to leave the field, then the global keys work.
@@ -59,6 +97,11 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `v`, `V` | Next or previous layout: list and detail, list, detail. |
 | `ctrl+d`, `ctrl+u` | Scroll the detail pane down or up. |
 | `/` | Focus the query field. |
+| `f` | Focus the filter bar, on its root field. Outside the query field only. |
+| `←`/`h`, `→`/`l` | In the filter bar: previous or next field. |
+| `enter` | In the filter bar: open the menu of the focused field. |
+| `space`, `x` | In a value menu: select or deselect the value under the cursor. |
+| `X` | Clear every filter but the root. Outside the query field only. |
 | `r` | Refresh an index: a dialog offers the lexical or the semantic index. Outside the query field only. |
 | `esc` | Leave the query field. Outside it, dismiss a sticky message. Close an overlay. |
 
