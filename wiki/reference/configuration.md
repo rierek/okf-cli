@@ -47,7 +47,7 @@ ERROR: no catalogue found in cwd or its ancestors and no root in /tmp/okf-facts/
 | File | Scope | Keys |
 |---|---|---|
 | `<root>/.okf.toml` | one catalogue | `bundle`, `types_source`, `ignore_rules`, `registry_format`, `wikilink_checked_bundles`, `[git_authors]` |
-| `~/.config/okf/config.toml` | the user | `root` |
+| `~/.config/okf/config.toml` | the user | `root`, `[tui]` |
 
 ### `.okf.toml`
 
@@ -73,7 +73,7 @@ ignore_rules = ["kc/asset/entry-file-description"]
 
 ### `~/.config/okf/config.toml`
 
-The only key is `root`: an absolute path or a path that starts with `~/`.
+The key `root` is an absolute path or a path that starts with `~/`. The table `[tui]` holds the settings of [`okf tui`](/okf-cli/reference/commands/tui/).
 
 ```toml title="~/.config/okf/config.toml"
 root = "~/knowledge"
