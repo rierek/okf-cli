@@ -23,13 +23,14 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	// The user config of the developer must not leak into a test.
+	// The user config and the TUI state file of the developer must not leak into a test.
 	home, err := os.MkdirTemp("", "okf-tui-test")
 	if err != nil {
 		panic(err)
 	}
 	os.Setenv("HOME", home)
 	os.Setenv("XDG_CONFIG_HOME", home+"/.config")
+	os.Setenv("XDG_STATE_HOME", home+"/.local/state")
 	lipgloss.SetColorProfile(termenv.Ascii)
 	defaultSettings().apply()
 	code := m.Run()
