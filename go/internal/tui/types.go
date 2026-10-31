@@ -10,13 +10,14 @@ import (
 type focusTarget int
 
 const (
-	focusQuery focusTarget = iota // the query field, a text input
-	focusList                     // the results pane
+	focusQuery  focusTarget = iota // the query field, a text input
+	focusFilter                    // the filter bar
+	focusList                      // the results pane
 )
 
-// focusRing is the tab order of the search screen. A later task inserts its targets (filter bar,
-// detail pane) here.
-var focusRing = []focusTarget{focusQuery, focusList}
+// focusRing is the tab order of the search screen. A later task inserts its targets (detail
+// pane) here.
+var focusRing = []focusTarget{focusQuery, focusFilter, focusList}
 
 // overlayKind names the overlay on top of the screen. There is one overlay at a time; it captures
 // every key until it closes.
@@ -28,6 +29,8 @@ const (
 	overlayConfirm
 	overlayRefresh
 	overlayText
+	overlayFilterMenu // value menu of the focused filter field
+	overlayRoot       // root menu
 )
 
 // screenKind is the screen under the overlays.
@@ -52,8 +55,11 @@ type model struct {
 	layout layoutMode
 
 	screen    screenKind
-	buf       buffer // the session buffer: kept across searches and root changes
+	buf       buffer // the session buffer: kept across searches, filter changes and root changes
 	bufCursor int    // entry under the cursor of screenBuffer
+
+	filters  filterState
+	rootMenu rootMenu // state of overlayRoot
 
 	overlay overlayKind
 	help    helpState     // state of overlayHelp

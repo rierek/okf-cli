@@ -11,7 +11,9 @@ import (
 )
 
 // Init starts the blink of the focused query field.
-func (m model) Init() tea.Cmd { return tea.Batch(textinput.Blink, m.checkIndexes()) }
+func (m model) Init() tea.Cmd {
+	return tea.Batch(textinput.Blink, m.checkIndexes(), rememberStartRoot(m.root))
+}
 
 // Update routes a message to its handler.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -27,6 +29,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleToastExpired(msg)
 	case indexCheckedMsg:
 		return m.handleIndexChecked(msg)
+	case rootRememberedMsg:
+		return m.handleRootRemembered(msg)
 	case indexRefreshedMsg:
 		return m.handleIndexRefreshed(msg)
 	case semanticPlanMsg:
@@ -79,6 +83,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyRefresh(msg)
 	case overlayText:
 		return m.keyText(msg)
+	case overlayFilterMenu:
+		return m.keyFilterMenu(msg)
+	case overlayRoot:
+		return m.keyRoot(msg)
 	}
 	if m.focus == focusQuery {
 		return m.keyQuery(msg)
@@ -91,6 +99,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, keys.Refresh):
 		m.overlay = overlayRefresh
 		return m, nil
+	case keybind.Matches(msg, keys.Filter) && m.screen == screenSearch:
+		m.filters.field = fieldRoot
+		return m.setFocus(focusFilter)
+	case keybind.Matches(msg, keys.FilterClear) && m.screen == screenSearch:
+		return m.clearFilters()
 	case keybind.Matches(msg, keys.FocusIn) && m.screen == screenSearch:
 		return m.stepFocus(1)
 	case keybind.Matches(msg, keys.FocusOut) && m.screen == screenSearch:
@@ -102,6 +115,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.screen == screenBuffer {
 		return m.keyBuffer(msg)
+	}
+	if m.focus == focusFilter {
+		return m.keyFilterBar(msg)
 	}
 	if m.focus == focusList {
 		if keybind.Matches(msg, keys.Edit) && m.search.focused() != nil {
@@ -148,8 +164,16 @@ func (m model) setFocus(target focusTarget) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// stepFocus moves the focus delta stops along the focus ring, wrapping at both ends.
+// stepFocus moves the focus delta stops along the focus ring, wrapping at both ends. Inside the
+// filter bar a step moves to the next field first and leaves the bar behind its last field; a
+// step into the bar lands on its first (or last) field.
 func (m model) stepFocus(delta int) (tea.Model, tea.Cmd) {
+	if m.focus == focusFilter {
+		if f := int(m.filters.field) + delta; f >= 0 && f < int(filterFieldCount) {
+			m.filters.field = filterField(f)
+			return m, nil
+		}
+	}
 	i := 0
 	for j, t := range focusRing {
 		if t == m.focus {
@@ -157,5 +181,12 @@ func (m model) stepFocus(delta int) (tea.Model, tea.Cmd) {
 		}
 	}
 	n := len(focusRing)
-	return m.setFocus(focusRing[((i+delta)%n+n)%n])
+	target := focusRing[((i+delta)%n+n)%n]
+	if target == focusFilter {
+		m.filters.field = fieldRoot
+		if delta < 0 {
+			m.filters.field = filterFieldCount - 1
+		}
+	}
+	return m.setFocus(target)
 }

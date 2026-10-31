@@ -72,11 +72,11 @@ func testApp() *cli.App {
 	return app
 }
 
-// cliPaths are the paths `okf find <query> --limit 50` lists, in order, from the command's own
-// handler.
-func cliPaths(t *testing.T, root, query string) []string {
+// cliPaths are the paths `okf find <query> --limit 50 [extra...]` lists, in order, from the
+// command's own handler.
+func cliPaths(t *testing.T, root, query string, extra ...string) []string {
 	t.Helper()
-	parsed, err := testApp().Parse([]string{"find", query, "--limit", "50", "--json"})
+	parsed, err := testApp().Parse(append([]string{"find", query, "--limit", "50", "--json"}, extra...))
 	if err != nil {
 		t.Fatal(err)
 	}

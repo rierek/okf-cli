@@ -36,6 +36,10 @@ func (m model) composeOverlays(out string, w, h int) string {
 		out = placeOverlay(out, m.refreshBox(), w, h)
 	case overlayText:
 		out = placeOverlay(out, m.textBox(), w, h)
+	case overlayFilterMenu:
+		out = placeOverlay(out, m.filterMenuBox(), w, h)
+	case overlayRoot:
+		out = placeOverlay(out, m.rootMenuBox(), w, h)
 	}
 	return out
 }
@@ -57,15 +61,19 @@ func (m model) footerBindings() []keybind.Binding {
 	return pick([]binding{
 		{toastDismissHint, m.escDismissesToast()},
 		{keys.Run, m.inInput()},
+		{keys.Open, m.focus == focusFilter},
+		{keys.FieldNext, m.focus == focusFilter},
 		{keys.Down, !m.inInput() && len(m.search.hits) > 0},
 		{keys.Layout, !m.inInput()},
 		{keys.Edit, hit},
-		{keys.Toggle, hit},
+		{keys.BufferToggle, hit},
 		{keys.Note, hit},
 		{keys.Buffer, m.focus == focusList},
 		{keys.FocusIn, len(focusRing) > 1},
 		{keys.FocusOut, len(focusRing) > 1},
 		{keys.Search, !m.inInput()},
+		{keys.Filter, !m.inInput()},
+		{keys.FilterClear, !m.inInput() && m.filters.active()},
 		{keys.Refresh, !m.inInput()},
 	})
 }
@@ -98,12 +106,13 @@ func (m model) header(innerW int) string {
 }
 
 // chrome is the frame around the body: the header, the footer and the rows left for the body
-// panes, borders included: the frame without header, query row, footer and the two dividers.
+// panes, borders included: the frame without header, query row, filter bar, footer and the two
+// dividers.
 func (m model) chrome(w, h int) (head, foot string, avail int) {
 	innerW := w - 2
 	head = m.header(innerW)
 	foot = footer(renderBindings(m.footerBindings()), innerW)
-	return head, foot, h - 2 - lipgloss.Height(head) - 1 - 1 - 1 - lipgloss.Height(foot)
+	return head, foot, h - 2 - lipgloss.Height(head) - 1 - 1 - 1 - filterBarHeight - lipgloss.Height(foot)
 }
 
 // queryRow is the query field; while a search runs the indicator stands at its right end.
@@ -125,6 +134,6 @@ func (m model) viewSearch(w, h int) string {
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	body := m.viewBody(max(avail-2, 1))
 
-	content := head + "\n" + div + "\n" + m.queryRow(innerW) + "\n" + body + "\n" + div + "\n" + foot
+	content := head + "\n" + div + "\n" + m.queryRow(innerW) + "\n" + m.filterBar(innerW) + "\n" + body + "\n" + div + "\n" + foot
 	return outerBorder(content, innerW)
 }

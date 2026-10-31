@@ -24,7 +24,7 @@ func (m model) keyBufferHit(msg tea.KeyMsg) (next model, cmd tea.Cmd, ok bool) {
 		m.screen = screenBuffer
 		m.bufCursor = min(m.bufCursor, max(len(m.buf.entries)-1, 0))
 		return m, nil, true
-	case keybind.Matches(msg, keys.Toggle) && m.search.focused() != nil:
+	case keybind.Matches(msg, keys.BufferToggle) && m.search.focused() != nil:
 		m.buf = m.buf.toggle(entryOf(*m.search.focused()))
 		return m, nil, true
 	case keybind.Matches(msg, keys.Note) && m.search.focused() != nil:
@@ -81,7 +81,7 @@ const bufferDetailRows = 8
 func (m model) viewBuffer(w, h int) string {
 	innerW := w - 2
 	head, foot, avail := m.chrome(w, h)
-	avail++ // no query row on this screen
+	avail += 1 + filterBarHeight // no query row and no filter bar on this screen
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 
 	detailH := 0
