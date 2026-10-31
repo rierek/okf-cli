@@ -358,6 +358,26 @@ func TestRootSwitchRechecks(t *testing.T) {
 	}
 }
 
+// A switch in the root menu rechecks both dots for the new root, end to end.
+func TestRootMenuSwitchRechecksTheDots(t *testing.T) {
+	withFake(t, true)
+	stateHome(t)
+	a, b := fixtureRoot(t), fixtureRoot(t)
+	m := started(t, a)
+	m, cmd := m.startLexical()
+	m = settleIndex(m, cmd)
+	if m.lexical.state != indexCurrent {
+		t.Fatalf("root A lexical = %v, want green", m.lexical.state)
+	}
+	m, cmd = switchTo(t, m, b)
+	if m.root != b || m.lexical.state != indexUnknown || m.semantic.state != indexUnknown {
+		t.Fatalf("the menu switch keeps the dots of the old root: %+v %+v", m.lexical, m.semantic)
+	}
+	if m = settleIndex(m, cmd); m.lexical.state != indexAbsent || m.semantic.state != indexAbsent {
+		t.Errorf("root B: lexical %v semantic %v, want both red", m.lexical.state, m.semantic.state)
+	}
+}
+
 func TestRefreshDialogGolden(t *testing.T) {
 	withFake(t, false)
 	m := leaveField(sized(t, nil))
