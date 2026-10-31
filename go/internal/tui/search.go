@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -154,4 +155,32 @@ func (m model) keyList(msg tea.KeyMsg) (model, bool) {
 		return m.nextLayout(msg.String() == "V"), true
 	}
 	return m, false
+}
+
+// handleFileEdited shows an editor failure as an error toast, and reads the edited hit again from
+// disk: description, tags, type, snippet and headings. The list order, the cursor and the detail
+// scroll stay; a file gone or unreadable keeps the old row and says so in a toast.
+func (m model) handleFileEdited(msg fileEditedMsg) (model, tea.Cmd) {
+	i := slices.IndexFunc(m.search.hits, func(h find.Hit) bool { return h.Abs == msg.path })
+	var reloadErr error
+	if i >= 0 {
+		var fresh find.Hit
+		if fresh, reloadErr = find.Reload(m.root, m.search.hits[i], m.search.query); reloadErr == nil {
+			m.search.hits = slices.Clone(m.search.hits) // earlier copies of the model keep their list
+			m.search.hits[i] = fresh
+			if i == m.search.cursor {
+				scroll := m.search.detailScroll
+				m = m.focusHit()
+				_, _, innerH := m.geometry()
+				m.search.detailScroll = min(scroll, max(len(m.detailRows(m.detailTextWidth()))-innerH, 0))
+			}
+		}
+	}
+	switch {
+	case msg.err != nil:
+		return m.showToast(toastError, "Editor failed", msg.err.Error(), false)
+	case reloadErr != nil:
+		return m.showToast(toastError, "Hit not reloaded", reloadErr.Error(), false)
+	}
+	return m, nil
 }

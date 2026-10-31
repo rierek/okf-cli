@@ -19,6 +19,7 @@ type keyMap struct {
 	DetailUp   keybind.Binding // ctrl+u: scroll the detail pane up
 	DetailDown keybind.Binding // ctrl+d: scroll the detail pane down
 	Layout     keybind.Binding // v, V: next and previous layout of the body
+	Edit       keybind.Binding // e: open the focused hit in the editor
 
 	// Focus ring: tab and shift+tab step the focus to the next and previous target.
 	FocusIn  keybind.Binding
@@ -45,6 +46,7 @@ func newKeyMap() keyMap {
 		DetailUp:   keybind.NewBinding(keybind.WithKeys("ctrl+u"), keybind.WithHelp("ctrl+u", "detail up")),
 		DetailDown: keybind.NewBinding(keybind.WithKeys("ctrl+d"), keybind.WithHelp("ctrl+d", "detail down")),
 		Layout:     keybind.NewBinding(keybind.WithKeys("v", "V"), keybind.WithHelp("v/V", "layout")),
+		Edit:       keybind.NewBinding(keybind.WithKeys("e"), keybind.WithHelp("e", "edit hit")),
 
 		FocusIn:  keybind.NewBinding(keybind.WithKeys("tab"), keybind.WithHelp("tab", "next focus")),
 		FocusOut: keybind.NewBinding(keybind.WithKeys("shift+tab"), keybind.WithHelp("shift+tab", "previous focus")),
@@ -74,7 +76,7 @@ type helpGroup struct {
 func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Top, k.Bottom, k.FocusIn, k.FocusOut, k.Search, k.Run, k.Back}},
-		{"Detail", []keybind.Binding{k.DetailUp, k.DetailDown, k.Layout}},
+		{"Detail", []keybind.Binding{k.DetailUp, k.DetailDown, k.Layout, k.Edit}},
 		{"Dialogs", []keybind.Binding{k.Confirm, k.Cancel}},
 		{"Global", []keybind.Binding{k.Help, k.Quit, k.QuitNow}},
 		{"Index", []keybind.Binding{k.Refresh}},
