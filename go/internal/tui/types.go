@@ -36,8 +36,10 @@ type model struct {
 
 	width, height int
 
-	focus focusTarget
-	query textinput.Model
+	focus  focusTarget
+	query  textinput.Model
+	search searchState
+	layout layoutMode
 
 	overlay overlayKind
 	help    helpState     // state of overlayHelp
@@ -56,7 +58,7 @@ func newModel(root string, settings Settings, settingsErr error) model {
 	q.PromptStyle = theme.Accent
 	q.PlaceholderStyle = theme.Muted
 	q.Focus()
-	m := model{root: root, settings: settings, focus: focusQuery, query: q}
+	m := model{root: root, settings: settings, focus: focusQuery, query: q, search: newSearchState()}
 	if settingsErr != nil {
 		m, _ = m.showToast(toastError, "Invalid [tui] settings, defaults in use", settingsErr.Error(), true)
 	}

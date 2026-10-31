@@ -207,14 +207,14 @@ func ExpandQueryTags(root, query string) ([]string, error) {
 
 // Ranking is Python semantic_ranking: the concepts closest to the query by cosine, best first,
 // at most limit of them after the --where filter, each with its cosine. No vectors or no
-// embedding backend skips the arm with one note and gives none.
-func Ranking(root, query string, limit int, filters *where.FindFilters) ([]rank.Scored, error) {
+// embedding backend skips the arm with one note, sent to note, and gives none.
+func Ranking(root, query string, limit int, filters *where.FindFilters, note func(string)) ([]rank.Scored, error) {
 	vecs, found, residual, err := loadConceptVectors(sqlstore.TagvecPath(root), filters)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		envelope.Note("semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only")
+		note("semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only")
 		return []rank.Scored{}, nil
 	}
 	if len(vecs) == 0 {
@@ -225,7 +225,7 @@ func Ranking(root, query string, limit int, filters *where.FindFilters) ([]rank.
 		return nil, err
 	}
 	if err != nil {
-		envelope.Note(fmt.Sprintf("semantic arm skipped (embedding backend unavailable: %v) — lexical results only", err))
+		note(fmt.Sprintf("semantic arm skipped (embedding backend unavailable: %v) — lexical results only", err))
 		return []rank.Scored{}, nil
 	}
 	ranked := rank.RankCosine(qvec, vecs)
