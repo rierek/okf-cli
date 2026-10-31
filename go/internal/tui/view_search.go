@@ -28,6 +28,8 @@ func (m model) composeOverlays(out string, w, h int) string {
 		out = placeOverlay(out, m.helpBox(), w, h)
 	case overlayConfirm:
 		out = placeOverlay(out, m.confirmBox(), w, h)
+	case overlayRefresh:
+		out = placeOverlay(out, m.refreshBox(), w, h)
 	}
 	return out
 }
@@ -45,6 +47,7 @@ func (m model) footerBindings() []keybind.Binding {
 		{keys.FocusIn, len(focusRing) > 1},
 		{keys.FocusOut, len(focusRing) > 1},
 		{keys.Search, !m.inInput()},
+		{keys.Refresh, !m.inInput()},
 	}
 	var out []keybind.Binding
 	for _, c := range cands {
@@ -58,7 +61,7 @@ func (m model) footerBindings() []keybind.Binding {
 // header is the first line: the active root and the screen title at the left, the global key
 // hints at the right.
 func (m model) header(innerW int) string {
-	return breadcrumb(m.root, "Search", renderBindings(globalBindings(m.inInput())), innerW)
+	return breadcrumb(m.root, "Search", m.dots()+"  "+renderBindings(globalBindings(m.inInput())), innerW)
 }
 
 // chrome is the frame around the body: the header, the footer and the rows left for the body

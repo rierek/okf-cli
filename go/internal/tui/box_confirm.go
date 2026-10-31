@@ -18,6 +18,7 @@ type confirmKind int
 
 const (
 	confirmQuit confirmKind = iota
+	confirmSemanticRefresh
 )
 
 // confirmDialog describes one confirm dialog. A destructive one gets a red border and title.
@@ -56,6 +57,8 @@ func (m model) runConfirm(kind confirmKind) (tea.Model, tea.Cmd) {
 	switch kind {
 	case confirmQuit:
 		return m, tea.Quit
+	case confirmSemanticRefresh:
+		return m.startSemantic()
 	}
 	return m, nil
 }
