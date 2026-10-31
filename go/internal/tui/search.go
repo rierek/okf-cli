@@ -1,0 +1,157 @@
+package tui
+
+import (
+	"strings"
+
+	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+
+	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
+	"nas/volume1/data/git/okf-tools/go/internal/find"
+	"nas/volume1/data/git/okf-tools/go/internal/frontmatter"
+	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
+)
+
+// searchLimit is the number of hits one search lists (SPEC D6). The list scrolls client-side.
+const searchLimit = 50
+
+// searchState is the search of the screen: the running search and the hits of the last finished one.
+type searchState struct {
+	seq     int // generation of the newest search; an answer of an older one is dropped
+	running bool
+	spinner spinner.Model
+
+	ran    bool   // a search has finished: an empty list means "no hits", not "no search yet"
+	query  string // the query the hits answer
+	hits   []find.Hit
+	cursor int
+
+	headings     []catalogue.Heading // H2 and H3 of the focused hit, in document order
+	detailScroll int                 // rows the detail pane is scrolled down
+}
+
+// searchDoneMsg is the answer of the search of generation seq.
+type searchDoneMsg struct {
+	seq    int
+	query  string
+	result *find.Result
+	err    error
+}
+
+func newSearchState() searchState {
+	return searchState{spinner: spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(theme.Accent))}
+}
+
+// focused is the hit under the cursor, nil without hits.
+func (s searchState) focused() *find.Hit {
+	if s.cursor < 0 || s.cursor >= len(s.hits) {
+		return nil
+	}
+	return &s.hits[s.cursor]
+}
+
+// startSearch runs the query field's text as a search: off the UI loop, so the program keeps
+// reacting to keys while it runs. A blank query starts nothing. Focus moves to the list; `/`
+// brings it back to the query field.
+func (m model) startSearch() (model, tea.Cmd) {
+	query := strings.TrimSpace(m.query.Value())
+	if query == "" {
+		return m, nil
+	}
+	m.search.seq++
+	m.search.running = true
+	seq, root := m.search.seq, m.root
+	run := func() tea.Msg {
+		result, err := find.Search(root, find.Options{Query: query, Limit: searchLimit})
+		return searchDoneMsg{seq: seq, query: query, result: result, err: err}
+	}
+	m.focus = focusList
+	m.query.Blur()
+	return m, tea.Batch(run, m.search.spinner.Tick)
+}
+
+// handleSearchDone replaces the list with the answer of the newest search, shows the warnings of
+// the ranking as a toast and reports a failure as an error toast.
+func (m model) handleSearchDone(msg searchDoneMsg) (model, tea.Cmd) {
+	if msg.seq != m.search.seq {
+		return m, nil
+	}
+	m.search.running = false
+	if msg.err != nil {
+		return m.showToast(toastError, "Search failed", msg.err.Error(), false)
+	}
+	m.search.ran, m.search.query = true, msg.query
+	m.search.hits, m.search.cursor = msg.result.Hits, 0
+	m = m.focusHit()
+	if w := msg.result.Warnings; len(w) > 0 {
+		return m.showToast(toastWarn, w[0], strings.Join(w[1:], " · "), false)
+	}
+	return m, nil
+}
+
+// moveCursor puts the cursor on hit i (clamped) and loads what the detail pane shows of it.
+func (m model) moveCursor(i int) model {
+	if len(m.search.hits) == 0 {
+		return m
+	}
+	m.search.cursor = min(max(i, 0), len(m.search.hits)-1)
+	return m.focusHit()
+}
+
+// focusHit loads the H2 and H3 headings of the focused hit, as `okf toc <path> --level 0` lists
+// them, and resets the detail scroll. A file that cannot be read shows no table of contents.
+func (m model) focusHit() model {
+	m.search.detailScroll = 0
+	m.search.headings = nil
+	hit := m.search.focused()
+	if hit == nil {
+		return m
+	}
+	text, err := catalogue.ReadFile(hit.Abs)
+	if err != nil {
+		return m
+	}
+	for _, h := range catalogue.IterHeadings(frontmatter.Read(text).Body) {
+		if h.Level == 2 || h.Level == 3 {
+			m.search.headings = append(m.search.headings, h)
+		}
+	}
+	return m
+}
+
+// handleSpinner advances the running indicator; it stops ticking when the search ends.
+func (m model) handleSpinner(msg spinner.TickMsg) (model, tea.Cmd) {
+	if !m.search.running {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.search.spinner, cmd = m.search.spinner.Update(msg)
+	return m, cmd
+}
+
+// keyList handles the keys of the focused list; ok is false for a key it does not own.
+func (m model) keyList(msg tea.KeyMsg) (model, bool) {
+	_, _, innerH := m.geometry()
+	page := max(innerH/2, 1)
+	maxScroll := max(len(m.detailRows(m.detailTextWidth()))-innerH, 0)
+	switch {
+	case keybind.Matches(msg, keys.Up):
+		return m.moveCursor(m.search.cursor - 1), true
+	case keybind.Matches(msg, keys.Down):
+		return m.moveCursor(m.search.cursor + 1), true
+	case keybind.Matches(msg, keys.Top):
+		return m.moveCursor(0), true
+	case keybind.Matches(msg, keys.Bottom):
+		return m.moveCursor(len(m.search.hits) - 1), true
+	case keybind.Matches(msg, keys.DetailDown):
+		m.search.detailScroll = min(m.search.detailScroll+page, maxScroll)
+		return m, true
+	case keybind.Matches(msg, keys.DetailUp):
+		m.search.detailScroll = max(m.search.detailScroll-page, 0)
+		return m, true
+	case keybind.Matches(msg, keys.Layout):
+		return m.nextLayout(msg.String() == "V"), true
+	}
+	return m, false
+}

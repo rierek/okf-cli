@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
-	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/rank"
 	"nas/volume1/data/git/okf-tools/go/internal/sqlstore"
 	"nas/volume1/data/git/okf-tools/go/internal/where"
@@ -23,13 +22,13 @@ type Row struct {
 // row before the cut to limit.
 //
 // ok is false when the caller must fall back to the substring scan (Python None): no index file,
-// or one SQLite cannot read. Either way exactly one note says so when notify is set. A query
-// without a term gives no rows and ok true. A stale index is answered and, under notify, noted.
-func Ranking(root, query string, limit int, filters *where.FindFilters, notify bool) (rows []Row, ok bool, err error) {
+// or one SQLite cannot read. Either way exactly one note says so through note (nil: silent). A query
+// without a term gives no rows and ok true. A stale index is answered and, when note is set, noted.
+func Ranking(root, query string, limit int, filters *where.FindFilters, note func(string)) (rows []Row, ok bool, err error) {
 	dbPath := sqlstore.FTSPath(root)
 	if !catalogue.RealFS.IsFile(dbPath) {
-		if notify {
-			envelope.Note("lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking")
+		if note != nil {
+			note("lexical index absent — falling back to substring scan; run `okf build-index` for BM25 ranking")
 		}
 		return nil, false, nil
 	}
@@ -54,11 +53,11 @@ func Ranking(root, query string, limit int, filters *where.FindFilters, notify b
 		sql += " LIMIT ?"
 		params = append(params, limit)
 	}
-	rows, err = fetch(root, dbPath, sql, params, limit, residual, filters, notify)
+	rows, err = fetch(root, dbPath, sql, params, limit, residual, filters, note)
 	if err != nil {
 		if sqlstore.IsDatabaseError(err) {
-			if notify {
-				envelope.Note("lexical index unusable — falling back to substring scan")
+			if note != nil {
+				note("lexical index unusable — falling back to substring scan")
 			}
 			return nil, false, nil
 		}
@@ -67,10 +66,10 @@ func Ranking(root, query string, limit int, filters *where.FindFilters, notify b
 	return rows, true, nil
 }
 
-// fetch runs the query, applies the residual filter and, under notify, checks the index for
+// fetch runs the query, applies the residual filter and, when note is set, checks the index for
 // staleness (after the query: a corrupt index must give only the "unusable" note). An error of
 // SQLite comes back as it is.
-func fetch(root, dbPath, sql string, params []any, limit int, residual, filters *where.FindFilters, notify bool) ([]Row, error) {
+func fetch(root, dbPath, sql string, params []any, limit int, residual, filters *where.FindFilters, note func(string)) ([]Row, error) {
 	db, err := sqlstore.Open(dbPath, sqlstore.Read)
 	if err != nil {
 		return nil, err
@@ -106,7 +105,7 @@ func fetch(root, dbPath, sql string, params []any, limit int, residual, filters 
 		return nil, err
 	}
 	cursor.Close() // the staleness check below reads from the same handle
-	if notify {
+	if note != nil {
 		topicsMissing := false
 		if filters.IncludeTopics() {
 			topics, known := IncludesTopics(root)
@@ -118,7 +117,7 @@ func fetch(root, dbPath, sql string, params []any, limit int, residual, filters 
 				return nil, err
 			}
 			if stale {
-				envelope.Note("lexical index is stale (catalogue changed since build) — run `okf build-index`")
+				note("lexical index is stale (catalogue changed since build) — run `okf build-index`")
 			}
 		}
 	}
