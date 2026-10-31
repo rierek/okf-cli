@@ -20,9 +20,9 @@ golden_catalogue := "tests/golden/catalogue"
 default:
     @just --list
 
-# Testsuite (unittest discovery ueber tests/test_*.py); baut vorher das Go-Binary fuer die MCP-Grenztests (tests/test_okf_mcp.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
+# Testsuite: erst die Go-Tests des Moduls (go-test), dann Python (unittest discovery ueber tests/test_*.py); baut vorher das Go-Binary fuer die MCP-Grenztests (tests/test_okf_mcp.py). Die Laufzeit-Abhaengigkeiten kommen aus dem
 # PEP-723-Header von cli/okf-cli.py; mcp ist ein reines Test-Extra. UV_PYTHON waehlt den Interpreter.
-test *ARGS: go-build
+test *ARGS: go-test go-build
     uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py --with mcp python -m unittest {{ if ARGS == "" { "discover -s tests -t . -p 'test_*.py'" } else { ARGS } }}
 
 # Golden-Output-Vergleich (tests/okf_golden.py): --update schreibt die Goldens neu, --cmd prueft eine
@@ -32,6 +32,10 @@ test *ARGS: go-build
 [positional-arguments]
 golden *ARGS:
     uv run --no-project --with-requirements {{cli_dir}}/okf-cli.py python tests/okf_golden.py "$@"
+
+# Go-Tests des Moduls (go/, alle Pakete); die TUI-Frames liegen als Goldens in go/internal/tui/testdata, `go test ./internal/tui -update` schreibt sie neu
+go-test:
+    go test -C {{go_dir}} ./...
 
 # Go-Binary bauen (statisch, ohne cgo) nach go/bin/okf; Abnahme: just golden --cmd go/bin/okf
 go-build:
