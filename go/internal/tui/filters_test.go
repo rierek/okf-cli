@@ -206,6 +206,21 @@ func TestRootSwitchWithoutQueryRunsNothing(t *testing.T) {
 	}
 }
 
+// A root switch while a search runs keeps the running indicator ticking.
+func TestRootSwitchDuringASearchKeepsTheSpinner(t *testing.T) {
+	stateHome(t)
+	m := onFixture(t, 250, 40)
+	running, _ := press(m, "deploy", "enter")
+	if !running.search.running {
+		t.Fatal("no search runs")
+	}
+	tick := running.search.spinner.Tick()
+	next, _ := switchTo(t, running, fixtureRoot(t))
+	if _, cmd := next.Update(tick); cmd == nil {
+		t.Error("the tick chain of the running search ends at the root switch: the spinner freezes")
+	}
+}
+
 // US 2, criterion 4: the root menu offers the configured root and the roots of earlier sessions.
 func TestRootMenuOffersConfiguredAndRememberedRoots(t *testing.T) {
 	stateHome(t)

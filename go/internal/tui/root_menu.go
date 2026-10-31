@@ -136,10 +136,11 @@ func (m model) pickRoot(input string) (tea.Model, tea.Cmd) {
 func (m model) switchRoot(root string) (tea.Model, tea.Cmd) {
 	query, running := m.search.asked, m.search.running
 	m, check := m.setRoot(root)
-	seq := m.search.seq
+	seq, spin := m.search.seq, m.search.spinner
 	m.search = newSearchState()
-	m.search.seq = seq         // a late answer of the old root keeps being dropped
-	m.search.running = running // the spinner of a running search keeps its one tick chain
+	m.search.seq = seq // a late answer of the old root keeps being dropped
+	// a running search keeps its spinner: a new one would drop the ticks of the running chain
+	m.search.running, m.search.spinner = running, spin
 	cmds := []tea.Cmd{check}
 
 	m.filters.loaded = false
