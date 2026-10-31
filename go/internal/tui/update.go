@@ -18,6 +18,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.overlay == overlayText { // the open text box follows the new size
+			m.text.area.SetWidth(m.textWidth())
+			m.text.area.SetHeight(m.textHeight())
+		}
 		return m, nil
 	case toastExpiredMsg:
 		return m.handleToastExpired(msg)
