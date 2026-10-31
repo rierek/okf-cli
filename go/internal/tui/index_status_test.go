@@ -447,3 +447,43 @@ func TestCheckFailureKeepsTheDot(t *testing.T) {
 		t.Errorf("toast = %+v, want a sticky error toast", m.toast)
 	}
 }
+
+// While the start check runs, a refresh does not start (it would race the check), and a check
+// result never clears the busy mark of a refresh that runs: a second refresh stays refused.
+func TestRefreshWaitsForCheckAndCheckKeepsRefreshBusy(t *testing.T) {
+	withFake(t, true)
+	root := fixtureRoot(t)
+
+	early := newModel(root, defaultSettings(), nil)
+	early = leaveField(early)
+	early, _ = press(early, "r")
+	early, _ = press(early, "l")
+	if early.lexical.busy || early.toast == nil || !strings.Contains(early.toast.title, "busy") {
+		t.Fatalf("r l before the start check returned: busy %v toast %+v, want a busy warning and no build",
+			early.lexical.busy, early.toast)
+	}
+
+	m := started(t, root)
+	m, build := m.startLexical()
+	next, _ := m.Update(indexCheckedMsg{root: root, kind: indexLexical, state: indexAbsent})
+	m = next.(model)
+	if !m.lexical.busy {
+		t.Fatal("a check result cleared the busy mark of the running build")
+	}
+	again, againCmd := m.startLexical()
+	if againCmd != nil || !strings.Contains(again.toast.title, "busy") {
+		t.Fatal("a second build started while the first one runs")
+	}
+	m = settle(m, build)
+	if m.lexical.busy || m.lexical.checking || m.lexical.state != indexCurrent {
+		t.Errorf("after the build: %+v, want green and idle", m.lexical)
+	}
+
+	m, sem := m.startSemantic()
+	next, _ = m.Update(indexCheckedMsg{root: root, kind: indexSemantic, state: indexAbsent})
+	m = next.(model)
+	if !m.semantic.busy {
+		t.Fatal("a check result cleared the busy mark of the running embedding")
+	}
+	settle(m, sem)
+}

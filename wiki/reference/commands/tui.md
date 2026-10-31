@@ -52,7 +52,7 @@ The right part of the header shows two labelled dots, one for the lexical (FTS) 
 | red | absent | absent |
 | grey | not checked yet | unavailable: `VOYAGE_API_KEY` is not set |
 
-A half-filled dot (`◐`) means a check or a refresh of that index is running.
+A half-filled dot (`◐`) means a check or a refresh of that index is running; it keeps its colour until the result is in. The dots are half filled from the start until the first check returns. Choosing a refresh while the check or another refresh of the same index is running starts nothing and shows a message; press `r` again when the dot is full.
 
 Press `r` outside the query field and choose:
 

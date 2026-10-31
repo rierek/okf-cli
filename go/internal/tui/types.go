@@ -60,6 +60,7 @@ func newModel(root string, settings Settings, settingsErr error) model {
 	q.PlaceholderStyle = theme.Muted
 	q.Focus()
 	m := model{root: root, settings: settings, focus: focusQuery, query: q}
+	m.lexical.checking, m.semantic.checking = true, true // Init starts both checks
 	if settingsErr != nil {
 		m, _ = m.showToast(toastError, "Invalid [tui] settings, defaults in use", settingsErr.Error(), true)
 	}

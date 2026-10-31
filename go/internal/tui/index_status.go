@@ -67,7 +67,9 @@ func (s indexState) color() lipgloss.Color {
 // indexDot is one dot: its state and whether a check or a refresh of that index is running.
 type indexDot struct {
 	state indexState
-	busy  bool
+	busy  bool // a refresh (or the planning of one) of this index is running
+
+	checking bool // a check is running; a refresh waits for it
 }
 
 // dot returns the dot of kind k for update.
@@ -139,7 +141,7 @@ func (m model) checkIndexes() tea.Cmd {
 // calls it.
 func (m model) setRoot(root string) (model, tea.Cmd) {
 	m.root = root
-	m.lexical, m.semantic = indexDot{}, indexDot{}
+	m.lexical, m.semantic = indexDot{checking: true}, indexDot{checking: true}
 	return m, m.checkIndexes()
 }
 
@@ -149,7 +151,7 @@ func (m model) handleIndexChecked(msg indexCheckedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	d := m.dot(msg.kind)
-	d.busy = false
+	d.checking = false
 	if msg.err != nil {
 		return m.showToast(toastError, "Checking the "+msg.kind.label()+" index failed", msg.err.Error(), true)
 	}
@@ -190,7 +192,7 @@ func (m model) running(k indexKind) (model, tea.Cmd) {
 
 // startLexical rebuilds the FTS index off the UI loop.
 func (m model) startLexical() (model, tea.Cmd) {
-	if m.lexical.busy {
+	if m.lexical.busy || m.lexical.checking {
 		return m.running(indexLexical)
 	}
 	m.lexical.busy = true
@@ -209,7 +211,7 @@ func (m model) startSemanticPlan() (model, tea.Cmd) {
 	if !voyageKeySet() {
 		return m.showToast(toastWarn, "Semantic refresh unavailable", voyageKeyVar+" is not set", false)
 	}
-	if m.semantic.busy {
+	if m.semantic.busy || m.semantic.checking {
 		return m.running(indexSemantic)
 	}
 	m.semantic.busy = true
@@ -243,7 +245,7 @@ func (m model) handleSemanticPlan(msg semanticPlanMsg) (tea.Model, tea.Cmd) {
 
 // startSemantic embeds the missing concepts off the UI loop, after the user confirmed.
 func (m model) startSemantic() (model, tea.Cmd) {
-	if m.semantic.busy {
+	if m.semantic.busy || m.semantic.checking {
 		return m.running(indexSemantic)
 	}
 	m.semantic.busy = true
@@ -273,6 +275,7 @@ func (m model) handleIndexRefreshed(msg indexRefreshedMsg) (tea.Model, tea.Cmd) 
 		ctx = fmt.Sprintf("%d concept(s) stayed unembedded, refresh again", msg.left)
 	}
 	m, toast := m.showToast(kind, title, ctx, false)
+	m.dot(msg.kind).busy, m.dot(msg.kind).checking = false, true
 	return m, tea.Batch(toast, checkIndex(msg.root, msg.kind))
 }
 
@@ -281,7 +284,7 @@ func (m model) handleIndexRefreshed(msg indexRefreshedMsg) (tea.Model, tea.Cmd) 
 func (m model) dots() string {
 	one := func(k indexKind, d indexDot) string {
 		glyph := "●"
-		if d.busy {
+		if d.busy || d.checking {
 			glyph = "◐"
 		}
 		return theme.Muted.Render(k.label()) + " " + lipgloss.NewStyle().Foreground(d.state.color()).Render(glyph)

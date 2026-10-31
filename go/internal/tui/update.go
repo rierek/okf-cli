@@ -40,7 +40,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKey is the key capture order; the first stage that owns the key consumes it:
 //
 //  1. ctrl+c quits at once, from every state.
-//  2. The open overlay (confirm dialog, help) captures every key.
+//  2. The open overlay (confirm dialog, help, refresh dialog) captures every key.
 //  3. A focused text input takes the text keys; only the keys that must work inside a text field
 //     (esc, tab, shift+tab, f1) are handled before it.
 //  4. The global keys: ? help, q quit dialog, tab and shift+tab focus ring, / query field, esc
