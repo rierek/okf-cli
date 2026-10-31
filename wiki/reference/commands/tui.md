@@ -8,7 +8,7 @@ description: "okf tui opens a keyboard-first terminal UI on the catalogue root: 
 `okf tui` opens a keyboard-first terminal UI on the catalogue. Look and keys follow `lif tui`. The command exists only in the Go binary; the Python CLI has no `tui`. It is hidden from `okf --help`, but `okf tui --help` and the call itself work.
 
 :::note
-This page describes the search screen, the filters, the editor, the index dots and the session buffer. The hand-off to an agent pane comes with a later release of the TUI.
+This page describes the search screen, the filters, the editor, the index dots, the session buffer and the hand-off of the buffer. The task about a hit comes with a later release of the TUI.
 :::
 
 ## Start
@@ -105,6 +105,41 @@ The session buffer collects hits across searches and roots, so that you can carr
 - `b` opens the buffer view. It lists the entries in the order they were added, each with title, type, bundle and a `✎` marker when the entry has a note. Below the list, the pane shows path, tags and note of the entry under the cursor.
 - In the buffer view: `j`/`k` move, `x` removes the entry under the cursor, `n` writes its note, `c` clears the whole buffer after a red confirm dialog (`enter` or `y` clears, `esc` or `n` keeps the buffer), and `b` or `esc` goes back to the search.
 
+## Hand-off
+
+`ctrl+s` hands the buffer to an agent, `y` copies it to the clipboard. Both work on the search screen (outside the query field for `y`, which types there) and in the buffer view. In the note text area `ctrl+s` still saves the note. An empty buffer sends and copies nothing; a message says so.
+
+The text is Markdown, one block per entry in buffer order, under the header `Fundstellen aus okf (<n>)`:
+
+```markdown
+Fundstellen aus okf (2)
+
+## Deploy runbook
+@/home/me/Knowledge-Catalogue/handbook/ops/deploy.md
+type: runbook · bundle: handbook · tags: ops, deploy
+Steps to roll out a release.
+
+> check the rollback step first
+
+## Incident review
+@/home/me/Knowledge-Catalogue/handbook/ops/incident.md
+type: note · bundle: handbook
+```
+
+- The line under the path holds type, bundle and tags; a field the entry lacks is left out, so is the description line.
+- The note is a quote under the entry, line by line. An entry without a note has no quote.
+- The path is absolute (`@<path>`), so an agent opens the file from any directory.
+
+`ctrl+s` picks the target from what herdr reports:
+
+1. The pane under the popup (`HERDR_ACTIVE_PANE_ID`) runs an agent: the text goes into that pane, **without Enter**, the pane gets the focus, and the TUI exits. A `working` agent gets the text too.
+2. The pane under the popup runs no agent: a picker lists the agents of `herdr agent list` with agent, status, title and directory; the agents of the current workspace come first. `↑`/`↓` choose, `enter` sends (text, focus, exit as above), `esc` closes the picker. Agents in state `blocked` wait at an approval or question dialog: the picker shows them grey and `enter` on one sends nothing. The same holds for a `blocked` agent under the popup: it is not sent to, and the picker opens.
+3. herdr lists no agent, or the TUI runs outside herdr (no `HERDR_ACTIVE_PANE_ID` and no `HERDR_PANE_ID`): the text goes to the clipboard, the message `no agent found – copied to clipboard` shows, and the TUI stays open.
+
+When herdr fails to take the text, an error message shows and the TUI stays open with its buffer.
+
+The clipboard is set by an OSC 52 escape sequence (also inside tmux and screen) and, where `pbcopy`, `wl-copy`, `xclip` or `xsel` exists, by that tool.
+
 ## Keys
 
 Inside the query field the letter keys type, so `q` and `?` are text there; the header names `f1` for the help. Press `esc` to leave the field, then the global keys work.
@@ -122,6 +157,8 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `space` | In the result list: add the focused hit to the buffer, or remove it. |
 | `n` | In the result list and in the buffer view: write the note of the focused hit or entry. |
 | `b` | In the result list: open the buffer view. In the buffer view: back to the search. |
+| `ctrl+s` | In the result list and in the buffer view: hand the buffer to an agent pane, else to the clipboard. |
+| `y` | In the result list and in the buffer view: copy the buffer to the clipboard. |
 | `x`, `c` | In the buffer view: remove the entry, or clear the buffer after a confirm dialog. |
 | `ctrl+s`, `ctrl+e` | In the note text area: save, or edit the text in the editor. `esc` cancels. |
 | `v`, `V` | Next or previous layout: list and detail, list, detail. |

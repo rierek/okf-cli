@@ -31,6 +31,7 @@ const (
 	overlayText
 	overlayFilterMenu // value menu of the focused filter field
 	overlayRoot       // root menu
+	overlayAgents     // agent picker of the hand-off
 )
 
 // screenKind is the screen under the overlays.
@@ -65,11 +66,13 @@ type model struct {
 	help    helpState     // state of overlayHelp
 	confirm confirmDialog // dialog of overlayConfirm
 	text    textOverlay   // box of overlayText
+	agents  agentPicker   // state of overlayAgents
 
 	lexical, semantic indexDot // the two index dots of the header
 
 	toast           *toastState
 	toastSeqCounter int
+	handoffBusy     bool // a hand-off resolves or sends off the UI loop
 }
 
 // newModel builds the model of the search screen on root: the query field is focused. A non-nil

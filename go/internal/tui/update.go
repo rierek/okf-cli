@@ -41,6 +41,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFileEdited(msg)
 	case textEditedMsg:
 		return m.handleTextEdited(msg)
+	case handoffPickMsg:
+		return m.handleHandoffPick(msg)
+	case handoffSentMsg:
+		return m.handleHandoffSent(msg)
+	case copiedMsg:
+		return m.handleCopied(msg)
 	case spinner.TickMsg:
 		return m.handleSpinner(msg)
 	case tea.KeyMsg:
@@ -87,6 +93,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyFilterMenu(msg)
 	case overlayRoot:
 		return m.keyRoot(msg)
+	case overlayAgents:
+		return m.keyAgents(msg)
+	}
+	if keybind.Matches(msg, keys.Send) {
+		return m.send()
 	}
 	if m.focus == focusQuery {
 		return m.keyQuery(msg)
@@ -96,6 +107,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openHelp(), nil
 	case keybind.Matches(msg, keys.Quit):
 		return m.openConfirm(quitDialog), nil
+	case keybind.Matches(msg, keys.Copy):
+		return m.copyBuffer()
 	case keybind.Matches(msg, keys.Refresh):
 		m.overlay = overlayRefresh
 		return m, nil
