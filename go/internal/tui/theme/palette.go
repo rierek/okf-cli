@@ -1,5 +1,5 @@
-// Copied from lif internal/ui/theme.go at commit 2056715, adapted: only the tones the TUI uses,
-// no CSS generation.
+// Copied from lif internal/ui/theme.go at commit 2056715, adapted: only the tones theme.Apply
+// maps, no CSS generation.
 
 package theme
 
