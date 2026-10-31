@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"nas/volume1/data/git/okf-tools/go/internal/where"
 )
 
 // choose opens the menu of field from the list, flips the values and closes the menu with esc;
@@ -385,12 +387,19 @@ func TestRootSwitchDropsFilterValuesMissingThere(t *testing.T) {
 	}
 }
 
-// Values that are not plain words are quoted.
+// Values that are not plain words are quoted with the quote kind they do not hold, the where
+// compiler takes the result, and a value holding both quote kinds is never offered.
 func TestExpressionQuotesValues(t *testing.T) {
 	f := filterState{}
-	f.selected[fieldTag] = []string{"two words", "it's", "and", "plain-1"}
-	want := `(tag = "two words" or tag = "it's" or tag = "and" or tag = plain-1)`
+	f.selected[fieldTag] = []string{"two words", "it's", "and", "plain-1", `say "hi"`, "x or tag = y"}
+	want := `(tag = "two words" or tag = "it's" or tag = "and" or tag = plain-1 or tag = 'say "hi"' or tag = "x or tag = y")`
 	if got := f.exprText(); got != want {
 		t.Errorf("expression = %q, want %q", got, want)
+	}
+	if _, err := where.CompileWhere(f.expression(), false, nil); err != nil {
+		t.Errorf("the where compiler refuses %q: %v", want, err)
+	}
+	if got := expressible([]string{"plain", `a"b'c`}); !slices.Equal(got, []string{"plain"}) {
+		t.Errorf("expressible = %v, want the value with both quote kinds left out", got)
 	}
 }
