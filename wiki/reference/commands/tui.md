@@ -8,7 +8,7 @@ description: "okf tui opens a keyboard-first terminal UI on the catalogue root: 
 `okf tui` opens a keyboard-first terminal UI on the catalogue. Look and keys follow `lif tui`. The command exists only in the Go binary; the Python CLI has no `tui`. It is hidden from `okf --help`, but `okf tui --help` and the call itself work.
 
 :::note
-This page describes the search screen. The session buffer and the hand-off to an agent pane come with later releases of the TUI.
+This page describes the search screen, the filters, the editor, the index dots and the session buffer. The hand-off to an agent pane comes with a later release of the TUI.
 :::
 
 ## Start
@@ -94,6 +94,17 @@ The editor is the first of these that is set:
 
 A value may carry arguments, for example `code --wait`. The file name is appended as the last argument.
 
+## Session buffer
+
+The session buffer collects hits across searches and roots, so that you can carry a curated selection through the session. It lives only as long as the TUI runs.
+
+- `space` on the focused hit adds it to the buffer; a second `space` removes it. A buffered hit carries a `◆` in the result list. The header shows the number of entries as `buffer N`.
+- A file is one entry. The identity is the absolute path with symlinks resolved, so the same file found by a later search, or under another spelling of the root (a symlink, a trailing slash), shows as buffered and is never added twice.
+- The buffer keeps its entries across new searches, and across a change of the root. Every entry keeps a snapshot of title, absolute path, type, bundle, tags and description, so it survives a root change. Editing a buffered hit with `e` refreshes its snapshot.
+- `n` opens a text area for the note of the focused hit. A hit that is not buffered yet joins the buffer when you save a note that is not empty. `ctrl+s` saves, `esc` cancels, `ctrl+e` opens the text in the editor and puts the edited text back into the text area when the editor exits. Enter starts a new line. Saving an empty note removes the note and keeps the entry.
+- `b` opens the buffer view. It lists the entries in the order they were added, each with title, type, bundle and a `✎` marker when the entry has a note. Below the list, the pane shows path, tags and note of the entry under the cursor.
+- In the buffer view: `j`/`k` move, `x` removes the entry under the cursor, `n` writes its note, `c` clears the whole buffer after a red confirm dialog (`enter` or `y` clears, `esc` or `n` keeps the buffer), and `b` or `esc` goes back to the search.
+
 ## Keys
 
 Inside the query field the letter keys type, so `q` and `?` are text there; the header names `f1` for the help. Press `esc` to leave the field, then the global keys work.
@@ -108,6 +119,11 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `j`, `k`, `↓`, `↑` | In the result list: focus the next or previous hit. |
 | `g`, `G` | In the result list: first or last hit. |
 | `e` | In the result list: open the focused hit in the editor. |
+| `space` | In the result list: add the focused hit to the buffer, or remove it. |
+| `n` | In the result list and in the buffer view: write the note of the focused hit or entry. |
+| `b` | In the result list: open the buffer view. In the buffer view: back to the search. |
+| `x`, `c` | In the buffer view: remove the entry, or clear the buffer after a confirm dialog. |
+| `ctrl+s`, `ctrl+e` | In the note text area: save, or edit the text in the editor. `esc` cancels. |
 | `v`, `V` | Next or previous layout: list and detail, list, detail. |
 | `ctrl+d`, `ctrl+u` | Scroll the detail pane down or up. |
 | `/` | Focus the query field. |

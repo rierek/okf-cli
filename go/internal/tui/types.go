@@ -28,8 +28,17 @@ const (
 	overlayHelp
 	overlayConfirm
 	overlayRefresh
+	overlayText
 	overlayFilterMenu // value menu of the focused filter field
 	overlayRoot       // root menu
+)
+
+// screenKind is the screen under the overlays.
+type screenKind int
+
+const (
+	screenSearch screenKind = iota // query field, result list, detail pane
+	screenBuffer                   // the session buffer
 )
 
 // model is the whole state of the TUI. Bubble Tea copies it on every message, so it holds values
@@ -45,12 +54,17 @@ type model struct {
 	search searchState
 	layout layoutMode
 
+	screen    screenKind
+	buf       buffer // the session buffer: kept across searches, filter changes and root changes
+	bufCursor int    // entry under the cursor of screenBuffer
+
 	filters  filterState
 	rootMenu rootMenu // state of overlayRoot
 
 	overlay overlayKind
 	help    helpState     // state of overlayHelp
 	confirm confirmDialog // dialog of overlayConfirm
+	text    textOverlay   // box of overlayText
 
 	lexical, semantic indexDot // the two index dots of the header
 

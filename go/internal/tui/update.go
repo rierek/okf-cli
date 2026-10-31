@@ -20,6 +20,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.overlay == overlayText { // the open text box follows the new size
+			m.text.area.SetWidth(m.textWidth())
+			m.text.area.SetHeight(m.textHeight())
+		}
 		return m, nil
 	case toastExpiredMsg:
 		return m.handleToastExpired(msg)
@@ -35,10 +39,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSearchDone(msg)
 	case fileEditedMsg:
 		return m.handleFileEdited(msg)
+	case textEditedMsg:
+		return m.handleTextEdited(msg)
 	case spinner.TickMsg:
 		return m.handleSpinner(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+	}
+	if m.overlay == overlayText { // cursor blink ticks of the text area
+		var cmd tea.Cmd
+		m.text.area, cmd = m.text.area.Update(msg)
+		return m, cmd
 	}
 	if m.focus == focusQuery { // cursor blink ticks
 		var cmd tea.Cmd
@@ -51,7 +62,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKey is the key capture order; the first stage that owns the key consumes it:
 //
 //  1. ctrl+c quits at once, from every state.
-//  2. The open overlay (confirm dialog, help, refresh dialog) captures every key.
+//  2. The open overlay (confirm dialog, help, refresh dialog, text box) captures every key.
 //  3. A focused text input takes the text keys; only the keys that must work inside a text field
 //     (esc, tab, shift+tab, f1) are handled before it.
 //  4. The global keys: ? help, q quit dialog, tab and shift+tab focus ring, / query field, esc
@@ -70,6 +81,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyHelp(msg)
 	case overlayRefresh:
 		return m.keyRefresh(msg)
+	case overlayText:
+		return m.keyText(msg)
 	case overlayFilterMenu:
 		return m.keyFilterMenu(msg)
 	case overlayRoot:
@@ -86,19 +99,22 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, keys.Refresh):
 		m.overlay = overlayRefresh
 		return m, nil
-	case keybind.Matches(msg, keys.Filter):
+	case keybind.Matches(msg, keys.Filter) && m.screen == screenSearch:
 		m.filters.field = fieldRoot
 		return m.setFocus(focusFilter)
-	case keybind.Matches(msg, keys.FilterClear):
+	case keybind.Matches(msg, keys.FilterClear) && m.screen == screenSearch:
 		return m.clearFilters()
-	case keybind.Matches(msg, keys.FocusIn):
+	case keybind.Matches(msg, keys.FocusIn) && m.screen == screenSearch:
 		return m.stepFocus(1)
-	case keybind.Matches(msg, keys.FocusOut):
+	case keybind.Matches(msg, keys.FocusOut) && m.screen == screenSearch:
 		return m.stepFocus(-1)
-	case keybind.Matches(msg, keys.Search):
+	case keybind.Matches(msg, keys.Search) && m.screen == screenSearch:
 		return m.setFocus(focusQuery)
 	case keybind.Matches(msg, keys.Back) && m.escDismissesToast():
 		return m.dismissToast()
+	}
+	if m.screen == screenBuffer {
+		return m.keyBuffer(msg)
 	}
 	if m.focus == focusFilter {
 		return m.keyFilterBar(msg)
@@ -106,6 +122,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.focus == focusList {
 		if keybind.Matches(msg, keys.Edit) && m.search.focused() != nil {
 			return m, m.openInEditor(m.search.focused().Abs)
+		}
+		if next, cmd, ok := m.keyBufferHit(msg); ok {
+			return next, cmd
 		}
 		next, _ := m.keyList(msg)
 		return next, nil

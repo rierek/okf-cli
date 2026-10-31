@@ -27,6 +27,7 @@ type searchState struct {
 	ran    bool   // a search has finished: an empty list means "no hits", not "no search yet"
 	query  string // the query the hits answer
 	hits   []find.Hit
+	ids    []string // fileID of every hit, in order: the identity the buffer matches on
 	cursor int
 
 	headings     []catalogue.Heading // H2 and H3 of the focused hit, in document order
@@ -100,6 +101,7 @@ func (m model) handleSearchDone(msg searchDoneMsg) (model, tea.Cmd) {
 	}
 	m.search.ran, m.search.query = true, msg.query
 	m.search.hits, m.search.cursor = msg.result.Hits, 0
+	m.search.ids = hitIDs(m.search.hits)
 	m = m.focusHit()
 	if w := msg.result.Warnings; len(w) > 0 {
 		return m.showToast(toastWarn, w[0], strings.Join(w[1:], " · "), false)
@@ -184,6 +186,7 @@ func (m model) handleFileEdited(msg fileEditedMsg) (model, tea.Cmd) {
 		if fresh, reloadErr = find.Reload(m.root, m.search.hits[i], m.search.query); reloadErr == nil {
 			m.search.hits = slices.Clone(m.search.hits) // earlier copies of the model keep their list
 			m.search.hits[i] = fresh
+			m.buf = m.buf.refresh(entryOf(fresh))
 			if i == m.search.cursor {
 				scroll := m.search.detailScroll
 				m = m.focusHit()
