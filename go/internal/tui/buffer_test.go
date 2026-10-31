@@ -455,3 +455,98 @@ func TestBufferGoldens(t *testing.T) {
 	m, _ = press(m, "c")
 	assertGolden(t, "buffer_clear_confirm", m)
 }
+
+// Criterion 4 with a real filter change: the menu choice reruns the search, the buffer is
+// unchanged and the buffered hits that the new list still holds keep their mark.
+func TestBufferSurvivesFilterChange(t *testing.T) {
+	stateHome(t)
+	_, m := search(t, onFixture(t, 200, 40), "the")
+	if len(m.search.hits) < 3 {
+		t.Fatalf("%d hits for the query: the test needs several", len(m.search.hits))
+	}
+	m = addHits(t, m, 0, 2)
+	want := m.buf.Entries()
+	typ := m.search.hits[0].Type
+
+	m, cmd := choose(t, m, fieldType, typ)
+	if cmd == nil {
+		t.Fatal("the filter choice started no search")
+	}
+	before := len(m.search.hits)
+	m = settle(t, m, cmd)
+	if len(m.search.hits) == 0 || len(m.search.hits) >= before {
+		t.Fatalf("filtered list has %d hits, want some, fewer than the %d before", len(m.search.hits), before)
+	}
+	if got := m.buf.Entries(); !slices.EqualFunc(got, want, func(a, b bufferEntry) bool { return a.id == b.id && a.Note == b.Note }) {
+		t.Errorf("buffer after the filter change = %+v, want %+v", got, want)
+	}
+	marked := 0
+	for i, h := range m.search.hits {
+		in := slices.ContainsFunc(want, func(e bufferEntry) bool { return e.id == fileID(h.Abs) })
+		if m.buffered(i) != in {
+			t.Errorf("hit %s: buffered = %v, want %v", h.Path, m.buffered(i), in)
+		}
+		if in {
+			marked++
+		}
+	}
+	if marked == 0 {
+		t.Fatal("no buffered hit survives the filter: the test proves nothing about the marks")
+	}
+	if got := strings.Count(m.View(), "◆"); got != marked {
+		t.Errorf("view shows %d marks, want %d:\n%s", got, marked, m.View())
+	}
+	if !strings.Contains(m.header(m.width-2), "buffer 2") {
+		t.Errorf("header count after the filter change: %s", m.header(m.width-2))
+	}
+}
+
+// Criterion 4 with a root switch through the root menu: the entries stay, the other root's hits
+// are other files and unmarked, and switching back marks the file again.
+func TestBufferSurvivesRootSwitchThroughRootMenu(t *testing.T) {
+	stateHome(t)
+	_, m := search(t, onFixture(t, 250, 40), "deploy")
+	first := m.root
+	m = addHits(t, m, 0)
+	want := m.buf.Entries()
+
+	other := fixtureRoot(t)
+	m, cmd := switchTo(t, m, other)
+	if m.root != other {
+		t.Fatalf("root = %q, want %q", m.root, other)
+	}
+	m = settle(t, m, cmd)
+	if len(m.search.hits) == 0 || !strings.HasPrefix(m.search.hits[0].Abs, other) {
+		t.Fatalf("hits after the switch = %v, want hits of %s", hitPaths(m), other)
+	}
+	if got := m.buf.Entries(); len(got) != 1 || got[0].id != want[0].id || got[0].Abs != want[0].Abs {
+		t.Errorf("buffer after the root switch = %+v, want %+v", got, want)
+	}
+	if strings.Contains(m.View(), "◆") || !strings.Contains(m.header(m.width-2), "buffer 1") {
+		t.Errorf("the other root's files are marked, or the count is gone:\n%s", m.View())
+	}
+
+	m, cmd = switchTo(t, m, first)
+	m = settle(t, m, cmd)
+	if len(m.search.hits) == 0 || !m.buffered(0) || len(m.buf.entries) != 1 {
+		t.Errorf("back on the first root: buffered(0) = %v, entries = %d", m.buffered(0), len(m.buf.entries))
+	}
+}
+
+// space and n with an empty result list, before and after a search without hits, do nothing.
+func TestBufferKeysWithoutHitsDoNothing(t *testing.T) {
+	fresh, _ := press(onFixture(t, 100, 30), "esc") // focus on the list, no search yet
+	_, noHits := search(t, onFixture(t, 100, 30), "zzzzqqqq")
+	if len(noHits.search.hits) != 0 || !noHits.search.ran {
+		t.Fatalf("hits for the nonsense query: %v", hitPaths(noHits))
+	}
+	for name, m := range map[string]model{"no search": fresh, "no hits": noHits} {
+		if m.focus != focusList {
+			t.Fatalf("%s: focus = %v, want the list", name, m.focus)
+		}
+		got, cmd := press(m, " ", "n")
+		if len(got.buf.entries) != 0 || got.overlay != overlayNone || cmd != nil {
+			t.Errorf("%s: buffer %+v, overlay %v, cmd %v; want nothing to happen", name, got.buf.entries, got.overlay, cmd != nil)
+		}
+	}
+}
