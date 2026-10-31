@@ -219,7 +219,7 @@ accent = "#cba6f7"  # #rrggbb for cursor and header; empty: the theme's accent
 
 An invalid section does not stop the TUI. The TUI starts with the default settings and shows a red message that names the config file and the reason, for example an unknown theme, an accent that is not `#rrggbb`, or a value of the wrong type. Press `esc` outside the query field to dismiss it. A popup closes when the program exits, so an error on stderr would vanish before you read it; this is why the message is part of the screen.
 
-A terminal with 256 colours (or 16) shows every coloured tone of the theme in its own hue: red stays red. Grey tones (text, borders, backgrounds) may turn grey. A root path that is too long for the header shows its end behind `…`, so the header stays one line. The root menu lists a directory once, even if the config and the state file spell it differently (for example `/tmp/x` and `/private/tmp/x`).
+A terminal with 256 colours shows every coloured tone of the theme in its own hue: red stays red. Grey tones (text, borders, backgrounds) may turn grey. A root path that is too long for the header shows its end behind `…`, so the header stays one line. The root menu lists a directory once, even if the config and the state file spell it differently (for example `/tmp/x` and `/private/tmp/x`).
 
 ### `[tui.tracker]`: where maintenance tasks go
 

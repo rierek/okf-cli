@@ -22,9 +22,9 @@ func hueDiff(a, b float64) float64 {
 // Under a 256-colour profile every chromatic tone of every flavour keeps its hue family and is
 // never a grey; latte red stays red (termenv alone maps it to #080808).
 func TestChromaticTonesKeepHueOn256Colours(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer Apply(palettes["mocha"]) // runs last, under the restored profile
 	defer lipgloss.SetColorProfile(termenv.Ascii)
-	defer Apply(palettes["mocha"])
+	lipgloss.SetColorProfile(termenv.ANSI256)
 
 	for _, name := range Names {
 		p := palettes[name]
@@ -56,9 +56,9 @@ func TestChromaticTonesKeepHueOn256Colours(t *testing.T) {
 
 // Truecolor keeps the palette value.
 func TestTruecolorKeepsHex(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer Apply(palettes["mocha"]) // runs last, under the restored profile
 	defer lipgloss.SetColorProfile(termenv.Ascii)
-	defer Apply(palettes["mocha"])
+	lipgloss.SetColorProfile(termenv.TrueColor)
 	Apply(palettes["latte"])
 	if Red != lipgloss.Color("#d20f39") {
 		t.Errorf("latte red = %v, want #d20f39", Red)

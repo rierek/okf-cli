@@ -116,7 +116,10 @@ func (m model) header(innerW int) string {
 	room := innerW - lipgloss.Width(right) - lipgloss.Width("> : "+title) - 1
 	root := m.root
 	if w := lipgloss.Width(root); room >= 1 && w > room {
-		root = ansi.TruncateLeft(root, w-room+1, "…")
+		// A wide cluster on the cut stays whole, so cut one cell more until the root fits.
+		for cut := w - room + 1; lipgloss.Width(root) > room; cut++ {
+			root = ansi.TruncateLeft(m.root, cut, "…")
+		}
 	}
 	return breadcrumb(root, title, right, innerW)
 }

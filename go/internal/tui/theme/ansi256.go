@@ -9,13 +9,13 @@ import (
 )
 
 // accentColor is the colour for a chromatic #rrggbb tone under the terminal's colour profile. A
-// 256- or 16-colour terminal gets the nearest colour of the 6x6x6 cube, never a grey: termenv's
-// own conversion sends some saturated tones to the grey ramp (latte red #d20f39 becomes #080808).
-// Truecolor and Ascii keep the hex value. Neutral tones (text, overlay, base, surface) skip this
-// and may map to grey.
+// 256-colour terminal gets the nearest colour of the 6x6x6 cube, never a grey: termenv's own
+// conversion sends some saturated tones to the grey ramp (latte red #d20f39 becomes #080808).
+// Other profiles keep the hex value. Neutral tones (text, overlay, base, surface) skip this and
+// may map to grey.
 func accentColor(hex string) lipgloss.Color {
 	switch lipgloss.ColorProfile() {
-	case termenv.ANSI256, termenv.ANSI:
+	case termenv.ANSI256:
 		if i, ok := cubeIndex(hex); ok {
 			return lipgloss.Color(strconv.Itoa(i))
 		}
