@@ -73,7 +73,7 @@ func (m model) footerBindings() []keybind.Binding {
 		{keys.BufferToggle, hit},
 		{keys.Note, hit},
 		{keys.Buffer, m.focus == focusList},
-		{keys.Send, !m.inInput() && len(m.buf.entries) > 0},
+		{keys.Send, len(m.buf.entries) > 0},
 		{keys.Copy, !m.inInput() && len(m.buf.entries) > 0},
 		{keys.FocusIn, len(focusRing) > 1},
 		{keys.FocusOut, len(focusRing) > 1},

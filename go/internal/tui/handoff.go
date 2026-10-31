@@ -24,8 +24,8 @@ import (
 // where it types nothing. An empty buffer sends and copies nothing.
 //
 // herdr is called as a subprocess, off the UI loop, with the export as one argv element (no
-// shell). Its CLI answers `{"id":…,"result":…}` or `{"id":…,"error":{"code","message"}}`, the
-// error with exit status 0.
+// shell). Its CLI answers `{"id":…,"result":…}` on stdout; an error is `{"id":…,"error":{…}}` on
+// stderr with exit status 1 (herdr 0.9.1, seen for `pane get` and `agent focus` of an unknown pane).
 
 // copyToClipboard writes the text to the clipboard; tests replace it.
 var copyToClipboard = clip.Copy
@@ -65,9 +65,9 @@ type copiedMsg struct {
 	err   error
 }
 
-// herdrCall runs `herdr args...` and returns the result of its JSON answer. A failed process and
-// an error answer are errors; an answer that is not JSON counts as success when the exit status
-// is 0.
+// herdrCall runs `herdr args...` and returns the result of its JSON answer. A failed process is an
+// error that carries its stderr; an answer that is not JSON counts as success when the exit
+// status is 0.
 func herdrCall(args ...string) (json.RawMessage, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -81,14 +81,8 @@ func herdrCall(args ...string) (json.RawMessage, error) {
 	}
 	var answer struct {
 		Result json.RawMessage `json:"result"`
-		Error  *struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
 	}
-	if json.Unmarshal(out, &answer) == nil && answer.Error != nil {
-		return nil, fmt.Errorf("herdr %s: %s", strings.Join(args[:min(len(args), 2)], " "), answer.Error.Message)
-	}
+	_ = json.Unmarshal(out, &answer)
 	return answer.Result, nil
 }
 

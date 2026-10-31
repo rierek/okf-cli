@@ -23,11 +23,13 @@ func fakeHerdr(t *testing.T, paneJSON, agentsJSON string) herdrFixture {
 	dir := t.TempDir()
 	script := `#!/bin/sh
 { printf '%s\037' "$@"; printf '\036'; } >> "` + dir + `/log"
+if [ -e "` + dir + `/down" ]; then echo '{"id":"x","error":{"code":"down","message":"herdr down"}}' >&2; exit 1; fi
 case "$1 $2" in
 "pane get") cat "` + dir + `/pane.json" ;;
 "agent list") cat "` + dir + `/agents.json" ;;
 *) if [ -e "` + dir + `/fail" ]; then
-     echo '{"id":"x","error":{"code":"pane_not_found","message":"pane gone"}}'
+     echo '{"id":"x","error":{"code":"pane_not_found","message":"pane gone"}}' >&2
+     exit 1
    else
      echo '{"id":"x","result":{}}'
    fi ;;
@@ -79,9 +81,14 @@ func (f herdrFixture) writes(t *testing.T) [][]string {
 	return out
 }
 
-func (f herdrFixture) fail(t *testing.T) {
+// fail makes send-text and focus fail; down makes every call fail. A failing call writes its
+// error to stderr and exits 1, as herdr does.
+func (f herdrFixture) fail(t *testing.T) { t.Helper(); f.marker(t, "fail") }
+func (f herdrFixture) down(t *testing.T) { t.Helper(); f.marker(t, "down") }
+
+func (f herdrFixture) marker(t *testing.T, name string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(f.dir, "fail"), nil, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(f.dir, name), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -333,8 +340,9 @@ func TestNoAgentCopiesToTheClipboard(t *testing.T) {
 			return fakeHerdr(t, noAgentPane, `{"id":"x","result":{"type":"agent_list","agents":[]}}`)
 		},
 		"herdr fails": func(t *testing.T) herdrFixture {
-			return fakeHerdr(t, `{"id":"x","error":{"code":"pane_not_found","message":"gone"}}`,
-				`{"id":"x","error":{"code":"x","message":"y"}}`)
+			f := fakeHerdr(t, noAgentPane, listed)
+			f.down(t)
+			return f
 		},
 	}
 	for name, setup := range cases {
@@ -439,5 +447,44 @@ func TestCtrlSInTheTextBoxSavesTheNote(t *testing.T) {
 	m, _ = ctrlS(m)
 	if m.overlay != overlayNone || m.buf.entries[0].Note != "hello" || len(f.calls(t)) != 0 {
 		t.Errorf("overlay = %v, note = %q, herdr calls = %q", m.overlay, m.buf.entries[0].Note, f.calls(t))
+	}
+}
+
+// A TUI in a plain herdr pane has no HERDR_ACTIVE_PANE_ID: its own pane, HERDR_PANE_ID, is the
+// one asked, and it runs no agent, so the picker opens.
+func TestOwnPaneIsAskedWithoutAnActivePane(t *testing.T) {
+	f := fakeHerdr(t, noAgentPane, listed)
+	t.Setenv("HERDR_ACTIVE_PANE_ID", "")
+	t.Setenv("HERDR_PANE_ID", "wA:p9")
+	m, cmd := ctrlS(buffered(t))
+	m, _ = answer(t, m, cmd)
+	calls := f.calls(t)
+	if m.overlay != overlayAgents || len(calls) < 1 || fmt.Sprint(calls[0]) != "[pane get wA:p9]" {
+		t.Errorf("overlay = %v, calls = %q: want `pane get wA:p9`, then the picker", m.overlay, calls)
+	}
+}
+
+// A second ctrl+s while the first resolves starts nothing; the answer frees the key again.
+func TestSecondCtrlSWhileResolvingIsIgnored(t *testing.T) {
+	f := fakeHerdr(t, noAgentPane, listed)
+	m, cmd := ctrlS(buffered(t))
+	m, again := ctrlS(m)
+	if again != nil || m.toast != nil {
+		t.Errorf("second ctrl+s: cmd = %v, toast = %+v", again != nil, m.toast)
+	}
+	m, _ = answer(t, m, cmd)
+	if m.handoffBusy || m.overlay != overlayAgents {
+		t.Errorf("busy = %v, overlay = %v after the answer", m.handoffBusy, m.overlay)
+	}
+	if n := len(f.calls(t)); n != 2 { // one pane get, one agent list
+		t.Errorf("herdr calls = %q, want one resolution", f.calls(t))
+	}
+}
+
+// ctrl+s sends from the query field too, so the footer names it there once the buffer has entries.
+func TestFooterNamesCtrlSInTheQueryField(t *testing.T) {
+	m, _ := press(buffered(t), "/")
+	if !strings.Contains(m.View(), "ctrl+s") {
+		t.Errorf("footer lacks ctrl+s in the query field:\n%s", m.View())
 	}
 }
