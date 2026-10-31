@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"nas/volume1/data/git/okf-tools/go/internal/find"
 	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
 )
 
@@ -93,19 +92,28 @@ func (m model) listPane(outerW, innerH int) string {
 	rowW := max(outerW-6, 1) // border, the cursor mark, and the margin renderPane keeps
 	rows := make([]string, len(s.hits))
 	for i, h := range s.hits {
-		rows[i] = hitRow(h, rowW)
+		rows[i] = listRow(bufferMark(m.buffered(i)), h.Title, h.Type, h.Bundle, rowW)
 	}
 	start := windowStart(len(rows), innerH, s.cursor)
 	return renderPane(pane{rows: windowAround(rows, innerH, s.cursor), cursor: s.cursor - start, isList: true}, outerW-2, innerH, m.focus == focusList)
 }
 
-// hitRow is one list row: the title, then type and bundle dimmed.
-func hitRow(h find.Hit, w int) string {
-	meta := truncate(h.Type+" · "+h.Bundle, max(w/2, 1))
+// bufferMark is the two-cell mark of a list row that is in the buffer.
+func bufferMark(buffered bool) string {
+	if buffered {
+		return theme.Accent.Render("◆ ")
+	}
+	return "  "
+}
+
+// listRow is one list row: the two-cell mark, the title, then type and bundle dimmed.
+func listRow(mark, title, typ, bundle string, w int) string {
+	w -= 2
+	meta := truncate(typ+" · "+bundle, max(w/2, 1))
 	titleW := max(w-ansi.StringWidth(meta)-2, 1)
-	title := truncate(h.Title, titleW)
+	title = truncate(title, titleW)
 	pad := strings.Repeat(" ", max(titleW-ansi.StringWidth(title), 0)+2)
-	return title + pad + theme.Muted.Render(meta)
+	return mark + title + pad + theme.Muted.Render(meta)
 }
 
 // detailPane shows the focused hit, scrolled by the user.

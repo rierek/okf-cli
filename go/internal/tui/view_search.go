@@ -18,7 +18,11 @@ var toastDismissHint = keybind.NewBinding(keybind.WithKeys("esc"), keybind.WithH
 // View renders the screen, the open overlay over it and the toast over both.
 func (m model) View() string {
 	w, h := m.size()
-	return m.renderToast(m.composeOverlays(m.viewSearch(w, h), w, h))
+	screen := m.viewSearch(w, h)
+	if m.screen == screenBuffer {
+		screen = m.viewBuffer(w, h)
+	}
+	return m.renderToast(m.composeOverlays(screen, w, h))
 }
 
 // composeOverlays draws the open overlay centered over the screen.
@@ -30,26 +34,50 @@ func (m model) composeOverlays(out string, w, h int) string {
 		out = placeOverlay(out, m.confirmBox(), w, h)
 	case overlayRefresh:
 		out = placeOverlay(out, m.refreshBox(), w, h)
+	case overlayText:
+		out = placeOverlay(out, m.textBox(), w, h)
 	}
 	return out
 }
 
 // footerBindings are the key hints of the footer: the keys that act in the current state.
 func (m model) footerBindings() []keybind.Binding {
-	cands := []struct {
-		b   keybind.Binding
-		act bool
-	}{
+	if m.screen == screenBuffer {
+		n := len(m.buf.entries)
+		return pick([]binding{
+			{toastDismissHint, m.escDismissesToast()},
+			{keys.Down, n > 0},
+			{keys.Note, n > 0},
+			{keys.BufferDrop, n > 0},
+			{keys.BufferClear, n > 0},
+			{keys.BufferBack, true},
+		})
+	}
+	hit := m.focus == focusList && m.search.focused() != nil
+	return pick([]binding{
 		{toastDismissHint, m.escDismissesToast()},
 		{keys.Run, m.inInput()},
 		{keys.Down, !m.inInput() && len(m.search.hits) > 0},
 		{keys.Layout, !m.inInput()},
-		{keys.Edit, m.focus == focusList && m.search.focused() != nil},
+		{keys.Edit, hit},
+		{keys.Toggle, hit},
+		{keys.Note, hit},
+		{keys.Buffer, m.focus == focusList},
 		{keys.FocusIn, len(focusRing) > 1},
 		{keys.FocusOut, len(focusRing) > 1},
 		{keys.Search, !m.inInput()},
 		{keys.Refresh, !m.inInput()},
-	}
+	})
+}
+
+// binding is a key hint and whether it acts in the current state.
+type binding struct {
+	b   keybind.Binding
+	act bool
+}
+
+// pick keeps the hints that act.
+func pick(cands []binding) []keybind.Binding {
 	var out []keybind.Binding
 	for _, c := range cands {
 		if c.act {
@@ -59,10 +87,14 @@ func (m model) footerBindings() []keybind.Binding {
 	return out
 }
 
-// header is the first line: the active root and the screen title at the left, the global key
-// hints at the right.
+// header is the first line: the active root and the screen title at the left, the buffer count,
+// the index dots and the global key hints at the right.
 func (m model) header(innerW int) string {
-	return breadcrumb(m.root, "Search", m.dots()+"  "+renderBindings(globalBindings(m.inInput())), innerW)
+	title := "Search"
+	if m.screen == screenBuffer {
+		title = "Buffer"
+	}
+	return breadcrumb(m.root, title, m.dots()+"  "+m.bufferCount()+"  "+renderBindings(globalBindings(m.inInput())), innerW)
 }
 
 // chrome is the frame around the body: the header, the footer and the rows left for the body

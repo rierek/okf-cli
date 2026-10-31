@@ -5,6 +5,8 @@
 package tui
 
 import (
+	"fmt"
+
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -19,6 +21,7 @@ type confirmKind int
 const (
 	confirmQuit confirmKind = iota
 	confirmSemanticRefresh
+	confirmClearBuffer
 )
 
 // confirmDialog describes one confirm dialog. A destructive one gets a red border and title.
@@ -32,6 +35,14 @@ type confirmDialog struct {
 
 // quitDialog is the dialog of `q`.
 var quitDialog = confirmDialog{kind: confirmQuit, title: "Quit?", body: "Really quit okf?", yes: "quit"}
+
+// clearBufferDialog is the red dialog of `c` in the buffer view.
+func clearBufferDialog(n int) confirmDialog {
+	return confirmDialog{
+		kind: confirmClearBuffer, title: "Clear buffer?", yes: "clear", destructive: true,
+		body: fmt.Sprintf("Remove all %d entries and their notes?", n),
+	}
+}
 
 // openConfirm shows d, replacing any other overlay: there is one overlay at a time.
 func (m model) openConfirm(d confirmDialog) model {
@@ -59,6 +70,8 @@ func (m model) runConfirm(kind confirmKind) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case confirmSemanticRefresh:
 		return m.startSemantic()
+	case confirmClearBuffer:
+		m.buf, m.bufCursor = buffer{}, 0
 	}
 	return m, nil
 }
