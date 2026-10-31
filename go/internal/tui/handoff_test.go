@@ -109,8 +109,8 @@ func ctrlS(m model) (model, tea.Cmd) {
 	return next.(model), cmd
 }
 
-// answer runs the command cmd stands for: the one answer goes back into the model.
-func answer(t *testing.T, m model, cmd tea.Cmd) (model, tea.Cmd) {
+// handoffAnswer runs the command cmd stands for: the one answer goes back into the model.
+func handoffAnswer(t *testing.T, m model, cmd tea.Cmd) (model, tea.Cmd) {
 	t.Helper()
 	if cmd == nil {
 		t.Fatal("no command")
@@ -200,7 +200,7 @@ func TestCtrlSSendsToTheAgentUnderThePopup(t *testing.T) {
 			if m.overlay != overlayNone {
 				t.Errorf("the picker opened for an agent pane")
 			}
-			_, follow := answer(t, m, cmd)
+			_, follow := handoffAnswer(t, m, cmd)
 			if !quits(follow) {
 				t.Error("the TUI did not exit after the send")
 			}
@@ -222,7 +222,7 @@ func TestCtrlSSendsToTheAgentUnderThePopup(t *testing.T) {
 func TestCtrlSOpensThePickerWithTheCurrentWorkspaceFirst(t *testing.T) {
 	f := fakeHerdr(t, noAgentPane, listed)
 	m, cmd := ctrlS(buffered(t))
-	m, _ = answer(t, m, cmd)
+	m, _ = handoffAnswer(t, m, cmd)
 	if m.overlay != overlayAgents {
 		t.Fatalf("overlay = %v, want the agent picker:\n%s", m.overlay, m.View())
 	}
@@ -249,7 +249,7 @@ func TestCtrlSOpensThePickerWithTheCurrentWorkspaceFirst(t *testing.T) {
 func TestPickingAnAgentSendsToIt(t *testing.T) {
 	f := fakeHerdr(t, noAgentPane, listed)
 	m, cmd := ctrlS(buffered(t))
-	m, _ = answer(t, m, cmd)
+	m, _ = handoffAnswer(t, m, cmd)
 	if m.agents.cursor != 1 {
 		t.Fatalf("cursor = %d, want 1: the first agent is blocked", m.agents.cursor)
 	}
@@ -258,7 +258,7 @@ func TestPickingAnAgentSendsToIt(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter sent nothing")
 	}
-	_, follow := answer(t, m, cmd)
+	_, follow := handoffAnswer(t, m, cmd)
 	if !quits(follow) {
 		t.Error("the TUI did not exit after the send")
 	}
@@ -275,7 +275,7 @@ func TestPickingAnAgentSendsToIt(t *testing.T) {
 func TestPickerEscSendsNothing(t *testing.T) {
 	f := fakeHerdr(t, noAgentPane, listed)
 	m, cmd := ctrlS(buffered(t))
-	m, _ = answer(t, m, cmd)
+	m, _ = handoffAnswer(t, m, cmd)
 	m, cmd = press(m, "esc")
 	if m.overlay != overlayNone || cmd != nil || len(f.writes(t)) != 0 {
 		t.Errorf("overlay = %v, cmd = %v, writes = %q", m.overlay, cmd != nil, f.writes(t))
@@ -289,7 +289,7 @@ func TestBlockedAgentIsGreyAndNotSentTo(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
 	m, cmd := ctrlS(buffered(t))
-	m, _ = answer(t, m, cmd)
+	m, _ = handoffAnswer(t, m, cmd)
 	var blocked, free string
 	for _, l := range strings.Split(m.View(), "\n") {
 		if strings.Contains(l, "waits for approval") {
@@ -321,7 +321,7 @@ func TestBlockedAgentIsGreyAndNotSentTo(t *testing.T) {
 	blockedPane := strings.Replace(agentPane, `"working"`, `"blocked"`, 1)
 	fakeHerdr(t, blockedPane, listed)
 	m, cmd = ctrlS(buffered(t))
-	m, _ = answer(t, m, cmd)
+	m, _ = handoffAnswer(t, m, cmd)
 	if m.overlay != overlayAgents {
 		t.Errorf("a blocked agent under the popup got the text:\n%s", m.View())
 	}
@@ -352,7 +352,7 @@ func TestNoAgentCopiesToTheClipboard(t *testing.T) {
 			m, _ := press(buffered(t), "/") // from the query field, where ctrl+s types nothing
 			want := exportText(m.buf.Entries())
 			m, cmd := ctrlS(m)
-			m, follow := answer(t, m, cmd)
+			m, follow := handoffAnswer(t, m, cmd)
 			if quits(follow) {
 				t.Error("the TUI exited")
 			}
@@ -380,7 +380,7 @@ func TestYCopiesTheExport(t *testing.T) {
 		}
 		*clipboard = nil
 		m, cmd := press(m, "y")
-		m, follow := answer(t, m, cmd)
+		m, follow := handoffAnswer(t, m, cmd)
 		if quits(follow) || len(*clipboard) != 1 || (*clipboard)[0] != exportText(m.buf.Entries()) {
 			t.Errorf("%s: clipboard = %q, quit = %v", screen, *clipboard, quits(follow))
 		}
@@ -427,7 +427,7 @@ func TestFailedSendStaysOpen(t *testing.T) {
 	f := fakeHerdr(t, agentPane, listed)
 	f.fail(t)
 	m, cmd := ctrlS(buffered(t))
-	m, follow := answer(t, m, cmd)
+	m, follow := handoffAnswer(t, m, cmd)
 	if quits(follow) {
 		t.Error("the TUI exited after a failed send")
 	}
@@ -457,7 +457,7 @@ func TestOwnPaneIsAskedWithoutAnActivePane(t *testing.T) {
 	t.Setenv("HERDR_ACTIVE_PANE_ID", "")
 	t.Setenv("HERDR_PANE_ID", "wA:p9")
 	m, cmd := ctrlS(buffered(t))
-	m, _ = answer(t, m, cmd)
+	m, _ = handoffAnswer(t, m, cmd)
 	calls := f.calls(t)
 	if m.overlay != overlayAgents || len(calls) < 1 || fmt.Sprint(calls[0]) != "[pane get wA:p9]" {
 		t.Errorf("overlay = %v, calls = %q: want `pane get wA:p9`, then the picker", m.overlay, calls)
@@ -472,7 +472,7 @@ func TestSecondCtrlSWhileResolvingIsIgnored(t *testing.T) {
 	if again != nil || m.toast != nil {
 		t.Errorf("second ctrl+s: cmd = %v, toast = %+v", again != nil, m.toast)
 	}
-	m, _ = answer(t, m, cmd)
+	m, _ = handoffAnswer(t, m, cmd)
 	if m.handoffBusy || m.overlay != overlayAgents {
 		t.Errorf("busy = %v, overlay = %v after the answer", m.handoffBusy, m.overlay)
 	}
