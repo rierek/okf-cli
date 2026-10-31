@@ -50,6 +50,7 @@ func (m model) footerBindings() []keybind.Binding {
 		{keys.FieldNext, m.focus == focusFilter},
 		{keys.Down, !m.inInput() && len(m.search.hits) > 0},
 		{keys.Layout, !m.inInput()},
+		{keys.Edit, m.focus == focusList && m.search.focused() != nil},
 		{keys.FocusIn, len(focusRing) > 1},
 		{keys.FocusOut, len(focusRing) > 1},
 		{keys.Search, !m.inInput()},

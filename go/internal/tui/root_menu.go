@@ -46,6 +46,32 @@ func validateRoot(input string) (string, error) {
 	return root, nil
 }
 
+// rootRememberedMsg is the end of remembering the start root; err is a failed write of the state
+// file.
+type rootRememberedMsg struct{ err error }
+
+// rememberStartRoot remembers the root the TUI started on for later sessions, off the UI loop. A
+// root that fails validateRoot (no directory, no catalogue marker) is not remembered, so the menu
+// never offers a root the user could not switch to.
+func rememberStartRoot(root string) tea.Cmd {
+	return func() tea.Msg {
+		valid, err := validateRoot(root)
+		if err != nil {
+			return nil
+		}
+		return rootRememberedMsg{err: rememberRoot(valid)}
+	}
+}
+
+// handleRootRemembered shows a state file that cannot be written as a sticky toast, unless the
+// toast slot already holds a message (an invalid [tui] section).
+func (m model) handleRootRemembered(msg rootRememberedMsg) (tea.Model, tea.Cmd) {
+	if msg.err == nil || m.toast != nil {
+		return m, nil
+	}
+	return m.showToast(toastWarn, "Could not remember the root", msg.err.Error(), true)
+}
+
 // openRootMenu opens the root menu with the cursor on the active root. A configured root or a
 // state file that cannot be read shows as a toast; the menu lists what could be read.
 func (m model) openRootMenu() (model, tea.Cmd) {

@@ -11,7 +11,9 @@ import (
 )
 
 // Init starts the blink of the focused query field.
-func (m model) Init() tea.Cmd { return tea.Batch(textinput.Blink, m.checkIndexes()) }
+func (m model) Init() tea.Cmd {
+	return tea.Batch(textinput.Blink, m.checkIndexes(), rememberStartRoot(m.root))
+}
 
 // Update routes a message to its handler.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -23,12 +25,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleToastExpired(msg)
 	case indexCheckedMsg:
 		return m.handleIndexChecked(msg)
+	case rootRememberedMsg:
+		return m.handleRootRemembered(msg)
 	case indexRefreshedMsg:
 		return m.handleIndexRefreshed(msg)
 	case semanticPlanMsg:
 		return m.handleSemanticPlan(msg)
 	case searchDoneMsg:
 		return m.handleSearchDone(msg)
+	case fileEditedMsg:
+		return m.handleFileEdited(msg)
 	case spinner.TickMsg:
 		return m.handleSpinner(msg)
 	case tea.KeyMsg:
@@ -98,6 +104,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyFilterBar(msg)
 	}
 	if m.focus == focusList {
+		if keybind.Matches(msg, keys.Edit) && m.search.focused() != nil {
+			return m, m.openInEditor(m.search.focused().Abs)
+		}
 		next, _ := m.keyList(msg)
 		return next, nil
 	}

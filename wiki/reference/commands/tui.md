@@ -81,6 +81,19 @@ The header and the Root box show the active root. `enter` on the Root box opens 
 
 The TUI remembers a root when it starts on it or switches to it. The list is in `tui.json` in `$XDG_STATE_HOME/okf/` (`~/.local/state/okf/` when the variable is unset), at most 20 roots. It is a state file of the TUI, outside every catalogue and outside the user config, which the TUI never writes.
 
+## Open a hit in the editor
+
+`e` on a focused hit opens its file in the editor and suspends the TUI. When the editor exits, the TUI comes back with the same root, query, hit list, order and focus, and reads that one hit again from disk: the detail pane shows the changed type, description, tags, snippet and headings. If the editor exits with an error, the TUI shows a red message and keeps the session. If the file is gone afterwards, the row stays and a red message says so.
+
+The editor is the first of these that is set:
+
+1. the `editor` key of `[tui]` in the user config;
+2. `$VISUAL`;
+3. `$EDITOR`;
+4. `vi`.
+
+A value may carry arguments, for example `code --wait`. The file name is appended as the last argument.
+
 ## Keys
 
 Inside the query field the letter keys type, so `q` and `?` are text there; the header names `f1` for the help. Press `esc` to leave the field, then the global keys work.
@@ -94,6 +107,7 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `enter` | In the query field: search. |
 | `j`, `k`, `↓`, `↑` | In the result list: focus the next or previous hit. |
 | `g`, `G` | In the result list: first or last hit. |
+| `e` | In the result list: open the focused hit in the editor. |
 | `v`, `V` | Next or previous layout: list and detail, list, detail. |
 | `ctrl+d`, `ctrl+u` | Scroll the detail pane down or up. |
 | `/` | Focus the query field. |
