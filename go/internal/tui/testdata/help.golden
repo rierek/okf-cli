@@ -24,7 +24,7 @@
 ││           [0m[;m│[0m   b          buffer                                                    [;m│[0m[0m           ││
 ││           [0m[;m│[0m   x          remove entry                                              [;m│[0m[0m           ││
 │╰───────────[0m[;m│[0m   c          clear buffer                                              [;m│[0m[0m───────────╯│
-│────────────[0m[;m│[0m   b/esc      back to search                                            [;m│[0m[0m────────────│
-│v/V layout ·[0m[;m│[0m /: search · ↑/↓/pgup/pgdn: scroll · esc/?/q: close · 1-24/49           [;m│[0m[0mfilter bar ·│
+│────────────[0m[;m│[0m   ctrl+s     send to agent                                             [;m│[0m[0m────────────│
+│v/V layout ·[0m[;m│[0m /: search · ↑/↓/pgup/pgdn: scroll · esc/?/q: close · 1-24/51           [;m│[0m[0mfilter bar ·│
 │r refresh in[0m[;m╰────────────────────────────────────────────────────────────────────────╯[0m[0m            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

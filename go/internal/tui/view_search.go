@@ -40,6 +40,8 @@ func (m model) composeOverlays(out string, w, h int) string {
 		out = placeOverlay(out, m.filterMenuBox(), w, h)
 	case overlayRoot:
 		out = placeOverlay(out, m.rootMenuBox(), w, h)
+	case overlayAgents:
+		out = placeOverlay(out, m.agentsBox(), w, h)
 	}
 	return out
 }
@@ -54,6 +56,8 @@ func (m model) footerBindings() []keybind.Binding {
 			{keys.Note, n > 0},
 			{keys.BufferDrop, n > 0},
 			{keys.BufferClear, n > 0},
+			{keys.Send, n > 0},
+			{keys.Copy, n > 0},
 			{keys.BufferBack, true},
 		})
 	}
@@ -70,6 +74,8 @@ func (m model) footerBindings() []keybind.Binding {
 		{keys.Note, hit},
 		{keys.Task, hit},
 		{keys.Buffer, m.focus == focusList},
+		{keys.Send, len(m.buf.entries) > 0},
+		{keys.Copy, !m.inInput() && len(m.buf.entries) > 0},
 		{keys.FocusIn, len(focusRing) > 1},
 		{keys.FocusOut, len(focusRing) > 1},
 		{keys.Search, !m.inInput()},
