@@ -62,8 +62,12 @@ func Apply(p Palette) {
 		&Rosewater: "rosewater", &Flamingo: "flamingo", &Pink: "pink", &Mauve: "mauve",
 		&Red: "red", &Maroon: "maroon", &Peach: "peach", &Yellow: "yellow",
 		&Green: "green", &Teal: "teal", &Sky: "sky", &Sapphire: "sapphire",
-		&Blue: "blue", &Lavender: "lavender", &Text: "text", &Subtext: "subtext0",
-		&Overlay: "overlay1", &Surface: "surface1", &Base: "base",
+		&Blue: "blue", &Lavender: "lavender",
+	} {
+		*c = accentColor(p.Hex(tone))
+	}
+	for c, tone := range map[*lipgloss.Color]string{
+		&Text: "text", &Subtext: "subtext0", &Overlay: "overlay1", &Surface: "surface1", &Base: "base",
 	} {
 		*c = lipgloss.Color(p.Hex(tone))
 	}
@@ -90,7 +94,7 @@ func SetAccent(hex string) {
 	if !HexColor.MatchString(hex) {
 		return
 	}
-	c := lipgloss.Color(hex)
+	c := accentColor(hex)
 	Accent = lipgloss.NewStyle().Foreground(c)
 	Header = lipgloss.NewStyle().Bold(true).Foreground(c)
 }
