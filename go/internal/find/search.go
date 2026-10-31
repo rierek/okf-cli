@@ -42,7 +42,7 @@ type Hit struct {
 
 // Result is the answer of one search.
 type Result struct {
-	Hits []Hit
+	Hits []Hit // filled by Search
 	// Warnings are the notes this call emitted, in order, the ones `okf find` prints as
 	// `note: ...` on stderr. They belong to this call alone.
 	Warnings []string
@@ -72,15 +72,19 @@ func Compile(root string, expression *string, includeTopics bool) (*where.FindFi
 }
 
 // Search runs one search on root and returns the hits in the order `okf find` lists them, plus the
-// warnings of this call. Calls share no state: concurrent searches each collect their own
-// warnings.
+// warnings of this call. Concurrent searches are safe and each collect their own warnings; they
+// share only the process-wide cache of query embeddings, which is locked.
 func Search(root string, opts Options) (*Result, error) {
 	var warnings []string
 	r, err := search(root, opts, func(s string) { warnings = append(warnings, s) })
-	if r != nil {
-		r.Warnings = warnings
+	if err != nil {
+		return r, err
 	}
-	return r, err
+	r.Warnings = warnings
+	for _, h := range r.ranked {
+		r.Hits = append(r.Hits, newHit(root, h, r.now))
+	}
+	return r, nil
 }
 
 // search is the one search body. note receives every warning as it happens: Search collects them,
@@ -143,9 +147,6 @@ func search(root string, opts Options, note func(string)) (*Result, error) {
 	}
 	result.ranked = rank.Cut(all, limit)
 	result.matched, result.maxScore = len(all), maxScore
-	for _, h := range result.ranked {
-		result.Hits = append(result.Hits, newHit(root, h, result.now))
-	}
 	return result, nil
 }
 

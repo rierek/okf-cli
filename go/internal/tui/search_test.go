@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -310,6 +311,38 @@ func TestNoHitsSaysSo(t *testing.T) {
 	}
 	if out := m.View(); !strings.Contains(out, `No hits for "zzzqqqxxx".`) {
 		t.Errorf("view does not say there is no hit:\n%s", out)
+	}
+}
+
+// A query without a searchable term finds nothing and says so like any other empty search.
+func TestQueryWithoutTermsSaysNoHits(t *testing.T) {
+	_, m := search(t, onFixture(t, 100, 30), "!!")
+	if !m.search.ran || len(m.search.hits) != 0 || m.search.running {
+		t.Fatalf("search state = %+v, want a finished search without hits", m.search)
+	}
+	if out := m.View(); !strings.Contains(out, `No hits for "!!".`) {
+		t.Errorf("view does not say there is no hit:\n%s", out)
+	}
+}
+
+// A failed search shows an error toast, ends the running indicator and keeps the old list.
+func TestFailedSearchShowsErrorToast(t *testing.T) {
+	_, m := search(t, onFixture(t, 100, 30), "deploy")
+	before := hitPaths(m)
+	m, _ = press(m, "/", " ", "x", "enter")
+	if !m.search.running {
+		t.Fatal("second search did not start")
+	}
+	next, _ := m.Update(searchDoneMsg{seq: m.search.seq, query: "deploy x", err: errors.New("boom")})
+	m = next.(model)
+	if m.search.running || strings.Contains(m.View(), "searching") {
+		t.Error("the running indicator stays after the failure")
+	}
+	if m.toast == nil || m.toast.kind != toastError || m.toast.title != "Search failed" || m.toast.context != "boom" {
+		t.Fatalf("toast = %+v, want the error toast naming the failure", m.toast)
+	}
+	if got := hitPaths(m); !slices.Equal(got, before) {
+		t.Errorf("list after the failure = %v, want the old list %v", got, before)
 	}
 }
 

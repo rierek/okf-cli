@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"sync"
 
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
@@ -38,18 +39,30 @@ func Register(app *cli.App) {
 }
 
 // queryVectors is Python's _QUERY_VEC_CACHE: one query text is embedded once per process, so
-// --expand-tags and the semantic arm share one call. A failure is not cached.
-var queryVectors = map[string][]float64{}
+// --expand-tags and the semantic arm share one call. A failure is not cached. The lock guards the
+// map only; the embedding call runs outside it, so two searches at once may both embed one text.
+var (
+	queryVectorsMu sync.Mutex
+	queryVectors   = map[string][]float64{}
+)
+
+// embedQuery is the embedding call of a query; tests replace it.
+var embedQuery = tagvec.EmbedVoyageQuery
 
 func queryVector(text string) ([]float64, error) {
-	if v, ok := queryVectors[text]; ok {
+	queryVectorsMu.Lock()
+	v, ok := queryVectors[text]
+	queryVectorsMu.Unlock()
+	if ok {
 		return v, nil
 	}
-	v, err := tagvec.EmbedVoyageQuery(text)
+	v, err := embedQuery(text)
 	if err != nil {
 		return nil, err
 	}
+	queryVectorsMu.Lock()
 	queryVectors[text] = v
+	queryVectorsMu.Unlock()
 	return v, nil
 }
 
