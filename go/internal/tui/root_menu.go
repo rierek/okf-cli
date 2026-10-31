@@ -7,7 +7,6 @@ package tui
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -85,8 +84,10 @@ func (m model) openRootMenu() (model, tea.Cmd) {
 	if err != nil {
 		problems = append(problems, err.Error())
 	}
+	seen := map[string]bool{fileID(m.root): true}
 	for _, r := range append([]string{configured}, state.Roots...) {
-		if r != "" && !slices.Contains(roots, r) {
+		if r != "" && !seen[fileID(r)] {
+			seen[fileID(r)] = true
 			roots = append(roots, r)
 		}
 	}

@@ -8,6 +8,7 @@ import (
 
 	keybind "github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
 )
@@ -103,13 +104,24 @@ func pick(cands []binding) []keybind.Binding {
 }
 
 // header is the first line: the active root and the screen title at the left, the buffer count,
-// the index dots and the global key hints at the right.
+// the index dots and the global key hints at the right. A root too long for the line shows its
+// tail behind "…", so the header never wraps.
 func (m model) header(innerW int) string {
 	title := "Search"
 	if m.screen == screenBuffer {
 		title = "Buffer"
 	}
-	return breadcrumb(m.root, title, m.dots()+"  "+m.bufferCount()+"  "+renderBindings(globalBindings(m.inInput())), innerW)
+	right := m.dots() + "  " + m.bufferCount() + "  " + renderBindings(globalBindings(m.inInput()))
+	// The left side is "> root: title" and one gap cell.
+	room := innerW - lipgloss.Width(right) - lipgloss.Width("> : "+title) - 1
+	root := m.root
+	if w := lipgloss.Width(root); room >= 1 && w > room {
+		// A wide cluster on the cut stays whole, so cut one cell more until the root fits.
+		for cut := w - room + 1; lipgloss.Width(root) > room; cut++ {
+			root = ansi.TruncateLeft(m.root, cut, "…")
+		}
+	}
+	return breadcrumb(root, title, right, innerW)
 }
 
 // chrome is the frame around the body: the header, the footer and the rows left for the body
