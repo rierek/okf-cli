@@ -364,3 +364,86 @@ func TestRefreshDialogGolden(t *testing.T) {
 	m, _ = press(m, "r")
 	assertGolden(t, "refresh_dialog", m)
 }
+
+// A second refresh of an index that is still being refreshed does not start; a toast says why.
+func TestRefreshWhileBusyDoesNotStartAgain(t *testing.T) {
+	withFake(t, true)
+	root := fixtureRoot(t)
+	m := started(t, root)
+	busy := func(m model, title string) {
+		t.Helper()
+		if m.toast == nil || m.toast.kind != toastWarn || !strings.Contains(m.toast.title, "busy") {
+			t.Errorf("%s: toast = %+v, want the busy warning", title, m.toast)
+		}
+	}
+	m, lex := m.startLexical()
+	again, _ := m.startLexical()
+	busy(again, "lexical")
+	m = settle(m, lex)
+
+	m, sem := m.startSemantic()
+	again, _ = m.startSemantic()
+	busy(again, "semantic")
+	again, _ = m.startSemanticPlan()
+	busy(again, "semantic plan")
+	settle(m, sem)
+}
+
+// With every concept embedded, the semantic refresh opens no confirm dialog and says so.
+func TestSemanticRefreshNothingToEmbed(t *testing.T) {
+	withFake(t, true)
+	root := fixtureRoot(t)
+	m := started(t, root)
+	m, cmd := m.startSemantic()
+	m = leaveField(settle(m, cmd))
+	m, _ = press(m, "r")
+	m, cmd = press(m, "s")
+	m = settle(m, cmd)
+	if m.overlay != overlayNone {
+		t.Errorf("overlay = %v, want none: nothing to embed", m.overlay)
+	}
+	if m.toast == nil || !strings.Contains(m.toast.title, "current") {
+		t.Errorf("toast = %+v, want one saying the index is current", m.toast)
+	}
+}
+
+// A refresh or a plan that ends after a root switch changes nothing for the new root.
+func TestRefreshOfAnOldRootIsDropped(t *testing.T) {
+	withFake(t, true)
+	a, b := fixtureRoot(t), fixtureRoot(t)
+	m := started(t, a)
+	m, lex := m.startLexical()
+	m, plan := m.startSemanticPlan()
+	m, _ = m.setRoot(b)
+	m = settle(m, tea.Batch(lex, plan))
+	if m.overlay == overlayConfirm {
+		t.Error("the plan of the old root opened the confirm dialog")
+	}
+	if m.toast != nil && strings.Contains(m.toast.title, "refreshed") {
+		t.Errorf("toast = %+v: the refresh of the old root reported on the new one", m.toast)
+	}
+}
+
+// A failed check keeps the dot as it was and shows the error.
+func TestCheckFailureKeepsTheDot(t *testing.T) {
+	withFake(t, true)
+	root := fixtureRoot(t)
+	m := started(t, root)
+	m, cmd := m.startSemantic()
+	m = settle(m, cmd)
+	if m.semantic.state != indexCurrent {
+		t.Fatalf("after the embedding: %v, want green", m.semantic.state)
+	}
+	concept := filepath.Join(root, "kc-gov", "naming.md")
+	if err := os.Chmod(concept, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(concept, 0o644) })
+	m = settle(m, checkIndex(root, indexSemantic))
+	if m.semantic.state != indexCurrent {
+		t.Errorf("state %v, want the old colour green", m.semantic.state)
+	}
+	if m.toast == nil || m.toast.kind != toastError || !m.toast.sticky {
+		t.Errorf("toast = %+v, want a sticky error toast", m.toast)
+	}
+}
