@@ -43,6 +43,19 @@ The result list shows title, type and bundle of every hit. The detail pane at th
 
 `v` cycles the body between list and detail side by side, the list alone and the detail alone; `V` cycles back. `ctrl+d` and `ctrl+u` scroll a detail pane that is taller than the screen.
 
+## Open a hit in the editor
+
+`e` on a focused hit opens its file in the editor and suspends the TUI. When the editor exits, the TUI comes back with the same root, query, hit list, order and focus, and reads that one hit again from disk: the detail pane shows the changed type, description, tags, snippet and headings. If the editor exits with an error, the TUI shows a red message and keeps the session. If the file is gone afterwards, the row stays and a red message says so.
+
+The editor is the first of these that is set:
+
+1. the `editor` key of `[tui]` in the user config;
+2. `$VISUAL`;
+3. `$EDITOR`;
+4. `vi`.
+
+A value may carry arguments, for example `code --wait`. The file name is appended as the last argument.
+
 ## Keys
 
 Inside the query field the letter keys type, so `q` and `?` are text there; the header names `f1` for the help. Press `esc` to leave the field, then the global keys work.
@@ -56,6 +69,7 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `enter` | In the query field: search. |
 | `j`, `k`, `↓`, `↑` | In the result list: focus the next or previous hit. |
 | `g`, `G` | In the result list: first or last hit. |
+| `e` | In the result list: open the focused hit in the editor. |
 | `v`, `V` | Next or previous layout: list and detail, list, detail. |
 | `ctrl+d`, `ctrl+u` | Scroll the detail pane down or up. |
 | `/` | Focus the query field. |

@@ -1,6 +1,7 @@
 package find
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -148,6 +149,20 @@ func search(root string, opts Options, note func(string)) (*Result, error) {
 	result.ranked = rank.Cut(all, limit)
 	result.matched, result.maxScore = len(all), maxScore
 	return result, nil
+}
+
+// Reload reads hit h again from its file: the title, type, description, tags and snippet as the
+// file says them now, and the trust fields. query is the query h answers (for the snippet); the
+// provenance of h stays. It fails when the file is gone or unreadable.
+func Reload(root string, h Hit, query string) (Hit, error) {
+	r, err := hydrate(root, h.Path, rank.Tokenize(query), 0, h.Provenance)
+	if err != nil {
+		return h, err
+	}
+	if r == nil {
+		return h, fmt.Errorf("%s no longer exists", h.Abs)
+	}
+	return newHit(root, r, time.Now()), nil
 }
 
 // newHit is the screen form of a ranked hit.

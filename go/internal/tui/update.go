@@ -23,6 +23,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleToastExpired(msg)
 	case searchDoneMsg:
 		return m.handleSearchDone(msg)
+	case fileEditedMsg:
+		return m.handleFileEdited(msg)
 	case spinner.TickMsg:
 		return m.handleSpinner(msg)
 	case tea.KeyMsg:
@@ -75,6 +77,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.dismissToast()
 	}
 	if m.focus == focusList {
+		if keybind.Matches(msg, keys.Edit) && m.search.focused() != nil {
+			return m, m.openInEditor(m.search.focused().Abs)
+		}
 		next, _ := m.keyList(msg)
 		return next, nil
 	}
