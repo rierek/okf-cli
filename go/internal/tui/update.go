@@ -11,7 +11,7 @@ import (
 )
 
 // Init starts the blink of the focused query field.
-func (m model) Init() tea.Cmd { return textinput.Blink }
+func (m model) Init() tea.Cmd { return tea.Batch(textinput.Blink, m.checkIndexes()) }
 
 // Update routes a message to its handler.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -21,6 +21,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case toastExpiredMsg:
 		return m.handleToastExpired(msg)
+	case indexCheckedMsg:
+		return m.handleIndexChecked(msg)
+	case indexRefreshedMsg:
+		return m.handleIndexRefreshed(msg)
+	case semanticPlanMsg:
+		return m.handleSemanticPlan(msg)
 	case searchDoneMsg:
 		return m.handleSearchDone(msg)
 	case fileEditedMsg:
@@ -41,7 +47,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKey is the key capture order; the first stage that owns the key consumes it:
 //
 //  1. ctrl+c quits at once, from every state.
-//  2. The open overlay (confirm dialog, help) captures every key.
+//  2. The open overlay (confirm dialog, help, refresh dialog) captures every key.
 //  3. A focused text input takes the text keys; only the keys that must work inside a text field
 //     (esc, tab, shift+tab, f1) are handled before it.
 //  4. The global keys: ? help, q quit dialog, tab and shift+tab focus ring, / query field, esc
@@ -58,6 +64,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyConfirm(msg)
 	case overlayHelp:
 		return m.keyHelp(msg)
+	case overlayRefresh:
+		return m.keyRefresh(msg)
 	}
 	if m.focus == focusQuery {
 		return m.keyQuery(msg)
@@ -67,6 +75,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openHelp(), nil
 	case keybind.Matches(msg, keys.Quit):
 		return m.openConfirm(quitDialog), nil
+	case keybind.Matches(msg, keys.Refresh):
+		m.overlay = overlayRefresh
+		return m, nil
 	case keybind.Matches(msg, keys.FocusIn):
 		return m.stepFocus(1)
 	case keybind.Matches(msg, keys.FocusOut):

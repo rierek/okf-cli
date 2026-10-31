@@ -26,6 +26,7 @@ const (
 	overlayNone overlayKind = iota
 	overlayHelp
 	overlayConfirm
+	overlayRefresh
 )
 
 // model is the whole state of the TUI. Bubble Tea copies it on every message, so it holds values
@@ -45,6 +46,8 @@ type model struct {
 	help    helpState     // state of overlayHelp
 	confirm confirmDialog // dialog of overlayConfirm
 
+	lexical, semantic indexDot // the two index dots of the header
+
 	toast           *toastState
 	toastSeqCounter int
 }
@@ -59,6 +62,7 @@ func newModel(root string, settings Settings, settingsErr error) model {
 	q.PlaceholderStyle = theme.Muted
 	q.Focus()
 	m := model{root: root, settings: settings, focus: focusQuery, query: q, search: newSearchState()}
+	m.lexical.checking, m.semantic.checking = true, true // Init starts both checks
 	if settingsErr != nil {
 		m, _ = m.showToast(toastError, "Invalid [tui] settings, defaults in use", settingsErr.Error(), true)
 	}

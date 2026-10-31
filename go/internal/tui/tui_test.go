@@ -215,6 +215,22 @@ func TestToastExpiry(t *testing.T) {
 	}
 }
 
+// A sticky toast that replaces a plain one in place (within the debounce window) inherits its
+// generation, so the timer of the plain toast must not clear it.
+func TestStickyToastOutlivesTheTimerItInherits(t *testing.T) {
+	m := sized(t, nil)
+	m, _ = m.showToast(toastInfo, "working", "", false)
+	seq := m.toast.seq
+	m, _ = m.showToast(toastError, "failed", "", true)
+	if m.toast.seq != seq {
+		t.Fatalf("seq = %d, want the debounced replacement to keep %d", m.toast.seq, seq)
+	}
+	next, _ := m.handleToastExpired(toastExpiredMsg{seq: seq})
+	if next.(model).toast == nil {
+		t.Error("the timer of the replaced plain toast cleared the sticky toast")
+	}
+}
+
 func TestLoadSettings(t *testing.T) {
 	t.Run("absent file gives defaults", func(t *testing.T) {
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())

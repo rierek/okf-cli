@@ -73,9 +73,30 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `v`, `V` | Next or previous layout: list and detail, list, detail. |
 | `ctrl+d`, `ctrl+u` | Scroll the detail pane down or up. |
 | `/` | Focus the query field. |
+| `r` | Refresh an index: a dialog offers the lexical or the semantic index. Outside the query field only. |
 | `esc` | Leave the query field. Outside it, dismiss a sticky message. Close an overlay. |
 
 One overlay is open at a time and takes every key until it closes. The help overlay scrolls with `↑`/`↓`/`pgup`/`pgdn`, and `/` searches it.
+
+## Index dots and refresh
+
+The right part of the header shows two labelled dots, one for the lexical (FTS) index and one for the semantic index. The TUI checks both in the background when it starts and when the root changes; the dots appear within moments and never block input.
+
+| Dot | Lexical index | Semantic index |
+|---|---|---|
+| green | current | every concept embedded |
+| yellow | stale: the catalogue changed since the build | partial: some concepts have no current embedding |
+| red | absent | absent |
+| grey | not checked yet | unavailable: `VOYAGE_API_KEY` is not set |
+
+A half-filled dot (`◐`) means a check or a refresh of that index is running; it keeps its colour until the result is in. The dots are half filled from the start until the first check returns. Choosing a refresh while the check or another refresh of the same index is running starts nothing and shows a message; press `r` again when the dot is full.
+
+Press `r` outside the query field and choose:
+
+- `l` rebuilds the lexical index at once, as `okf build-index` does. A new index keeps the choice of the current one (with or without topics).
+- `s` embeds the concepts without a current embedding, as `okf build-semantic-index` does. A dialog names the number of concepts first and sends nothing to Voyage AI until you confirm with `enter` or `y`. Without `VOYAGE_API_KEY` the choice shows a message that names the key and nothing runs.
+
+Both refreshes run in the background. A message reports the end and the dot is checked again, so it turns green on success. If a refresh fails, the dot keeps its colour and a red message shows the error; `esc` outside the query field dismisses it.
 
 ## Settings: `[tui]`
 
