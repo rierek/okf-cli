@@ -169,8 +169,8 @@ cp `+replacement+` "$1"`)
 	}
 }
 
-// A hit that is not under the cursor but is the edited file reloads too; the cursor stays.
-func TestReloadKeepsCursorAndScroll(t *testing.T) {
+// A hit that is not under the cursor but is the edited file reloads; the cursor stays on its hit.
+func TestReloadOfOtherHitKeepsCursor(t *testing.T) {
 	m := searchedOnFixture(t, "unused")
 	m = m.moveCursor(1)
 	m.search.detailScroll = 0
@@ -185,6 +185,40 @@ func TestReloadKeepsCursorAndScroll(t *testing.T) {
 	}
 	if m.search.hits[0].Title == "Changed" {
 		t.Error("reload wrote into the list of the earlier model")
+	}
+}
+
+// The detail scroll survives the reload of the focused hit, and is clamped when the file got
+// shorter.
+func TestReloadKeepsDetailScroll(t *testing.T) {
+	m := onFixture(t, 100, 12)
+	_, m = search(t, m, "deploy")
+	hit := *m.search.focused()
+	_, _, innerH := m.geometry()
+	m, _ = press(m, "ctrl+d")
+	if m.search.detailScroll == 0 {
+		t.Fatal("ctrl+d did not scroll: the test proves nothing")
+	}
+	scrolled := m.search.detailScroll
+	same := feed(m, fileEditedMsg{path: hit.Abs})
+	if same.search.detailScroll != scrolled {
+		t.Errorf("scroll after an unchanged reload = %d, want %d", same.search.detailScroll, scrolled)
+	}
+	for m.search.detailScroll < len(m.detailRows(m.detailTextWidth()))-innerH {
+		m, _ = press(m, "ctrl+d")
+	}
+	scrolled = m.search.detailScroll
+	short := "---\ntype: Runbook\ntitle: Deploy\ndescription: short\n---\n\n## Only\n"
+	if err := os.WriteFile(hit.Abs, []byte(short), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after := feed(m, fileEditedMsg{path: hit.Abs})
+	want := max(len(after.detailRows(after.detailTextWidth()))-innerH, 0)
+	if want >= scrolled {
+		t.Fatal("the shorter file does not shorten the detail pane: the test proves nothing")
+	}
+	if after.search.detailScroll != want {
+		t.Errorf("scroll after a shorter file = %d, want it clamped to %d", after.search.detailScroll, want)
 	}
 }
 
