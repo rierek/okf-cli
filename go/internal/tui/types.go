@@ -26,6 +26,7 @@ const (
 	overlayNone overlayKind = iota
 	overlayHelp
 	overlayConfirm
+	overlayRefresh
 )
 
 // model is the whole state of the TUI. Bubble Tea copies it on every message, so it holds values
@@ -42,6 +43,8 @@ type model struct {
 	overlay overlayKind
 	help    helpState     // state of overlayHelp
 	confirm confirmDialog // dialog of overlayConfirm
+
+	lexical, semantic indexDot // the two index dots of the header
 
 	toast           *toastState
 	toastSeqCounter int

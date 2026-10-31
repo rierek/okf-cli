@@ -84,7 +84,7 @@ func (m model) showToast(kind toastKind, title, context string, sticky bool) (mo
 
 // handleToastExpired clears the toast when the expired generation is still the current one.
 func (m model) handleToastExpired(msg toastExpiredMsg) (tea.Model, tea.Cmd) {
-	if m.toast != nil && msg.seq == m.toast.seq {
+	if m.toast != nil && msg.seq == m.toast.seq && !m.toast.sticky {
 		m.toast = nil
 	}
 	return m, nil

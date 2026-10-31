@@ -25,6 +25,7 @@ type keyMap struct {
 	QuitNow keybind.Binding // ctrl+c: quit at once, from every state (handled first in handleKey)
 	Help    keybind.Binding // ?: help overlay; f1 also works inside a text field
 	Search  keybind.Binding // /: focus the query field
+	Refresh keybind.Binding // r: choose an index to refresh (outside text inputs)
 }
 
 func newKeyMap() keyMap {
@@ -42,6 +43,7 @@ func newKeyMap() keyMap {
 		QuitNow: keybind.NewBinding(keybind.WithKeys("ctrl+c"), keybind.WithHelp("ctrl+c", "quit now")),
 		Help:    keybind.NewBinding(keybind.WithKeys("?", "f1"), keybind.WithHelp("?/f1", "help")),
 		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "query field")),
+		Refresh: keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "refresh index")),
 	}
 }
 
@@ -60,6 +62,7 @@ func (k keyMap) helpGroups() []helpGroup {
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.FocusIn, k.FocusOut, k.Search, k.Back}},
 		{"Dialogs", []keybind.Binding{k.Confirm, k.Cancel}},
 		{"Global", []keybind.Binding{k.Help, k.Quit, k.QuitNow}},
+		{"Index", []keybind.Binding{k.Refresh}},
 	}
 }
 

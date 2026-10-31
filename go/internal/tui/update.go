@@ -10,7 +10,7 @@ import (
 )
 
 // Init starts the blink of the focused query field.
-func (m model) Init() tea.Cmd { return textinput.Blink }
+func (m model) Init() tea.Cmd { return tea.Batch(textinput.Blink, m.checkIndexes()) }
 
 // Update routes a message to its handler.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -20,6 +20,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case toastExpiredMsg:
 		return m.handleToastExpired(msg)
+	case indexCheckedMsg:
+		return m.handleIndexChecked(msg)
+	case indexRefreshedMsg:
+		return m.handleIndexRefreshed(msg)
+	case semanticPlanMsg:
+		return m.handleSemanticPlan(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -51,6 +57,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyConfirm(msg)
 	case overlayHelp:
 		return m.keyHelp(msg)
+	case overlayRefresh:
+		return m.keyRefresh(msg)
 	}
 	if m.focus == focusQuery {
 		return m.keyQuery(msg)
@@ -60,6 +68,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openHelp(), nil
 	case keybind.Matches(msg, keys.Quit):
 		return m.openConfirm(quitDialog), nil
+	case keybind.Matches(msg, keys.Refresh):
+		m.overlay = overlayRefresh
+		return m, nil
 	case keybind.Matches(msg, keys.FocusIn):
 		return m.stepFocus(1)
 	case keybind.Matches(msg, keys.FocusOut):

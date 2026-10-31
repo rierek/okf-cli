@@ -255,17 +255,7 @@ func build(root string, a *cli.Args) (any, error) {
 	dbPath := sqlstore.TagvecPath(root)
 	result := envelope.O("applied", false, "embedded", 0, "path", dbPath)
 	if a.Bool("if_stale") {
-		bundles, err := catalogue.ListIndexableBundles(root, "")
-		if err != nil {
-			return nil, err
-		}
-		var paths []string
-		for _, b := range bundles {
-			for cid := range catalogue.IterConcepts(catalogue.Join(root, b), true) {
-				paths = append(paths, b+"/"+cid)
-			}
-		}
-		cov, ok, err := tagvec.SemanticCoverage(root, paths)
+		cov, ok, err := Coverage(root)
 		if err != nil {
 			return nil, err
 		}
@@ -287,18 +277,9 @@ func build(root string, a *cli.Args) (any, error) {
 	if a.JSON {
 		progress = os.Stderr
 	}
-	written, left, err := fill(root, dbPath, progress)
+	written, left, err := fill(root, dbPath, tagvec.EmbedVoyage, progress)
 	if err != nil {
-		class, message, ok := sqlstore.PyError(err)
-		var exception *tagvec.Exception
-		switch {
-		case ok:
-		case errors.As(err, &exception):
-			class, message = exception.Class, exception.Message
-		default:
-			class, message = "Error", err.Error()
-		}
-		envelope.Note(fmt.Sprintf("semantic index build failed (%s: %s) -- lexical arm unaffected", class, message))
+		envelope.Note(fmt.Sprintf("semantic index build failed (%s) -- lexical arm unaffected", failureText(err)))
 		return result, nil
 	}
 	result.Set("applied", written > 0)
@@ -316,7 +297,7 @@ func build(root string, a *cli.Args) (any, error) {
 // fill embeds the concept delta in batches and writes each batch as it arrives, so a failure
 // later keeps what is done. It returns the rows written and the planned concepts left unembedded
 // when a batch was skipped (0 when none was).
-func fill(root, dbPath string, progress io.Writer) (written, left int, err error) {
+func fill(root, dbPath string, embed func([]string) ([][]float32, error), progress io.Writer) (written, left int, err error) {
 	delta, err := tagvec.PlanConceptDelta(root, tagvec.SemanticModel, dbPath, "", 0)
 	if err != nil {
 		return 0, 0, err
@@ -328,7 +309,7 @@ func fill(root, dbPath string, progress io.Writer) (written, left int, err error
 		for i, t := range batch {
 			texts[i] = t.Text
 		}
-		vectors, err := tagvec.EmbedResilient(tagvec.EmbedVoyage, texts, "voyage concepts "+batch[0].Item+"..", progress)
+		vectors, err := tagvec.EmbedResilient(embed, texts, "voyage concepts "+batch[0].Item+"..", progress)
 		if err != nil {
 			return 0, 0, err
 		}
