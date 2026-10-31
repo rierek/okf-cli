@@ -29,6 +29,7 @@ type keyMap struct {
 	BufferClear  keybind.Binding // c: clear the buffer, after a confirm dialog
 	TextSave     keybind.Binding // ctrl+s: save the text box
 	TextEdit     keybind.Binding // ctrl+e: edit the text of the text box in the editor
+	Task         keybind.Binding // t: record a maintenance task on the focused hit in the tracker
 
 	// Focus ring: tab and shift+tab step the focus to the next and previous target.
 	FocusIn  keybind.Binding
@@ -72,6 +73,7 @@ func newKeyMap() keyMap {
 		BufferClear:  keybind.NewBinding(keybind.WithKeys("c"), keybind.WithHelp("c", "clear buffer")),
 		TextSave:     keybind.NewBinding(keybind.WithKeys("ctrl+s"), keybind.WithHelp("ctrl+s", "save text")),
 		TextEdit:     keybind.NewBinding(keybind.WithKeys("ctrl+e"), keybind.WithHelp("ctrl+e", "edit text in editor")),
+		Task:         keybind.NewBinding(keybind.WithKeys("t"), keybind.WithHelp("t", "maintenance task")),
 
 		FocusIn:  keybind.NewBinding(keybind.WithKeys("tab"), keybind.WithHelp("tab", "next focus")),
 		FocusOut: keybind.NewBinding(keybind.WithKeys("shift+tab"), keybind.WithHelp("shift+tab", "previous focus")),
@@ -110,6 +112,7 @@ func (k keyMap) helpGroups() []helpGroup {
 		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Top, k.Bottom, k.FocusIn, k.FocusOut, k.Search, k.Run, k.Back}},
 		{"Detail", []keybind.Binding{k.DetailUp, k.DetailDown, k.Layout, k.Edit}},
 		{"Buffer", []keybind.Binding{k.BufferToggle, k.Note, k.Buffer, k.BufferDrop, k.BufferClear, k.BufferBack, k.TextSave, k.TextEdit}},
+		{"Tasks", []keybind.Binding{k.Task}},
 		{"Dialogs", []keybind.Binding{k.Confirm, k.Cancel}},
 		{"Global", []keybind.Binding{k.Help, k.Quit, k.QuitNow}},
 		{"Index", []keybind.Binding{k.Refresh}},

@@ -8,7 +8,7 @@ description: "okf tui opens a keyboard-first terminal UI on the catalogue root: 
 `okf tui` opens a keyboard-first terminal UI on the catalogue. Look and keys follow `lif tui`. The command exists only in the Go binary; the Python CLI has no `tui`. It is hidden from `okf --help`, but `okf tui --help` and the call itself work.
 
 :::note
-This page describes the search screen, the filters, the editor, the index dots and the session buffer. The hand-off to an agent pane comes with a later release of the TUI.
+This page describes the search screen, the filters, the editor, the index dots, the session buffer and maintenance tasks. The hand-off to an agent pane comes with a later release of the TUI.
 :::
 
 ## Start
@@ -105,6 +105,17 @@ The session buffer collects hits across searches and roots, so that you can carr
 - `b` opens the buffer view. It lists the entries in the order they were added, each with title, type, bundle and a `✎` marker when the entry has a note. Below the list, the pane shows path, tags and note of the entry under the cursor.
 - In the buffer view: `j`/`k` move, `x` removes the entry under the cursor, `n` writes its note, `c` clears the whole buffer after a red confirm dialog (`enter` or `y` clears, `esc` or `n` keeps the buffer), and `b` or `esc` goes back to the search.
 
+## Maintenance tasks
+
+Press `t` on a focused hit in the result list to record a maintenance task about that concept in your own tracker, without leaving the TUI. A text area opens: the first line is the title, the rest is the body. `ctrl+s` saves, `esc` cancels, `ctrl+e` edits the text in the editor. Enter starts a new line. A text without a title is refused with a message and the box stays open.
+
+The tracker is the `[tui.tracker]` table of the user config; the section `[tui.tracker]` under Settings below describes the two kinds (`command` and `file`), the `OKF_TASK_*` variables and examples. Without a valid `[tui.tracker]`, `t` opens no text area and says what is wrong and which config file to change.
+
+- Saving runs in the background; the TUI keeps reacting to keys. A blue message reports the result: the first stdout line of the command, or the file that got the line.
+- Root, query, result list, focus and buffer stay as they were, and you are on the same hit afterwards. A task never enters the session buffer.
+- The `file` kind appends one Obsidian Tasks line, then the body as lines indented by two blanks; blank body lines are dropped: `- [ ] <title> [<bundle>/<id>](<absolute path>) ➕ <YYYY-MM-DD>`. A path with a blank or a parenthesis stands in `<...>` in the link.
+- If the command exits non-zero, a red message shows its stderr (shortened to 400 characters) and the text area opens again with the text you wrote, so `ctrl+s` retries. `esc` drops the text.
+
 ## Keys
 
 Inside the query field the letter keys type, so `q` and `?` are text there; the header names `f1` for the help. Press `esc` to leave the field, then the global keys work.
@@ -119,6 +130,7 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `j`, `k`, `↓`, `↑` | In the result list: focus the next or previous hit. |
 | `g`, `G` | In the result list: first or last hit. |
 | `e` | In the result list: open the focused hit in the editor. |
+| `t` | In the result list: record a maintenance task on the focused hit in the tracker. |
 | `space` | In the result list: add the focused hit to the buffer, or remove it. |
 | `n` | In the result list and in the buffer view: write the note of the focused hit or entry. |
 | `b` | In the result list: open the buffer view. In the buffer view: back to the search. |
@@ -169,6 +181,62 @@ accent = "#cba6f7"  # #rrggbb for cursor and header; empty: the theme's accent
 ```
 
 An invalid section does not stop the TUI. The TUI starts with the default settings and shows a red message that names the config file and the reason, for example an unknown theme, an accent that is not `#rrggbb`, or a value of the wrong type. Press `esc` outside the query field to dismiss it. A popup closes when the program exits, so an error on stderr would vanish before you read it; this is why the message is part of the screen.
+
+### `[tui.tracker]`: where maintenance tasks go
+
+The sub-table `[tui.tracker]` names the tracker that receives maintenance tasks (see Maintenance tasks above). The TUI has no code for a specific tracker. There are two kinds:
+
+```toml title="~/.config/okf/config.toml"
+[tui.tracker]
+kind    = "command"                    # "command" or "file"
+command = "lif create -t task -- \"$OKF_TASK_TITLE\""   # kind "command": a shell command line
+# file  = "~/vault/Tasks/okf.md"       # kind "file": absolute path, a leading ~ is expanded
+```
+
+- `kind = "command"` needs `command`. The TUI runs it as `sh -c <command>` with the task in environment variables and does not change the string. It never puts task text into the command line; quote the variables in the command (`"$OKF_TASK_TITLE"`), so the shell expands them as plain values.
+- `kind = "file"` needs `file`: an absolute path, or a path that starts with `~` or `~name` (the home directory of that account). Other path forms are refused, because the TUI's working directory is not a stable base. The TUI creates the file and its folder when they are absent.
+
+The TUI reads `[tui.tracker]` when you press `t`, so you can change it without a restart. A missing table, a missing or unknown `kind`, an empty `command` or `file`, a relative `file` and a config file that does not parse each give a red message that names the problem and the config path. The TUI opens no text area and records nothing then.
+
+| Variable | Value |
+|---|---|
+| `OKF_TASK_TITLE` | The first line of the text. |
+| `OKF_TASK_BODY` | The rest of the text, surrounding blank lines removed; may be empty. |
+| `OKF_TASK_PATH` | The absolute path of the hit's file. |
+| `OKF_TASK_REF` | The hit reference `<bundle>/<id>`, without `.md`. |
+| `OKF_TASK_ROOT` | The active root. |
+
+The environment of the TUI passes on as well. The command runs without a terminal on stdin; it must not ask questions. Its first stdout line shows in the toast. A non-zero exit shows stderr (the exit status when stderr is empty) in a red message, and the text area opens again.
+
+Examples. The tests cover both kinds with fake commands and files. The examples for lif, the Todoist CLI and Memos call real tools that the tests do not run; they are examples, untested here. Adapt them to your setup.
+
+```toml title="lif (example, not run by the tests)"
+# Needs a lif store in the catalogue (`lif init` there). `cd` finds it from any working directory.
+[tui.tracker]
+kind    = "command"
+command = '''cd "$OKF_TASK_ROOT" && lif create -t task --tag maintenance -d "$(printf '%s\n\nConcept: %s\n%s' "$OKF_TASK_BODY" "$OKF_TASK_REF" "$OKF_TASK_PATH")" -- "$OKF_TASK_TITLE"'''
+```
+
+```toml title="Todoist CLI (example, not run by the tests)"
+# sachaos/todoist; other Todoist CLIs take different arguments.
+[tui.tracker]
+kind    = "command"
+command = '''todoist add "$OKF_TASK_TITLE ($OKF_TASK_REF)"'''
+```
+
+```toml title="Memos with curl (example, not run by the tests)"
+# Memos API v1; set MEMOS_URL and MEMOS_TOKEN in the environment that starts okf tui. The JSON
+# body is built by jq, so quotes and newlines in the task stay data.
+[tui.tracker]
+kind    = "command"
+command = '''jq -n --arg t "$OKF_TASK_TITLE" --arg b "$OKF_TASK_BODY" --arg r "$OKF_TASK_REF" '{content: ("#maintenance " + $t + "\n\n" + $b + "\n\n" + $r)}' | curl -fsS -X POST "$MEMOS_URL/api/v1/memos" -H "Authorization: Bearer $MEMOS_TOKEN" -H 'Content-Type: application/json' -d @-'''
+```
+
+```toml title="Obsidian Tasks (kind file)"
+[tui.tracker]
+kind = "file"
+file = "~/Obsidian/Tasks/okf-maintenance.md"
+```
 
 ## herdr popup
 
