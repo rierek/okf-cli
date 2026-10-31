@@ -198,8 +198,11 @@ func TestBufferViewListsInInsertionOrder(t *testing.T) {
 			t.Errorf("entry %d: note marker = %v, want %v", i, got, wantMark)
 		}
 	}
-	if !strings.Contains(view, "worth a look") && !strings.Contains(strings.Join(lines, " "), "none, press n") {
-		t.Errorf("detail pane shows neither note nor hint:\n%s", view)
+	if !strings.Contains(view, "none, press n") {
+		t.Errorf("detail pane of the entry without a note lacks the hint:\n%s", view)
+	}
+	if noted, _ := press(m, "j"); !strings.Contains(noted.View(), "worth a look") {
+		t.Errorf("detail pane of the entry with a note lacks the note:\n%s", noted.View())
 	}
 	back, _ := press(m, "esc")
 	if back.screen != screenSearch || !strings.Contains(back.View(), "Search") {
@@ -222,6 +225,40 @@ func TestBufferViewRemovesOneEntry(t *testing.T) {
 	}
 	if view := m.View(); !strings.Contains(view, "The buffer is empty.") {
 		t.Errorf("empty buffer view:\n%s", view)
+	}
+}
+
+// The buffer view keeps the list focus: / and tab do not move it to the hidden query field. A
+// cursor left behind by entries removed on the search screen is pulled back into the list.
+func TestBufferViewKeepsFocusAndCursor(t *testing.T) {
+	m := searchedOnFixture(t, "unused")
+	m = addHits(t, m, 0, 1, 2)
+	m, _ = press(m, "b")
+	for _, k := range []string{"/", "tab", "shift+tab"} {
+		if next, _ := press(m, k); next.screen != screenBuffer || next.focus != focusList {
+			t.Errorf("%s in the buffer view: screen %v, focus %v", k, next.screen, next.focus)
+		}
+	}
+	m, _ = press(m, "G", "b")
+	m = m.moveCursor(0)
+	m, _ = press(m, " ")
+	m = m.moveCursor(1)
+	m, _ = press(m, " ", "b")
+	if len(m.buf.entries) != 1 || m.bufCursor != 0 {
+		t.Fatalf("after removing two entries on the search screen: %d entries, cursor %d", len(m.buf.entries), m.bufCursor)
+	}
+	if m, _ = press(m, "n"); m.overlay != overlayText {
+		t.Errorf("n on the one entry opened overlay %v", m.overlay)
+	}
+}
+
+// The open text box follows a resize of the terminal.
+func TestTextBoxFollowsResize(t *testing.T) {
+	m := searchedOnFixture(t, "unused")
+	m, _ = press(m, "n")
+	m = feed(m, tea.WindowSizeMsg{Width: 50, Height: 12})
+	if m.text.area.Width() != m.textWidth() || m.text.area.Height() != m.textHeight() {
+		t.Errorf("text area %dx%d after resize, want %dx%d", m.text.area.Width(), m.text.area.Height(), m.textWidth(), m.textHeight())
 	}
 }
 
