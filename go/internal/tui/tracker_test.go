@@ -274,3 +274,89 @@ func TestTaskWithoutTitleIsRefused(t *testing.T) {
 		t.Error("the command ran for a task without a title")
 	}
 }
+
+// commandModel is a model on the fixture whose tracker command is a script that runs body.
+func commandModel(t *testing.T, body string) model {
+	t.Helper()
+	writeConfig(t, "[tui.tracker]\nkind = \"command\"\ncommand = '"+fakeEditor(t, body)+"'\n")
+	return searchedOnFixture(t, "unused")
+}
+
+// saveTask writes text in the task box and saves; the returned message is the tracker's answer.
+func saveTask(t *testing.T, m model, text string) (model, taskDoneMsg) {
+	t.Helper()
+	m = writeTask(t, m, text)
+	m, cmd := pressKey(m, tea.KeyCtrlS)
+	msg, ok := cmd().(taskDoneMsg)
+	if !ok {
+		t.Fatalf("the save command answered %T, want taskDoneMsg", cmd())
+	}
+	return m, msg
+}
+
+// Criterion 5: a command that fails without stderr shows its exit status; a long stderr is cut to
+// 400 characters; a command without stdout gives the title and the reference in the toast.
+func TestTaskToastTexts(t *testing.T) {
+	t.Run("exit status without stderr", func(t *testing.T) {
+		m, msg := saveTask(t, commandModel(t, "exit 3"), "title")
+		m = feed(m, msg)
+		if m.toast == nil || m.toast.kind != toastError || !strings.Contains(m.toast.context, "exit status 3") {
+			t.Errorf("toast = %+v, want the exit status", m.toast)
+		}
+	})
+	t.Run("long stderr is cut", func(t *testing.T) {
+		m, msg := saveTask(t, commandModel(t, "head -c 600 /dev/zero | tr '\\0' x >&2; exit 1"), "title")
+		m = feed(m, msg)
+		if got := []rune(m.toast.context); len(got) != maxStderrToast+1 || got[len(got)-1] != '…' {
+			t.Errorf("toast context has %d runes, want %d and a final …", len(got), maxStderrToast+1)
+		}
+	})
+	t.Run("silent success", func(t *testing.T) {
+		m := commandModel(t, "exit 0")
+		hit := *m.search.focused()
+		m, msg := saveTask(t, m, "silent title")
+		m = feed(m, msg)
+		if want := "silent title (" + hit.Path + ")"; m.toast == nil || m.toast.kind != toastInfo || m.toast.context != want {
+			t.Errorf("toast = %+v, want context %q", m.toast, want)
+		}
+	})
+}
+
+// A late failure never replaces another overlay: a note box, the help and a second task box keep
+// their state, and the sticky error toast names the failed task.
+func TestLateTaskFailureKeepsOtherOverlay(t *testing.T) {
+	m, failed := saveTask(t, commandModel(t, "echo nope >&2; exit 1"), "first task")
+
+	note, _ := press(m, "n", "my note")
+	if got := feed(note, failed); got.overlay != overlayText || got.text.caller != noteCaller || got.text.area.Value() != "my note" {
+		t.Errorf("note box: overlay %v, caller %q, text %q: want it untouched", got.overlay, got.text.caller, got.text.area.Value())
+	} else if got.toast == nil || got.toast.kind != toastError || !strings.Contains(got.toast.title, "first task") ||
+		!strings.Contains(got.toast.context, "nope") {
+		t.Errorf("toast = %+v, want an error toast naming the task and stderr", got.toast)
+	}
+
+	second := writeTask(t, m, "second task")
+	if got := feed(second, failed); got.overlay != overlayText || got.text.area.Value() != "second task" {
+		t.Errorf("second task box: overlay %v, text %q: want it untouched", got.overlay, got.text.area.Value())
+	}
+
+	help, _ := press(m, "?")
+	if got := feed(help, failed); got.overlay != overlayHelp {
+		t.Errorf("overlay %v, want the help kept", got.overlay)
+	}
+
+	if got := feed(m, failed); got.overlay != overlayText || got.text.area.Value() != "first task" {
+		t.Errorf("no other overlay: overlay %v, text %q: want the task box back", got.overlay, got.text.area.Value())
+	}
+}
+
+// A body line that looks like a task does not become a second task.
+func TestTaskLineEscapesBodyCheckbox(t *testing.T) {
+	day := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
+	got := taskLine(maintenanceTask{Title: "T", Body: "- [ ] sub\n  * [x] done\n1. [ ] num\n- [link](x) plain\ntext [ ] mid", Path: "/p.md", Ref: "b/z"}, day)
+	want := "- [ ] T [b/z](/p.md) ➕ 2026-10-31\n" +
+		"  - \\[ ] sub\n" + "    * \\[x] done\n" + "  1. \\[ ] num\n" + "  - [link](x) plain\n" + "  text [ ] mid\n"
+	if got != want {
+		t.Errorf("taskLine:\n%s\nwant:\n%s", got, want)
+	}
+}

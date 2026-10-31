@@ -57,8 +57,10 @@ func (m model) openTaskBox(boxTitle, initial string, tr tracker, task maintenanc
 	})
 }
 
-// handleTaskDone shows the result. Success: an info toast, nothing else changes. Failure: an error
-// toast with the tracker's message (stderr of a command) and the box back with the same text.
+// handleTaskDone shows the result. Success: an info toast, nothing else changes. Failure: a sticky
+// error toast with the tracker's message (stderr of a command). When no overlay is open, the box
+// comes back with the same text. Another overlay (a second task box, a note box, the help) stays
+// as it is, so its text is not lost; the toast names the task, which the user writes again.
 func (m model) handleTaskDone(msg taskDoneMsg) (model, tea.Cmd) {
 	if msg.err == nil {
 		context := msg.note
@@ -70,6 +72,9 @@ func (m model) handleTaskDone(msg taskDoneMsg) (model, tea.Cmd) {
 	reason := []rune(msg.err.Error())
 	if len(reason) > maxStderrToast {
 		reason = append(reason[:maxStderrToast], '…')
+	}
+	if m.overlay != overlayNone {
+		return m.showToast(toastError, "Task not saved: "+msg.task.Title, string(reason), true)
 	}
 	m, toast := m.showToast(toastError, "Task not saved", string(reason), true)
 	m, box := msg.retry(m)

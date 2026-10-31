@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -117,8 +118,9 @@ func (c commandTracker) record(t maintenanceTask) (string, error) {
 type fileTracker struct{ file string }
 
 // taskLine is the Obsidian Tasks entry of t: `- [ ] <title> [<ref>](<path>) ➕ <date>`, then the
-// body as indented lines. Blank body lines are dropped: a blank line would end the list item.
-// A path with a space or a parenthesis goes in `<...>`, which Markdown links accept.
+// body as indented lines. Blank body lines are dropped: a blank line would end the list item. A
+// body line that starts like a task (`- [ ]`) gets its `[` escaped, so one save is one task. A
+// path with a space or a parenthesis goes in `<...>`, which Markdown links accept.
 func taskLine(t maintenanceTask, day time.Time) string {
 	target := t.Path
 	if strings.ContainsAny(target, " ()") {
@@ -128,11 +130,14 @@ func taskLine(t maintenanceTask, day time.Time) string {
 	fmt.Fprintf(&b, "- [ ] %s [%s](%s) ➕ %s\n", t.Title, t.Ref, target, day.Format("2006-01-02"))
 	for _, line := range strings.Split(t.Body, "\n") {
 		if line = strings.TrimRight(line, " \t\r"); line != "" {
-			b.WriteString("  " + line + "\n")
+			b.WriteString("  " + checkboxStart.ReplaceAllString(line, `$1\[$2]`) + "\n")
 		}
 	}
 	return b.String()
 }
+
+// checkboxStart matches the start of a Markdown task item: a list marker, then `[x]`.
+var checkboxStart = regexp.MustCompile(`^(\s*(?:[-*+]|\d+[.)])\s+)\[(.)\]`)
 
 // record appends the task line and creates the file (and its folder) when absent. A file that
 // does not end in a newline gets one first.

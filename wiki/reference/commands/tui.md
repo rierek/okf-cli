@@ -113,8 +113,8 @@ The tracker is the `[tui.tracker]` table of the user config; the section `[tui.t
 
 - Saving runs in the background; the TUI keeps reacting to keys. A blue message reports the result: the first stdout line of the command, or the file that got the line.
 - Root, query, result list, focus and buffer stay as they were, and you are on the same hit afterwards. A task never enters the session buffer.
-- The `file` kind appends one Obsidian Tasks line, then the body as lines indented by two blanks; blank body lines are dropped: `- [ ] <title> [<bundle>/<id>](<absolute path>) ➕ <YYYY-MM-DD>`. A path with a blank or a parenthesis stands in `<...>` in the link.
-- If the command exits non-zero, a red message shows its stderr (shortened to 400 characters) and the text area opens again with the text you wrote, so `ctrl+s` retries. `esc` drops the text.
+- The `file` kind appends one Obsidian Tasks line, then the body as lines indented by two blanks; blank body lines are dropped: `- [ ] <title> [<bundle>/<id>](<absolute path>) ➕ <YYYY-MM-DD>`. A body line that starts like a task (`- [ ]`, `* [x]`, `1. [ ]`) gets its `[` escaped (`- \[ ]`), so one save is one task. A path with a blank or a parenthesis stands in `<...>` in the link.
+- If the command exits non-zero, a red message shows its stderr (shortened to 400 characters) and the text area opens again with the text you wrote, so `ctrl+s` retries. `esc` drops the text. If another overlay is open when the failure arrives (a note box, the help, a second task box), it stays as it is; the red message names the failed task and you write it again.
 
 ## Keys
 
