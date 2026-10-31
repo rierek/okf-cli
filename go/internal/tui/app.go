@@ -11,7 +11,8 @@ import (
 
 // Run starts the TUI on root and blocks until the user quits. It loads the [tui] settings first
 // and puts the theme in force before anything renders; an invalid section does not stop the
-// start, it shows as a sticky error toast.
+// start, it shows as a sticky error toast. The start root is remembered for later sessions by
+// Init, see rememberStartRoot.
 func Run(root string) error {
 	settings, settingsErr := LoadSettings()
 	settings.apply()

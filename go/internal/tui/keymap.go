@@ -34,6 +34,13 @@ type keyMap struct {
 	Search  keybind.Binding // /: focus the query field
 	Refresh keybind.Binding // r: choose an index to refresh (outside text inputs)
 	Run     keybind.Binding // enter inside the query field: run the search
+
+	Filter      keybind.Binding // f: focus the filter bar
+	FieldPrev   keybind.Binding // left, h: previous filter field
+	FieldNext   keybind.Binding // right, l: next filter field
+	Open        keybind.Binding // enter: open the menu of the focused filter field, take a menu row
+	Toggle      keybind.Binding // space, x: flip a menu value
+	FilterClear keybind.Binding // X: clear every filter but the root
 }
 
 func newKeyMap() keyMap {
@@ -60,6 +67,13 @@ func newKeyMap() keyMap {
 		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "query field")),
 		Refresh: keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "refresh index")),
 		Run:     keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "search")),
+
+		Filter:      keybind.NewBinding(keybind.WithKeys("f"), keybind.WithHelp("f", "filter bar")),
+		FieldPrev:   keybind.NewBinding(keybind.WithKeys("left", "h"), keybind.WithHelp("←/h", "previous field")),
+		FieldNext:   keybind.NewBinding(keybind.WithKeys("right", "l"), keybind.WithHelp("→/l", "next field")),
+		Open:        keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "open menu")),
+		Toggle:      keybind.NewBinding(keybind.WithKeys(" ", "x"), keybind.WithHelp("space/x", "toggle value")),
+		FilterClear: keybind.NewBinding(keybind.WithKeys("X"), keybind.WithHelp("X", "clear filters")),
 	}
 }
 
@@ -80,6 +94,7 @@ func (k keyMap) helpGroups() []helpGroup {
 		{"Dialogs", []keybind.Binding{k.Confirm, k.Cancel}},
 		{"Global", []keybind.Binding{k.Help, k.Quit, k.QuitNow}},
 		{"Index", []keybind.Binding{k.Refresh}},
+		{"Filters", []keybind.Binding{k.Filter, k.FieldPrev, k.FieldNext, k.Open, k.Toggle, k.FilterClear}},
 	}
 }
 

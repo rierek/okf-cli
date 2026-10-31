@@ -37,7 +37,8 @@ func TestQueryFieldTypesLetterKeys(t *testing.T) {
 	}
 }
 
-// esc leaves the field, / and tab come back; tab and shift+tab cycle the whole ring.
+// esc leaves the field, / and tab come back; tab and shift+tab cycle the whole ring, and walk the
+// fields of the filter bar on their way through it.
 func TestFocusRing(t *testing.T) {
 	m, _ := press(sized(t, nil), "esc")
 	if m.focus != focusList || m.query.Focused() {
@@ -48,8 +49,17 @@ func TestFocusRing(t *testing.T) {
 		t.Fatalf("after /: focus = %v; want the query field", m.focus)
 	}
 	m, _ = press(m, "tab")
+	if m.focus != focusFilter || m.filters.field != fieldRoot {
+		t.Fatalf("after tab: focus = %v, field = %v; want the first field of the filter bar", m.focus, m.filters.field)
+	}
+	for f := fieldBundle; f < filterFieldCount; f++ {
+		if m, _ = press(m, "tab"); m.focus != focusFilter || m.filters.field != f {
+			t.Fatalf("tab inside the bar: focus = %v, field = %v; want field %v", m.focus, m.filters.field, f)
+		}
+	}
+	m, _ = press(m, "tab")
 	if m.focus != focusList {
-		t.Fatalf("after tab: focus = %v; want the list", m.focus)
+		t.Fatalf("tab behind the last field: focus = %v; want the list", m.focus)
 	}
 	m, _ = press(m, "tab")
 	if m.focus != focusQuery {
@@ -58,6 +68,10 @@ func TestFocusRing(t *testing.T) {
 	m, _ = press(m, "shift+tab")
 	if m.focus != focusList {
 		t.Fatalf("shift+tab wraps back: focus = %v; want the list", m.focus)
+	}
+	m, _ = press(m, "shift+tab")
+	if m.focus != focusFilter || m.filters.field != filterFieldCount-1 {
+		t.Fatalf("shift+tab into the bar: focus = %v, field = %v; want its last field", m.focus, m.filters.field)
 	}
 }
 

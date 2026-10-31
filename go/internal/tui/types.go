@@ -10,13 +10,14 @@ import (
 type focusTarget int
 
 const (
-	focusQuery focusTarget = iota // the query field, a text input
-	focusList                     // the results pane
+	focusQuery  focusTarget = iota // the query field, a text input
+	focusFilter                    // the filter bar
+	focusList                      // the results pane
 )
 
-// focusRing is the tab order of the search screen. A later task inserts its targets (filter bar,
-// detail pane) here.
-var focusRing = []focusTarget{focusQuery, focusList}
+// focusRing is the tab order of the search screen. A later task inserts its targets (detail
+// pane) here.
+var focusRing = []focusTarget{focusQuery, focusFilter, focusList}
 
 // overlayKind names the overlay on top of the screen. There is one overlay at a time; it captures
 // every key until it closes.
@@ -27,6 +28,8 @@ const (
 	overlayHelp
 	overlayConfirm
 	overlayRefresh
+	overlayFilterMenu // value menu of the focused filter field
+	overlayRoot       // root menu
 )
 
 // model is the whole state of the TUI. Bubble Tea copies it on every message, so it holds values
@@ -41,6 +44,9 @@ type model struct {
 	query  textinput.Model
 	search searchState
 	layout layoutMode
+
+	filters  filterState
+	rootMenu rootMenu // state of overlayRoot
 
 	overlay overlayKind
 	help    helpState     // state of overlayHelp

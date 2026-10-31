@@ -21,6 +21,7 @@ const searchLimit = 50
 type searchState struct {
 	seq     int // generation of the newest search; an answer of an older one is dropped
 	running bool
+	asked   string // the query of the newest search, started or finished; a filter change reruns it
 	spinner spinner.Model
 
 	ran    bool   // a search has finished: an empty list means "no hits", not "no search yet"
@@ -52,23 +53,38 @@ func (s searchState) focused() *find.Hit {
 	return &s.hits[s.cursor]
 }
 
-// startSearch runs the query field's text as a search: off the UI loop, so the program keeps
-// reacting to keys while it runs. A blank query starts nothing. Focus moves to the list; `/`
-// brings it back to the query field.
+// startSearch runs the query field's text as a search. A blank query starts nothing. Focus moves
+// to the list; `/` brings it back to the query field.
 func (m model) startSearch() (model, tea.Cmd) {
 	query := strings.TrimSpace(m.query.Value())
 	if query == "" {
 		return m, nil
 	}
-	m.search.seq++
-	m.search.running = true
-	seq, root := m.search.seq, m.root
-	run := func() tea.Msg {
-		result, err := find.Search(root, find.Options{Query: query, Limit: searchLimit})
-		return searchDoneMsg{seq: seq, query: query, result: result, err: err}
-	}
 	m.focus = focusList
 	m.query.Blur()
+	return m.runSearch(query)
+}
+
+// runSearch searches query with the chosen filters off the UI loop, so the program keeps reacting
+// to keys while it runs. The filter expression is compiled by the same facade `okf find --where`
+// uses; a compile failure comes back as the search's error.
+func (m model) runSearch(query string) (model, tea.Cmd) {
+	m.search.seq++
+	wasRunning := m.search.running
+	m.search.running = true
+	m.search.asked = query
+	seq, root, expr := m.search.seq, m.root, m.filters.expression()
+	run := func() tea.Msg {
+		filters, err := find.Compile(root, expr, false)
+		if err != nil {
+			return searchDoneMsg{seq: seq, query: query, err: err}
+		}
+		result, err := find.Search(root, find.Options{Query: query, Limit: searchLimit, Filters: filters})
+		return searchDoneMsg{seq: seq, query: query, result: result, err: err}
+	}
+	if wasRunning { // the spinner already ticks
+		return m, run
+	}
 	return m, tea.Batch(run, m.search.spinner.Tick)
 }
 
