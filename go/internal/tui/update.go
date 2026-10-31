@@ -5,6 +5,7 @@ package tui
 
 import (
 	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -26,6 +27,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleIndexRefreshed(msg)
 	case semanticPlanMsg:
 		return m.handleSemanticPlan(msg)
+	case searchDoneMsg:
+		return m.handleSearchDone(msg)
+	case spinner.TickMsg:
+		return m.handleSpinner(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -80,11 +85,16 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, keys.Back) && m.escDismissesToast():
 		return m.dismissToast()
 	}
+	if m.focus == focusList {
+		next, _ := m.keyList(msg)
+		return next, nil
+	}
 	return m, nil
 }
 
-// keyQuery handles a key while the query field has the focus: esc leaves the field, tab and
-// shift+tab step the focus ring, f1 opens the help; every other key goes to the field.
+// keyQuery handles a key while the query field has the focus: enter runs the search, esc leaves
+// the field, tab and shift+tab step the focus ring, f1 opens the help; every other key goes to
+// the field. Typing never starts a search.
 func (m model) keyQuery(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case keybind.Matches(msg, keys.Back):
@@ -95,6 +105,8 @@ func (m model) keyQuery(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.stepFocus(-1)
 	case msg.Type == tea.KeyF1:
 		return m.openHelp(), nil
+	case keybind.Matches(msg, keys.Run):
+		return m.startSearch()
 	}
 	var cmd tea.Cmd
 	m.query, cmd = m.query.Update(msg)

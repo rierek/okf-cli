@@ -17,8 +17,8 @@ import (
 // rankLexically is Python _rank_lexically: the lexical arm's hits and the scale their score is
 // printed against. The FTS index answers when there is a usable one (BM25, scores relative to the
 // best hit, scale 100); otherwise the substring scan does (field-weighted counts, scale 6 per term).
-func rankLexically(root, query string, terms []string, limit int, filters *where.FindFilters, notify bool) ([]*rank.Hit, int, error) {
-	rows, ok, err := fts.Ranking(root, query, limit, filters, notify)
+func rankLexically(root, query string, terms []string, limit int, filters *where.FindFilters, note func(string)) ([]*rank.Hit, int, error) {
+	rows, ok, err := fts.Ranking(root, query, limit, filters, note)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -69,9 +69,9 @@ func hydrate(root, path string, terms []string, score int, provenance string) (*
 // semanticHitList is Python _semantic_hit_dicts: the semantic arm's ranking hydrated into the shape
 // of the lexical hits. The score is round(100 * cosine), on the same 0..100 scale as the BM25 score;
 // the two are never fused by score (see rank.FuseConditional).
-func semanticHitList(root, query string, limit int, filters *where.FindFilters) ([]*rank.Hit, error) {
+func semanticHitList(root, query string, limit int, filters *where.FindFilters, note func(string)) ([]*rank.Hit, error) {
 	terms := rank.Tokenize(query)
-	ranked, err := semantic.Ranking(root, query, limit, filters)
+	ranked, err := semantic.Ranking(root, query, limit, filters, note)
 	if err != nil {
 		return nil, err
 	}

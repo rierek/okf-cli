@@ -11,8 +11,14 @@ import (
 // are generated from it, and re-binding a key changes exactly one place. A later task adds its
 // bindings here and to helpGroups, nowhere else.
 type keyMap struct {
-	Up   keybind.Binding
-	Down keybind.Binding
+	Up     keybind.Binding
+	Down   keybind.Binding
+	Top    keybind.Binding // g: first hit
+	Bottom keybind.Binding // G: last hit
+
+	DetailUp   keybind.Binding // ctrl+u: scroll the detail pane up
+	DetailDown keybind.Binding // ctrl+d: scroll the detail pane down
+	Layout     keybind.Binding // v, V: next and previous layout of the body
 
 	// Focus ring: tab and shift+tab step the focus to the next and previous target.
 	FocusIn  keybind.Binding
@@ -26,12 +32,19 @@ type keyMap struct {
 	Help    keybind.Binding // ?: help overlay; f1 also works inside a text field
 	Search  keybind.Binding // /: focus the query field
 	Refresh keybind.Binding // r: choose an index to refresh (outside text inputs)
+	Run     keybind.Binding // enter inside the query field: run the search
 }
 
 func newKeyMap() keyMap {
 	return keyMap{
-		Up:   keybind.NewBinding(keybind.WithKeys("up", "k"), keybind.WithHelp("↑/k", "up")),
-		Down: keybind.NewBinding(keybind.WithKeys("down", "j"), keybind.WithHelp("↓/j", "down")),
+		Up:     keybind.NewBinding(keybind.WithKeys("up", "k"), keybind.WithHelp("↑/k", "up")),
+		Down:   keybind.NewBinding(keybind.WithKeys("down", "j"), keybind.WithHelp("↓/j", "down")),
+		Top:    keybind.NewBinding(keybind.WithKeys("g", "home"), keybind.WithHelp("g", "first hit")),
+		Bottom: keybind.NewBinding(keybind.WithKeys("G", "end"), keybind.WithHelp("G", "last hit")),
+
+		DetailUp:   keybind.NewBinding(keybind.WithKeys("ctrl+u"), keybind.WithHelp("ctrl+u", "detail up")),
+		DetailDown: keybind.NewBinding(keybind.WithKeys("ctrl+d"), keybind.WithHelp("ctrl+d", "detail down")),
+		Layout:     keybind.NewBinding(keybind.WithKeys("v", "V"), keybind.WithHelp("v/V", "layout")),
 
 		FocusIn:  keybind.NewBinding(keybind.WithKeys("tab"), keybind.WithHelp("tab", "next focus")),
 		FocusOut: keybind.NewBinding(keybind.WithKeys("shift+tab"), keybind.WithHelp("shift+tab", "previous focus")),
@@ -44,6 +57,7 @@ func newKeyMap() keyMap {
 		Help:    keybind.NewBinding(keybind.WithKeys("?", "f1"), keybind.WithHelp("?/f1", "help")),
 		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "query field")),
 		Refresh: keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "refresh index")),
+		Run:     keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "search")),
 	}
 }
 
@@ -59,18 +73,22 @@ type helpGroup struct {
 // one group.
 func (k keyMap) helpGroups() []helpGroup {
 	return []helpGroup{
-		{"Navigation", []keybind.Binding{k.Up, k.Down, k.FocusIn, k.FocusOut, k.Search, k.Back}},
+		{"Navigation", []keybind.Binding{k.Up, k.Down, k.Top, k.Bottom, k.FocusIn, k.FocusOut, k.Search, k.Run, k.Back}},
+		{"Detail", []keybind.Binding{k.DetailUp, k.DetailDown, k.Layout}},
 		{"Dialogs", []keybind.Binding{k.Confirm, k.Cancel}},
 		{"Global", []keybind.Binding{k.Help, k.Quit, k.QuitNow}},
 		{"Index", []keybind.Binding{k.Refresh}},
 	}
 }
 
+// fieldHelpHint is the help hint inside a text field, where only f1 opens the help.
+var fieldHelpHint = keybind.NewBinding(keybind.WithKeys("f1"), keybind.WithHelp("f1", "help"))
+
 // globalBindings are the hints at the right of the header. Inside a text field the letter keys
 // type, so the hints name the keys that work there.
 func globalBindings(inInput bool) []keybind.Binding {
 	if inInput {
-		return []keybind.Binding{keys.Back, keys.QuitNow}
+		return []keybind.Binding{keys.Back, fieldHelpHint, keys.QuitNow}
 	}
 	return []keybind.Binding{keys.Help, keys.Quit}
 }

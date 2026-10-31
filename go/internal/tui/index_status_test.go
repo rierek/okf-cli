@@ -15,10 +15,10 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
 )
 
-// settle runs cmd and every command it spawns and feeds the index messages to Update. Cursor blink
+// settleIndex runs cmd and every command it spawns and feeds the index messages to Update. Cursor blink
 // ticks and toast timers are not fed (they would never end); a command that takes longer than a
 // second is left out. It returns the final model.
-func settle(m model, cmd tea.Cmd) model {
+func settleIndex(m model, cmd tea.Cmd) model {
 	pending := []tea.Cmd{cmd}
 	for len(pending) > 0 {
 		running := pending
@@ -106,7 +106,7 @@ func started(t *testing.T, root string) model {
 	m := newModel(root, defaultSettings(), nil)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: goldenWidth, Height: goldenHeight})
 	m = next.(model)
-	return settle(m, m.Init())
+	return settleIndex(m, m.Init())
 }
 
 // leaveField moves the focus from the query field to the results pane, where `r` acts.
@@ -129,7 +129,7 @@ func TestDotsAtStart(t *testing.T) {
 	if !strings.Contains(m.View(), "lexical") || !strings.Contains(m.View(), "semantic") {
 		t.Errorf("the header shows no labelled dots:\n%s", m.View())
 	}
-	m = settle(m, init)
+	m = settleIndex(m, init)
 	if m.lexical.state != indexAbsent {
 		t.Errorf("lexical dot = %v, want red (absent): the fixture has no .fts", m.lexical.state)
 	}
@@ -159,9 +159,9 @@ func TestLexicalDotFollowsTheIndex(t *testing.T) {
 	if m.lexical.state != indexAbsent {
 		t.Fatalf("before the build: %v, want red", m.lexical.state)
 	}
-	m = settle(m, checkIndex(root, indexLexical))
+	m = settleIndex(m, checkIndex(root, indexLexical))
 	m, cmd := m.startLexical()
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.lexical.state != indexCurrent {
 		t.Fatalf("after the build: %v, want green", m.lexical.state)
 	}
@@ -169,7 +169,7 @@ func TestLexicalDotFollowsTheIndex(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "kc-gov", "extra.md"), []byte(extra), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m = settle(m, checkIndex(root, indexLexical))
+	m = settleIndex(m, checkIndex(root, indexLexical))
 	if m.lexical.state != indexStale {
 		t.Errorf("after a new concept: %v, want yellow", m.lexical.state)
 	}
@@ -193,7 +193,7 @@ func TestLexicalRefreshBuildsTheIndex(t *testing.T) {
 	if !strings.Contains(m.View(), "◐") {
 		t.Error("a running refresh is visible in the header")
 	}
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.lexical.state != indexCurrent || m.lexical.busy {
 		t.Errorf("after the build: state %v busy %v, want green and idle", m.lexical.state, m.lexical.busy)
 	}
@@ -225,7 +225,7 @@ func TestSemanticRefreshAsksThenEmbeds(t *testing.T) {
 	}
 	m, _ = press(m, "r")
 	m, cmd := press(m, "s")
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.overlay != overlayConfirm || m.confirm.kind != confirmSemanticRefresh {
 		t.Fatalf("overlay = %v, want the semantic confirm dialog", m.overlay)
 	}
@@ -242,7 +242,7 @@ func TestSemanticRefreshAsksThenEmbeds(t *testing.T) {
 		t.Fatalf("cancel: %d calls, overlay %v", calls, c.overlay)
 	}
 	m, cmd = press(m, "enter")
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if _, texts := fake.seen(); texts != n {
 		t.Errorf("embedded %d texts, the dialog named %d", texts, n)
 	}
@@ -257,7 +257,7 @@ func TestSemanticDotPartial(t *testing.T) {
 	root := fixtureRoot(t)
 	m := started(t, root)
 	m, cmd := m.startSemantic()
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.semantic.state != indexCurrent {
 		t.Fatalf("after the embedding: %v, want green", m.semantic.state)
 	}
@@ -265,7 +265,7 @@ func TestSemanticDotPartial(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "kc-gov", "extra.md"), []byte(extra), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	m = settle(m, checkIndex(root, indexSemantic))
+	m = settleIndex(m, checkIndex(root, indexSemantic))
 	if m.semantic.state != indexStale {
 		t.Errorf("one concept unembedded: %v, want yellow", m.semantic.state)
 	}
@@ -278,7 +278,7 @@ func TestSemanticRefreshFailureKeepsTheDot(t *testing.T) {
 	m := started(t, root)
 	before := m.semantic.state
 	m, cmd := m.startSemantic()
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.semantic.state != before || m.semantic.busy {
 		t.Errorf("state %v busy %v, want the old colour %v and idle", m.semantic.state, m.semantic.busy, before)
 	}
@@ -297,7 +297,7 @@ func TestLexicalRefreshFailureKeepsTheDot(t *testing.T) {
 	m := started(t, root)
 	before := m.lexical.state
 	m, cmd := m.startLexical()
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.lexical.state != before || m.lexical.busy {
 		t.Errorf("state %v busy %v, want the old colour %v and idle", m.lexical.state, m.lexical.busy, before)
 	}
@@ -318,7 +318,7 @@ func TestSemanticWithoutKey(t *testing.T) {
 		t.Error("the dialog does not name the missing key")
 	}
 	m, cmd := press(m, "s")
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.overlay != overlayNone || m.semantic.busy {
 		t.Errorf("the refresh ran: overlay %v busy %v", m.overlay, m.semantic.busy)
 	}
@@ -336,7 +336,7 @@ func TestRootSwitchRechecks(t *testing.T) {
 	a, b := fixtureRoot(t), fixtureRoot(t)
 	m := started(t, a)
 	m, cmd := m.startLexical()
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.lexical.state != indexCurrent {
 		t.Fatalf("root A lexical = %v, want green", m.lexical.state)
 	}
@@ -348,11 +348,11 @@ func TestRootSwitchRechecks(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("the switch starts no recheck")
 	}
-	m = settle(m, slow)
+	m = settleIndex(m, slow)
 	if m.lexical.state != indexUnknown {
 		t.Error("a result of the old root changed the dot")
 	}
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.lexical.state != indexAbsent || m.semantic.state != indexAbsent {
 		t.Errorf("root B: lexical %v semantic %v, want both red", m.lexical.state, m.semantic.state)
 	}
@@ -379,14 +379,14 @@ func TestRefreshWhileBusyDoesNotStartAgain(t *testing.T) {
 	m, lex := m.startLexical()
 	again, _ := m.startLexical()
 	busy(again, "lexical")
-	m = settle(m, lex)
+	m = settleIndex(m, lex)
 
 	m, sem := m.startSemantic()
 	again, _ = m.startSemantic()
 	busy(again, "semantic")
 	again, _ = m.startSemanticPlan()
 	busy(again, "semantic plan")
-	settle(m, sem)
+	settleIndex(m, sem)
 }
 
 // With every concept embedded, the semantic refresh opens no confirm dialog and says so.
@@ -395,10 +395,10 @@ func TestSemanticRefreshNothingToEmbed(t *testing.T) {
 	root := fixtureRoot(t)
 	m := started(t, root)
 	m, cmd := m.startSemantic()
-	m = leaveField(settle(m, cmd))
+	m = leaveField(settleIndex(m, cmd))
 	m, _ = press(m, "r")
 	m, cmd = press(m, "s")
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.overlay != overlayNone {
 		t.Errorf("overlay = %v, want none: nothing to embed", m.overlay)
 	}
@@ -415,7 +415,7 @@ func TestRefreshOfAnOldRootIsDropped(t *testing.T) {
 	m, lex := m.startLexical()
 	m, plan := m.startSemanticPlan()
 	m, _ = m.setRoot(b)
-	m = settle(m, tea.Batch(lex, plan))
+	m = settleIndex(m, tea.Batch(lex, plan))
 	if m.overlay == overlayConfirm {
 		t.Error("the plan of the old root opened the confirm dialog")
 	}
@@ -430,7 +430,7 @@ func TestCheckFailureKeepsTheDot(t *testing.T) {
 	root := fixtureRoot(t)
 	m := started(t, root)
 	m, cmd := m.startSemantic()
-	m = settle(m, cmd)
+	m = settleIndex(m, cmd)
 	if m.semantic.state != indexCurrent {
 		t.Fatalf("after the embedding: %v, want green", m.semantic.state)
 	}
@@ -439,7 +439,7 @@ func TestCheckFailureKeepsTheDot(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(concept, 0o644) })
-	m = settle(m, checkIndex(root, indexSemantic))
+	m = settleIndex(m, checkIndex(root, indexSemantic))
 	if m.semantic.state != indexCurrent {
 		t.Errorf("state %v, want the old colour green", m.semantic.state)
 	}
@@ -474,7 +474,7 @@ func TestRefreshWaitsForCheckAndCheckKeepsRefreshBusy(t *testing.T) {
 	if againCmd != nil || !strings.Contains(again.toast.title, "busy") {
 		t.Fatal("a second build started while the first one runs")
 	}
-	m = settle(m, build)
+	m = settleIndex(m, build)
 	if m.lexical.busy || m.lexical.checking || m.lexical.state != indexCurrent {
 		t.Errorf("after the build: %+v, want green and idle", m.lexical)
 	}
@@ -485,5 +485,5 @@ func TestRefreshWaitsForCheckAndCheckKeepsRefreshBusy(t *testing.T) {
 	if !m.semantic.busy {
 		t.Fatal("a check result cleared the busy mark of the running embedding")
 	}
-	settle(m, sem)
+	settleIndex(m, sem)
 }
