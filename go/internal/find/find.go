@@ -13,12 +13,9 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
-	"nas/volume1/data/git/okf-tools/go/internal/fts"
 	"nas/volume1/data/git/okf-tools/go/internal/rank"
-	"nas/volume1/data/git/okf-tools/go/internal/semantic"
 	"nas/volume1/data/git/okf-tools/go/internal/spec"
 	"nas/volume1/data/git/okf-tools/go/internal/stdio"
-	"nas/volume1/data/git/okf-tools/go/internal/where"
 )
 
 // Register attaches the `find` command.
@@ -46,34 +43,21 @@ func Register(app *cli.App) {
 
 // run is Python cmd_find.
 func run(root string, a *cli.Args) (any, error) {
-	includeTopics := a.Bool("include_topics")
-	config, err := catalogue.LoadConfig(root)
-	if err != nil {
-		return nil, err
-	}
-	var corpus []string
-	if bundle, _ := config["bundle"].(string); bundle != "" && !includeTopics {
-		if corpus, err = catalogue.ListSearchBundles(root, false, ""); err != nil {
-			return nil, err
-		}
-	}
 	var expression *string
 	if a.Has("where") {
 		text := a.String("where")
 		expression = &text
 	}
-	filters, err := where.CompileWhere(expression, includeTopics, corpus)
+	filters, err := Compile(root, expression, a.Bool("include_topics"))
 	if err != nil {
 		return nil, err
 	}
-	if includeTopics {
-		if topics, known := fts.IncludesTopics(root); known && !topics {
-			envelope.Note("lexical index excludes topic folders — run `okf build-index --include-topics`")
-		}
-	}
 	query, limit := a.String("query"), a.Int("limit")
-	terms := rank.Tokenize(query)
-	if len(terms) == 0 {
+	result, err := search(root, Options{Query: query, Limit: limit, Filters: filters, ExpandTags: a.Bool("expand_tags")}, envelope.Note)
+	if err != nil {
+		return nil, err
+	}
+	if result.Empty {
 		if a.JSON {
 			return envelope.O("hits", []any{}, "nearest_tags", []any{}), nil
 		}
@@ -81,58 +65,21 @@ func run(root string, a *cli.Args) (any, error) {
 		return nil, nil
 	}
 	breakdown := a.Bool("breakdown")
-	hits, maxScore, err := rankLexically(root, query, terms, limit, filters, true)
-	if err != nil {
-		return nil, err
-	}
-	ownedProvisionally := rank.Confident(hits)
-	if a.Bool("expand_tags") && !ownedProvisionally {
-		extra, err := semantic.ExpandQueryTags(root, query)
-		if err != nil {
-			return nil, err
-		}
-		if len(extra) > 0 {
-			envelope.Note("query expanded with tag(s): " + strings.Join(extra, ", "))
-			known := terms
-			for _, t := range extra {
-				if !contains(known, t) {
-					terms = append(terms, t)
-				}
-			}
-			if hits, maxScore, err = rankLexically(root, strings.Join(terms, " "), terms, limit, filters, false); err != nil {
-				return nil, err
-			}
-			ownedProvisionally = rank.Confident(hits)
-		}
-	}
-	var semanticHits []*rank.Hit
-	if !ownedProvisionally || len(hits) < limit {
-		if semanticHits, err = semanticHitList(root, query, limit, filters); err != nil {
-			return nil, err
-		}
-	}
-	if filters.IncludeArchive() && len(semanticHits) > 0 {
-		envelope.Note("`archived` in --where covers the lexical arm only; embeddings stay on the active catalogue")
-	}
-	all, lexicalOwned := rank.FuseConditional(hits, semanticHits, limit)
-	if !lexicalOwned && len(semanticHits) > 0 {
-		envelope.Note("semantic arm owns this ranking (lexical top-1 lacked a clear margin)")
-	}
-	shown := rank.Cut(all, limit)
+	shown := result.ranked
 	if a.JSON {
 		records := make([]envelope.Obj, len(shown))
 		for i, h := range shown {
-			records[i] = hitRecord(i+1, h, breakdown, maxScore, filters.Now())
+			records[i] = hitRecord(i+1, h, breakdown, result.maxScore, result.now)
 		}
 		nearest := []string{}
-		if len(all) == 0 {
+		if result.matched == 0 {
 			if nearest, err = zeroHitSuggestions(root, query); err != nil {
 				return nil, err
 			}
 		}
 		return envelope.O("hits", records, "nearest_tags", nearest), nil
 	}
-	if len(all) == 0 {
+	if result.matched == 0 {
 		stdio.Printf("(no matches for: %s)\n", query)
 		near, err := zeroHitSuggestions(root, query)
 		if err != nil {
@@ -145,7 +92,7 @@ func run(root string, a *cli.Args) (any, error) {
 		return nil, nil
 	}
 	for i, h := range shown {
-		printHit(i+1, h, breakdown, maxScore)
+		printHit(i+1, h, breakdown, result.maxScore)
 	}
 	stdio.Println("------")
 	return nil, nil

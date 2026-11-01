@@ -1,0 +1,178 @@
+// Frame composition from lif internal/tui/view_browse_repo.go (viewBrowseRepo, composeOverlays,
+// footerBindings, View) at commit 2056715, adapted. Written, not copied.
+
+package tui
+
+import (
+	"strings"
+
+	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+
+	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
+)
+
+// toastDismissHint is the footer hint of a sticky toast; the key is handled in handleKey.
+var toastDismissHint = keybind.NewBinding(keybind.WithKeys("esc"), keybind.WithHelp("esc", "dismiss"))
+
+// View renders the screen, the open overlay over it and the toast over both.
+func (m model) View() string {
+	w, h := m.size()
+	screen := m.viewSearch(w, h)
+	if m.screen == screenBuffer {
+		screen = m.viewBuffer(w, h)
+	}
+	if m.screen == screenTypes || m.screen == screenTags {
+		screen = m.viewCatalogue(w, h)
+	}
+	return m.renderToast(m.composeOverlays(screen, w, h))
+}
+
+// composeOverlays draws the open overlay centered over the screen.
+func (m model) composeOverlays(out string, w, h int) string {
+	switch m.overlay {
+	case overlayHelp:
+		out = placeOverlay(out, m.helpBox(), w, h)
+	case overlayConfirm:
+		out = placeOverlay(out, m.confirmBox(), w, h)
+	case overlayRefresh:
+		out = placeOverlay(out, m.refreshBox(), w, h)
+	case overlayText:
+		out = placeOverlay(out, m.textBox(), w, h)
+	case overlayFilterMenu:
+		out = placeOverlay(out, m.filterMenuBox(), w, h)
+	case overlayRoot:
+		out = placeOverlay(out, m.rootMenuBox(), w, h)
+	case overlayAgents:
+		out = placeOverlay(out, m.agentsBox(), w, h)
+	case overlayPalette:
+		out = placeOverlay(out, m.paletteBox(), w, h)
+	}
+	return out
+}
+
+// footerBindings are the key hints of the footer: the keys that act in the current state.
+func (m model) footerBindings() []keybind.Binding {
+	if m.screen == screenTypes || m.screen == screenTags {
+		return pick([]binding{
+			{toastDismissHint, m.escDismissesToast()},
+			{keys.Down, m.catalogueLen() > 0},
+			{keys.BufferBack, true},
+		})
+	}
+	if m.screen == screenBuffer {
+		n := len(m.buf.entries)
+		return pick([]binding{
+			{toastDismissHint, m.escDismissesToast()},
+			{keys.Down, n > 0},
+			{keys.Note, n > 0},
+			{keys.BufferDrop, n > 0},
+			{keys.BufferClear, n > 0},
+			{keys.Send, n > 0},
+			{keys.Copy, n > 0},
+			{keys.BufferBack, true},
+		})
+	}
+	hit := m.focus == focusList && m.search.focused() != nil
+	return pick([]binding{
+		{toastDismissHint, m.escDismissesToast()},
+		{keys.Run, m.inInput()},
+		{keys.Back, m.inInput()},
+		{keys.Open, m.focus == focusFilter},
+		{keys.FieldNext, m.focus == focusFilter},
+		{keys.Down, !m.inInput() && len(m.search.hits) > 0},
+		{keys.Layout, !m.inInput()},
+		{keys.Edit, hit},
+		{keys.BufferToggle, hit},
+		{keys.Note, hit},
+		{keys.Task, hit},
+		{keys.Buffer, m.focus == focusList},
+		{keys.Send, len(m.buf.entries) > 0},
+		{keys.Copy, !m.inInput() && len(m.buf.entries) > 0},
+		{keys.FocusIn, len(focusRing) > 1},
+		{keys.FocusOut, len(focusRing) > 1},
+		{keys.Search, !m.inInput()},
+		{keys.Filter, !m.inInput()},
+		{keys.FilterClear, !m.inInput() && m.filters.active()},
+		{keys.Refresh, !m.inInput()},
+	})
+}
+
+// binding is a key hint and whether it acts in the current state.
+type binding struct {
+	b   keybind.Binding
+	act bool
+}
+
+// pick keeps the hints that act.
+func pick(cands []binding) []keybind.Binding {
+	var out []keybind.Binding
+	for _, c := range cands {
+		if c.act {
+			out = append(out, c.b)
+		}
+	}
+	return out
+}
+
+// header is the first line: the active root and the screen title at the left, the buffer count,
+// the index dots and the global key hints at the right. A root too long for the line shows its
+// tail behind "…", so the header never wraps.
+func (m model) header(innerW int) string {
+	title := map[screenKind]string{screenSearch: "Search", screenBuffer: "Buffer", screenTypes: "Types", screenTags: "Tags"}[m.screen]
+	right := m.dots() + "  " + m.bufferCount() + "  " + renderBindings(globalBindings(m.inInput()))
+	// The left side is "> root: title" and one gap cell.
+	room := innerW - lipgloss.Width(right) - lipgloss.Width("> : "+title) - 1
+	root := m.root
+	if w := lipgloss.Width(root); room >= 1 && w > room {
+		// A wide cluster on the cut stays whole, so cut one cell more until the root fits.
+		for cut := w - room + 1; lipgloss.Width(root) > room; cut++ {
+			root = ansi.TruncateLeft(m.root, cut, "…")
+		}
+	}
+	return breadcrumb(root, title, right, innerW)
+}
+
+// queryRows is the height of the query box: its text row and the two border rows.
+const queryRows = 3
+
+// chrome is the frame around the body: the header, the footer and the rows left for the body
+// panes, borders included: the frame without header, query box, filter bar, footer and the two
+// dividers.
+func (m model) chrome(w, h int) (head, foot string, avail int) {
+	innerW := w - 2
+	head = m.header(innerW)
+	foot = footer(renderBindings(m.footerBindings()), innerW)
+	return head, foot, h - 2 - lipgloss.Height(head) - 1 - queryRows - 1 - filterBarHeight - lipgloss.Height(foot)
+}
+
+// queryBox is the query field in a titled rounded border of outer width outerW: teal while it has
+// focus. While a search runs the indicator stands at the right end of the text row.
+func (m model) queryBox(outerW int) string {
+	inner := outerW - 2
+	m.query.Width = max(inner-lipgloss.Width(m.query.Prompt)-1, 1)
+	row := m.query.View()
+	if m.search.running {
+		indicator := m.search.spinner.View() + " searching"
+		m.query.Width = max(m.query.Width-lipgloss.Width(indicator)-1, 1)
+		row = m.query.View() + " " + indicator
+	}
+	col := theme.Overlay
+	if m.focus == focusQuery {
+		col = theme.Teal
+	}
+	return titledBox([]string{row}, "Query", inner, col)
+}
+
+// viewSearch is the search screen: header, query field, result list and detail pane, footer, all
+// in the outer frame of w×h cells.
+func (m model) viewSearch(w, h int) string {
+	innerW := w - 2
+	head, foot, avail := m.chrome(w, h)
+	div := theme.Dim.Render(strings.Repeat("─", innerW))
+	body := m.viewBody(max(avail-2, 1))
+
+	content := head + "\n" + div + "\n" + m.queryBox(innerW) + "\n" + m.filterBar(innerW) + "\n" + body + "\n" + div + "\n" + foot
+	return outerBorder(content, innerW)
+}

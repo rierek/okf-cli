@@ -3,9 +3,12 @@
 package info
 
 import (
+	"strings"
+
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
+	"nas/volume1/data/git/okf-tools/go/internal/pytext"
 	"nas/volume1/data/git/okf-tools/go/internal/stdio"
 )
 
@@ -51,4 +54,26 @@ func run(root string, a *cli.Args) (any, error) {
 	}
 	stdio.Println("------")
 	return nil, nil
+}
+
+// TypeDef is one type of the catalogue's TYPES.md: its name and description.
+type TypeDef struct{ Name, Description string }
+
+// Types lists the types of the catalogue's TYPES.md in file order, read the way `info` reads the
+// file. ok is false when TYPES.md is missing. The description of a block entry joins its lines.
+func Types(root string) (defs []TypeDef, ok bool, err error) {
+	path := catalogue.Join(root, "TYPES.md")
+	if !catalogue.RealFS.IsFile(path) {
+		return nil, false, nil
+	}
+	text, err := catalogue.ReadFile(path)
+	if err != nil {
+		return nil, true, err
+	}
+	lines := pytext.SplitLines(text, true)
+	for _, e := range catalogue.ScanRegistry(lines).Entries {
+		_, desc := e.Fields(lines)
+		defs = append(defs, TypeDef{e.Value, strings.Join(desc, " ")})
+	}
+	return defs, true, nil
 }

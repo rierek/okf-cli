@@ -24,6 +24,11 @@ class T(unittest.TestCase):
         self.assertNotIn("T1", b)
         self.assertNotIn("D1", b)
 
+    def test_epic_source_counts_tasks(self):
+        b = rn.render_block({**M, "type": "epic"}, KIDS)
+        self.assertIn("- [T1] Task", b)
+        self.assertNotIn("D1", b)
+
     def test_splice_keeps_outside_and_is_idempotent(self):
         b = rn.render_block(M, KIDS)
         once = rn.splice(PAGE, b)

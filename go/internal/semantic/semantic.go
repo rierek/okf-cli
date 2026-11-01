@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"sync"
 
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
@@ -38,18 +39,30 @@ func Register(app *cli.App) {
 }
 
 // queryVectors is Python's _QUERY_VEC_CACHE: one query text is embedded once per process, so
-// --expand-tags and the semantic arm share one call. A failure is not cached.
-var queryVectors = map[string][]float64{}
+// --expand-tags and the semantic arm share one call. A failure is not cached. The lock guards the
+// map only; the embedding call runs outside it, so two searches at once may both embed one text.
+var (
+	queryVectorsMu sync.Mutex
+	queryVectors   = map[string][]float64{}
+)
+
+// embedQuery is the embedding call of a query; tests replace it.
+var embedQuery = tagvec.EmbedVoyageQuery
 
 func queryVector(text string) ([]float64, error) {
-	if v, ok := queryVectors[text]; ok {
+	queryVectorsMu.Lock()
+	v, ok := queryVectors[text]
+	queryVectorsMu.Unlock()
+	if ok {
 		return v, nil
 	}
-	v, err := tagvec.EmbedVoyageQuery(text)
+	v, err := embedQuery(text)
 	if err != nil {
 		return nil, err
 	}
+	queryVectorsMu.Lock()
 	queryVectors[text] = v
+	queryVectorsMu.Unlock()
 	return v, nil
 }
 
@@ -207,14 +220,14 @@ func ExpandQueryTags(root, query string) ([]string, error) {
 
 // Ranking is Python semantic_ranking: the concepts closest to the query by cosine, best first,
 // at most limit of them after the --where filter, each with its cosine. No vectors or no
-// embedding backend skips the arm with one note and gives none.
-func Ranking(root, query string, limit int, filters *where.FindFilters) ([]rank.Scored, error) {
+// embedding backend skips the arm with one note, sent to note, and gives none.
+func Ranking(root, query string, limit int, filters *where.FindFilters, note func(string)) ([]rank.Scored, error) {
 	vecs, found, residual, err := loadConceptVectors(sqlstore.TagvecPath(root), filters)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		envelope.Note("semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only")
+		note("semantic arm skipped (.tagvec cache/concept embeddings absent) — lexical results only")
 		return []rank.Scored{}, nil
 	}
 	if len(vecs) == 0 {
@@ -225,7 +238,7 @@ func Ranking(root, query string, limit int, filters *where.FindFilters) ([]rank.
 		return nil, err
 	}
 	if err != nil {
-		envelope.Note(fmt.Sprintf("semantic arm skipped (embedding backend unavailable: %v) — lexical results only", err))
+		note(fmt.Sprintf("semantic arm skipped (embedding backend unavailable: %v) — lexical results only", err))
 		return []rank.Scored{}, nil
 	}
 	ranked := rank.RankCosine(qvec, vecs)
@@ -255,17 +268,7 @@ func build(root string, a *cli.Args) (any, error) {
 	dbPath := sqlstore.TagvecPath(root)
 	result := envelope.O("applied", false, "embedded", 0, "path", dbPath)
 	if a.Bool("if_stale") {
-		bundles, err := catalogue.ListIndexableBundles(root, "")
-		if err != nil {
-			return nil, err
-		}
-		var paths []string
-		for _, b := range bundles {
-			for cid := range catalogue.IterConcepts(catalogue.Join(root, b), true) {
-				paths = append(paths, b+"/"+cid)
-			}
-		}
-		cov, ok, err := tagvec.SemanticCoverage(root, paths)
+		cov, ok, err := Coverage(root)
 		if err != nil {
 			return nil, err
 		}
@@ -287,18 +290,9 @@ func build(root string, a *cli.Args) (any, error) {
 	if a.JSON {
 		progress = os.Stderr
 	}
-	written, left, err := fill(root, dbPath, progress)
+	written, left, err := fill(root, dbPath, tagvec.EmbedVoyage, progress)
 	if err != nil {
-		class, message, ok := sqlstore.PyError(err)
-		var exception *tagvec.Exception
-		switch {
-		case ok:
-		case errors.As(err, &exception):
-			class, message = exception.Class, exception.Message
-		default:
-			class, message = "Error", err.Error()
-		}
-		envelope.Note(fmt.Sprintf("semantic index build failed (%s: %s) -- lexical arm unaffected", class, message))
+		envelope.Note(fmt.Sprintf("semantic index build failed (%s) -- lexical arm unaffected", failureText(err)))
 		return result, nil
 	}
 	result.Set("applied", written > 0)
@@ -316,7 +310,7 @@ func build(root string, a *cli.Args) (any, error) {
 // fill embeds the concept delta in batches and writes each batch as it arrives, so a failure
 // later keeps what is done. It returns the rows written and the planned concepts left unembedded
 // when a batch was skipped (0 when none was).
-func fill(root, dbPath string, progress io.Writer) (written, left int, err error) {
+func fill(root, dbPath string, embed func([]string) ([][]float32, error), progress io.Writer) (written, left int, err error) {
 	delta, err := tagvec.PlanConceptDelta(root, tagvec.SemanticModel, dbPath, "", 0)
 	if err != nil {
 		return 0, 0, err
@@ -328,7 +322,7 @@ func fill(root, dbPath string, progress io.Writer) (written, left int, err error
 		for i, t := range batch {
 			texts[i] = t.Text
 		}
-		vectors, err := tagvec.EmbedResilient(tagvec.EmbedVoyage, texts, "voyage concepts "+batch[0].Item+"..", progress)
+		vectors, err := tagvec.EmbedResilient(embed, texts, "voyage concepts "+batch[0].Item+"..", progress)
 		if err != nil {
 			return 0, 0, err
 		}

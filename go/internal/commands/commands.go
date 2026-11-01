@@ -17,6 +17,7 @@ import (
 	"nas/volume1/data/git/okf-tools/go/internal/rewrite"
 	"nas/volume1/data/git/okf-tools/go/internal/semantic"
 	"nas/volume1/data/git/okf-tools/go/internal/tagwrite"
+	"nas/volume1/data/git/okf-tools/go/internal/tui"
 	"nas/volume1/data/git/okf-tools/go/internal/wikisync"
 )
 
@@ -38,6 +39,7 @@ var commands = []func(*cli.App){
 	navigation.Register,
 	wikisync.Register,
 	tagwrite.Register,
+	tui.Register,
 }
 
 // Register attaches every command package to app, in the order of the list above.

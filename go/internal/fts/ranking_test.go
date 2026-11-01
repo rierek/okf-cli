@@ -35,7 +35,7 @@ func ranked(t *testing.T, root, query string) []Row {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows, ok, err := Ranking(root, query, 10, filters, false)
+	rows, ok, err := Ranking(root, query, 10, filters, nil)
 	if err != nil || !ok {
 		t.Fatalf("Ranking: ok=%v err=%v", ok, err)
 	}

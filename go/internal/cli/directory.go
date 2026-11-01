@@ -38,6 +38,7 @@ var directory = []Entry{
 	{Name: "sync-update", Group: "maintenance", Summary: "re-materialise outdated consumer blocks from their canon owner (dry-run default)"},
 	{Name: "tags", Group: "tags", Summary: "list all tags with usage counts, or fuzzy-search candidate tags"},
 	{Name: "toc", Group: "navigation", Summary: "print a concept's headings (default: h2 only)"},
+	{Name: "tui", Group: "search", Summary: "keyboard-first terminal UI: search the catalogue, screen hits"},
 	{Name: "verify", Group: "maintenance", Summary: "record that a concept was checked against its sources"},
 	{Name: "visualize", Group: "navigation", Summary: "write a viz.html concept graph for a bundle (embeds every concept body; needs network for cytoscape/marked)"},
 	{Name: "wikilinks", Group: "maintenance", Summary: "report Obsidian wikilinks ([[…]]) and whether each resolves to a concept"},

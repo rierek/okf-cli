@@ -1,7 +1,9 @@
 package catalogue
 
 import (
+	"slices"
 	"sort"
+	"strings"
 
 	"nas/volume1/data/git/okf-tools/go/internal/frontmatter"
 	"nas/volume1/data/git/okf-tools/go/internal/pytext"
@@ -14,6 +16,7 @@ var RegistryRanks = []string{"1", "2", "3", "—"}
 var (
 	tableEntryRE      = pytext.Regexp("^\\|\\s*`([^`]+)`")
 	blockEntryRE      = pytext.Regexp("^###\\s+`([^`]+)`\\s*$")
+	rankLineRE        = pytext.Regexp(`^rank:\s*(` + strings.Join(RegistryRanks, "|") + `)\s*$`)
 	registryHeadingRE = pytext.Regexp(`^#{1,6}(?:\s|$)`)
 	fenceOpenRE       = pytext.Regexp("^ {0,3}(`{3,}|~{3,})")
 	fenceCloseRE      = pytext.Regexp("^ {0,3}(`{3,}|~{3,})\\s*$")
@@ -181,4 +184,32 @@ func AllTags(root string) (TagCounts, error) {
 		}
 	}
 	return counts, nil
+}
+
+// Fields is Python _entry_fields: the rank (or "") and the description lines of one entry.
+func (e RegistryEntry) Fields(lines []string) (rank string, desc []string) {
+	if e.Kind == "table" {
+		cells := strings.Split(strings.Trim(pytext.Strip(lines[e.Start]), "|"), "|")
+		var text string
+		if len(cells) >= 3 && slices.Contains(RegistryRanks, pytext.Strip(cells[1])) {
+			rank, text = pytext.Strip(cells[1]), pytext.Strip(strings.Join(cells[2:], "|"))
+		} else if len(cells) > 1 {
+			text = pytext.Strip(strings.Join(cells[1:], "|"))
+		}
+		if text != "" {
+			desc = []string{text}
+		}
+		return rank, desc
+	}
+	for _, l := range lines[e.Start+1 : e.End] {
+		if s := pytext.Strip(l); s != "" {
+			desc = append(desc, s)
+		}
+	}
+	if len(desc) > 0 {
+		if m := rankLineRE.FindStringSubmatch(desc[0]); m != nil {
+			rank, desc = m[1], desc[1:]
+		}
+	}
+	return rank, desc
 }
