@@ -67,12 +67,7 @@ func (m model) keyBuffer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keybind.Matches(msg, keys.DetailDown), keybind.Matches(msg, keys.DetailUp):
 		w, h := m.size()
 		_, previewW, topH, _ := m.bufferLayout(w, h)
-		page := max(topH/2, 1)
-		if keybind.Matches(msg, keys.DetailUp) {
-			page = -page
-		}
-		maxScroll := max(len(m.bufferPreviewRows(max(previewW-4, 1)))-topH, 0)
-		m.bufScroll = min(max(m.bufScroll+page, 0), maxScroll)
+		m.bufScroll, _ = scrollKey(msg, m.bufScroll, len(m.bufferPreviewRows(max(previewW-4, 1))), topH)
 	case keybind.Matches(msg, keys.BufferDrop) && n > 0:
 		m.buf = m.buf.remove(m.bufCursor)
 		m.bufCursor = min(m.bufCursor, max(n-2, 0))
@@ -164,9 +159,7 @@ func (m model) bufferPreviewRows(w int) []string {
 
 // bufferPreview is the preview pane of the entry under the cursor, scrolled by the user.
 func (m model) bufferPreview(outerW, innerH int) string {
-	rows := m.bufferPreviewRows(max(outerW-4, 1))
-	scroll := min(m.bufScroll, max(len(rows)-innerH, 0))
-	return renderPane(pane{rows: rows[scroll:]}, "Preview", outerW-2, innerH, false)
+	return previewPane(m.bufferPreviewRows(max(outerW-4, 1)), m.bufScroll, outerW, innerH)
 }
 
 // bufferNote shows the note of the entry under the cursor, or says there is none.

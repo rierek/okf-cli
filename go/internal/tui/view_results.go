@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	keybind "github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -126,9 +128,27 @@ func listRow(mark, title, typ, bundle string, w int) string {
 
 // detailPane shows the focused hit, scrolled by the user.
 func (m model) detailPane(outerW, innerH int) string {
-	rows := m.detailRows(max(outerW-4, 1))
-	scroll := min(m.search.detailScroll, max(len(rows)-innerH, 0))
+	return previewPane(m.detailRows(max(outerW-4, 1)), m.search.detailScroll, outerW, innerH)
+}
+
+// previewPane is a preview pane of outer width outerW: rows scrolled down by scroll, at most the
+// rows that leave the last page full.
+func previewPane(rows []string, scroll, outerW, innerH int) string {
+	scroll = min(scroll, max(len(rows)-innerH, 0))
 	return renderPane(pane{rows: rows[scroll:]}, "Preview", outerW-2, innerH, false)
+}
+
+// scrollKey applies ctrl+d or ctrl+u to scroll, a preview of nRows rows in a pane of innerH rows:
+// half a page, kept inside the rows. ok is false for any other key.
+func scrollKey(msg tea.KeyMsg, scroll, nRows, innerH int) (next int, ok bool) {
+	page := max(innerH/2, 1)
+	switch {
+	case keybind.Matches(msg, keys.DetailDown):
+		return min(scroll+page, max(nRows-innerH, 0)), true
+	case keybind.Matches(msg, keys.DetailUp):
+		return max(scroll-page, 0), true
+	}
+	return scroll, false
 }
 
 const detailLabelW = 12

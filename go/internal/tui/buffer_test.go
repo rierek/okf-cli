@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -243,11 +244,47 @@ func TestBufferViewPreviewBesideNote(t *testing.T) {
 	}
 	next, _ := press(m, "j")
 	above, below = split(next)
-	if base2 := filepath.Base(next.buf.entries[1].Abs); !strings.Contains(above, "path        "+filepath.Dir(next.buf.entries[1].Abs)+"/"+base2) {
-		t.Errorf("preview did not follow the cursor to %q:\n%s", base2, above)
+	// Only the path row names the file: other rows (the snippet) may link to its neighbours.
+	pathRow := regexp.MustCompile(`path\s+/\S+`).FindString(above)
+	if base2 := filepath.Base(next.buf.entries[1].Abs); !strings.HasSuffix(pathRow, base2) || strings.HasSuffix(pathRow, base) {
+		t.Errorf("preview did not follow the cursor to %q, path row %q:\n%s", base2, pathRow, above)
 	}
 	if !strings.Contains(below, "No note, press n") {
 		t.Errorf("note pane of the entry without a note:\n%s", below)
+	}
+}
+
+// ctrl+d scrolls the buffer preview, ctrl+u and a move to another entry bring it back to the top;
+// the headings of the entry's file show in the preview.
+func TestBufferPreviewScrolls(t *testing.T) {
+	m := searchedOnFixture(t, "unused")
+	m = feed(m, tea.WindowSizeMsg{Width: 100, Height: 12})
+	m = addHits(t, m, 0, 1)
+	m, _ = press(m, "b")
+	w, h := m.size()
+	_, previewW, topH, _ := m.bufferLayout(w, h)
+	rows := m.bufferPreviewRows(max(previewW-4, 1))
+	if len(rows) <= topH {
+		t.Fatal("preview fits the small terminal: the test proves nothing")
+	}
+	heads := headingsOf(m.buf.entries[0].Abs)
+	if len(heads) == 0 {
+		t.Fatal("the first entry has no H2 or H3 heading: the test proves nothing")
+	}
+	if !slices.ContainsFunc(rows, func(r string) bool { return strings.Contains(r, "- "+heads[0].Text) }) {
+		t.Errorf("preview lacks the heading %q of the file: %q", heads[0].Text, rows)
+	}
+	m, _ = press(m, "ctrl+d")
+	if m.bufScroll == 0 {
+		t.Fatal("ctrl+d did not scroll the buffer preview")
+	}
+	m, _ = press(m, "ctrl+u")
+	if m.bufScroll != 0 {
+		t.Errorf("ctrl+u: scroll = %d, want 0", m.bufScroll)
+	}
+	m, _ = press(m, "ctrl+d", "j")
+	if m.bufScroll != 0 {
+		t.Errorf("a new entry keeps the scroll %d, want 0", m.bufScroll)
 	}
 }
 

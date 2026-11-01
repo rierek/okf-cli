@@ -23,7 +23,7 @@ okf [--root ROOT | --global] tui
 - `okf --root <dir> tui` opens `<dir>`.
 - With no root at all, `okf tui` prints the message of `okf find` and exits with code 3. The TUI does not start.
 
-The TUI starts on the search screen. The header shows the active root. The query field has the focus.
+The TUI starts on the search screen. The header shows the active root. The query field has the focus: it sits in a rounded frame titled `Query`, teal while it has the focus. Every pane shows its title on its top border: `Query`, `Results`, `Preview`, `Buffer`, `Note`.
 
 ## Search
 
@@ -100,10 +100,10 @@ The session buffer collects hits across searches and roots, so that you can carr
 
 - `space` on the focused hit adds it to the buffer; a second `space` removes it. A buffered hit carries a `◆` in the result list. The header shows the number of entries as `buffer N`.
 - A file is one entry. The identity is the absolute path with symlinks resolved, so the same file found by a later search, or under another spelling of the root (a symlink, a trailing slash), shows as buffered and is never added twice.
-- The buffer keeps its entries across new searches, and across a change of the root. Every entry keeps a snapshot of title, absolute path, type, bundle, tags and description, so it survives a root change. Editing a buffered hit with `e` refreshes its snapshot.
+- The buffer keeps its entries across new searches, and across a change of the root. Every entry keeps a snapshot of title, absolute path, type, bundle, tags, description, snippet, provenance, tier and stale flag, so it survives a root change. Editing a buffered hit with `e` refreshes its snapshot.
 - `n` opens a text area for the note of the focused hit. A hit that is not buffered yet joins the buffer when you save a note that is not empty. `ctrl+s` saves, `esc` cancels, `ctrl+e` opens the text in the editor and puts the edited text back into the text area when the editor exits. Enter starts a new line. Saving an empty note removes the note and keeps the entry.
-- `b` opens the buffer view. It lists the entries in the order they were added, each with title, type, bundle and a `✎` marker when the entry has a note. Below the list, the pane shows path, tags and note of the entry under the cursor.
-- In the buffer view: `j`/`k` move, `x` removes the entry under the cursor, `n` writes its note, `c` clears the whole buffer after a red confirm dialog (`enter` or `y` clears, `esc` or `n` keeps the buffer), and `b` or `esc` goes back to the search.
+- `b` opens the buffer view. It lists the entries in the order they were added, each with title, type, bundle and a `✎` marker when the entry has a note. At the right, the `Preview` pane shows the entry under the cursor as the search screen shows a hit: type, bundle, tags, provenance, tier, stale flag, the absolute path, description, snippet and the table of contents. Below, the `Note` pane shows only the note of that entry, or `No note, press n to write one.` when it has none. The path does not appear in the `Note` pane.
+- In the buffer view: `j`/`k` move (the preview scrolls back to the top), `ctrl+d` and `ctrl+u` scroll a preview that is taller than its pane, `x` removes the entry under the cursor, `n` writes its note, `c` clears the whole buffer after a red confirm dialog (`enter` or `y` clears, `esc` or `n` keeps the buffer), and `b` or `esc` goes back to the search.
 
 ## Hand-off
 
@@ -174,7 +174,7 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `x`, `c` | In the buffer view: remove the entry, or clear the buffer after a confirm dialog. |
 | `ctrl+s`, `ctrl+e` | In the note text area: save, or edit the text in the editor. `esc` cancels. |
 | `v`, `V` | Next or previous layout: list and detail, list, detail. |
-| `ctrl+d`, `ctrl+u` | Scroll the detail pane down or up. |
+| `ctrl+d`, `ctrl+u` | Scroll the detail pane, or in the buffer view the preview pane, down or up. |
 | `/` | Focus the query field. |
 | `f` | Focus the filter bar, on its root field. Outside the query field only. |
 | `←`/`h`, `→`/`l` | In the filter bar: previous or next field. |

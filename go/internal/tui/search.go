@@ -157,8 +157,10 @@ func (m model) handleSpinner(msg spinner.TickMsg) (model, tea.Cmd) {
 // keyList handles the keys of the focused list; ok is false for a key it does not own.
 func (m model) keyList(msg tea.KeyMsg) (model, bool) {
 	_, _, innerH := m.geometry()
-	page := max(innerH/2, 1)
-	maxScroll := max(len(m.detailRows(m.detailTextWidth()))-innerH, 0)
+	if scroll, ok := scrollKey(msg, m.search.detailScroll, len(m.detailRows(m.detailTextWidth())), innerH); ok {
+		m.search.detailScroll = scroll
+		return m, true
+	}
 	switch {
 	case keybind.Matches(msg, keys.Up):
 		return m.moveCursor(m.search.cursor - 1), true
@@ -168,12 +170,6 @@ func (m model) keyList(msg tea.KeyMsg) (model, bool) {
 		return m.moveCursor(0), true
 	case keybind.Matches(msg, keys.Bottom):
 		return m.moveCursor(len(m.search.hits) - 1), true
-	case keybind.Matches(msg, keys.DetailDown):
-		m.search.detailScroll = min(m.search.detailScroll+page, maxScroll)
-		return m, true
-	case keybind.Matches(msg, keys.DetailUp):
-		m.search.detailScroll = max(m.search.detailScroll-page, 0)
-		return m, true
 	case keybind.Matches(msg, keys.Layout):
 		return m.nextLayout(msg.String() == "V"), true
 	}
