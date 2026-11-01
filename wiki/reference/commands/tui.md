@@ -31,7 +31,7 @@ Type a query and press `enter`. The search runs only on `enter`, never while you
 
 - The search runs in the background. The TUI keeps reacting to keys and shows a spinner and `searching` at the right end of the query row until the answer arrives.
 - After `enter` the focus moves to the result list. Press `/` to edit the query again and `enter` to search again. A new search replaces the list. The answer of an older search never replaces a newer one.
-- The warnings `okf find` prints as `note:` lines on stderr (an absent or stale index, a skipped semantic arm) show as a toast.
+- The warnings `okf find` prints as `note:` lines on stderr (an absent or stale index, a skipped semantic arm) show as a toast, each text once per session. The note that the semantic arm owns the ranking does not show; the provenance row of each hit says it.
 - A search without a hit says `No hits for "<query>".` in the list area.
 
 The result list shows title, type and bundle of every hit. The detail pane at the right shows the focused hit:
