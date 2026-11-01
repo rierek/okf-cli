@@ -183,7 +183,9 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `space`, `x` | In a value menu: select or deselect the value under the cursor. |
 | `X` | Clear every filter but the root. Outside the query field only. |
 | `r` | Refresh an index: a dialog offers the lexical or the semantic index. Outside the query field only. |
-| `esc` | Leave the query field. Outside it, dismiss a sticky message (it shows `esc: dismiss` and goes away by itself after 15 seconds). Close an overlay. |
+| `esc` | Leave the query field. Outside it, dismiss a sticky message. Close an overlay. |
+
+A sticky message shows `esc: dismiss` and goes away by itself after 15 seconds.
 
 One overlay is open at a time and takes every key until it closes. The help overlay scrolls with `↑`/`↓`/`pgup`/`pgdn`, and `/` searches it.
 
