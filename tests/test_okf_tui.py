@@ -38,6 +38,9 @@ class TuiDispatch(unittest.TestCase):
         self.assertIn("no catalogue found", tui.stderr)
         self.assertEqual(tui.stdout, "")
 
+    def test_tui_is_listed_in_the_overview(self):
+        self.assertRegex(self._run("--help").stdout, r"(?m)^\s+tui\s+\S")
+
 
 if __name__ == "__main__":
     unittest.main()

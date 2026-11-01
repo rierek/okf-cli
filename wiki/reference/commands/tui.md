@@ -5,7 +5,7 @@ description: "okf tui opens a keyboard-first terminal UI on the catalogue root: 
 
 # `okf tui`
 
-`okf tui` opens a keyboard-first terminal UI on the catalogue. Look and keys follow `lif tui`. The command exists only in the Go binary; the Python CLI has no `tui`. It is hidden from `okf --help`, but `okf tui --help` and the call itself work.
+`okf tui` opens a keyboard-first terminal UI on the catalogue. Look and keys follow `lif tui`. The command exists only in the Go binary; the Python CLI has no `tui`. `okf tui --help` names the settings, the state file and the environment variables the TUI reads.
 
 :::note
 This page describes the search screen, the filters, the editor, the index dots, the session buffer, the hand-off of the buffer and maintenance tasks.
