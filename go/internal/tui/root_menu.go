@@ -7,6 +7,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	keybind "github.com/charmbracelet/bubbles/key"
@@ -21,7 +22,8 @@ import (
 // field below them (cursor == len(roots)).
 type rootMenu struct {
 	roots  []string
-	cursor int
+	cursor int // over the roots the query leaves, then the path field
+	search menuSearch
 	input  textinput.Model
 }
 
@@ -105,17 +107,31 @@ func (m model) openRootMenu() (model, tea.Cmd) {
 }
 
 // keyRoot handles input while the root menu is open (full capture): up and down (tab, shift+tab)
-// walk the roots and the path field, enter takes the root under the cursor or the typed path,
-// esc closes. In the path field every other key types.
+// walk the roots and the path field, enter or space takes the root under the cursor, enter also
+// the typed path, / types a query that narrows the roots, esc clears a query or else closes. In
+// the path field every other key types, space and / too.
 func (m model) keyRoot(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	rm := m.rootMenu
-	inField := rm.cursor == len(rm.roots)
+	roots := rm.visible()
+	inField := rm.cursor == len(roots)
 	move := func(to int) {
-		rm.cursor = min(max(to, 0), len(rm.roots))
-		if rm.cursor == len(rm.roots) {
+		rm.cursor = min(max(to, 0), len(roots))
+		if rm.cursor == len(roots) {
 			rm.input.Focus()
 		} else {
 			rm.input.Blur()
+		}
+	}
+	// The path field types every key, but a query that left no root stays editable from it.
+	if !inField || rm.search.typing || (msg.Type == tea.KeyEsc && rm.search.query != "") {
+		if search, before, handled := rm.search.edit(msg); handled {
+			rm.search = search
+			if search.query != before {
+				roots = rm.visible()
+				move(0)
+			}
+			m.rootMenu = rm
+			return m, nil
 		}
 	}
 	switch {
@@ -124,12 +140,14 @@ func (m model) keyRoot(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case msg.Type == tea.KeyUp, msg.Type == tea.KeyShiftTab, !inField && keybind.Matches(msg, keys.Up):
 		move(rm.cursor - 1)
+		rm.search.typing = rm.search.typing && rm.cursor < len(roots)
 	case msg.Type == tea.KeyDown, msg.Type == tea.KeyTab, !inField && keybind.Matches(msg, keys.Down):
 		move(rm.cursor + 1)
-	case keybind.Matches(msg, keys.Open):
+		rm.search.typing = rm.search.typing && rm.cursor < len(roots)
+	case keybind.Matches(msg, keys.Open), !inField && msg.String() == " ":
 		input := rm.input.Value()
 		if !inField {
-			input = rm.roots[rm.cursor]
+			input = roots[rm.cursor]
 		}
 		m.rootMenu = rm
 		return m.pickRoot(input)
@@ -141,6 +159,14 @@ func (m model) keyRoot(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.rootMenu = rm
 	return m, nil
+}
+
+// visible is the roots the query leaves, in menu order.
+func (rm rootMenu) visible() []string {
+	if rm.search.query == "" {
+		return rm.roots
+	}
+	return slices.DeleteFunc(slices.Clone(rm.roots), func(r string) bool { return !fuzzyMatch(rm.search.query, r) })
 }
 
 // pickRoot validates input and makes it the active root. A refused root keeps the menu open, the
@@ -199,13 +225,15 @@ func (m model) switchRoot(root string) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// rootMenuBox renders the root menu; a long path shows its tail.
+// rootMenuBox renders the root menu; a long path shows its tail. The query line shows once `/`
+// is pressed or a query stands.
 func (m model) rootMenuBox() string {
 	rm := m.rootMenu
 	w := clampModalWidth(72, m.width)
 	const active = " (active)"
-	rows := make([]string, 0, len(rm.roots)+2)
-	for i, r := range rm.roots {
+	roots := rm.visible()
+	rows := make([]string, 0, len(roots)+2)
+	for i, r := range roots {
 		room := w - 4 // padding and the cursor column
 		if r == m.root {
 			room -= len(active)
@@ -220,11 +248,18 @@ func (m model) rootMenuBox() string {
 		rows = append(rows, cursor+label)
 	}
 	cursor := "  "
-	if rm.cursor == len(rm.roots) {
+	if rm.cursor == len(roots) {
 		cursor = theme.Accent.Render("▸ ")
 	}
 	rm.input.Width = max(w-2-len(rm.input.Prompt)-4, 8)
 	rows = append(rows, cursor+rm.input.View())
-	hint := theme.Muted.Render("↑/↓ choose · enter switch · esc cancel")
-	return modalPanel("Root", hint+"\n"+strings.Join(rows, "\n"), "", w, theme.Mauve)
+	hint := "↑/↓ choose · enter/space switch · / search · esc"
+	if rm.search.typing {
+		hint = "type to search · enter done · esc clear"
+	}
+	head := theme.Muted.Render(hint)
+	if rm.search.shown() {
+		head += "\n" + rm.search.line()
+	}
+	return modalPanel("Root", head+"\n"+strings.Join(rows, "\n"), "", w, theme.Mauve)
 }
