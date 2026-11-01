@@ -7,7 +7,7 @@ import (
 
 // exportText renders the buffer entries for the hand-off (SPEC D13): the header line
 // `Fundstellen aus okf (<n>)`, then one block per entry in buffer order: `## <title>`,
-// `@<absolute path>`, a line with type, bundle and tags, the description, and the note as a quote.
+// `@<absolute path>`, a line with type, bundle and tags, the description, and the note under a `## Notes` heading.
 // A field an entry does not have leaves its line out. The text ends with a newline and never with
 // an Enter: the target pane gets it as typed text.
 func exportText(entries []bufferEntry) string {
@@ -32,9 +32,9 @@ func exportText(entries []bufferEntry) string {
 			b.WriteString(e.Description + "\n")
 		}
 		if e.Note != "" {
-			b.WriteString("\n")
-			for _, l := range strings.Split(strings.TrimSpace(e.Note), "\n") {
-				b.WriteString(strings.TrimRight("> "+l, " ") + "\n")
+			b.WriteString("\n## Notes\n\n" + e.Note)
+			if !strings.HasSuffix(e.Note, "\n") {
+				b.WriteString("\n")
 			}
 		}
 	}

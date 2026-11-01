@@ -15,9 +15,8 @@ import (
 )
 
 // The toast is a colour-coded box in the top-right corner. There is one slot, no stack: a new
-// toast replaces the old one. It disappears after a kind-specific time, except a sticky toast,
-// which stays until a newer toast replaces it or the user dismisses it with esc. A toast never
-// blocks the keyboard.
+// toast replaces the old one. It disappears after a kind-specific time; a sticky toast lasts 15
+// seconds and esc dismisses it earlier. A toast never blocks the keyboard.
 
 type toastKind int
 
@@ -41,18 +40,24 @@ type toastState struct {
 // toastExpiredMsg ends the auto-dismiss timer of toast generation seq.
 type toastExpiredMsg struct{ seq int }
 
-func toastTimeout(seq int, kind toastKind) tea.Cmd {
-	return tea.Tick(toastDuration(kind), func(time.Time) tea.Msg {
+func toastTimeout(seq int, kind toastKind, sticky bool) tea.Cmd {
+	return tea.Tick(toastDuration(kind, sticky), func(time.Time) tea.Msg {
 		return toastExpiredMsg{seq}
 	})
 }
 
-// toastDebounceWindow: a second showToast call within this span of the last toast replaces its
-// content in place instead of starting a new generation and a new timer.
+// toastDebounceWindow: a second plain showToast call within this span of the last plain toast
+// replaces its content in place instead of starting a new generation and a new timer.
 const toastDebounceWindow = 300 * time.Millisecond
 
-// toastDuration returns the kind-specific auto-dismiss duration.
-func toastDuration(kind toastKind) time.Duration {
+// stickyToastDuration is how long a sticky toast stays when esc does not dismiss it first.
+const stickyToastDuration = 15 * time.Second
+
+// toastDuration returns the auto-dismiss duration of a toast.
+func toastDuration(kind toastKind, sticky bool) time.Duration {
+	if sticky {
+		return stickyToastDuration
+	}
 	switch kind {
 	case toastError:
 		return 8 * time.Second
@@ -63,28 +68,26 @@ func toastDuration(kind toastKind) time.Duration {
 	}
 }
 
-// showToast fills the toast slot and returns the timer command, or nil for a sticky toast and for
-// a debounced replacement.
+// showToast fills the toast slot and returns the timer command, or nil for a debounced
+// replacement. A sticky toast never takes part in the debounce: it always gets its own generation
+// and its own timer, so no older timer can end it early.
 func (m model) showToast(kind toastKind, title, context string, sticky bool) (model, tea.Cmd) {
 	now := time.Now()
-	if m.toast != nil && now.Sub(m.toast.setAt) < toastDebounceWindow {
+	if m.toast != nil && !sticky && !m.toast.sticky && now.Sub(m.toast.setAt) < toastDebounceWindow {
 		t := *m.toast
-		t.kind, t.title, t.context, t.sticky, t.setAt = kind, title, context, sticky, now
+		t.kind, t.title, t.context, t.setAt = kind, title, context, now
 		m.toast = &t
 		return m, nil // the running timer stays valid
 	}
 	m.toastSeqCounter++
 	seq := m.toastSeqCounter
 	m.toast = &toastState{kind: kind, title: title, context: context, seq: seq, sticky: sticky, setAt: now}
-	if sticky {
-		return m, nil
-	}
-	return m, toastTimeout(seq, kind)
+	return m, toastTimeout(seq, kind, sticky)
 }
 
 // handleToastExpired clears the toast when the expired generation is still the current one.
 func (m model) handleToastExpired(msg toastExpiredMsg) (tea.Model, tea.Cmd) {
-	if m.toast != nil && msg.seq == m.toast.seq && !m.toast.sticky {
+	if m.toast != nil && msg.seq == m.toast.seq {
 		m.toast = nil
 	}
 	return m, nil
@@ -156,6 +159,9 @@ func (m model) toastBox() string {
 	body := line1
 	if t.context != "" {
 		body += "\n" + theme.Dim.Render(wrapText(t.context, innerW))
+	}
+	if t.sticky {
+		body += "\n" + theme.Dim.Render("esc: dismiss")
 	}
 	return modalBox(body, outerW-2, col)
 }
