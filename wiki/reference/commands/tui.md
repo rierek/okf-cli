@@ -153,11 +153,12 @@ The tracker is the `[tui.tracker]` table of the user config; the section `[tui.t
 
 ## Keys
 
-Inside the query field the letter keys type, so `q` and `?` are text there; the header names `f1` for the help. Press `esc` to leave the field, then the global keys work.
+Inside the query field the letter keys type, so `q` and `?` are text there; the header names `ctrl+k` for the command center, where `help` is one of the entries. Press `esc` to leave the field, then the global keys work.
 
 | Key | Action |
 |---|---|
-| `?`, `f1` | Help overlay, generated from the key map. `f1` also works inside the query field. |
+| `ctrl+k` | Command center, from every state, also inside the query field. See below. |
+| `?` | Help overlay, generated from the key map. Outside the query field; the command center has `help` everywhere. |
 | `q` | Quit. A dialog asks first: `enter` or `y` quits, `esc` or `n` cancels. |
 | `ctrl+c` | Quit at once, without a dialog, from every state. |
 | `tab`, `shift+tab` | Move the focus to the next or previous part of the screen. |
@@ -185,6 +186,14 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `esc` | Leave the query field. Outside it, dismiss a sticky message. Close an overlay. |
 
 One overlay is open at a time and takes every key until it closes. The help overlay scrolls with `↑`/`↓`/`pgup`/`pgdn`, and `/` searches it.
+
+## Command center
+
+`ctrl+k` opens a floating list of every action of the key map and every view, named `<verb>: <object>` (`add: note`, `add: task`, `view: buffer`, `view: types`, `view: tags`, `refresh: index`, `copy: buffer`, `send: buffer`, `help`, `quit`, ...). The key of an action stands at the right of its row. Type to filter fuzzily (the letters of the filter must appear in the name in order), `↑`/`↓` select, `enter` runs the entry, `esc` or `ctrl+k` closes the list.
+
+An entry runs what its key runs, wherever the focus was: `add: note` opens the note box of the focused hit, `help` opens the help. An entry that needs a hit says so in a message when there is none; the buffer-view entries `remove: entry` and `clear: buffer` say that they work in the buffer view.
+
+The two views `view: types` and `view: tags` open only from the command center. `view: types` lists the types of the catalogue's `TYPES.md` with their descriptions, read as `okf info` reads the file. `view: tags` lists the tags with their usage counts, most used first, as `okf tags` lists them. `j`/`k` move, `g`/`G` jump, `esc` goes back to the search.
 
 ## Index dots and refresh
 

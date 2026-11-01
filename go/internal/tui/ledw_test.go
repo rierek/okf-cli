@@ -27,12 +27,12 @@ func TestHeaderStaysOneLineWithALongRoot(t *testing.T) {
 				t.Errorf("width %d: frame is %d rows high, want 30", w, len(lines))
 			}
 			head := strings.ReplaceAll(lines[1], "\u00a0", " ")
-			for _, want := range []string{"> …", tail, "lexical ", "semantic ", "buffer 0", "f1 help", "ctrl+c quit now"} {
+			for _, want := range []string{"> …", tail, "lexical ", "semantic ", "buffer 0", "ctrl+k commands", "ctrl+c quit now"} {
 				if !strings.Contains(head, want) {
 					t.Errorf("width %d: header row %q lacks %q", w, head, want)
 				}
 			}
-			if strings.Contains(lines[2], "lexical") || strings.Contains(lines[2], "f1\u00a0help") {
+			if strings.Contains(lines[2], "lexical") || strings.Contains(lines[2], "ctrl+k\u00a0commands") {
 				t.Errorf("width %d: header runs into a second row: %q", w, lines[2])
 			}
 		}

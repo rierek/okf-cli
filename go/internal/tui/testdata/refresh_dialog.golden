@@ -1,5 +1,5 @@
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│> /srv/catalogue: Search                       lexical ◐  semantic ◐  buffer 0  ?/f1 help · q quit│
+│> /srv/catalogue: Search        lexical ◐  semantic ◐  buffer 0  ctrl+k commands · ? help · q quit│
 │──────────────────────────────────────────────────────────────────────────────────────────────────│
 │/ query                                                                                           │
 │╭─ Root ───────╮ ╭─ Bundle ─────╮ ╭─ Type ───────╮ ╭─ Tag ───────╮ ╭─ Status ────╮ ╭─ Tier ──────╮│

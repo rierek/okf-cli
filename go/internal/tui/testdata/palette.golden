@@ -1,0 +1,30 @@
+╭────────────────────[0m[;m╭────────────────────────────────────────────────────────╮[0m[0m────────────────────╮
+│> /srv/catalogue: Se[0m[;m│[0m Command center                                         [;m│[0m[0mds · ctrl+c quit now│
+│────────────────────[0m[;m│[0m > ▏                                                    [;m│[0m[0m────────────────────│
+│/ keep me           [0m[;m│[0m ────────────────────────────────────────────────────   [;m│[0m[0m                    │
+│╭─ Root ───────╮ ╭─ [0m[;m│[0m ▸ add: note                                        n   [;m│[0m[0m───╮ ╭─ Tier ──────╮│
+││ …catalogue ▾ │ │ ([0m[;m│[0m   add: task                                        t   [;m│[0m[0m ▾ │ │ (any)     ▾ ││
+│╰──────────────╯ ╰──[0m[;m│[0m   clear: buffer                                    c   [;m│[0m[0m───╯ ╰─────────────╯│
+│╭───────────────────[0m[;m│[0m   clear: filters                                   X   [;m│[0m[0m───────────────────╮│
+││No search yet.     [0m[;m│[0m   copy: buffer                                     y   [;m│[0m[0m                   ││
+││Type a query, press[0m[;m│[0m   edit: hit                                        e   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   focus: filters                                   f   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   focus: query                                     /   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   go: first hit                                    g   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   go: last hit                                     G   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   help                                             ?   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   next: layout                                   v/V   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   previous: layout                               v/V   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   quit                                             q   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   refresh: index                                   r   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   remove: entry                                    x   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   run: search                                  enter   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   scroll: detail down                         ctrl+d   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   scroll: detail up                           ctrl+u   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   send: buffer                                ctrl+s   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   toggle: hit                                  space   [;m│[0m[0m                   ││
+││                   [0m[;m│[0m   view: buffer                                     b   [;m│[0m[0m                   ││
+│╰───────────────────[0m[;m│[0m                                                        [;m│[0m[0m───────────────────╯│
+│────────────────────[0m[;m│[0m type: filter · ↑↓: select · enter: run · esc: close    [;m│[0m[0m────────────────────│
+│enter search · esc b[0m[;m╰────────────────────────────────────────────────────────╯[0m[0m                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
