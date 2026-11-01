@@ -2,8 +2,8 @@
 # Local check of packaging/homebrew/okf-cli.rb (OKFT-qg0o, D11): build the formula from source in a
 # throwaway local tap, run `brew test`, and prove the installed binary without Python or uv.
 # Nothing goes to a public tap, no tag is made or read, the real HOME is not written by okf itself.
-# The formula has only `head` until a release carries the Go sources, so the local-only url, sha256
-# and version are substituted here, never in the checked-in file. The check names the formula
+# The release url, sha256 and version of the checked-in formula are replaced here by the local
+# archive, never in the checked-in file. The check names the formula
 # okf-cli-check and makes it keg-only: an installed okf-cli of the same machine stays untouched
 # (same Cellar name would replace it, same bin/okf link would clash).
 # Source = `git archive HEAD` of this checkout (commit first); the formula = the working-tree file.
@@ -39,6 +39,7 @@ dropuv=0
 if [ -n "$(brew outdated --quiet uv)" ]; then dropuv=1; echo "note: uv is outdated here; the throwaway formula omits depends_on uv"; fi
 awk -v t="$T" -v sha="$sha" -v dropuv="$dropuv" '
     /^  depends_on "uv"/ && dropuv == 1 { next }
+    /^  (url|sha256|version) / { next }
     /^class OkfCli < Formula/ { print "class OkfCliCheck < Formula"; next }
     /^  head / { print "  url \"file://" t "/src.tar.gz\""; print "  sha256 \"" sha "\""; print "  version \"0.0.0-local\""
                  print "  keg_only \"throwaway check, never linked\""; print "  env :std"; next }

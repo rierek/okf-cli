@@ -1,11 +1,14 @@
 # Repo copy of the tap formula (xRiErOS/homebrew-tap, Formula/okf-cli.rb) for the Go binary (OKFT-jyvt).
 # It builds `okf` from source with `just go-build`, the one build command of the Go module (go/).
-# No release carries the Go sources yet (D11): until one does, the formula has only `head`.
-# At the release that ships the port: add url, version and sha256 of that rel-* tag, then copy to the tap.
+# At each release: set url, version and sha256 of the new rel-* tag, then copy to the tap.
+# `version` is explicit because Homebrew misreads the rel-0-2-x tag name.
 # Local check without the tap: scripts/brew-local-check.sh.
 class OkfCli < Formula
   desc "CLI and MCP server for Open Knowledge Format (OKF) catalogues"
   homepage "https://github.com/xRiErOS/okf-cli"
+  url "https://github.com/xRiErOS/okf-cli/archive/refs/tags/rel-0-2-6.tar.gz"
+  version "0.2.6"
+  sha256 "04a9c301f7a372b3b5ccb4561926d26e58623c5db9fa3b5a87c71de4c931ae1f"
   head "https://github.com/xRiErOS/okf-cli.git", branch: "main"
   license "Apache-2.0"
 
