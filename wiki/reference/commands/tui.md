@@ -11,6 +11,8 @@ description: "okf tui opens a keyboard-first terminal UI on the catalogue root: 
 This page describes the search screen, the filters, the editor, the index dots, the session buffer, the hand-off of the buffer and maintenance tasks.
 :::
 
+See [Terminal UI](/okf-cli/features/tui/) for a tour with recordings that show every key.
+
 ## Start
 
 ```text

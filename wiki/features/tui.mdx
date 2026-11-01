@@ -1,0 +1,105 @@
+---
+title: "Terminal UI for a Markdown knowledge base: okf tui"
+description: "okf tui is a keyboard-first terminal UI: search a catalogue, filter, collect hits in a session buffer, hand them to an agent, record maintenance tasks. GIFs show every key."
+---
+
+import TuiMedia from '../../site/src/components/TuiMedia.astro';
+
+## A keyboard-first terminal UI for your catalogue: `okf tui`
+
+**Run `okf tui` in a catalogue and search it, filter the hits, keep the good ones in a buffer and hand them to an agent. All without leaving the keyboard.**
+
+The recordings below show each pressed key in a small box at the bottom right. They run the real binary against a throwaway copy of the test catalogue. Light and dark variants follow the site theme.
+
+:::note
+`okf tui` exists only in the Go binary. The Python CLI has no `tui`. The command is hidden from `okf --help`; `okf tui --help` works.
+:::
+
+## Start
+
+Change into a catalogue and run `okf tui`. It takes the root as `okf find` does: `--root`, then `--global`, then the nearest catalogue above the current directory, then `root` in the user config. Without a root it prints the message of `okf find` and exits with code 3.
+
+```text title="Start the TUI"
+$ cd ~/Knowledge-Catalogue
+$ okf tui
+```
+
+The TUI opens on the search screen with the focus in the query field. The header shows the root, the two index dots (lexical and semantic), the buffer count and `ctrl+k` for the command center.
+
+## Search
+
+Type a query and press `enter`. The search runs only on `enter`, never while you type; it is `okf find <query> --limit 50` on the active root. The focus moves to the list. `j` and `k` move through the hits, `v` cycles the layout (list and detail, list, detail), `/` edits the query again, `?` opens the help.
+
+<TuiMedia name="search" alt="Recording: okf tui starts, the query bread is typed and sent with enter, j moves down the hits, v changes the layout, ? opens the help overlay. Each key shows in a box at the bottom right." caption="Search: start, query, move, layout, help." />
+
+<TuiMedia name="search-results" ext="png" alt="Screenshot of the search screen: query bread, filter bar with six empty boxes, result list at the left, detail pane at the right with type, bundle, tags, provenance and path." caption="The search screen after enter: results at the left, the focused hit at the right." />
+
+<TuiMedia name="search-help" ext="png" alt="Screenshot of the help overlay over the search screen, a generated list of all keys grouped by Navigation, Detail, Buffer and Tasks." caption="The help overlay, generated from the key map." />
+
+## Filters
+
+Below the query field a bar of six boxes narrows the search: **Root**, **Bundle**, **Type**, **Tag**, **Status** and **Tier**. You never write `--where` syntax; the TUI builds the expression for you. `f` focuses the bar, `←` and `→` move between boxes, `enter` opens the menu of a box, `space` selects a value and `esc` closes the menu. In a long menu, `/` opens a query line and the menu shows only the matching values. `X` clears every filter.
+
+<TuiMedia name="filters" alt="Recording: f focuses the filter bar, enter opens the Bundle menu, / and hand narrow it to the bundle handbook, space selects it, esc closes the menu and the list narrows. The same steps follow for Type with run, then X clears the filters. Each key shows in a box at the bottom right." caption="Filters: open a menu, pick values, clear with X." />
+
+<TuiMedia name="filters-menu" ext="png" alt="Screenshot of the open Bundle menu with the list of bundles over the search screen." caption="A value menu is multi-select." />
+
+<TuiMedia name="filters-menu-search" ext="png" alt="Screenshot of the Bundle menu with the query line hand: only the bundle handbook is listed." caption="Press / in a menu to narrow a long list." />
+
+## Buffer and hand-off
+
+The session buffer collects hits across searches and roots. `space` adds the focused hit (a `◆` marks it), `n` writes a note for it, `b` opens the buffer view. `ctrl+s` hands the buffer to an agent: the text goes into the agent pane under the herdr popup, or a picker lists the agents herdr knows. Outside herdr the text goes to the clipboard. `y` copies it to the clipboard on its own.
+
+The recording uses a stand-in `herdr` that lists three agents, so it shows the picker. The last lines print the text the agent received.
+
+<TuiMedia name="handoff" alt="Recording: space adds two hits to the buffer, n opens a note box and a note is typed and saved with ctrl+s, b opens the buffer view, ctrl+s opens the agent picker, enter sends the buffer. The shell then prints the Markdown text the agent received. Each key shows in a box at the bottom right." caption="Buffer and hand-off: collect, annotate, review, send." />
+
+<TuiMedia name="handoff-note" ext="png" alt="Screenshot of the note box open over the search screen with the text Check the rollback step first." caption="The note box: ctrl+s saves, esc cancels, ctrl+e edits in your editor." />
+
+<TuiMedia name="handoff-buffer" ext="png" alt="Screenshot of the buffer view: the entries at the left, the preview of the entry under the cursor at the right, its note below." caption="The buffer view: entries, preview and note." />
+
+<TuiMedia name="handoff-picker" ext="png" alt="Screenshot of the agent picker over the buffer view: three agents with status, title and directory; a blocked agent is grey." caption="The agent picker. A blocked agent waits at a dialog and gets nothing." />
+
+## Command center
+
+`ctrl+k` opens the command center from every view, also inside the query field. It lists every action of the key map and every view as `<verb>: <object>` with its key at the right. Type to filter, `↑` and `↓` select, `enter` runs. It is the only way to open the types view and the tags view.
+
+<TuiMedia name="command-center" alt="Recording: ctrl+k opens the command center, types is typed and enter opens the types view; ctrl+k, tags and enter open the tags view; ctrl+k, search and enter return to the search screen. Each key shows in a box at the bottom right." caption="Command center: find an action by typing a few letters of its name." />
+
+<TuiMedia name="command-center-open" ext="png" alt="Screenshot of the command center: a floating list of all actions with their keys at the right." caption="The command center lists every action and view." />
+
+<TuiMedia name="command-center-types" ext="png" alt="Screenshot of the types view: the types of TYPES.md with a one-line description each." caption="View: types, the types of TYPES.md." />
+
+<TuiMedia name="command-center-tags" ext="png" alt="Screenshot of the tags view: all tags with their usage counts, most used first." caption="View: tags, usage counts as okf tags lists them." />
+
+## Maintenance tasks
+
+Found something wrong in a concept? Press `t` on the hit. A text area opens: the first line is the title, the rest is the body. `ctrl+s` saves the task to the tracker you configured in `[tui.tracker]`; the TUI keeps your search, list and buffer. The recording uses the `file` kind, which appends an Obsidian Tasks line.
+
+<TuiMedia name="maintenance" alt="Recording: t opens the task box over a hit, a title and a body are typed, ctrl+s saves, q and y quit, and the shell prints the task line the TUI wrote to the tracker file. Each key shows in a box at the bottom right." caption="Maintenance task: write, save, find it in the tracker." />
+
+<TuiMedia name="maintenance-box" ext="png" alt="Screenshot of the task box over the search screen with a title line and a body line." caption="The task box." />
+
+## Index dots
+
+Two dots in the header show the state of the indexes: green current, yellow stale or partial, red absent, grey not checked yet (lexical) or unavailable without `VOYAGE_API_KEY` (semantic). `r` opens a dialog: `l` rebuilds the lexical index, `s` embeds the missing concepts for the semantic index (it names the number of concepts and asks first).
+
+<TuiMedia name="index" alt="Recording: the TUI starts on a catalogue without index, the dots show it, r opens the refresh dialog, l rebuilds the lexical index, the dot turns green and a search finds hits. Each key shows in a box at the bottom right." caption="Index: see the state, rebuild with r then l." />
+
+<TuiMedia name="index-dots" ext="png" alt="Screenshot of the search screen on a catalogue without index: the lexical and the semantic dot in the header are red." caption="No index yet: both dots are red." />
+
+<TuiMedia name="index-dialog" ext="png" alt="Screenshot of the refresh dialog with the two choices, l lexical index rebuild and s semantic index embed the missing concepts." caption="The refresh dialog." />
+
+<TuiMedia name="index-built" ext="png" alt="Screenshot after the lexical refresh: the lexical dot is green, the semantic dot is still red, a message says the lexical index is refreshed." caption="After l: the lexical dot turns green." />
+
+## Open a hit in the editor
+
+`e` on a hit opens its file in your editor (`editor` in `[tui]`, then `$VISUAL`, `$EDITOR`, `vi`) and suspends the TUI. When the editor exits, the TUI reads that hit again, so the detail pane shows your change.
+
+## Keys and settings
+
+The [`okf tui` reference](/okf-cli/reference/commands/tui/) lists every key, the `[tui]` settings (editor, theme, accent), the `[tui.tracker]` kinds, the herdr popup and the exact hand-off text.
+
+## Reproduce the media
+
+The recordings come from versioned [vhs](https://github.com/charmbracelet/vhs) tapes in `scripts/tui-media/`. `just docs-tui-media` runs them against a throwaway copy of the test catalogue with an isolated home and config, and draws the key boxes from the key timeline of each tape.

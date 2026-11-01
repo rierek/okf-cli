@@ -30,6 +30,7 @@ export const nav: NavEntry[] = [
 			{ title: 'Safe edits', description: 'Preview first, then apply renames and rewrites', href: '/features/safe-edits/' },
 			{ title: 'Tags and registry', description: 'Tag usage, fuzzy search and the tag registry', href: '/features/tags-and-registry/' },
 			{ title: 'Canon blocks', description: 'Shared text kept in sync across concepts', href: '/features/canon-blocks/' },
+			{ title: 'Terminal UI', description: 'Search, filter, buffer and hand off from a keyboard-first TUI', href: '/features/tui/' },
 		],
 	},
 	{
