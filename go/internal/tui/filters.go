@@ -354,18 +354,23 @@ func (f filterState) visible() []string {
 }
 
 // filterMenuBox renders the value menu of the focused field. The box is as wide as the longest
-// option of the field, the hint and the query line need, up to the terminal width; a longer option
-// ends in an ellipsis.
+// option of the field and the longer of the two hints need, up to the terminal width; a longer
+// option or query line ends in an ellipsis.
 func (m model) filterMenuBox() string {
 	field := m.filters.field
 	opts := m.filters.options[field]
 	visible := m.filters.visible()
-	const rowChrome = 2 + 3 + 1 // cursor column, box, space
-	hint := "enter/space toggle · / search · X clear · esc"
+	const (
+		rowChrome  = 2 + 3 + 1 // cursor column, box, space
+		hintIdle   = "enter/space toggle · / search · X clear · esc"
+		hintTyping = "type to search · enter done · esc clear"
+	)
+	hint := hintIdle
 	if m.filters.search.typing {
-		hint = "type to search · enter done · esc clear"
+		hint = hintTyping
 	}
-	need := lipgloss.Width(hint)
+	// Both hints size the box, so it keeps its width when / starts the search.
+	need := max(lipgloss.Width(hintIdle), lipgloss.Width(hintTyping))
 	for _, o := range opts {
 		need = max(need, rowChrome+lipgloss.Width(o))
 	}
@@ -398,7 +403,7 @@ func (m model) filterMenuBox() string {
 	}
 	head := theme.Muted.Render(truncate(hint, w-2))
 	if m.filters.search.shown() {
-		head += "\n" + m.filters.search.line()
+		head += "\n" + truncate(m.filters.search.line(), w-2)
 	}
 	return modalPanel(title, head+"\n"+strings.Join(rows, "\n"), "", w, theme.Mauve)
 }

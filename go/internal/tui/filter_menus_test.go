@@ -209,3 +209,22 @@ func TestRootMenuSpaceSelectsAndSlashNarrows(t *testing.T) {
 		t.Errorf("path field = %q, overlay = %v; want the keys typed", got, field.overlay)
 	}
 }
+
+// The box keeps its width when / starts the search, and a long query is cut instead of wrapped.
+func TestFilterMenuWidthIsStableWhileSearching(t *testing.T) {
+	stateHome(t)
+	m := openMenu(t, modelOn(t, longRoot(t), 200, 40), fieldStatus)
+	before := lipgloss.Width(m.filterMenuBox())
+	m, _ = press(m, "/")
+	if after := lipgloss.Width(m.filterMenuBox()); after != before {
+		t.Errorf("box width = %d after /, want the %d of the idle menu", after, before)
+	}
+	m, _ = press(m, strings.Repeat("d", 120))
+	box := m.filterMenuBox()
+	if w := lipgloss.Width(box); w != before {
+		t.Errorf("box width = %d with a long query, want %d", w, before)
+	}
+	if lines := strings.Count(box, "\n") + 1; lines != 6 { // frame, title, hint, query, no match, frame
+		t.Errorf("box has %d lines with a long query, want 6 (the query wrapped):\n%s", lines, box)
+	}
+}
