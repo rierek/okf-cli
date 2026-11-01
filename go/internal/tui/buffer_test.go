@@ -198,7 +198,7 @@ func TestBufferViewListsInInsertionOrder(t *testing.T) {
 			t.Errorf("entry %d: note marker = %v, want %v", i, got, wantMark)
 		}
 	}
-	if !strings.Contains(view, "none, press n") {
+	if !strings.Contains(view, "No note, press n") {
 		t.Errorf("detail pane of the entry without a note lacks the hint:\n%s", view)
 	}
 	if noted, _ := press(m, "j"); !strings.Contains(noted.View(), "worth a look") {
@@ -207,6 +207,47 @@ func TestBufferViewListsInInsertionOrder(t *testing.T) {
 	back, _ := press(m, "esc")
 	if back.screen != screenSearch || !strings.Contains(back.View(), "Search") {
 		t.Errorf("esc did not leave the buffer view:\n%s", back.View())
+	}
+}
+
+// The buffer view shows the preview of the entry under the cursor in a right pane, path among its
+// metadata, and only that entry's note in the pane below, where the path does not appear.
+func TestBufferViewPreviewBesideNote(t *testing.T) {
+	m := feed(searchedOnFixture(t, "unused"), tea.WindowSizeMsg{Width: 320, Height: 40}) // wide: the path does not wrap
+	m = addHits(t, m, 0, 1)
+	m = m.moveCursor(0)
+	m = saveNote(m, "worth a look")
+	m, _ = press(m, "b")
+	m.toast = nil
+	split := func(m model) (above, below string) {
+		lines := strings.Split(m.View(), "\n")
+		i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "─ Note ") })
+		if i < 0 {
+			t.Fatalf("no Note pane title:\n%s", m.View())
+		}
+		return strings.Join(lines[:i], "\n"), strings.Join(lines[i:], "\n")
+	}
+	for _, title := range []string{"Buffer", "Preview"} {
+		if above, _ := split(m); !strings.Contains(above, "─ "+title+" ") {
+			t.Errorf("no %s pane title:\n%s", title, above)
+		}
+	}
+	e := m.buf.entries[m.bufCursor]
+	above, below := split(m)
+	base := filepath.Base(e.Abs)
+	if !strings.Contains(above, "path") || !strings.Contains(above, base) || !strings.Contains(above, "provenance") {
+		t.Errorf("preview lacks the metadata with path %q:\n%s", base, above)
+	}
+	if !strings.Contains(below, "worth a look") || strings.Contains(below, base) || strings.Contains(below, "path") {
+		t.Errorf("note pane must hold only the note:\n%s", below)
+	}
+	next, _ := press(m, "j")
+	above, below = split(next)
+	if base2 := filepath.Base(next.buf.entries[1].Abs); !strings.Contains(above, "path        "+filepath.Dir(next.buf.entries[1].Abs)+"/"+base2) {
+		t.Errorf("preview did not follow the cursor to %q:\n%s", base2, above)
+	}
+	if !strings.Contains(below, "No note, press n") {
+		t.Errorf("note pane of the entry without a note:\n%s", below)
 	}
 }
 

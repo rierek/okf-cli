@@ -118,25 +118,30 @@ func (m model) moveCursor(i int) model {
 	return m.focusHit()
 }
 
-// focusHit loads the H2 and H3 headings of the focused hit, as `okf toc <path> --level 0` lists
-// them, and resets the detail scroll. A file that cannot be read shows no table of contents.
+// focusHit loads the H2 and H3 headings of the focused hit and resets the detail scroll.
 func (m model) focusHit() model {
 	m.search.detailScroll = 0
 	m.search.headings = nil
-	hit := m.search.focused()
-	if hit == nil {
-		return m
-	}
-	text, err := catalogue.ReadFile(hit.Abs)
-	if err != nil {
-		return m
-	}
-	for _, h := range catalogue.IterHeadings(frontmatter.Read(text).Body) {
-		if h.Level == 2 || h.Level == 3 {
-			m.search.headings = append(m.search.headings, h)
-		}
+	if hit := m.search.focused(); hit != nil {
+		m.search.headings = headingsOf(hit.Abs)
 	}
 	return m
+}
+
+// headingsOf lists the H2 and H3 headings of the file at abs, as `okf toc <path> --level 0` lists
+// them. A file that cannot be read has none.
+func headingsOf(abs string) []catalogue.Heading {
+	text, err := catalogue.ReadFile(abs)
+	if err != nil {
+		return nil
+	}
+	var hs []catalogue.Heading
+	for _, h := range catalogue.IterHeadings(frontmatter.Read(text).Body) {
+		if h.Level == 2 || h.Level == 3 {
+			hs = append(hs, h)
+		}
+	}
+	return hs
 }
 
 // handleSpinner advances the running indicator; it stops ticking when the search ends.

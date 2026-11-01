@@ -124,25 +124,35 @@ func (m model) header(innerW int) string {
 	return breadcrumb(root, title, right, innerW)
 }
 
+// queryRows is the height of the query box: its text row and the two border rows.
+const queryRows = 3
+
 // chrome is the frame around the body: the header, the footer and the rows left for the body
-// panes, borders included: the frame without header, query row, filter bar, footer and the two
+// panes, borders included: the frame without header, query box, filter bar, footer and the two
 // dividers.
 func (m model) chrome(w, h int) (head, foot string, avail int) {
 	innerW := w - 2
 	head = m.header(innerW)
 	foot = footer(renderBindings(m.footerBindings()), innerW)
-	return head, foot, h - 2 - lipgloss.Height(head) - 1 - 1 - 1 - filterBarHeight - lipgloss.Height(foot)
+	return head, foot, h - 2 - lipgloss.Height(head) - 1 - queryRows - 1 - filterBarHeight - lipgloss.Height(foot)
 }
 
-// queryRow is the query field; while a search runs the indicator stands at its right end.
-func (m model) queryRow(innerW int) string {
-	m.query.Width = max(innerW-lipgloss.Width(m.query.Prompt)-1, 1)
-	if !m.search.running {
-		return m.query.View()
+// queryBox is the query field in a titled rounded border of outer width outerW: teal while it has
+// focus. While a search runs the indicator stands at the right end of the text row.
+func (m model) queryBox(outerW int) string {
+	inner := outerW - 2
+	m.query.Width = max(inner-lipgloss.Width(m.query.Prompt)-1, 1)
+	row := m.query.View()
+	if m.search.running {
+		indicator := m.search.spinner.View() + " searching"
+		m.query.Width = max(m.query.Width-lipgloss.Width(indicator)-1, 1)
+		row = m.query.View() + " " + indicator
 	}
-	indicator := m.search.spinner.View() + " searching"
-	m.query.Width = max(m.query.Width-lipgloss.Width(indicator)-1, 1)
-	return m.query.View() + " " + indicator
+	col := theme.Overlay
+	if m.focus == focusQuery {
+		col = theme.Teal
+	}
+	return titledBox([]string{row}, "Query", inner, col)
 }
 
 // viewSearch is the search screen: header, query field, result list and detail pane, footer, all
@@ -153,6 +163,6 @@ func (m model) viewSearch(w, h int) string {
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	body := m.viewBody(max(avail-2, 1))
 
-	content := head + "\n" + div + "\n" + m.queryRow(innerW) + "\n" + m.filterBar(innerW) + "\n" + body + "\n" + div + "\n" + foot
+	content := head + "\n" + div + "\n" + m.queryBox(innerW) + "\n" + m.filterBar(innerW) + "\n" + body + "\n" + div + "\n" + foot
 	return outerBorder(content, innerW)
 }
