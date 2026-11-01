@@ -3,7 +3,7 @@ package tui
 // tuiEpilog is the text after the options of `okf tui --help`: where the TUI reads its
 // settings, state and environment. Raw keeps the line breaks (argparse RawDescriptionHelpFormatter).
 // The key list mirrors Settings and loadTracker; the full page is the docs URL at the end.
-const tuiEpilog = "settings (~/.config/okf/config.toml):\n" +
+const tuiEpilog = "settings ($XDG_CONFIG_HOME/okf/config.toml, default ~/.config/okf/config.toml):\n" +
 	"  [tui]\n" +
 	"    editor   editor command; empty: $VISUAL, then $EDITOR, then vi\n" +
 	"    theme    latte, frappe, macchiato or mocha (default: mocha)\n" +
