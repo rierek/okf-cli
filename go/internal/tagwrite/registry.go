@@ -16,7 +16,6 @@ import (
 )
 
 var (
-	rankLineRE  = pytext.Regexp(`^rank:\s*(` + strings.Join(catalogue.RegistryRanks, "|") + `)\s*$`)
 	separatorRE = pytext.Regexp(`^\|[\s:|-]+\|?\s*$`)
 )
 
@@ -52,34 +51,6 @@ func registerRegistry(app *cli.App) {
 // refuse is Python _refuse: the conversion stops at line index with `<file>:<line>: <message>`.
 func refuse(filename string, lineIndex int, format string, args ...any) error {
 	return okferr.Newf(okferr.InvalidInput, "%s:%d: %s", filename, lineIndex+1, fmt.Sprintf(format, args...))
-}
-
-// entryFields is Python _entry_fields: the rank (or "") and the description lines of one entry.
-func entryFields(lines []string, e catalogue.RegistryEntry) (rank string, desc []string) {
-	if e.Kind == "table" {
-		cells := strings.Split(strings.Trim(pytext.Strip(lines[e.Start]), "|"), "|")
-		var text string
-		if len(cells) >= 3 && slices.Contains(catalogue.RegistryRanks, pytext.Strip(cells[1])) {
-			rank, text = pytext.Strip(cells[1]), pytext.Strip(strings.Join(cells[2:], "|"))
-		} else if len(cells) > 1 {
-			text = pytext.Strip(strings.Join(cells[1:], "|"))
-		}
-		if text != "" {
-			desc = []string{text}
-		}
-		return rank, desc
-	}
-	for _, l := range lines[e.Start+1 : e.End] {
-		if s := pytext.Strip(l); s != "" {
-			desc = append(desc, s)
-		}
-	}
-	if len(desc) > 0 {
-		if m := rankLineRE.FindStringSubmatch(desc[0]); m != nil {
-			rank, desc = m[1], desc[1:]
-		}
-	}
-	return rank, desc
 }
 
 // tableRuns is Python _table_runs: the maximal runs [start, end) of non-fenced lines that start with
@@ -164,7 +135,7 @@ func toBlock(lines []string, filename string) ([]string, int, error) {
 			if !ok {
 				continue
 			}
-			rank, desc := entryFields(lines, e)
+			rank, desc := e.Fields(lines)
 			if len(desc) > 0 && strings.Contains(desc[0], "|") {
 				return nil, 0, refuse(filename, i, "row `%s` has more than one description cell; convert it by hand", e.Value)
 			}
@@ -211,7 +182,7 @@ func toTable(lines []string, filename string) ([]string, int, error) {
 		rows := make([]row, len(group))
 		ranked := false
 		for i, e := range group {
-			rank, desc := entryFields(lines, e)
+			rank, desc := e.Fields(lines)
 			if len(desc) > 1 {
 				return nil, 0, refuse(filename, e.Start, "block `%s` has a multi-line description; a table cell holds one line", e.Value)
 			}

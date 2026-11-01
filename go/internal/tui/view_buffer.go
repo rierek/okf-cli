@@ -22,9 +22,7 @@ const noteMark = "✎ "
 func (m model) keyBufferHit(msg tea.KeyMsg) (next model, cmd tea.Cmd, ok bool) {
 	switch {
 	case keybind.Matches(msg, keys.Buffer):
-		m.screen = screenBuffer
-		m.bufCursor = min(m.bufCursor, max(len(m.buf.entries)-1, 0))
-		return m.focusBuffer(), nil, true
+		return m.openBuffer(), nil, true
 	case keybind.Matches(msg, keys.BufferToggle) && m.search.focused() != nil:
 		m.buf = m.buf.toggle(entryOf(*m.search.focused()))
 		return m, nil, true

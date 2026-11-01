@@ -1,5 +1,6 @@
-// Copied from lif internal/tui/modal.go at commit 2056715, adapted: no menuList (copied when a
-// menu needs it); clampModalWidth comes from lif internal/tui/box_filter_facets.go.
+// Copied from lif internal/tui/modal.go at commit 2056715, adapted: clampModalWidth comes from lif
+// internal/tui/box_filter_facets.go. menuList is copied from the same modal.go at commit d0cd455
+// for the command center.
 
 package tui
 
@@ -60,4 +61,19 @@ func clampModalWidth(pref, termW int) int {
 		w = 24
 	}
 	return w
+}
+
+// menuList renders a selection list with a ▸ cursor (Accent) before the active entry. render(i,
+// selected) returns the entry text after the cursor. Every line ends with "\n".
+func menuList(n, cursor int, render func(i int, selected bool) string) string {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		sel := i == cursor
+		c := "  "
+		if sel {
+			c = theme.Accent.Render("▸ ")
+		}
+		b.WriteString(c + render(i, sel) + "\n")
+	}
+	return b.String()
 }

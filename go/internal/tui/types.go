@@ -33,6 +33,7 @@ const (
 	overlayFilterMenu // value menu of the focused filter field
 	overlayRoot       // root menu
 	overlayAgents     // agent picker of the hand-off
+	overlayPalette    // command center
 )
 
 // screenKind is the screen under the overlays.
@@ -41,6 +42,8 @@ type screenKind int
 const (
 	screenSearch screenKind = iota // query field, result list, detail pane
 	screenBuffer                   // the session buffer
+	screenTypes                    // the catalogue's types, reached from the command center
+	screenTags                     // the catalogue's tags, reached from the command center
 )
 
 // model is the whole state of the TUI. Bubble Tea copies it on every message, so it holds values
@@ -71,6 +74,8 @@ type model struct {
 	confirm confirmDialog // dialog of overlayConfirm
 	text    textOverlay   // box of overlayText
 	agents  agentPicker   // state of overlayAgents
+	palette paletteState  // state of overlayPalette
+	cat     catalogueView // data and cursor of screenTypes and screenTags
 
 	lexical, semantic indexDot // the two index dots of the header
 

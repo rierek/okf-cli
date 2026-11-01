@@ -23,6 +23,9 @@ func (m model) View() string {
 	if m.screen == screenBuffer {
 		screen = m.viewBuffer(w, h)
 	}
+	if m.screen == screenTypes || m.screen == screenTags {
+		screen = m.viewCatalogue(w, h)
+	}
 	return m.renderToast(m.composeOverlays(screen, w, h))
 }
 
@@ -43,12 +46,21 @@ func (m model) composeOverlays(out string, w, h int) string {
 		out = placeOverlay(out, m.rootMenuBox(), w, h)
 	case overlayAgents:
 		out = placeOverlay(out, m.agentsBox(), w, h)
+	case overlayPalette:
+		out = placeOverlay(out, m.paletteBox(), w, h)
 	}
 	return out
 }
 
 // footerBindings are the key hints of the footer: the keys that act in the current state.
 func (m model) footerBindings() []keybind.Binding {
+	if m.screen == screenTypes || m.screen == screenTags {
+		return pick([]binding{
+			{toastDismissHint, m.escDismissesToast()},
+			{keys.Down, m.catalogueLen() > 0},
+			{keys.BufferBack, true},
+		})
+	}
 	if m.screen == screenBuffer {
 		n := len(m.buf.entries)
 		return pick([]binding{
@@ -66,6 +78,7 @@ func (m model) footerBindings() []keybind.Binding {
 	return pick([]binding{
 		{toastDismissHint, m.escDismissesToast()},
 		{keys.Run, m.inInput()},
+		{keys.Back, m.inInput()},
 		{keys.Open, m.focus == focusFilter},
 		{keys.FieldNext, m.focus == focusFilter},
 		{keys.Down, !m.inInput() && len(m.search.hits) > 0},
@@ -107,10 +120,7 @@ func pick(cands []binding) []keybind.Binding {
 // the index dots and the global key hints at the right. A root too long for the line shows its
 // tail behind "…", so the header never wraps.
 func (m model) header(innerW int) string {
-	title := "Search"
-	if m.screen == screenBuffer {
-		title = "Buffer"
-	}
+	title := map[screenKind]string{screenSearch: "Search", screenBuffer: "Buffer", screenTypes: "Types", screenTags: "Tags"}[m.screen]
 	right := m.dots() + "  " + m.bufferCount() + "  " + renderBindings(globalBindings(m.inInput()))
 	// The left side is "> root: title" and one gap cell.
 	room := innerW - lipgloss.Width(right) - lipgloss.Width("> : "+title) - 1

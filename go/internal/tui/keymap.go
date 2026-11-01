@@ -9,7 +9,7 @@ import (
 
 // keyMap is the one source of every keybinding. The footer, the header hints and the help overlay
 // are generated from it, and re-binding a key changes exactly one place. A later task adds its
-// bindings here and to helpGroups, nowhere else.
+// bindings here, to helpGroups and to paletteCommands, nowhere else.
 type keyMap struct {
 	Up     keybind.Binding
 	Down   keybind.Binding
@@ -42,7 +42,8 @@ type keyMap struct {
 	Cancel  keybind.Binding // esc or n: cancel a dialog
 	Quit    keybind.Binding // q: quit, after a confirm dialog
 	QuitNow keybind.Binding // ctrl+c: quit at once, from every state (handled first in handleKey)
-	Help    keybind.Binding // ?: help overlay; f1 also works inside a text field
+	Help    keybind.Binding // ?: help overlay, outside text input
+	Palette keybind.Binding // ctrl+k: command center, from every view, also inside the query field; an open overlay keeps the key
 	Search  keybind.Binding // /: focus the query field
 	Refresh keybind.Binding // r: choose an index to refresh (outside text inputs)
 	Run     keybind.Binding // enter inside the query field: run the search
@@ -87,7 +88,8 @@ func newKeyMap() keyMap {
 		Cancel:  keybind.NewBinding(keybind.WithKeys("esc", "n"), keybind.WithHelp("esc/n", "cancel")),
 		Quit:    keybind.NewBinding(keybind.WithKeys("q"), keybind.WithHelp("q", "quit")),
 		QuitNow: keybind.NewBinding(keybind.WithKeys("ctrl+c"), keybind.WithHelp("ctrl+c", "quit now")),
-		Help:    keybind.NewBinding(keybind.WithKeys("?", "f1"), keybind.WithHelp("?/f1", "help")),
+		Help:    keybind.NewBinding(keybind.WithKeys("?"), keybind.WithHelp("?", "help")),
+		Palette: keybind.NewBinding(keybind.WithKeys("ctrl+k"), keybind.WithHelp("ctrl+k", "commands")),
 		Search:  keybind.NewBinding(keybind.WithKeys("/"), keybind.WithHelp("/", "query field")),
 		Refresh: keybind.NewBinding(keybind.WithKeys("r"), keybind.WithHelp("r", "refresh index")),
 		Run:     keybind.NewBinding(keybind.WithKeys("enter"), keybind.WithHelp("enter", "search")),
@@ -118,20 +120,17 @@ func (k keyMap) helpGroups() []helpGroup {
 		{"Buffer", []keybind.Binding{k.BufferToggle, k.Note, k.Buffer, k.BufferDrop, k.BufferClear, k.Send, k.Copy, k.BufferBack, k.TextSave, k.TextEdit}},
 		{"Tasks", []keybind.Binding{k.Task}},
 		{"Dialogs", []keybind.Binding{k.Confirm, k.Cancel}},
-		{"Global", []keybind.Binding{k.Help, k.Quit, k.QuitNow}},
+		{"Global", []keybind.Binding{k.Palette, k.Help, k.Quit, k.QuitNow}},
 		{"Index", []keybind.Binding{k.Refresh}},
 		{"Filters", []keybind.Binding{k.Filter, k.FieldPrev, k.FieldNext, k.Open, k.Toggle, k.FilterClear}},
 	}
 }
 
-// fieldHelpHint is the help hint inside a text field, where only f1 opens the help.
-var fieldHelpHint = keybind.NewBinding(keybind.WithKeys("f1"), keybind.WithHelp("f1", "help"))
-
 // globalBindings are the hints at the right of the header. Inside a text field the letter keys
 // type, so the hints name the keys that work there.
 func globalBindings(inInput bool) []keybind.Binding {
 	if inInput {
-		return []keybind.Binding{keys.Back, fieldHelpHint, keys.QuitNow}
+		return []keybind.Binding{keys.Palette, keys.QuitNow}
 	}
-	return []keybind.Binding{keys.Help, keys.Quit}
+	return []keybind.Binding{keys.Palette, keys.Help, keys.Quit}
 }

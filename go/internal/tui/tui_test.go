@@ -75,8 +75,8 @@ func TestFocusRing(t *testing.T) {
 	}
 }
 
-// The help overlay lists every binding of the key map, and opens with ? outside the field and with
-// f1 inside it.
+// The help overlay lists every binding of the key map, and opens with ? outside the field. f1 is
+// not bound: it does nothing, in the field or outside it.
 func TestHelpOverlayIsGeneratedFromKeyMap(t *testing.T) {
 	m, _ := press(sized(t, nil), "esc", "?")
 	if m.overlay != overlayHelp {
@@ -98,8 +98,10 @@ func TestHelpOverlayIsGeneratedFromKeyMap(t *testing.T) {
 	golden, _ := press(sized(t, nil), "esc", "?")
 	assertGolden(t, "help", golden)
 
-	if in, _ := press(sized(t, nil), "f1"); in.overlay != overlayHelp {
-		t.Errorf("f1 inside the query field: overlay = %v, want the help", in.overlay)
+	for _, start := range [][]string{nil, {"esc"}} {
+		if f, cmd := press(sized(t, nil), append(start, "f1")...); f.overlay != overlayNone || cmd != nil {
+			t.Errorf("f1 after %v: overlay = %v, want none", start, f.overlay)
+		}
 	}
 }
 

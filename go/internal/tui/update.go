@@ -71,9 +71,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 //
 //  1. ctrl+c quits at once, from every state.
 //  2. The open overlay (confirm dialog, help, refresh dialog, text box) captures every key.
-//  3. A focused text input takes the text keys; only the keys that must work inside a text field
-//     (esc, tab, shift+tab, f1) are handled before it.
-//  4. The global keys: ? help, q quit dialog, tab and shift+tab focus ring, / query field, esc
+//  3. ctrl+k opens the command center, also inside a text input.
+//  4. A focused text input takes the text keys; only the keys that must work inside a text field
+//     (esc, tab, shift+tab) are handled before it.
+//  5. The global keys: ? help, q quit dialog, tab and shift+tab focus ring, / query field, esc
 //     dismisses a sticky toast.
 //
 // A later task adds its stages at the matching place: modal editors and forms next to the
@@ -97,6 +98,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyRoot(msg)
 	case overlayAgents:
 		return m.keyAgents(msg)
+	case overlayPalette:
+		return m.keyPalette(msg)
+	}
+	if keybind.Matches(msg, keys.Palette) {
+		return m.openPalette(), nil
 	}
 	if keybind.Matches(msg, keys.Send) {
 		return m.send()
@@ -131,6 +137,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.screen == screenBuffer {
 		return m.keyBuffer(msg)
 	}
+	if m.screen == screenTypes || m.screen == screenTags {
+		return m.keyCatalogue(msg)
+	}
 	if m.focus == focusFilter {
 		return m.keyFilterBar(msg)
 	}
@@ -151,8 +160,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // keyQuery handles a key while the query field has the focus: enter runs the search, esc leaves
-// the field, tab and shift+tab step the focus ring, f1 opens the help; every other key goes to
-// the field. Typing never starts a search.
+// the field, tab and shift+tab step the focus ring; every other key goes to the field. Typing never starts a search.
 func (m model) keyQuery(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case keybind.Matches(msg, keys.Back):
@@ -161,8 +169,6 @@ func (m model) keyQuery(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.stepFocus(1)
 	case keybind.Matches(msg, keys.FocusOut):
 		return m.stepFocus(-1)
-	case msg.Type == tea.KeyF1:
-		return m.openHelp(), nil
 	case keybind.Matches(msg, keys.Run):
 		return m.startSearch()
 	}

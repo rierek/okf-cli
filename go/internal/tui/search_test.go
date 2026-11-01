@@ -438,11 +438,11 @@ func TestDetailScrolls(t *testing.T) {
 	}
 }
 
-// The header names f1 inside the query field, where ? types.
-func TestQueryFieldHeaderHintsF1(t *testing.T) {
+// The header names the command center inside the query field, where ? types.
+func TestQueryFieldHeaderHintsCommandCenter(t *testing.T) {
 	out := strings.ReplaceAll(sized(t, nil).View(), nbsp, " ")
-	if !strings.Contains(out, "esc back · f1 help · ctrl+c quit now") {
-		t.Errorf("header lacks the f1 help hint inside the query field:\n%s", out)
+	if !strings.Contains(out, "ctrl+k commands · ctrl+c quit now") || !strings.Contains(out, "esc back") {
+		t.Errorf("view lacks the command center or esc hint inside the query field:\n%s", out)
 	}
 }
 
