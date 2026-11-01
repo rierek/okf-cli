@@ -157,7 +157,7 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 
 | Key | Action |
 |---|---|
-| `ctrl+k` | Command center, from every state, also inside the query field. See below. |
+| `ctrl+k` | Command center, from every view, also inside the query field. See below. |
 | `?` | Help overlay, generated from the key map. Outside the query field; the command center has `help` everywhere. |
 | `q` | Quit. A dialog asks first: `enter` or `y` quits, `esc` or `n` cancels. |
 | `ctrl+c` | Quit at once, without a dialog, from every state. |
@@ -189,7 +189,7 @@ One overlay is open at a time and takes every key until it closes. The help over
 
 ## Command center
 
-`ctrl+k` opens a floating list of every action of the key map and every view, named `<verb>: <object>` (`add: note`, `add: task`, `view: buffer`, `view: types`, `view: tags`, `refresh: index`, `copy: buffer`, `send: buffer`, `help`, `quit`, ...). The key of an action stands at the right of its row. Type to filter fuzzily (the letters of the filter must appear in the name in order), `↑`/`↓` select, `enter` runs the entry, `esc` or `ctrl+k` closes the list.
+`ctrl+k` opens a floating list of every action of the key map and every view, named `<verb>: <object>` (`add: note`, `add: task`, `view: buffer`, `view: types`, `view: tags`, `refresh: index`, `copy: buffer`, `send: buffer`, `help`, `quit`, ...). The key of an action stands at the right of its row. Type to filter fuzzily (the letters of the filter must appear in the name in order), `↑`/`↓` select, `enter` runs the entry, `esc` or `ctrl+k` closes the list. An open overlay keeps `ctrl+k`: no second overlay opens on top of it.
 
 An entry runs what its key runs, wherever the focus was: `add: note` opens the note box of the focused hit, `help` opens the help. An entry that needs a hit says so in a message when there is none; the buffer-view entries `remove: entry` and `clear: buffer` say that they work in the buffer view.
 

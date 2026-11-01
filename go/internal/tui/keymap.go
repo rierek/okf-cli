@@ -43,7 +43,7 @@ type keyMap struct {
 	Quit    keybind.Binding // q: quit, after a confirm dialog
 	QuitNow keybind.Binding // ctrl+c: quit at once, from every state (handled first in handleKey)
 	Help    keybind.Binding // ?: help overlay, outside text input
-	Palette keybind.Binding // ctrl+k: command center, from every state
+	Palette keybind.Binding // ctrl+k: command center, from every view, also inside the query field; an open overlay keeps the key
 	Search  keybind.Binding // /: focus the query field
 	Refresh keybind.Binding // r: choose an index to refresh (outside text inputs)
 	Run     keybind.Binding // enter inside the query field: run the search

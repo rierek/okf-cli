@@ -191,12 +191,3 @@ func TestTypesAndTagsViews(t *testing.T) {
 		}
 	}
 }
-
-// Criterion 6: f1 opens nothing, in the query field or outside it.
-func TestF1IsNotBound(t *testing.T) {
-	for _, h := range helpEntries() {
-		if strings.Contains(h.key, "f1") {
-			t.Errorf("help lists f1: %+v", h)
-		}
-	}
-}

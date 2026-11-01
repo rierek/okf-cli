@@ -1,6 +1,7 @@
 // Copied from lif internal/tui/overlay_palette.go at commit d0cd455 (paletteItem, palFiltered,
-// openPalette, keyPalette, dispatchPalette, paletteBox), adapted: the entries come from the okf key
-// map (paletteCommands) and name the same action as their key; ctrl+k opens it from every state.
+// openPalette, keyPalette, paletteBox), adapted: the entries come from the okf key map
+// (paletteCommands) and name the same action as their key; ctrl+k opens it from every view, also
+// inside the query field; an open overlay keeps the key.
 
 package tui
 
@@ -53,11 +54,7 @@ func paletteCommands() []command {
 		{"previous: layout", k.Layout, func(m model) (tea.Model, tea.Cmd) { return m.toSearch().nextLayout(true), nil }},
 		{"run: search", k.Run, func(m model) (tea.Model, tea.Cmd) { return m.toSearch().startSearch() }},
 		{"focus: query", k.Search, func(m model) (tea.Model, tea.Cmd) { return m.toSearch().setFocus(focusQuery) }},
-		{"focus: filters", k.Filter, func(m model) (tea.Model, tea.Cmd) {
-			m = m.toSearch()
-			m.filters.field = fieldRoot
-			return m.setFocus(focusFilter)
-		}},
+		{"focus: filters", k.Filter, func(m model) (tea.Model, tea.Cmd) { return m.toSearch().press(k.Filter) }},
 		{"clear: filters", k.FilterClear, func(m model) (tea.Model, tea.Cmd) { return m.toSearch().clearFilters() }},
 		{"view: search", k.BufferBack, func(m model) (tea.Model, tea.Cmd) { return m.toSearch(), nil }},
 		{"view: buffer", k.Buffer, func(m model) (tea.Model, tea.Cmd) { return m.openBuffer(), nil }},
@@ -67,7 +64,7 @@ func paletteCommands() []command {
 		{"clear: buffer", k.BufferClear, func(m model) (tea.Model, tea.Cmd) { return m.pressInBuffer("clear: buffer", k.BufferClear) }},
 		{"copy: buffer", k.Copy, func(m model) (tea.Model, tea.Cmd) { return m.copyBuffer() }},
 		{"send: buffer", k.Send, func(m model) (tea.Model, tea.Cmd) { return m.send() }},
-		{"refresh: index", k.Refresh, func(m model) (tea.Model, tea.Cmd) { m.overlay = overlayRefresh; return m, nil }},
+		{"refresh: index", k.Refresh, func(m model) (tea.Model, tea.Cmd) { return m.press(k.Refresh) }},
 		{"help", k.Help, func(m model) (tea.Model, tea.Cmd) { return m.openHelp(), nil }},
 		{"quit", k.Quit, func(m model) (tea.Model, tea.Cmd) { return m.openConfirm(quitDialog), nil }},
 	}
@@ -123,7 +120,7 @@ func (m model) pressInBuffer(name string, b keybind.Binding) (tea.Model, tea.Cmd
 	return m.press(b)
 }
 
-// openBuffer is the b key: it shows the buffer view.
+// openBuffer is the b key and view: buffer: it shows the buffer view.
 func (m model) openBuffer() model {
 	m.screen = screenBuffer
 	m.focus = focusList
