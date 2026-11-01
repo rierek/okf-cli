@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -231,19 +232,33 @@ func TestToastExpiry(t *testing.T) {
 	}
 }
 
-// A sticky toast that replaces a plain one in place (within the debounce window) inherits its
-// generation, so the timer of the plain toast must not clear it.
-func TestStickyToastOutlivesTheTimerItInherits(t *testing.T) {
-	m := sized(t, nil)
-	m, _ = m.showToast(toastInfo, "working", "", false)
-	seq := m.toast.seq
-	m, _ = m.showToast(toastError, "failed", "", true)
-	if m.toast.seq != seq {
-		t.Fatalf("seq = %d, want the debounced replacement to keep %d", m.toast.seq, seq)
+// A newer toast replaces a sticky one with its own generation; the timer of the sticky toast
+// must not clear the newer toast. A sticky toast expires after 15 seconds.
+func TestStickyToastTimers(t *testing.T) {
+	if toastDuration(toastError, true) != 15*time.Second || toastDuration(toastError, false) != 8*time.Second {
+		t.Error("sticky lasts 15s, a plain error toast keeps 8s")
 	}
-	next, _ := m.handleToastExpired(toastExpiredMsg{seq: seq})
+	m := sized(t, nil)
+	m, cmd := m.showToast(toastError, "failed", "", true)
+	if cmd == nil {
+		t.Fatal("a sticky toast sets a timer")
+	}
+	stickySeq := m.toast.seq
+	gone, _ := m.handleToastExpired(toastExpiredMsg{seq: stickySeq})
+	if gone.(model).toast != nil {
+		t.Error("the sticky toast did not expire")
+	}
+	m, _ = m.showToast(toastInfo, "next", "", false)
+	if m.toast.seq == stickySeq {
+		t.Fatal("the newer toast inherited the sticky generation")
+	}
+	next, _ := m.handleToastExpired(toastExpiredMsg{seq: stickySeq})
 	if next.(model).toast == nil {
-		t.Error("the timer of the replaced plain toast cleared the sticky toast")
+		t.Error("the timer of the replaced sticky toast cleared the newer toast")
+	}
+	m, _ = m.showToast(toastError, "failed", "", true)
+	if !strings.Contains(m.toastBox(), "esc: dismiss") {
+		t.Error("a sticky toast shows the dismiss hint")
 	}
 }
 
