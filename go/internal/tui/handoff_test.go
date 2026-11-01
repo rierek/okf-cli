@@ -164,10 +164,10 @@ func TestExportHoldsEveryEntryInOrder(t *testing.T) {
 			t.Errorf("entry %q: tags %v missing", e.Title, e.Tags)
 		}
 	}
-	if !strings.HasPrefix(entries[0].Abs, "/") || !strings.Contains(got, "> check the rollback\n> step first\n") {
+	if !strings.HasPrefix(entries[0].Abs, "/") || !strings.Contains(got, "\n\n## Notes\n\ncheck the rollback\nstep first\n") {
 		t.Errorf("absolute path or quoted note missing in\n%s", got)
 	}
-	if strings.Count(got, "\n> ") != 2 {
+	if strings.Count(got, "## Notes") != 1 || strings.Contains(got, "> ") {
 		t.Errorf("only the first entry has a note:\n%s", got)
 	}
 }
