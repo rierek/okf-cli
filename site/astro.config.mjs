@@ -79,6 +79,7 @@ export default defineConfig({
 						'features/safe-edits',
 						'features/tags-and-registry',
 						'features/canon-blocks',
+						'features/tui',
 					],
 				},
 				{

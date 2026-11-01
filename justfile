@@ -132,3 +132,9 @@ docs-dev: docs-gen
 # Echte okf-Ausgabe fuer die Startseite neu aufnehmen (site/src/data/demo.json; braucht go/bin/okf)
 docs-capture: go-build
     node site/scripts/capture-demo.mjs
+
+# GIFs und Screenshots der TUI-Seite neu aufnehmen (scripts/tui-media: vhs, ffmpeg, ImageMagick; Ausgabe site/public/media/tui).
+# ARGS: Tape-Namen und/oder --theme=light|dark. Ohne VOYAGE_API_KEY entfaellt der semantische Index.
+docs-tui-media *ARGS: go-build
+    node --test scripts/tui-media/timeline.test.mjs
+    node scripts/tui-media/build.mjs {{ARGS}}
