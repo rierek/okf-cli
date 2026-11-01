@@ -118,25 +118,30 @@ func (m model) moveCursor(i int) model {
 	return m.focusHit()
 }
 
-// focusHit loads the H2 and H3 headings of the focused hit, as `okf toc <path> --level 0` lists
-// them, and resets the detail scroll. A file that cannot be read shows no table of contents.
+// focusHit loads the H2 and H3 headings of the focused hit and resets the detail scroll.
 func (m model) focusHit() model {
 	m.search.detailScroll = 0
 	m.search.headings = nil
-	hit := m.search.focused()
-	if hit == nil {
-		return m
-	}
-	text, err := catalogue.ReadFile(hit.Abs)
-	if err != nil {
-		return m
-	}
-	for _, h := range catalogue.IterHeadings(frontmatter.Read(text).Body) {
-		if h.Level == 2 || h.Level == 3 {
-			m.search.headings = append(m.search.headings, h)
-		}
+	if hit := m.search.focused(); hit != nil {
+		m.search.headings = headingsOf(hit.Abs)
 	}
 	return m
+}
+
+// headingsOf lists the H2 and H3 headings of the file at abs, as `okf toc <path> --level 0` lists
+// them. A file that cannot be read has none.
+func headingsOf(abs string) []catalogue.Heading {
+	text, err := catalogue.ReadFile(abs)
+	if err != nil {
+		return nil
+	}
+	var hs []catalogue.Heading
+	for _, h := range catalogue.IterHeadings(frontmatter.Read(text).Body) {
+		if h.Level == 2 || h.Level == 3 {
+			hs = append(hs, h)
+		}
+	}
+	return hs
 }
 
 // handleSpinner advances the running indicator; it stops ticking when the search ends.
@@ -152,8 +157,10 @@ func (m model) handleSpinner(msg spinner.TickMsg) (model, tea.Cmd) {
 // keyList handles the keys of the focused list; ok is false for a key it does not own.
 func (m model) keyList(msg tea.KeyMsg) (model, bool) {
 	_, _, innerH := m.geometry()
-	page := max(innerH/2, 1)
-	maxScroll := max(len(m.detailRows(m.detailTextWidth()))-innerH, 0)
+	if scroll, ok := scrollKey(msg, m.search.detailScroll, len(m.detailRows(m.detailTextWidth())), innerH); ok {
+		m.search.detailScroll = scroll
+		return m, true
+	}
 	switch {
 	case keybind.Matches(msg, keys.Up):
 		return m.moveCursor(m.search.cursor - 1), true
@@ -163,12 +170,6 @@ func (m model) keyList(msg tea.KeyMsg) (model, bool) {
 		return m.moveCursor(0), true
 	case keybind.Matches(msg, keys.Bottom):
 		return m.moveCursor(len(m.search.hits) - 1), true
-	case keybind.Matches(msg, keys.DetailDown):
-		m.search.detailScroll = min(m.search.detailScroll+page, maxScroll)
-		return m, true
-	case keybind.Matches(msg, keys.DetailUp):
-		m.search.detailScroll = max(m.search.detailScroll-page, 0)
-		return m, true
 	case keybind.Matches(msg, keys.Layout):
 		return m.nextLayout(msg.String() == "V"), true
 	}

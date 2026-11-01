@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	keybind "github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
+	"nas/volume1/data/git/okf-tools/go/internal/find"
 	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
 )
 
@@ -54,8 +58,14 @@ func (m model) geometry() (listW, detailW, innerH int) {
 	case layoutDetail:
 		return 0, innerW, innerH
 	}
+	listW, detailW = splitWidths(innerW)
+	return listW, detailW, innerH
+}
+
+// splitWidths splits innerW cells between a list pane and a preview pane.
+func splitWidths(innerW int) (listW, detailW int) {
 	listW = min(max(innerW*2/5, 24), max(innerW-24, 1))
-	return listW, innerW - listW, innerH
+	return listW, innerW - listW
 }
 
 // detailTextWidth is the width of a detail row: the pane without its border and the margin
@@ -87,7 +97,7 @@ func (m model) listPane(outerW, innerH int) string {
 		if s.ran {
 			rows = []string{theme.Muted.Render(fmt.Sprintf("No hits for %q.", s.query))}
 		}
-		return renderPane(pane{rows: rows}, outerW-2, innerH, m.focus == focusList)
+		return renderPane(pane{rows: rows}, "Results", outerW-2, innerH, m.focus == focusList)
 	}
 	rowW := max(outerW-6, 1) // border, the cursor mark, and the margin renderPane keeps
 	rows := make([]string, len(s.hits))
@@ -95,7 +105,7 @@ func (m model) listPane(outerW, innerH int) string {
 		rows[i] = listRow(bufferMark(m.buffered(i)), h.Title, h.Type, h.Bundle, rowW)
 	}
 	start := windowStart(len(rows), innerH, s.cursor)
-	return renderPane(pane{rows: windowAround(rows, innerH, s.cursor), cursor: s.cursor - start, isList: true}, outerW-2, innerH, m.focus == focusList)
+	return renderPane(pane{rows: windowAround(rows, innerH, s.cursor), cursor: s.cursor - start, isList: true}, "Results", outerW-2, innerH, m.focus == focusList)
 }
 
 // bufferMark is the two-cell mark of a list row that is in the buffer.
@@ -118,9 +128,27 @@ func listRow(mark, title, typ, bundle string, w int) string {
 
 // detailPane shows the focused hit, scrolled by the user.
 func (m model) detailPane(outerW, innerH int) string {
-	rows := m.detailRows(max(outerW-4, 1))
-	scroll := min(m.search.detailScroll, max(len(rows)-innerH, 0))
-	return renderPane(pane{rows: rows[scroll:]}, outerW-2, innerH, false)
+	return previewPane(m.detailRows(max(outerW-4, 1)), m.search.detailScroll, outerW, innerH)
+}
+
+// previewPane is a preview pane of outer width outerW: rows scrolled down by scroll, at most the
+// rows that leave the last page full.
+func previewPane(rows []string, scroll, outerW, innerH int) string {
+	scroll = min(scroll, max(len(rows)-innerH, 0))
+	return renderPane(pane{rows: rows[scroll:]}, "Preview", outerW-2, innerH, false)
+}
+
+// scrollKey applies ctrl+d or ctrl+u to scroll, a preview of nRows rows in a pane of innerH rows:
+// half a page, kept inside the rows. ok is false for any other key.
+func scrollKey(msg tea.KeyMsg, scroll, nRows, innerH int) (next int, ok bool) {
+	page := max(innerH/2, 1)
+	switch {
+	case keybind.Matches(msg, keys.DetailDown):
+		return min(scroll+page, max(nRows-innerH, 0)), true
+	case keybind.Matches(msg, keys.DetailUp):
+		return max(scroll-page, 0), true
+	}
+	return scroll, false
 }
 
 const detailLabelW = 12
@@ -139,10 +167,14 @@ func detailField(label, value string, w int) []string {
 	return out
 }
 
-// detailRows are the rows of the detail pane at text width w: the metadata of the focused hit,
-// its absolute path, description, snippet and the H2/H3 table of contents.
+// detailRows are the rows of the search preview at text width w.
 func (m model) detailRows(w int) []string {
-	h := m.search.focused()
+	return previewRows(m.search.focused(), m.search.headings, w)
+}
+
+// previewRows are the rows of a preview pane at text width w: the metadata of hit h, its absolute
+// path, description, snippet and the H2/H3 table of contents.
+func previewRows(h *find.Hit, headings []catalogue.Heading, w int) []string {
 	if h == nil {
 		return []string{theme.Muted.Render("(no hit selected)")}
 	}
@@ -167,10 +199,10 @@ func (m model) detailRows(w int) []string {
 	rows = append(rows, detailField("description", or(h.Description, "-"), w)...)
 	rows = append(rows, detailField("snippet", or(h.Snippet, "-"), w)...)
 	rows = append(rows, "", theme.Muted.Render("Contents"))
-	if len(m.search.headings) == 0 {
+	if len(headings) == 0 {
 		rows = append(rows, theme.Muted.Render("(no H2 or H3 headings)"))
 	}
-	for _, hd := range m.search.headings {
+	for _, hd := range headings {
 		rows = append(rows, strings.Repeat("  ", hd.Level-2)+"- "+hd.Text)
 	}
 	return rows

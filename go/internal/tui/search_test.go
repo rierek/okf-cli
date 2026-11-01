@@ -9,11 +9,15 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"nas/volume1/data/git/okf-tools/go/internal/cli"
 	"nas/volume1/data/git/okf-tools/go/internal/envelope"
 	"nas/volume1/data/git/okf-tools/go/internal/find"
 	"nas/volume1/data/git/okf-tools/go/internal/navigation"
+	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
 )
 
 // searchQueries are queries with several hits on the fixture catalogue, in lexical mode.
@@ -439,5 +443,32 @@ func TestQueryFieldHeaderHintsF1(t *testing.T) {
 	out := strings.ReplaceAll(sized(t, nil).View(), nbsp, " ")
 	if !strings.Contains(out, "esc back · f1 help · ctrl+c quit now") {
 		t.Errorf("header lacks the f1 help hint inside the query field:\n%s", out)
+	}
+}
+
+// Every pane of the search screen carries its title on the top border; the query field has its own
+// frame, in teal while it has the focus and in the pane border colour otherwise.
+func TestSearchPanesAreTitledAndQueryFramed(t *testing.T) {
+	m := onFixture(t, 120, 30)
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	focused := m.queryBox(118)
+	if plain := ansi.Strip(focused); !strings.Contains(plain, "─ Query ") || !strings.Contains(plain, "╭") || !strings.Contains(plain, "╯") {
+		t.Errorf("query field is not a titled rounded box:\n%s", focused)
+	}
+	teal := lipgloss.NewStyle().Foreground(theme.Teal).Render("╭")
+	if !strings.HasPrefix(focused, teal) {
+		t.Errorf("focused query border is not teal: %q", focused)
+	}
+	m, _ = press(m, "esc")
+	if blurred := m.queryBox(118); strings.HasPrefix(blurred, teal) {
+		t.Errorf("unfocused query border is still teal: %q", blurred)
+	}
+	view := ansi.Strip(m.View())
+	for _, title := range []string{"Query", "Results", "Preview"} {
+		if !strings.Contains(view, "─ "+title+" ") {
+			t.Errorf("no %s pane title:\n%s", title, view)
+		}
 	}
 }
