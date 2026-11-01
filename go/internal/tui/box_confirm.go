@@ -72,6 +72,7 @@ func (m model) runConfirm(kind confirmKind) (tea.Model, tea.Cmd) {
 		return m.startSemantic()
 	case confirmClearBuffer:
 		m.buf, m.bufCursor = buffer{}, 0
+		m = m.focusBuffer()
 	}
 	return m, nil
 }

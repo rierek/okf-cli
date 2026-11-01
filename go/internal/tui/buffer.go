@@ -18,6 +18,10 @@ type bufferEntry struct {
 	Bundle      string
 	Tags        []string
 	Description string
+	Snippet     string // the preview shows these four as the search that found the hit did
+	Provenance  string
+	Tier        string
+	Stale       bool
 	Note        string // free text, empty for none
 }
 
@@ -36,6 +40,15 @@ func entryOf(h find.Hit) bufferEntry {
 	return bufferEntry{
 		id: fileID(h.Abs), Abs: h.Abs, Title: h.Title, Type: h.Type, Bundle: h.Bundle,
 		Tags: slices.Clone(h.Tags), Description: h.Description,
+		Snippet: h.Snippet, Provenance: h.Provenance, Tier: h.Tier, Stale: h.Stale,
+	}
+}
+
+// hit is the snapshot as the hit the preview pane draws.
+func (e bufferEntry) hit() find.Hit {
+	return find.Hit{
+		Abs: e.Abs, Title: e.Title, Type: e.Type, Bundle: e.Bundle, Tags: e.Tags,
+		Description: e.Description, Snippet: e.Snippet, Provenance: e.Provenance, Tier: e.Tier, Stale: e.Stale,
 	}
 }
 

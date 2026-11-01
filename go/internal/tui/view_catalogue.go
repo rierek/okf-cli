@@ -85,7 +85,7 @@ func (m model) keyCatalogue(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) viewCatalogue(w, h int) string {
 	innerW := w - 2
 	head, foot, avail := m.chrome(w, h)
-	avail += 1 + filterBarHeight // no query row and no filter bar on this screen
+	avail += queryRows + filterBarHeight // no query box and no filter bar on this screen
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
 	content := head + "\n" + div + "\n" + m.cataloguePane(innerW, max(avail-2, 1)) + "\n" + div + "\n" + foot
 	return outerBorder(content, innerW)
@@ -95,6 +95,7 @@ func (m model) viewCatalogue(w, h int) string {
 // name and usage count, both in columns.
 func (m model) cataloguePane(outerW, innerH int) string {
 	var rows []string
+	title := map[screenKind]string{screenTypes: "Types", screenTags: "Tags"}[m.screen]
 	switch {
 	case m.screen == screenTypes && m.cat.typesMissing:
 		rows = []string{theme.Muted.Render("(missing: TYPES.md)")}
@@ -118,10 +119,10 @@ func (m model) cataloguePane(outerW, innerH int) string {
 	}
 	if len(rows) == 0 {
 		msg := map[screenKind]string{screenTypes: "No types in TYPES.md.", screenTags: "No tags found."}[m.screen]
-		return renderPane(pane{rows: []string{theme.Muted.Render(msg)}}, outerW-2, innerH, true)
+		return renderPane(pane{rows: []string{theme.Muted.Render(msg)}}, title, outerW-2, innerH, true)
 	}
 	start := windowStart(len(rows), innerH, m.cat.cursor)
-	return renderPane(pane{rows: windowAround(rows, innerH, m.cat.cursor), cursor: m.cat.cursor - start, isList: true}, outerW-2, innerH, true)
+	return renderPane(pane{rows: windowAround(rows, innerH, m.cat.cursor), cursor: m.cat.cursor - start, isList: true}, title, outerW-2, innerH, true)
 }
 
 // padRight pads s with spaces to w cells.

@@ -6,6 +6,7 @@ import (
 
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
 )
@@ -49,6 +50,7 @@ func (m model) openNote(e bufferEntry) (model, tea.Cmd) {
 // buffer after a confirm dialog, n writes the note, b or esc leaves the view.
 func (m model) keyBuffer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	n := len(m.buf.entries)
+	cursor := m.bufCursor
 	switch {
 	case keybind.Matches(msg, keys.BufferBack):
 		m.screen = screenSearch
@@ -60,39 +62,66 @@ func (m model) keyBuffer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.bufCursor = 0
 	case keybind.Matches(msg, keys.Bottom):
 		m.bufCursor = max(n-1, 0)
+	case keybind.Matches(msg, keys.DetailDown), keybind.Matches(msg, keys.DetailUp):
+		w, h := m.size()
+		_, previewW, topH, _ := m.bufferLayout(w, h)
+		m.bufScroll, _ = scrollKey(msg, m.bufScroll, len(m.bufferPreviewRows(max(previewW-4, 1))), topH)
 	case keybind.Matches(msg, keys.BufferDrop) && n > 0:
 		m.buf = m.buf.remove(m.bufCursor)
 		m.bufCursor = min(m.bufCursor, max(n-2, 0))
+		return m.focusBuffer(), nil
 	case keybind.Matches(msg, keys.BufferClear) && n > 0:
 		return m.openConfirm(clearBufferDialog(n)), nil
 	case keybind.Matches(msg, keys.Note) && n > 0:
 		return m.openNote(m.buf.entries[m.bufCursor])
 	}
+	if m.bufCursor != cursor {
+		m = m.focusBuffer()
+	}
 	return m, nil
 }
 
-// bufferDetailRows is the height of the entry pane under the buffer list, borders included.
-const bufferDetailRows = 8
+// bufferNoteRows is the height of the note pane under the buffer list and preview, borders
+// included.
+const bufferNoteRows = 6
 
-// viewBuffer is the buffer screen: header, the entries in the order they were added, the path
-// and note of the entry under the cursor, footer, in the outer frame of w×h cells.
+// bufferLayout is the geometry of the buffer view in w×h cells: the outer widths of the list and
+// the preview, the inner height of both, and the inner height of the note pane (0: too little room
+// to show it).
+func (m model) bufferLayout(w, h int) (listW, previewW, topH, noteH int) {
+	_, _, avail := m.chrome(w, h)
+	avail += queryRows + filterBarHeight // no query field and no filter bar on this screen
+	noteOuter := 0
+	if avail >= 2*bufferNoteRows {
+		noteOuter = bufferNoteRows
+	}
+	listW, previewW = splitWidths(w - 2)
+	return listW, previewW, max(avail-noteOuter-2, 1), max(noteOuter-2, 0)
+}
+
+// viewBuffer is the buffer screen: header, the entries in the order they were added beside the
+// preview of the entry under the cursor, its note below, footer, in the outer frame of w×h cells.
 func (m model) viewBuffer(w, h int) string {
 	innerW := w - 2
-	head, foot, avail := m.chrome(w, h)
-	avail += 1 + filterBarHeight // no query row and no filter bar on this screen
+	head, foot, _ := m.chrome(w, h)
 	div := theme.Dim.Render(strings.Repeat("─", innerW))
+	listW, previewW, topH, noteH := m.bufferLayout(w, h)
 
-	detailH := 0
-	if avail >= 2*bufferDetailRows {
-		detailH = bufferDetailRows
-	}
-	list := m.bufferList(innerW, max(avail-detailH-2, 1))
-	body := list
-	if detailH > 0 {
-		body += "\n" + m.bufferDetail(innerW, detailH-2)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, m.bufferList(listW, topH), m.bufferPreview(previewW, topH))
+	if noteH > 0 {
+		body += "\n" + m.bufferNote(innerW, noteH)
 	}
 	content := head + "\n" + div + "\n" + body + "\n" + div + "\n" + foot
 	return outerBorder(content, innerW)
+}
+
+// focusBuffer loads the headings of the entry under the cursor and resets the preview scroll.
+func (m model) focusBuffer() model {
+	m.bufScroll, m.bufHeadings = 0, nil
+	if m.bufCursor < len(m.buf.entries) {
+		m.bufHeadings = headingsOf(m.buf.entries[m.bufCursor].Abs)
+	}
+	return m
 }
 
 // bufferList is the entry list: one row per entry in insertion order, with a note marker, title,
@@ -101,7 +130,7 @@ func (m model) bufferList(outerW, innerH int) string {
 	es := m.buf.entries
 	if len(es) == 0 {
 		rows := []string{theme.Muted.Render("The buffer is empty."), theme.Muted.Render("Press space on a hit to add it.")}
-		return renderPane(pane{rows: rows}, outerW-2, innerH, true)
+		return renderPane(pane{rows: rows}, "Buffer", outerW-2, innerH, true)
 	}
 	rowW := max(outerW-6, 1)
 	rows := make([]string, len(es))
@@ -113,26 +142,35 @@ func (m model) bufferList(outerW, innerH int) string {
 		rows[i] = listRow(mark, e.Title, e.Type, e.Bundle, rowW)
 	}
 	start := windowStart(len(rows), innerH, m.bufCursor)
-	return renderPane(pane{rows: windowAround(rows, innerH, m.bufCursor), cursor: m.bufCursor - start, isList: true}, outerW-2, innerH, true)
+	return renderPane(pane{rows: windowAround(rows, innerH, m.bufCursor), cursor: m.bufCursor - start, isList: true}, "Buffer", outerW-2, innerH, true)
 }
 
-// bufferDetail shows the path, tags and note of the entry under the cursor.
-func (m model) bufferDetail(outerW, innerH int) string {
+// bufferPreviewRows are the rows of the preview of the entry under the cursor at text width w:
+// what the search preview shows of a hit, path included.
+func (m model) bufferPreviewRows(w int) []string {
+	if m.bufCursor >= len(m.buf.entries) {
+		return []string{theme.Muted.Render("(no entry selected)")}
+	}
+	hit := m.buf.entries[m.bufCursor].hit()
+	return previewRows(&hit, m.bufHeadings, w)
+}
+
+// bufferPreview is the preview pane of the entry under the cursor, scrolled by the user.
+func (m model) bufferPreview(outerW, innerH int) string {
+	return previewPane(m.bufferPreviewRows(max(outerW-4, 1)), m.bufScroll, outerW, innerH)
+}
+
+// bufferNote shows the note of the entry under the cursor, or says there is none.
+func (m model) bufferNote(outerW, innerH int) string {
 	var rows []string
 	if m.bufCursor < len(m.buf.entries) {
-		e := m.buf.entries[m.bufCursor]
-		tw := max(outerW-4, 1)
-		rows = append(rows, detailField("path", e.Abs, tw)...)
-		if len(e.Tags) > 0 {
-			rows = append(rows, detailField("tags", strings.Join(e.Tags, ", "), tw)...)
-		}
-		if e.Note == "" {
-			rows = append(rows, detailField("note", theme.Muted.Render("none, press n"), tw)...)
+		if note := m.buf.entries[m.bufCursor].Note; note != "" {
+			rows = strings.Split(wrapText(note, max(outerW-4, 1)), "\n")
 		} else {
-			rows = append(rows, detailField("note", e.Note, tw)...)
+			rows = []string{theme.Muted.Render("No note, press n to write one.")}
 		}
 	}
-	return renderPane(pane{rows: rows}, outerW-2, innerH, false)
+	return renderPane(pane{rows: rows}, "Note", outerW-2, innerH, false)
 }
 
 // bufferCount is the header's buffer count.

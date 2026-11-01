@@ -126,7 +126,7 @@ func (m model) openBuffer() model {
 	m.focus = focusList
 	m.query.Blur()
 	m.bufCursor = min(m.bufCursor, max(len(m.buf.entries)-1, 0))
-	return m
+	return m.focusBuffer()
 }
 
 // palFiltered is the commands that match the filter text, in the order of paletteCommands.

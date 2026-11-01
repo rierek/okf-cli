@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/charmbracelet/bubbles/textinput"
 
+	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
 )
 
@@ -61,6 +62,9 @@ type model struct {
 	screen    screenKind
 	buf       buffer // the session buffer: kept across searches, filter changes and root changes
 	bufCursor int    // entry under the cursor of screenBuffer
+
+	bufHeadings []catalogue.Heading // H2 and H3 of the entry under the cursor
+	bufScroll   int                 // rows the buffer preview is scrolled down
 
 	filters  filterState
 	rootMenu rootMenu // state of overlayRoot
