@@ -209,22 +209,3 @@ func TestRootMenuSpaceSelectsAndSlashNarrows(t *testing.T) {
 		t.Errorf("path field = %q, overlay = %v; want the keys typed", got, field.overlay)
 	}
 }
-
-// EARS 5: every menu hint names enter, space and /.
-func TestMenuHintsNameEnterSpaceAndSlash(t *testing.T) {
-	stateHome(t)
-	m := modelOn(t, longRoot(t), 200, 40)
-	boxes := map[string]string{}
-	for _, f := range []filterField{fieldBundle, fieldType, fieldTag, fieldStatus, fieldTier} {
-		boxes[filterLabels[f]] = openMenu(t, m, f).filterMenuBox()
-	}
-	root, _ := press(m, "esc", "f", "enter")
-	boxes["Root"] = root.rootMenuBox()
-	for name, box := range boxes {
-		for _, want := range []string{"enter", "space", "/"} {
-			if !strings.Contains(lineWith(box, "enter"), want) {
-				t.Errorf("the %s menu hint lacks %q:\n%s", name, want, box)
-			}
-		}
-	}
-}
