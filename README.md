@@ -21,6 +21,8 @@ brew install okf-cli
 
 Release binaries and a source build: [Installation](https://rierek.github.io/okf-cli/overview/installation/). First steps, command reference and agent onboarding are on the same site.
 
+Versioning: major and minor of okf-cli follow the OKF spec version (spec 0.2, so okf-cli 0.2.x). Only the patch number counts CLI releases.
+
 The Python CLI of the earlier releases is still published as wheel and sdist (`pipx install git+https://github.com/rierek/okf-cli`, or `uv run --script cli/okf-cli.py` from a clone; Python 3.11 or newer). It offers the same commands; what differs is listed under [Differences from the Python CLI](#differences-from-the-python-cli).
 
 ## Demo
