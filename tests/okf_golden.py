@@ -184,6 +184,11 @@ def _stderr(stderr):
 # parser (accepted deviation, ACCEPTANCE-REPORT); the golden pins only that the frontmatter fails.
 _YAML_ERROR = re.compile(r"(does not parse: |no parseable frontmatter: )[^\n\"]*?\(line \d+, column \d+\)")
 
+# `tui` exists only in the Go binary and is visible there, so the Go `prime` command listing carries a
+# `tui` line the Python CLI cannot print. The line is dropped from the record (text and JSON form);
+# the goldens pin the listing of the commands both implementations have.
+_GO_ONLY_TUI = re.compile(r"(?:\\n|\n)    tui  +keyboard-first terminal UI[^\n\\\"]*")
+
 
 def run_case(case, cmd, template, workdir):
     """The golden record of one case: host paths become <ROOT> and <HOME>, an instant of the run's
@@ -211,7 +216,7 @@ def run_case(case, cmd, template, workdir):
         for form in sorted({os.path.realpath(path), path}, key=len, reverse=True):
             record = record.replace(form, token)
     now = re.compile(r"(?:{})T\d\d:\d\d:\d\dZ".format("|".join(sorted(days))))
-    return _YAML_ERROR.sub(r"\1<yaml error>", now.sub("<NOW>", record))
+    return _YAML_ERROR.sub(r"\1<yaml error>", _GO_ONLY_TUI.sub("", now.sub("<NOW>", record)))
 
 
 def _seccomp_no_inet():
