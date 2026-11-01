@@ -4,7 +4,7 @@
 usage: scripts/release-notes.py <milestone-id> [--write wiki/releases/<v>.md]
 
 Source: the `lif` CLI (read-only). Epics and features below the milestone are
-"Changes"; bugs are "Fixes". Each line is "[bean-id] summary"; the title stands in
+"Changes"; bugs are "Fixes". An epic works as source too; its tasks count as "Changes". Each line is "[bean-id] summary"; the title stands in
 for a missing summary. Without --write the block prints to stdout. With --write only
 the text between START and END in the page is replaced; the rest stays byte for byte.
 """
@@ -27,7 +27,8 @@ def summary(b):
 
 def render_block(milestone, children):
     kids = [b for b in children if b["status"] in ("completed", "to-review")]
-    changes = [b for b in kids if b["type"] in ("epic", "feature")]
+    kinds = ("epic", "feature", "task") if milestone.get("type") == "epic" else ("epic", "feature")
+    changes = [b for b in kids if b["type"] in kinds]
     fixes = [b for b in kids if b["type"] == "bug"]
     parts = [summary(milestone)]
     if changes:
@@ -49,8 +50,8 @@ def main(argv):
     if len(argv) not in (1, 3) or (len(argv) == 3 and argv[1] != "--write"):
         sys.exit(__doc__)
     m = lif("show", argv[0])
-    if m["type"] != "milestone":
-        sys.exit(f"{argv[0]} is a {m['type']}, not a milestone")
+    if m["type"] not in ("milestone", "epic"):
+        sys.exit(f"{argv[0]} is a {m['type']}, not a milestone or epic")
     block = render_block(m, lif("list", "--parent", argv[0]))
     if len(argv) == 1:
         print(block, end="")
