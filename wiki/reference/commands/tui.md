@@ -119,7 +119,9 @@ Fundstellen aus okf (2)
 type: runbook · bundle: handbook · tags: ops, deploy
 Steps to roll out a release.
 
-> check the rollback step first
+## Notes
+
+check the rollback step first
 
 ## Incident review
 @/home/me/Knowledge-Catalogue/handbook/ops/incident.md
@@ -127,7 +129,7 @@ type: note · bundle: handbook
 ```
 
 - The line under the path holds type, bundle and tags; a field the entry lacks is left out, so is the description line.
-- The note is a quote under the entry, line by line. An entry without a note has no quote.
+- The note stands verbatim under a `## Notes` heading after a blank line. An entry without a note has no Notes heading.
 - The path is absolute (`@<path>`), so an agent opens the file from any directory.
 
 `ctrl+s` picks the target from what herdr reports:
