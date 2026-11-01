@@ -51,7 +51,9 @@ Press `f` to focus the bar, or step into it with `tab`. `tab` and `shift+tab` wa
 
 ### Value menus
 
-The menus of Bundle, Type, Tag, Status and Tier are multi-select. `↑`/`↓` move the cursor, `space` or `x` select or deselect a value, `X` clears all filters, and `esc` closes the menu. A search that already ran starts again on `esc` when the choice changed, so the list always shows the chosen filters. Before the first search the choice waits and applies to it.
+The menus of Bundle, Type, Tag, Status and Tier are multi-select. `↑`/`↓` move the cursor, `space`, `x` or `enter` select or deselect a value, `X` clears all filters, and `esc` closes the menu. A search that already ran starts again on `esc` when the choice changed, so the list always shows the chosen filters. Before the first search the choice waits and applies to it.
+
+The box is as wide as its longest value, up to the terminal width, so no value wraps; a value that is wider than the terminal ends in `…`. Press `/` to type a query: a query line appears and the menu lists only the values that match it (the letters of the query in order, case ignored), so long Bundle and Tag lists shrink to what you look for. While you type, every printable key is text. `enter` keeps the query and returns to the keys above; they now act on the filtered list. `esc` clears the query, a second `esc` closes the menu. The hint line of each menu names `enter`, `space` and `/`.
 
 The menus list only values that exist in the active root:
 
@@ -73,7 +75,7 @@ Bundle `handbook` and type `Runbook` give the hits of `okf find <query> --where 
 
 ### Root
 
-The header and the Root box show the active root. `enter` on the Root box opens the root menu. It lists the active root, the root of `~/.config/okf/config.toml` and every root you used in earlier sessions, most recent first. Choose one with `↑`/`↓` and `enter`, or move below the list and type a path (`~` and relative paths work as for `--root`).
+The header and the Root box show the active root. `enter` on the Root box opens the root menu. It lists the active root, the root of `~/.config/okf/config.toml` and every root you used in earlier sessions, most recent first. Choose one with `↑`/`↓` and `enter` or `space`, or move below the list and type a path (`~` and relative paths work as for `--root`; there `space` and `/` are text). `/` narrows the root list as in the value menus.
 
 - The TUI runs the current query again on the new root and resets the index dots. The list of the old root is dropped.
 - Filter values the new root does not hold are dropped. A message names them.
@@ -183,6 +185,7 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `←`/`h`, `→`/`l` | In the filter bar: previous or next field. |
 | `enter` | In the filter bar: open the menu of the focused field. |
 | `space`, `x` | In a value menu: select or deselect the value under the cursor. |
+| `/` | In a value menu or the root menu: type a query that narrows the list. |
 | `X` | Clear every filter but the root. Outside the query field only. |
 | `r` | Refresh an index: a dialog offers the lexical or the semantic index. Outside the query field only. |
 | `esc` | Leave the query field. Outside it, dismiss a sticky message. Close an overlay. |

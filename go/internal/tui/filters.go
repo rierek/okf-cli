@@ -13,6 +13,7 @@ import (
 
 	keybind "github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"nas/volume1/data/git/okf-tools/go/internal/catalogue"
 	"nas/volume1/data/git/okf-tools/go/internal/tui/theme"
@@ -48,7 +49,8 @@ type filterState struct {
 	selected [filterFieldCount][]string // chosen values per field, in menu order; the root is no filter
 	options  [filterFieldCount][]string // the menu values of the active root
 	loaded   bool                       // options hold the values of the active root
-	cursor   int                        // the cursor of the open value menu
+	cursor   int                        // the cursor of the open value menu, over the list the query leaves
+	search   menuSearch                 // the query of the open value menu
 	before   string                     // the expression when the open menu opened
 }
 
@@ -251,25 +253,35 @@ func (m model) openFilterField() (model, tea.Cmd) {
 		}
 		return m.showToast(toastInfo, "No "+strings.ToLower(filterLabels[field])+" values in this root", "", false)
 	}
-	m.filters.cursor = 0
+	m.filters.cursor, m.filters.search = 0, menuSearch{}
 	m.filters.before = m.filters.exprText()
 	m.overlay = overlayFilterMenu
 	return m, nil
 }
 
 // keyFilterMenu handles input while a value menu is open (full capture): up and down move the
-// cursor, space, x and enter flip the value under it, X clears every filter, esc closes the menu
-// and reruns the search when the choice changed.
+// cursor, space, x and enter flip the value under it, / types a query that narrows the list, X
+// clears every filter, esc clears a query or else closes the menu and reruns the search when the
+// choice changed. The cursor indexes the list the query leaves.
 func (m model) keyFilterMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	field := m.filters.field
-	n := len(m.filters.options[field])
+	if search, before, handled := m.filters.search.edit(msg); handled {
+		m.filters.search = search
+		if search.query != before {
+			m.filters.cursor = 0
+		}
+		return m, nil
+	}
+	visible := m.filters.visible()
 	switch {
 	case keybind.Matches(msg, keys.Up):
 		m.filters.cursor = max(m.filters.cursor-1, 0)
 	case keybind.Matches(msg, keys.Down):
-		m.filters.cursor = min(m.filters.cursor+1, n-1)
+		m.filters.cursor = max(min(m.filters.cursor+1, len(visible)-1), 0)
 	case keybind.Matches(msg, keys.Toggle), keybind.Matches(msg, keys.Open):
-		m.filters = m.filters.reselect(field, m.filters.options[field][m.filters.cursor])
+		if m.filters.cursor < len(visible) {
+			m.filters = m.filters.reselect(field, visible[m.filters.cursor])
+		}
 	case keybind.Matches(msg, keys.FilterClear):
 		m.filters.selected = [filterFieldCount][]string{}
 	case keybind.Matches(msg, keys.Back):
@@ -281,28 +293,117 @@ func (m model) keyFilterMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// filterMenuBox renders the value menu of the focused field.
+// menuSearch is the query of a menu: the text and whether the keys type it. It is the `/` search
+// of the help overlay: printable keys are text while typing, enter keeps the term, esc clears it.
+type menuSearch struct {
+	query  string
+	typing bool
+}
+
+// edit applies msg when the search owns it and reports the query before the key. Up, down and
+// tab stay with the menu while typing; outside typing only `/` and esc on a non-empty query
+// belong to the search.
+func (s menuSearch) edit(msg tea.KeyMsg) (menuSearch, string, bool) {
+	before := s.query
+	if !s.typing {
+		switch {
+		case keybind.Matches(msg, keys.Search):
+			s.typing = true
+			return s, before, true
+		case msg.Type == tea.KeyEsc && s.query != "":
+			return menuSearch{}, before, true
+		}
+		return s, before, false
+	}
+	switch msg.Type {
+	case tea.KeyUp, tea.KeyDown, tea.KeyTab, tea.KeyShiftTab:
+		return s, before, false
+	case tea.KeyEsc:
+		return menuSearch{}, before, true
+	case tea.KeyEnter:
+		s.typing = false
+	case tea.KeyBackspace:
+		if r := []rune(s.query); len(r) > 0 {
+			s.query = string(r[:len(r)-1])
+		}
+	case tea.KeyRunes, tea.KeySpace:
+		s.query += string(msg.Runes)
+	}
+	return s, before, true
+}
+
+// line renders the query line: the typed text with a caret while typing.
+func (s menuSearch) line() string {
+	line := theme.Accent.Render("/ ") + theme.Header.Render(s.query)
+	if s.typing {
+		line += theme.Accent.Render("▏")
+	}
+	return line
+}
+
+// shown reports whether the query line is on screen.
+func (s menuSearch) shown() bool { return s.typing || s.query != "" }
+
+// visible is the menu list of the focused field that the query leaves, in menu order.
+func (f filterState) visible() []string {
+	opts := f.options[f.field]
+	if f.search.query == "" {
+		return opts
+	}
+	return slices.DeleteFunc(slices.Clone(opts), func(o string) bool { return !fuzzyMatch(f.search.query, o) })
+}
+
+// filterMenuBox renders the value menu of the focused field. The box is as wide as the longest
+// option of the field and the longer of the two hints need, up to the terminal width; a longer
+// option or query line ends in an ellipsis.
 func (m model) filterMenuBox() string {
 	field := m.filters.field
 	opts := m.filters.options[field]
-	rows := make([]string, len(opts))
-	for i, o := range opts {
+	visible := m.filters.visible()
+	const (
+		rowChrome  = 2 + 3 + 1 // cursor column, box, space
+		hintIdle   = "enter/space toggle · / search · X clear · esc"
+		hintTyping = "type to search · enter done · esc clear"
+	)
+	hint := hintIdle
+	if m.filters.search.typing {
+		hint = hintTyping
+	}
+	// Both hints size the box, so it keeps its width when / starts the search.
+	need := max(lipgloss.Width(hintIdle), lipgloss.Width(hintTyping))
+	for _, o := range opts {
+		need = max(need, rowChrome+lipgloss.Width(o))
+	}
+	w := clampModalWidth(need+2, m.width) // two columns of padding
+	rows := make([]string, len(visible))
+	for i, o := range visible {
 		box := theme.Dim.Render("[ ]")
 		if slices.Contains(m.filters.selected[field], o) {
 			box = theme.Accent.Render("[x]")
 		}
+		o = truncate(o, w-2-rowChrome)
 		cursor, label := "  ", o
 		if i == m.filters.cursor {
 			cursor, label = theme.Accent.Render("▸ "), theme.Header.Render(o)
 		}
 		rows[i] = cursor + box + " " + label
 	}
-	_, h := m.size()
-	rows = windowAround(rows, max(h-10, 3), m.filters.cursor)
-	title := filterLabels[field]
-	if len(opts) > len(rows) {
-		title += fmt.Sprintf(" %d/%d", m.filters.cursor+1, len(opts))
+	if len(rows) == 0 {
+		rows = []string{theme.Dim.Render("  no match")}
 	}
-	hint := theme.Muted.Render("space/x toggle · X clear all · esc apply")
-	return modalPanel(title, hint+"\n"+strings.Join(rows, "\n"), "", clampModalWidth(44, m.width), theme.Mauve)
+	_, h := m.size()
+	lead := 1 // the hint
+	if m.filters.search.shown() {
+		lead++
+	}
+	rows = windowAround(rows, max(h-9-lead, 3), m.filters.cursor)
+	title := filterLabels[field]
+	if len(visible) > len(rows) {
+		title += fmt.Sprintf(" %d/%d", m.filters.cursor+1, len(visible))
+	}
+	head := theme.Muted.Render(truncate(hint, w-2))
+	if m.filters.search.shown() {
+		head += "\n" + truncate(m.filters.search.line(), w-2)
+	}
+	return modalPanel(title, head+"\n"+strings.Join(rows, "\n"), "", w, theme.Mauve)
 }
