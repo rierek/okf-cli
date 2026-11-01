@@ -8,7 +8,7 @@ class OkfCli < Formula
   homepage "https://github.com/xRiErOS/okf-cli"
   url "https://github.com/xRiErOS/okf-cli/archive/refs/tags/rel-0-2-6.tar.gz"
   version "0.2.6"
-  sha256 "04a9c301f7a372b3b5ccb4561926d26e58623c5db9fa3b5a87c71de4c931ae1f"
+  sha256 "9fe0a99b0781de1672ffc341f8ba3b422f85e3659dc6ea8be8326c8abbe4f658"
   head "https://github.com/xRiErOS/okf-cli.git", branch: "main"
   license "Apache-2.0"
 
