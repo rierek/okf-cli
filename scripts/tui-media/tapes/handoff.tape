@@ -6,11 +6,11 @@ Sleep 1500ms
 Type "recipe"
 Enter
 Sleep 2s
-Type " "
+Space
 Sleep 900ms
 Type "j"
 Sleep 600ms
-Type " "
+Space
 Sleep 900ms
 Type "n"
 Sleep 1s

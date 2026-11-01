@@ -9,7 +9,7 @@
 // Needs: vhs, ffmpeg, ffprobe, magick (all Homebrew), go/bin/okf (just go-build). Never touches the user config, the live
 // catalogue or the real clipboard: the tape shell gets a PATH that holds only a fake herdr and a few tools (no pbcopy).
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { intervals, parseTape, stillLabels } from './timeline.mjs';
@@ -44,7 +44,7 @@ for (const d of ['state', 'bin', 'shots', 'boxes', 'seq']) mkdirSync(join(work, 
 for (const d of [join(work, 'kc'), join(work, 'kc-bare')]) cpSync(fixture, d, { recursive: true });
 const isolated = { PATH: process.env.PATH, HOME: work };
 sh(okf, ['--root', join(work, 'kc'), 'build-index'], { env: isolated });
-// kc-bare keeps no index: the index tape builds it live.
+// kc-bare keeps no index: the index tape builds it live (record() copies it again before every recording).
 if (process.env.VOYAGE_API_KEY) sh(okf, ['--root', join(work, 'kc'), 'build-semantic-index'], { env: { ...isolated, VOYAGE_API_KEY: process.env.VOYAGE_API_KEY } });
 else console.warn('VOYAGE_API_KEY is not set: semantic index skipped, the semantic dot stays grey and find runs lexical only');
 
@@ -77,7 +77,8 @@ function compose(body, theme, name) {
 	const t = THEMES[theme];
 	const cwd = /^# cwd: (\S+)/m.exec(body)?.[1] ?? 'kc';
 	const env = [
-		'unset NO_COLOR VISUAL EDITOR HERDR_PANE_ID', 'export CLICOLOR_FORCE=1 COLORTERM=truecolor PS1="$ "',
+		// CI makes termenv treat stdout as no terminal (no colour, or ANSI-16 when forced): unset it, and ask for truecolor.
+		'unset CI NO_COLOR VISUAL EDITOR HERDR_PANE_ID', 'export TERM=xterm-256color COLORTERM=truecolor PS1="$ "',
 		`export PATH=${work}/bin HOME=${work} XDG_CONFIG_HOME=${work}/cfg-${theme} XDG_STATE_HOME=${work}/state`,
 		'export HERDR_ACTIVE_PANE_ID=wA:p1', `cd ${work}/${cwd}`, 'clear',
 	].join('; ');
@@ -122,12 +123,20 @@ function record(name, theme) {
 	const tape = compose(readFileSync(join(tapeDir, `${name}.tape`), 'utf8'), theme, name);
 	const tapeFile = join(work, `${name}.${theme}.tape`);
 	writeFileSync(tapeFile, tape);
-	rmSync(join(work, 'tasks.md'), { force: true });
-	rmSync(join(work, 'sent.md'), { force: true });
-	// vhs inherits this environment; the shell of the tape resets what matters (see compose). VOYAGE_API_KEY passes through.
-	sh('vhs', [tapeFile], { stdio: ['ignore', 'ignore', 'inherit'] });
-
 	const parsed = parseTape(tape);
+	// vhs inherits this environment; the shell of the tape resets what matters (see compose). VOYAGE_API_KEY passes through.
+	// Every attempt starts from the same state (tasks, sent text, an unindexed kc-bare). vhs sometimes saves a blank
+	// screenshot (a few KB of flat colour): record again then.
+	for (let attempt = 1; ; attempt++) {
+		for (const f of ['tasks.md', 'sent.md']) rmSync(join(work, f), { force: true });
+		rmSync(join(work, 'kc-bare'), { recursive: true, force: true });
+		cpSync(fixture, join(work, 'kc-bare'), { recursive: true });
+		sh('vhs', [tapeFile], { stdio: ['ignore', 'ignore', 'inherit'] });
+		const blank = parsed.stills.filter((s) => statSync(s.name).size < 20000);
+		if (!blank.length) break;
+		if (attempt === 3) throw new Error(`blank screenshot after 3 attempts: ${blank.map((s) => s.name).join(', ')}`);
+		console.warn(`${name}.${theme}: blank screenshot, recording again`);
+	}
 	const mp4 = join(work, `${name}.${theme}.mp4`);
 	const real = parseFloat(sh('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', mp4]));
 	const scale = real / parsed.duration;
@@ -149,14 +158,14 @@ function record(name, theme) {
 	}
 	const gif = join(outDir, `${name}.${theme}.gif`);
 	sh('ffmpeg', ['-y', '-v', 'error', '-i', mp4, '-framerate', String(FPS), '-i', join(seq, '%05d.png'), '-filter_complex',
-		`[1:v]format=rgba[k];[0:v][k]overlay=${position}:eof_action=pass,fps=12.5,scale=1000:-1:flags=lanczos,split[a][b];` +
-		'[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle', gif]);
+		`[1:v]format=rgba[k];[0:v][k]overlay=${position}:eof_action=pass,fps=10,scale=1000:-1:flags=lanczos,split[a][b];` +
+		'[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle', gif]);
 
 	for (const still of parsed.stills) {
 		const shot = basename(still.name);
 		const png = join(work, 'boxes', `${shot}`);
 		canvas(stillLabels(parsed, still.t), theme, png);
-		sh('ffmpeg', ['-y', '-v', 'error', '-i', still.name, '-i', png, '-filter_complex', `[0:v][1:v]overlay=${position}`, join(outDir, shot)]);
+		sh('ffmpeg', ['-y', '-v', 'error', '-i', still.name, '-i', png, '-filter_complex', `[0:v][1:v]overlay=${position},split[a][b];[a]palettegen[p];[b][p]paletteuse=dither=none`, join(outDir, shot)]);
 	}
 }
 

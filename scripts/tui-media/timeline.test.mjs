@@ -39,3 +39,8 @@ test('intervals cover the video, newest boxes last', () => {
 	const both = iv.find((i) => i.labels.length === 2);
 	assert.deepEqual(both.labels, ['ctrl+k', '↓']);
 });
+
+test('a still shows the key that led to it, not the key right after it', () => {
+	const p = parseTape('Set TypingSpeed 100ms\nType "r"\nScreenshot a\nType "l"\n');
+	assert.deepEqual(stillLabels(p, p.stills[0].t), ['r']);
+});

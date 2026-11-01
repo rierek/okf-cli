@@ -8,7 +8,6 @@ Sleep 1500ms
 Screenshot open
 Type "types"
 Sleep 1s
-Screenshot filtered
 Enter
 Sleep 2s
 Screenshot types

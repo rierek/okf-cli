@@ -15,7 +15,6 @@ Sleep 1s
 Screenshot box
 Ctrl+S
 Sleep 2s
-Screenshot saved
 Type "q"
 Sleep 1s
 Type "y"

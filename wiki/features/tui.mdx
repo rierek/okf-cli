@@ -24,7 +24,7 @@ $ cd ~/Knowledge-Catalogue
 $ okf tui
 ```
 
-The TUI opens on the search screen with the focus in the query field. The header shows the root, the two index dots (lexical and semantic), the buffer count and the keys for the command center, help and quit.
+The TUI opens on the search screen with the focus in the query field. The header shows the root, the two index dots (lexical and semantic), the buffer count and `ctrl+k` for the command center.
 
 ## Search
 
@@ -38,11 +38,13 @@ Type a query and press `enter`. The search runs only on `enter`, never while you
 
 ## Filters
 
-Below the query field a bar of six boxes narrows the search: **Root**, **Bundle**, **Type**, **Tag**, **Status** and **Tier**. You never write `--where` syntax; the TUI builds the expression for you. `f` focuses the bar, `←` and `→` move between boxes, `enter` opens the menu of a box, `space` or `x` select a value and `esc` closes the menu. `X` clears every filter.
+Below the query field a bar of six boxes narrows the search: **Root**, **Bundle**, **Type**, **Tag**, **Status** and **Tier**. You never write `--where` syntax; the TUI builds the expression for you. `f` focuses the bar, `←` and `→` move between boxes, `enter` opens the menu of a box, `space` selects a value and `esc` closes the menu. In a long menu, `/` opens a query line and the menu shows only the matching values. `X` clears every filter.
 
-<TuiMedia name="filters" alt="Recording: f focuses the filter bar, enter opens the Bundle menu, space selects a bundle, esc closes the menu and the list narrows. The same steps follow for Type, then X clears the filters. Each key shows in a box at the bottom right." caption="Filters: open a menu, pick values, clear with X." />
+<TuiMedia name="filters" alt="Recording: f focuses the filter bar, enter opens the Bundle menu, / and hand narrow it to the bundle handbook, space selects it, esc closes the menu and the list narrows. The same steps follow for Type with run, then X clears the filters. Each key shows in a box at the bottom right." caption="Filters: open a menu, pick values, clear with X." />
 
-<TuiMedia name="filters-menu" ext="png" alt="Screenshot of the open Bundle menu with a list of bundles and check marks, over the search screen." caption="A value menu is multi-select." />
+<TuiMedia name="filters-menu" ext="png" alt="Screenshot of the open Bundle menu with the list of bundles over the search screen." caption="A value menu is multi-select." />
+
+<TuiMedia name="filters-menu-search" ext="png" alt="Screenshot of the Bundle menu with the query line hand: only the bundle handbook is listed." caption="Press / in a menu to narrow a long list." />
 
 ## Buffer and hand-off
 
@@ -80,11 +82,15 @@ Found something wrong in a concept? Press `t` on the hit. A text area opens: the
 
 ## Index dots
 
-Two dots in the header show the state of the indexes: green current, yellow stale or partial, red absent, grey unavailable. `r` opens a dialog: `l` rebuilds the lexical index, `s` embeds the missing concepts for the semantic index (it names the cost and asks first).
+Two dots in the header show the state of the indexes: green current, yellow stale or partial, red absent, grey not checked yet (lexical) or unavailable without `VOYAGE_API_KEY` (semantic). `r` opens a dialog: `l` rebuilds the lexical index, `s` embeds the missing concepts for the semantic index (it names the number of concepts and asks first).
 
 <TuiMedia name="index" alt="Recording: the TUI starts on a catalogue without index, the dots show it, r opens the refresh dialog, l rebuilds the lexical index, the dot turns green and a search finds hits. Each key shows in a box at the bottom right." caption="Index: see the state, rebuild with r then l." />
 
+<TuiMedia name="index-dots" ext="png" alt="Screenshot of the search screen on a catalogue without index: the lexical and the semantic dot in the header are red." caption="No index yet: both dots are red." />
+
 <TuiMedia name="index-dialog" ext="png" alt="Screenshot of the refresh dialog with the two choices, l lexical index rebuild and s semantic index embed the missing concepts." caption="The refresh dialog." />
+
+<TuiMedia name="index-built" ext="png" alt="Screenshot after the lexical refresh: the lexical dot is green, the semantic dot is still red, a message says the lexical index is refreshed." caption="After l: the lexical dot turns green." />
 
 ## Open a hit in the editor
 

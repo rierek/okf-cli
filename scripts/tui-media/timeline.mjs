@@ -90,8 +90,8 @@ export function intervals({ slots, duration }, scale = 1) {
 	return out;
 }
 
-// The key that led to a still: the label of the last key group before time t, however long ago.
+// The key that led to a still: the label of the last key group that starts before time t (a key right after the Screenshot is not it).
 export function stillLabels({ slots }, t) {
-	const last = slots.filter((s) => s.start <= t).slice(-1)[0];
+	const last = slots.filter((s) => s.start < t).slice(-1)[0];
 	return last ? [labelAt(last, t)] : [];
 }

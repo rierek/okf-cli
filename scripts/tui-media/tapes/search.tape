@@ -15,7 +15,6 @@ Type "j"
 Sleep 1200ms
 Type "v"
 Sleep 1500ms
-Screenshot list-only
 Type "v"
 Sleep 1500ms
 Type "V"

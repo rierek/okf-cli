@@ -1,4 +1,4 @@
-# Narrow a search with the filter bar: bundle, type, then clear everything with X.
+# Narrow a search with the filter bar: pick a bundle and a type from menus (/ narrows a long menu), then clear with X.
 Sleep 600ms
 Type "okf tui"
 Enter
@@ -13,24 +13,36 @@ Sleep 600ms
 Enter
 Sleep 1500ms
 Screenshot menu
-Down
+Type "/"
+Sleep 600ms
+Type "hand"
+Sleep 1s
+Screenshot menu-search
+Enter
 Sleep 700ms
-Type "x"
+Space
 Sleep 1s
 Escape
+Sleep 700ms
+Escape
 Sleep 2s
-Screenshot narrowed
 Right
 Sleep 600ms
 Enter
-Sleep 1500ms
-Down
+Sleep 1s
+Type "/"
+Sleep 400ms
+Type "run"
+Sleep 800ms
+Enter
 Sleep 700ms
-Type "x"
+Space
 Sleep 1s
 Escape
-Sleep 2s
+Sleep 700ms
+Escape
+Sleep 2500ms
 Escape
 Sleep 800ms
 Type "X"
-Sleep 2s
+Sleep 2500ms
