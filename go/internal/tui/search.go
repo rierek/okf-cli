@@ -90,7 +90,7 @@ func (m model) runSearch(query string) (model, tea.Cmd) {
 }
 
 // handleSearchDone replaces the list with the answer of the newest search, shows the warnings of
-// the ranking as a toast and reports a failure as an error toast.
+// the ranking as a toast (the ranking note never, any other text once per session) and reports a failure as an error toast.
 func (m model) handleSearchDone(msg searchDoneMsg) (model, tea.Cmd) {
 	if msg.seq != m.search.seq {
 		return m, nil
@@ -103,7 +103,14 @@ func (m model) handleSearchDone(msg searchDoneMsg) (model, tea.Cmd) {
 	m.search.hits, m.search.cursor = msg.result.Hits, 0
 	m.search.ids = hitIDs(m.search.hits)
 	m = m.focusHit()
-	if w := msg.result.Warnings; len(w) > 0 {
+	var w []string // the ranking note is not shown, any other warning once per session
+	for _, text := range msg.result.Warnings {
+		if text != find.NoteSemanticOwns && !m.warned[text] {
+			m.warned[text] = true
+			w = append(w, text)
+		}
+	}
+	if len(w) > 0 {
 		return m.showToast(toastWarn, w[0], strings.Join(w[1:], " · "), false)
 	}
 	return m, nil

@@ -41,6 +41,10 @@ type Hit struct {
 	Stale       bool
 }
 
+// NoteSemanticOwns is the note that the semantic arm owns the ranking; the provenance of each hit
+// says the same, so a UI need not show it.
+const NoteSemanticOwns = "semantic arm owns this ranking (lexical top-1 lacked a clear margin)"
+
 // Result is the answer of one search.
 type Result struct {
 	Hits []Hit // filled by Search
@@ -144,7 +148,7 @@ func search(root string, opts Options, note func(string)) (*Result, error) {
 	}
 	all, lexicalOwned := rank.FuseConditional(hits, semanticHits, limit)
 	if !lexicalOwned && len(semanticHits) > 0 {
-		note("semantic arm owns this ranking (lexical top-1 lacked a clear margin)")
+		note(NoteSemanticOwns)
 	}
 	result.ranked = rank.Cut(all, limit)
 	result.matched, result.maxScore = len(all), maxScore

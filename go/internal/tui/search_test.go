@@ -472,3 +472,27 @@ func TestSearchPanesAreTitledAndQueryFramed(t *testing.T) {
 		}
 	}
 }
+
+// EARS 1 and 2 of OKFT-brlv: the ranking note never toasts; any other warning toasts once per
+// session for the same text.
+func TestSearchWarningToastsOncePerText(t *testing.T) {
+	answer := func(m model, warnings ...string) model {
+		m, _ = m.handleSearchDone(searchDoneMsg{seq: m.search.seq, result: &find.Result{Warnings: warnings}})
+		return m
+	}
+	m := onFixture(t, 100, 30)
+
+	if m = answer(m, find.NoteSemanticOwns); m.toast != nil {
+		t.Fatalf("toast = %+v, want none for the ranking note", m.toast)
+	}
+	if m = answer(m, find.NoteSemanticOwns, "semantic arm skipped"); m.toast == nil || m.toast.title != "semantic arm skipped" || m.toast.context != "" {
+		t.Fatalf("toast = %+v, want only the other warning", m.toast)
+	}
+	m.toast = nil
+	if m = answer(m, "semantic arm skipped"); m.toast != nil {
+		t.Fatalf("toast = %+v, want none for a repeated text", m.toast)
+	}
+	if m = answer(m, "another warning"); m.toast == nil || m.toast.title != "another warning" {
+		t.Fatalf("toast = %+v, want the new text", m.toast)
+	}
+}

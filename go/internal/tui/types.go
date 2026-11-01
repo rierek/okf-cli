@@ -79,6 +79,8 @@ type model struct {
 
 	lexical, semantic indexDot // the two index dots of the header
 
+	warned map[string]bool // search warnings already toasted this session
+
 	toast           *toastState
 	toastSeqCounter int
 	handoffBusy     bool // a hand-off resolves or sends off the UI loop
@@ -93,7 +95,7 @@ func newModel(root string, settings Settings, settingsErr error) model {
 	q.PromptStyle = theme.Accent
 	q.PlaceholderStyle = theme.Muted
 	q.Focus()
-	m := model{root: root, settings: settings, focus: focusQuery, query: q, search: newSearchState()}
+	m := model{root: root, settings: settings, focus: focusQuery, query: q, search: newSearchState(), warned: map[string]bool{}}
 	m.lexical.checking, m.semantic.checking = true, true // Init starts both checks
 	if settingsErr != nil {
 		m, _ = m.showToast(toastError, "Invalid [tui] settings, defaults in use", settingsErr.Error(), true)
