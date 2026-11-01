@@ -249,9 +249,9 @@ func TestTrackerProblemNamesPathInsteadOfSaving(t *testing.T) {
 			}
 			m := searchedOnFixture(t, "unused")
 			before := m
-			m, cmd := press(m, "t")
-			if m.overlay != overlayNone || cmd != nil {
-				t.Fatalf("overlay %v, cmd %v: a broken tracker must open no box and run nothing", m.overlay, cmd != nil)
+			m, _ = press(m, "t")
+			if m.overlay != overlayNone {
+				t.Fatalf("overlay %v: a broken tracker must open no box", m.overlay)
 			}
 			if m.toast == nil || m.toast.kind != toastError || !m.toast.sticky ||
 				!strings.Contains(m.toast.context, path) || !strings.Contains(m.toast.context, c.problem) {

@@ -121,7 +121,9 @@ Fundstellen aus okf (2)
 type: runbook · bundle: handbook · tags: ops, deploy
 Steps to roll out a release.
 
-> check the rollback step first
+## Notes
+
+check the rollback step first
 
 ## Incident review
 @/home/me/Knowledge-Catalogue/handbook/ops/incident.md
@@ -129,7 +131,7 @@ type: note · bundle: handbook
 ```
 
 - The line under the path holds type, bundle and tags; a field the entry lacks is left out, so is the description line.
-- The note is a quote under the entry, line by line. An entry without a note has no quote.
+- The note stands verbatim under a `## Notes` heading after a blank line. An entry without a note has no Notes heading.
 - The path is absolute (`@<path>`), so an agent opens the file from any directory.
 
 `ctrl+s` picks the target from what herdr reports:
@@ -187,6 +189,8 @@ Inside the query field the letter keys type, so `q` and `?` are text there; the 
 | `X` | Clear every filter but the root. Outside the query field only. |
 | `r` | Refresh an index: a dialog offers the lexical or the semantic index. Outside the query field only. |
 | `esc` | Leave the query field. Outside it, dismiss a sticky message. Close an overlay. |
+
+A sticky message shows `esc: dismiss` and goes away by itself after 15 seconds.
 
 One overlay is open at a time and takes every key until it closes. The help overlay scrolls with `↑`/`↓`/`pgup`/`pgdn`, and `/` searches it.
 
